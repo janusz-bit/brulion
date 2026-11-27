@@ -3123,7 +3123,7 @@ FocusScope {
     Loader {
         id: atramentLoader
         anchors.fill: list
-        active: editor.usesAtrament && editor.controller !== null
+        active: editor.usesAtrament && editor.controller !== null && editor.atramentHost === null
         visible: active && !editor.controller.sourceMode
         source: active ? "EditorAtramentPage.qml" : ""
     }
@@ -3135,7 +3135,11 @@ FocusScope {
     }
     /// The page drawn by Atrament (EditorAtramentPage, an AtramentView) while usesAtrament; its
     /// members are reached by name (the type exists only where Atrament is built).
-    readonly property Item atramentPage: atramentLoader.item as Item
+    readonly property Item atramentPage: editor.atramentHost !== null ? editor.atramentHost : atramentLoader.item as Item
+    /// The page drawn by Atrament outside the editor: the journal stream's AtramentView
+    /// (EditorAtramentJournal; docs/ATRAMENT.md "The journal stream as one list"). The editor then
+    /// has no rows of its own; its controller is the stream's active day's.
+    property Item atramentHost: null
 
     // ---- Selecting blocks by dragging -------------------------------------------------------------
     /// The list's scroll bar (a press on it selects nothing).

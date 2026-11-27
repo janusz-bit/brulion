@@ -1,0 +1,355 @@
+pragma ComponentBehavior: Bound
+import QtQuick
+import Brulion
+
+// ContentJournalsAtramentSelfTest — dev: the journal stream drawn by Atrament as one list
+// (docs/ATRAMENT.md "The journal stream as one list"; qml/editor/EditorAtramentJournal.qml) in the
+// real app, headless (`brulion --demo --route journals --editor-script journals-selftest
+// --atrament-editor`, ctest tst_content_journals_atrament_qml; JournalsView loads it in place of
+// ContentJournalsSelfTest when its stream is Atrament's). The steps of the QML stream's self-test
+// that matter for one list, with real keys, typed letters and taps through the window:
+//   * today's prompt begins today (from the journal template), what is typed is saved, also once
+//     another day is written in and today scrolled far away has gone, and shown when scrolled back;
+//   * ↓ on a day's last line edits the next day's first block, ↑ goes back; Enter at a day's end
+//     makes a block in that day, Backspace at the next day's start merges nothing;
+//   * Esc and Shift+↓ past a day's end select blocks of two days (StreamSelection);
+//   * the find bar's query reaches the stream (every day tints it), its matches counted in days;
+//   * a zoom into a block of a day: Back (JournalsView.stepBack) zooms out;
+//   * the view's state (the day at the top and the offset) saved and restored, "Go to day";
+//   * only the days near the view are made (a stream scrolled to its end keeps a few).
+// Prints "SELFTEST PASS|FAIL <what>" lines and quits with the number of failures as exit code.
+// Registered only where Atrament is built (it names AtramentView).
+Item {
+    id: test
+
+    /// JournalsView's parts: the stream (the AtramentView), its editor, the days, the selection over
+    /// several days, the find over them and JournalsView itself (viewState, stepBack, scrollToDate).
+    property AtramentView stream
+    property BlockEditor editor
+    property JournalListModel days
+    property StreamSelection selection
+    property StreamFind streamFind
+    property Item journalsView
+
+    property int failures: 0
+    property int stepIndex: 0
+    property int waited: 0
+    property int stepTarget: 0
+    property int stepCursor: 0
+    property bool stepDone: true
+
+    property string todayPath: ""
+    property int lastRow: -1
+    property int blocksFirst: 0
+    property int blocksSecond: 0
+    property var savedState: ({})
+    property int savedOffset: 0
+    property string savedDate: ""
+    property string expectedDate: ""
+    property point _at: Qt.point(0, 0)
+
+    DevEvents { id: events }
+    DevBlock { id: block }
+    MapHolder { id: stateInfo }
+
+    function check(ok: bool, what: string): void {
+        if (!ok)
+            test.failures += 1
+        console.log((ok ? "SELFTEST PASS " : "SELFTEST FAIL ") + what)
+    }
+    function at(): bool {
+        return test.stepCursor++ === test.stepTarget
+    }
+    function waitFor(ready: bool): void {
+        test.stepDone = ready
+    }
+    /// Day `row`'s controller while the stream has it made (null: far from the view).
+    function day(row: int): PageController {
+        return test.stream.dayController(row) as PageController
+    }
+    function dayLoaded(row: int): bool {
+        const c = test.day(row)
+        return c !== null && c.loaded
+    }
+    function fileHas(path: string, text: string): bool {
+        return Js.indexOf(Workspace.readFile(path), text) >= 0
+    }
+    function dayShows(row: int, needle: string): bool {
+        const c = test.day(row)
+        if (c === null)
+            return false
+        for (let i = 0; i < c.blocks.count; ++i) {
+            block.read(c.blocks.get(i))
+            if (Js.indexOf(block.plainText, needle) >= 0)
+                return true
+        }
+        return false
+    }
+    /// A real key through the window (the stream has the keyboard).
+    function key(k: int, modifiers: int): void {
+        const code = k
+        const mods = modifiers
+        EditorInput.sendKey(test.stream, code, mods, "")
+    }
+    function typeKeys(s: string): void {
+        const text = s
+        for (let i = 0; i < text.length; ++i)
+            EditorInput.sendKey(test.stream, 0, 0, text[i])
+    }
+    /// A tap (touch UIs) or a click at (x, y) of the stream.
+    function tap(x: real, y: real): void {
+        if (Theme.touchUi) {
+            events.touchPress(test.stream, x, y)
+            events.touchRelease(test.stream, x, y)
+        } else {
+            events.mouseClick(test.stream, x, y, Qt.LeftButton, Qt.NoModifier, -1)
+        }
+    }
+    /// A tap on block `row` of day `d`, a little into its text.
+    function tapBlock(d: int, row: int, intoX: real): void {
+        const top = test.stream.dayRowTop(d, row)
+        const height = test.stream.dayRowHeight(d, row)
+        const x = test.stream.contentX + test.stream.gutter + intoX
+        test.tap(x, top + Math.min(height / 2, 12))
+    }
+    function editing(d: int, row: int): bool {
+        const c = test.day(d)
+        return c !== null && c.editingRow === row && test.stream.activeDay === d && test.stream.editRow === row
+    }
+    function writeDays(): void {
+        for (let n = 2; n <= 60; ++n) {
+            const path = "" + Workspace.journalPath("" + DatesHelper.addDays(DatesHelper.today, -n))
+            if (Workspace.exists(path))
+                continue
+            let md = ""
+            for (let b = 0; b < 6; ++b)
+                md += "- Dzień " + n + ", notatka " + b + ": zażółć gęślą jaźń, mleko\n"
+            Workspace.writeFile(path, md)
+        }
+    }
+
+    function runSteps(): void {
+        runStepsToday()
+        runStepsAcross()
+        runStepsSelection()
+        runStepsViews()
+    }
+    function runStepsToday(): void {
+        // ---- A notebook with two months of days ------------------------------------------------
+        if (test.at())
+            test.waitFor(Workspace.ready && test.days.count >= 2 && test.dayLoaded(0))
+        if (test.at())
+            test.writeDays()
+        if (test.at())
+            test.waitFor(test.days.count >= 55 && test.stream.dayCount() >= 55)
+        // ---- Today: begun from its prompt, typed, saved ------------------------------------------
+        if (test.at()) {
+            test.stream.scrollToDay(0, false)
+            const today = test.day(0)
+            test.check(today !== null && AppController.routeFlag(test.days.get(0), "isToday"), "today is the first day")
+            test.todayPath = AppController.routeText(test.days.get(0), "path")
+        }
+        if (test.at()) {
+            const empty = test.day(0) !== null && test.day(0).blocks.visibleCount === 0
+            if (empty) {
+                test._at = test.stream.dayPoint(0, "prompt")
+                test.check(test._at.x >= 0, "today without a note shows its prompt")
+                test.tap(test._at.x, test._at.y)
+            } else {
+                test.editor.startEditing(test.day(0).lastVisibleRow(), -1)
+            }
+        }
+        if (test.at())
+            test.waitFor(test.day(0) !== null && test.day(0).editingRow >= 0 && test.stream.editRow >= 0
+                         && test.stream.activeDay === 0)
+        if (test.at()) {
+            test.check(test.editor.controller === test.day(0), "the stream's editor acts on today")
+            test.typeKeys("Kupić mleko")
+            test.check(Js.indexOf(test.stream.editText, "Kupić mleko") >= 0, "typed into today: " + test.stream.editText)
+        }
+        if (test.at())
+            test.waitFor(test.fileHas(test.todayPath, "Kupić mleko")) // the editor's debounced save
+        if (test.at())
+            test.check(test.fileHas(test.todayPath, "Kupić mleko"), "today's file is made by its first edit")
+    }
+    function runStepsAcross(): void {
+        // ---- ↓ / ↑ across days -------------------------------------------------------------------
+        if (test.at()) {
+            test.day(0).stopEditing()
+            test.stream.scrollToDay(1, false)
+        }
+        if (test.at())
+            test.waitFor(test.dayLoaded(1) && test.dayLoaded(2) && test.stream.dayTop(1) >= 0)
+        if (test.at()) {
+            test.lastRow = test.day(1).lastVisibleRow()
+            test.tapBlock(1, test.lastRow, 20)
+        }
+        if (test.at())
+            test.waitFor(test.editing(1, test.lastRow))
+        if (test.at())
+            test.key(Qt.Key_Down, 0)
+        if (test.at())
+            test.waitFor(test.editing(2, 0))
+        if (test.at()) {
+            test.check(test.day(1).editingRow === -1, "↓ on a day's last line edits the next day's first block")
+            test.check(test.editor.controller === test.day(2), "the next day is the one written in")
+            test.key(Qt.Key_Up, 0)
+        }
+        if (test.at())
+            test.waitFor(test.editing(1, test.lastRow))
+        if (test.at()) {
+            test.check(test.day(2).editingRow === -1, "↑ on its first line goes back to the day above")
+            // ---- Enter and Backspace at a day's edges ------------------------------------------
+            test.blocksFirst = test.day(1).blocks.count
+            test.blocksSecond = test.day(2).blocks.count
+            test.key(Qt.Key_End, 0)
+            test.key(Qt.Key_Return, 0)
+        }
+        if (test.at())
+            test.waitFor(test.day(1).blocks.count === test.blocksFirst + 1)
+        if (test.at()) {
+            test.check(test.day(2).blocks.count === test.blocksSecond, "Enter at a day's end makes a block in that day")
+            test.check(test.day(1).editingRow === test.lastRow + 1, "the new block is edited")
+            test.typeKeys("nowy")
+            test.key(Qt.Key_Down, 0)
+        }
+        if (test.at())
+            test.waitFor(test.editing(2, 0))
+        if (test.at()) {
+            test.key(Qt.Key_Home, 0)
+            test.key(Qt.Key_Backspace, 0)
+        }
+        if (test.at()) {
+            test.check(test.day(1).blocks.count === test.blocksFirst + 1 && test.day(2).blocks.count === test.blocksSecond,
+                       "Backspace at a day's start merges nothing into the day above")
+            test.check(test.day(2).editingRow === 0, "the day's first block stays edited")
+        }
+    }
+    function runStepsSelection(): void {
+        // ---- A selection over two days -------------------------------------------------------------
+        if (test.at()) {
+            test.key(Qt.Key_Up, 0)
+        }
+        if (test.at())
+            test.waitFor(test.editing(1, test.lastRow + 1))
+        if (test.at())
+            test.key(Qt.Key_Escape, 0)
+        if (test.at())
+            test.waitFor(test.day(1).selectedRow === test.lastRow + 1 && test.day(1).editingRow === -1)
+        if (test.at())
+            test.key(Qt.Key_Down, Qt.ShiftModifier)
+        if (test.at())
+            test.waitFor(test.selection.active)
+        if (test.at()) {
+            test.check(test.selection.count >= 2 && test.day(2).selectionCount >= 1 && test.day(1).selectionCount >= 1,
+                       "Shift+↓ past a day's end selects into the next day: " + test.selection.count)
+            test.key(Qt.Key_Escape, 0)
+        }
+        if (test.at())
+            test.waitFor(!test.selection.active && test.day(1).selectionCount === 0 && test.day(2).selectionCount === 0)
+        // ---- The find bar over the days -------------------------------------------------------------
+        if (test.at())
+            QmlCall.call1(test.journalsView, "openFind", false)
+        if (test.at())
+            test.waitFor(test.editor.find !== null)
+        if (test.at())
+            test.editor.find.query = "mleko"
+        if (test.at())
+            test.waitFor(test.stream.findQuery === "mleko" && test.streamFind.count >= 2)
+        if (test.at()) {
+            test.check(test.streamFind.dayCount >= 2, "the find bar counts matches in several days: " + test.streamFind.dayCount)
+            QmlCall.call(test.journalsView, "closeFind")
+        }
+        if (test.at())
+            test.waitFor(test.stream.findQuery === "")
+    }
+    function runStepsViews(): void {
+        // ---- Back zooms out of a day's block -------------------------------------------------------
+        if (test.at()) {
+            test.day(1).zoomInto(0)
+        }
+        if (test.at())
+            test.waitFor(test.day(1).zoomBlock >= 0 && QmlCall.isTrue(QmlCall.get(test.journalsView, "canStepBack")))
+        if (test.at())
+            QmlCall.call(test.journalsView, "stepBack")
+        if (test.at())
+            test.waitFor(test.day(1).zoomBlock < 0)
+        // ---- The view's state, "Go to day" ---------------------------------------------------------
+        if (test.at()) {
+            test.stream.scrollToDay(20, false)
+        }
+        if (test.at())
+            test.waitFor(test.stream.dayTop(20) >= -1 && test.stream.dayTop(20) <= 1)
+        if (test.at()) {
+            test.stream.scrollBy(30)
+        }
+        if (test.at()) {
+            test.savedState = QmlCall.call(test.journalsView, "viewState")
+            stateInfo.map = test.savedState
+            test.savedOffset = AppController.routeInt(stateInfo.map, "offset", -1)
+            test.savedDate = AppController.routeText(stateInfo.map, "date")
+            test.expectedDate = AppController.routeText(test.days.get(20), "date")
+            test.check(test.savedDate === test.expectedDate && Math.abs(test.savedOffset - 30) <= 1,
+                       "the view's state: the day at the top and the offset into it: " + test.savedOffset)
+            test.stream.scrollToDay(0, false)
+        }
+        if (test.at())
+            test.waitFor(test.stream.dayTop(0) >= 0)
+        if (test.at())
+            QmlCall.call1(test.journalsView, "restoreViewState", test.savedState)
+        if (test.at())
+            test.waitFor(Math.abs(test.stream.dayTop(20) + test.savedOffset) <= 1)
+        if (test.at()) {
+            test.check(Math.abs(test.stream.dayTop(20) + test.savedOffset) <= 1, "the view's state restored")
+            QmlCall.call1(test.journalsView, "scrollToDate", AppController.routeText(test.days.get(10), "date"))
+        }
+        if (test.at())
+            test.waitFor(Math.abs(test.stream.dayTop(10)) <= 1)
+        // ---- Only the days near the view; today saved and shown again --------------------------------
+        if (test.at())
+            test.stream.scrollToDay(test.days.count - 1, false)
+        if (test.at())
+            test.waitFor(test.day(0) === null && test.dayLoaded(test.days.count - 1))
+        if (test.at()) {
+            test.check(test.stream.madeDayCount() <= 20, "only the days near the view are made: " + test.stream.madeDayCount())
+            test.check(test.fileHas(test.todayPath, "Kupić mleko"), "today's text is in its file after it went")
+            test.stream.scrollToDay(0, false)
+        }
+        if (test.at())
+            test.waitFor(test.dayLoaded(0))
+        if (test.at())
+            test.check(test.dayShows(0, "Kupić mleko"), "scrolled back, today shows the text")
+    }
+
+    property bool inStep: false
+    Timer {
+        id: runner
+        interval: 120
+        repeat: true
+        running: test.stream !== null && test.days !== null
+        onTriggered: {
+            if (test.inStep)
+                return
+            test.inStep = true
+            test.stepTarget = test.stepIndex
+            test.stepCursor = 0
+            test.stepDone = true
+            const error = DevTest.callCatching(test, "runSteps")
+            test.inStep = false
+            if (error !== "")
+                test.check(false, "step " + test.stepIndex + " threw: " + error)
+            if (test.stepCursor <= test.stepTarget) {
+                runner.stop()
+                console.log("SELFTEST DONE failures=" + test.failures)
+                Qt.exit(test.failures === 0 ? 0 : 1)
+                return
+            }
+            if (!test.stepDone && ++test.waited < 80)
+                return
+            if (!test.stepDone)
+                test.check(false, "step " + test.stepIndex + " timed out")
+            test.waited = 0
+            test.stepIndex += 1
+        }
+    }
+}

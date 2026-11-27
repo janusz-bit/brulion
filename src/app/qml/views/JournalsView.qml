@@ -30,6 +30,10 @@ import Brulion
 // `toolbarDocked`, `endEditing()`, `canStepBack` / `stepBack()` (Back zooms out the zoom of the day
 // written in first — a day zoomed into becomes that day), `sourceMode` and `viewState()` /
 // `restoreViewState()` (the stream: the day at the top and how far into it; one day: its PageView's).
+// With the editor drawn by Atrament (AppSettings.editorAtrament, `--atrament-editor`) the stream is
+// one Atrament list instead of the ListView of ContentJournalDay items (docs/ATRAMENT.md "The journal
+// stream as one list"; qml/editor/EditorAtramentJournal.qml, loaded by its file name): no QML item
+// per day, one BlockEditor (`streamEditor`) acting on the day being written in.
 FocusScope {
     id: root
 
@@ -42,12 +46,14 @@ FocusScope {
     function viewState(): var {
         if (root.single)
             return pageTraits.viewState()
+        if (root.streamView)
+            return QmlCall.call(root.streamView, "viewState")
         return root.streamList ? root.streamViewState() : {}
     }
     function restoreViewState(state: var): void {
         if (root.single) {
             pageTraits.restoreViewState(state)
-        } else if (root.streamList) {
+        } else if (root.streamList || root.streamView) {
             root.restoreStreamState(state)
         }
     }
@@ -55,6 +61,12 @@ FocusScope {
     // ---- The journal stream's list and days (set by the stream while it exists) -------------------
     property ListView streamList: null
     property JournalListModel streamDays: null
+    /// The stream drawn by Atrament (EditorAtramentJournal, an AtramentView reached by name) and its
+    /// one editor; null with the QML stream.
+    property Item streamView: null
+    property BlockEditor streamEditor: null
+    /// The stream is drawn by Atrament (decided when the stream is made).
+    readonly property bool atramentStream: DeviceInfo.atrament && (AppSettings.editorAtrament || DevTools.atramentEditor)
     /// A view state to scroll back to once the days are known (pendingDate "": none).
     property string pendingDate
     property real pendingOffset
@@ -94,11 +106,17 @@ FocusScope {
         applyStateLater.restart()
     }
     function applyStreamState(): void {
-        if (!root.streamList)
+        if (!root.streamList && !root.streamView)
             return
         const row = root.pendingDate !== "" ? root.rowOfDate(root.pendingDate) : -1
         if (row < 0)
             return // (once the days are known: onRefreshed)
+        if (root.streamView) {
+            // (The day, else the nearest earlier one: the stream's own rule.)
+            QmlCall.call1(root.streamView, "restoreViewState", { date: root.pendingDate, offset: root.pendingOffset })
+            root.pendingDate = ""
+            return
+        }
         root.pendingDate = ""
         root.streamList.positionViewAtIndex(row, ListView.Beginning)
         root.streamList.forceLayout()
@@ -112,6 +130,10 @@ FocusScope {
     /// Make the day at `row` the one written in (the stream's find bar goes on there): scrolled
     /// to, created when it was not, activated.
     function activateDay(row: int): void {
+        if (root.streamView) {
+            QmlCall.call1(root.streamView, "activateDay", row)
+            return
+        }
         if (!root.streamList || row < 0 || row >= root.streamDays.count)
             return
         root.streamList.positionViewAtIndex(row, ListView.Contain)
@@ -125,6 +147,10 @@ FocusScope {
         return root.streamDays.rowOfDate(date)
     }
     function scrollToDate(date: string): void {
+        if (root.streamView) {
+            QmlCall.call1(root.streamView, "scrollToDate", date)
+            return
+        }
         if (!root.streamList)
             return
         const row = root.rowOfDate(date)
@@ -153,8 +179,9 @@ FocusScope {
     // "A journal day as one item").
     onActiveDayChanged: if (root.activeDay !== null) root.activeDay.materialize()
     /// The editor and the page of activeDay (null with none).
-    readonly property BlockEditor activeEditor: activeDay !== null ? activeDay.editor : null
-    readonly property PageController activeController: activeDay !== null ? activeDay.controller : null
+    readonly property BlockEditor activeEditor: streamEditor !== null ? (streamEditor.controller !== null ? streamEditor : null)
+                                                : activeDay !== null ? activeDay.editor : null
+    readonly property PageController activeController: activeEditor !== null ? activeEditor.controller : null
     /// Vim's mode of the day written in, the command typed or the command line (the status bar's
     /// left part; docs/UI.md "Vim mode"). One day shown: its page's.
     readonly property string statusVim: single ? pageTraits.statusVim
@@ -164,7 +191,7 @@ FocusScope {
 
     readonly property string title: single ? DatesHelper.formatLong(date) : ""
     readonly property bool editing: single ? pageTraits.editing
-                                           : (activeDay !== null && activeDay.editing)
+                                           : (activeController !== null && activeController.editingRow >= 0)
     /// A touch toolbar is docked at the bottom (the shell keeps the content above it).
     readonly property bool toolbarDocked: single ? pageTraits.toolbarDocked
                                                  : (activeEditor !== null && activeEditor.toolbarVisible)
@@ -201,7 +228,7 @@ FocusScope {
     PageTools { id: tools; workspace: Workspace }
 
     /// The stream's commands and shortcuts act on the day being written in (this pane, shown).
-    readonly property bool streamKeys: !single && !inSidePanel && paneActive && visible && activeDay !== null
+    readonly property bool streamKeys: !single && !inSidePanel && paneActive && visible && activeController !== null
 
     // The palette's "Toggle note mode", "Add page property", "Share as QR code…" and its link commands
     // ("copyLink:<kind>") in the journal stream: the day being written in (today until another day gets the caret). One day
@@ -209,7 +236,7 @@ FocusScope {
     Connections {
         target: AppController
         function onUiActionRequested(action: string) {
-            if (root.single || root.inSidePanel || !root.paneActive || !root.visible || !root.activeDay)
+            if (root.single || root.inSidePanel || !root.paneActive || !root.visible || !root.activeController)
                 return
             if (Js.startsWith(action, "copyLink:")) {
                 root.activeEditor.copyCurrentLink(Js.sliceFrom(action, 9))
@@ -270,21 +297,21 @@ FocusScope {
     // (The shortcuts of these commands can be changed: ShortcutMap.)
     Shortcut {
         sequence: ShortcutMap.sequences["page.addProperty"] || ""
-        enabled: !root.single && !root.inSidePanel && root.paneActive && root.visible && root.activeDay !== null
+        enabled: !root.single && !root.inSidePanel && root.paneActive && root.visible && root.activeController !== null
                  && !root.activeController.sourceMode
         onActivated: root.activeEditor.addProperty()
     }
     // Markdown source of the day being written in (Ctrl+E): it opens as a page in source mode.
     Shortcut {
         sequence: ShortcutMap.sequences["page.source"] || ""
-        enabled: !root.single && !root.inSidePanel && root.visible && root.activeDay !== null
+        enabled: !root.single && !root.inSidePanel && root.visible && root.activeController !== null
         onActivated: root.activeEditor.toggleSourceMode()
     }
 
     // ---- The find bar over the stream ------------------------------------------------------------
     property bool findOpen: false
     function openFind(withReplace: bool): void {
-        if (root.single || !root.activeDay)
+        if (root.single || !root.activeController)
             return
         if (!root.findOpen) {
             noteFind.setOriginHere(-1)
@@ -406,7 +433,7 @@ FocusScope {
         anchors.topMargin: findBarLoader.height
         active: !root.single
         focus: !root.single
-        sourceComponent: journalsComponent
+        sourceComponent: root.atramentStream ? atramentStreamComponent : journalsComponent
     }
 
     // Vim's mode in the corner where the shell's status bar does not show it (the stream's days;
@@ -824,13 +851,195 @@ FocusScope {
         }
     }
 
+    // ---- The journal stream drawn by Atrament (one list, no item per day) ---------------------------
+    Component {
+        id: atramentStreamComponent
+
+        // The stream's frame: the editor's touch toolbar docks on its bottom edge (it never scrolls).
+        Item {
+            id: frame
+
+            /// The day being written in has its toolbar docked here.
+            readonly property bool toolbarDocked: root.activeEditor !== null && root.activeEditor.toolbarVisible
+            /// The editor's last message with an action (a toast's button runs it).
+            property EditorToastAction messageAction: null
+            property int messageToast: -1
+            Connections {
+                target: AppController
+                function onToastActionTriggered(id: int) {
+                    if (id === frame.messageToast && frame.messageAction)
+                        frame.messageAction.run()
+                }
+            }
+
+            Component.onCompleted: {
+                root.streamScrolled = false
+                root.streamDays = atramentDays
+                root.streamEditor = streamEditor
+                if (AppController.routeText(root.route, "open") === "jump")
+                    atramentJumpLater.restart()
+                streamLoader.load()
+            }
+            Component.onDestruction: {
+                if (root.streamEditor === streamEditor) {
+                    root.streamEditor = null
+                    root.streamView = null
+                    root.streamDays = null
+                }
+            }
+            Later {
+                id: atramentJumpLater
+                onTriggered: frame.openJumpDialog()
+            }
+            Later {
+                id: atramentBeginLater
+                onTriggered: {
+                    if (root.streamView)
+                        QmlCall.call1(root.streamView, "beginDay", 0)
+                }
+            }
+
+            // One selection over several days: the days' controllers attach while they are made.
+            StreamSelection {
+                id: atramentStream
+                objectName: "journalStreamSelection"
+                host: Workspace
+                model: atramentDays
+                locale: DatesHelper.locale
+            }
+            JournalListModel {
+                id: atramentDays
+                workspace: Workspace
+                // Hidden (kept by ShellRouteView): edits only mark the days stale until it is shown.
+                active: root.visible
+                today: DatesHelper.today
+                onRefreshed: {
+                    if (root.pendingDate !== "")
+                        applyStateLater.restart()
+                    if (!root.streamScrolled && AppController.routeFlag(root.route, "date") && count > 0) {
+                        root.streamScrolled = true
+                        scrollToRouteLater.restart()
+                    }
+                    // route.open "write": start writing today (screenshots, smoke tests).
+                    if (count > 0 && AppController.routeText(root.route, "open") === "write" && !frame.began) {
+                        frame.began = true
+                        atramentBeginLater.restart()
+                    }
+                }
+            }
+            property bool began: false
+            Connections {
+                target: root
+                function onRouteChanged() {
+                    if (root.single || !AppController.routeFlag(root.route, "date"))
+                        return
+                    if (atramentDays.active)
+                        root.scrollToDate(AppController.routeText(root.route, "date"))
+                    else
+                        scrollToRouteLater.restart()
+                }
+            }
+
+            Rectangle {
+                anchors.fill: parent
+                color: Theme.bg
+            }
+            // The stream's one editor: no rows of its own (the stream draws them), its geometry the
+            // frame's, its controller the day written in (EditorAtramentJournal sets it).
+            BlockEditor {
+                id: streamEditor
+                objectName: "journalDayEditor"
+                width: frame.width
+                height: 0
+                atramentHost: root.streamView
+                find: noteFind.active ? noteFind : null
+                onVimQuitRequested: (force) => AppController.back()
+                toolbarHost: frame
+                stream: atramentStream
+                onReadOnlyLeaveRequested: AppSettings.readingMode = false
+                onMessage: (text, kind, action) => {
+                    if (action) {
+                        frame.messageAction = action
+                        frame.messageToast = AppController.toastWithAction(text, kind, action.text)
+                    } else {
+                        AppController.toast(text, kind)
+                    }
+                }
+                listView.interactive: false
+                maxTextWidth: AppSettings.editorWidth > 0 ? AppSettings.editorWidth : 100000
+                typewriter: AppSettings.typewriterScrolling
+                copyRefShortcut: AppController.routeText(ShortcutMap.sequences, "block.copyRef")
+                sourceModeShortcut: AppController.routeText(ShortcutMap.sequences, "page.source")
+                propertiesExpanded: AppSettings.propertiesExpanded
+                onPropertiesExpandedToggled: (expanded) => AppSettings.propertiesExpanded = expanded
+                horizontalPadding: Theme.compact ? Theme.space3 : Theme.space8
+                bottomSpace: Theme.touchUi ? Theme.touchTarget : Theme.space3
+                headingCap: Theme.compact ? Theme.textXl : Theme.text2xl
+                documentInset: Workspace.config.journalMode === "document" ? 0 : streamEditor.outlineGutter
+            }
+            // The stream itself (EditorAtramentJournal, an AtramentView: loaded by its file name).
+            Loader {
+                id: streamLoader
+                anchors.fill: parent
+                focus: true
+                function load(): void {
+                    frame.streamValues = { editorItem: streamEditor, journals: frame, daysModel: atramentDays,
+                                           streamSelection: atramentStream, streamFind: streamFind }
+                    streamLoader.setSource(frame.streamSource, frame.streamValues)
+                }
+                onLoaded: {
+                    root.streamView = streamLoader.item as Item
+                    if (root.pendingDate !== "")
+                        applyStateLater.restart()
+                }
+            }
+            readonly property url streamSource: Qt.resolvedUrl("../editor/EditorAtramentJournal.qml")
+            property var streamValues: ({})
+
+            // Dev: the stream's self-test against the list drawn by Atrament (ctest
+            // tst_content_journals_atrament_qml), loaded from its file in developer builds only.
+            Loader {
+                id: atramentSelfTestLoader
+                active: DevTools.editorScript === "journals-selftest" && root.streamView !== null
+                onActiveChanged: {
+                    if (!atramentSelfTestLoader.active)
+                        return
+                    frame.selfTestValues = { stream: root.streamView, editor: streamEditor, days: atramentDays,
+                                             selection: atramentStream, streamFind: streamFind, journalsView: root }
+                    atramentSelfTestLoader.setSource(frame.selfTestSource, frame.selfTestValues)
+                }
+            }
+            property var selfTestValues: ({})
+            readonly property url selfTestSource: Qt.resolvedUrl("../content/ContentJournalsAtramentSelfTest.qml")
+
+            // "Go to day" (JournalsJumpDialog, loaded when it first opens).
+            Loader { id: atramentJumpLoader }
+            function openJumpDialog(): void {
+                if (atramentJumpLoader.item === null)
+                    atramentJumpLoader.source = Qt.resolvedUrl("JournalsJumpDialog.qml")
+                const dialog = atramentJumpLoader.item as T.Popup
+                if (dialog)
+                    dialog.open()
+            }
+            Connections {
+                target: atramentJumpLoader.item
+                function onDayPicked(day: string): void {
+                    if (atramentDays.exactRowOfDate(day) >= 0)
+                        root.scrollToDate(day)
+                    else
+                        AppController.navigate({ view: "journal", date: day })
+                }
+            }
+        }
+    }
+
     Component {
         id: journalsPanel
         // (ContentSidePanel, loaded from its file when the panel is shown: docs/PERFORMANCE.md "QML
         // files loaded when first used".)
         Loader {
             id: journalsPanelLoader
-            readonly property string path: root.activeDay ? root.activeDay.path : tools.journalPathFor(DatesHelper.today)
+            readonly property string path: root.activeController ? root.activeController.path : tools.journalPathFor(DatesHelper.today)
             Component.onCompleted: {
                 root._panelValues = { path: journalsPanelLoader.path, controller: root.activeController, editor: root.activeEditor }
                 journalsPanelLoader.setSource(root._panelSource, root._panelValues)

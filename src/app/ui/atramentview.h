@@ -158,6 +158,42 @@ class AtramentView : public brulion::atrament::AtramentItem {
     Q_PROPERTY(qreal dragBottomInset MEMBER m_dragBottomInset NOTIFY touchSelectionChanged FINAL)
     Q_PROPERTY(QRectF selectionRect READ selectionRect NOTIFY selectionRectChanged FINAL)
 
+    // "journal" (docs/ATRAMENT.md "The journal stream as one list"; editor/atrament/journalview.h):
+    // the journal stream as one list. Its days are `daysModel`'s (JournalListModel); each day near the
+    // view gets a PageController made here — `editorHost` (Workspace), `daysActive`, `dayReadOnly`,
+    // `dayAllowNewBlockIds`, `dayPalette` (BlockEditor.rendererPalette), `dayLocale`, `dayNow`:
+    // ContentJournalDay's — and a PageView of the looks above; the stream's `streamSelection`
+    // (StreamSelection) and `streamFind` (StreamFind) have the days made attached. A day without a
+    // note starts from `journalTemplate`; a document day's text starts `documentGutter` into the
+    // column. The headings' look and words: `journalLook` (JournalView::Look's keys: text, muted,
+    // faint, accentText, accent, onAccent, neutralBadge, separator, hover, pressed, background
+    // (colours), dateFamily, uiFamily, dateSize, todaySize, compactDateSize, captionSize,
+    // buttonSize, badgeSize, lineHeightTight, gap, space2, space3, touchTarget, radius, iconSize,
+    // compact, touch, readOnly, today, yesterday, openAsPage, promptToday, promptDay, readOnlyToday,
+    // readOnlyDay). `streamHeader` / `streamFooter`: the QML items above and below the days. The
+    // room the docked touch toolbar covers: `bottomInset`.
+    // The page API above (editRow, editText, revealRow, rowTop, linkPoint, selectInEdited…) and the
+    // page's signals are the active day's: a day's signal makes it the active one first
+    // (`activeController` changes before the signal is emitted).
+    Q_PROPERTY(QObject *daysModel READ daysModel WRITE setDaysModel NOTIFY journalChanged FINAL)
+    Q_PROPERTY(QObject *editorHost MEMBER m_editorHost NOTIFY journalChanged FINAL)
+    Q_PROPERTY(bool daysActive MEMBER m_daysActive NOTIFY dayOptionsChanged FINAL)
+    Q_PROPERTY(bool dayReadOnly MEMBER m_dayReadOnly NOTIFY dayOptionsChanged FINAL)
+    Q_PROPERTY(bool dayAllowNewBlockIds MEMBER m_dayAllowNewBlockIds NOTIFY dayOptionsChanged FINAL)
+    Q_PROPERTY(QVariantMap dayPalette MEMBER m_dayPalette NOTIFY dayOptionsChanged FINAL)
+    Q_PROPERTY(QString dayLocale MEMBER m_dayLocale NOTIFY dayOptionsChanged FINAL)
+    Q_PROPERTY(QString dayNow MEMBER m_dayNow NOTIFY dayOptionsChanged FINAL)
+    Q_PROPERTY(QString journalTemplate MEMBER m_journalTemplate NOTIFY dayOptionsChanged FINAL)
+    Q_PROPERTY(qreal documentGutter MEMBER m_documentGutter NOTIFY styleChanged FINAL)
+    Q_PROPERTY(qreal bottomInset MEMBER m_bottomInset NOTIFY dayOptionsChanged FINAL)
+    Q_PROPERTY(QObject *streamSelection MEMBER m_streamSelection NOTIFY journalChanged FINAL)
+    Q_PROPERTY(QObject *streamFind MEMBER m_streamFind NOTIFY journalChanged FINAL)
+    Q_PROPERTY(QVariantMap journalLook MEMBER m_journalLook NOTIFY journalLookChanged FINAL)
+    Q_PROPERTY(QQuickItem *streamHeader READ streamHeader WRITE setStreamHeader NOTIFY journalChanged FINAL)
+    Q_PROPERTY(QQuickItem *streamFooter READ streamFooter WRITE setStreamFooter NOTIFY journalChanged FINAL)
+    Q_PROPERTY(QObject *activeController READ activeController NOTIFY activeControllerChanged FINAL)
+    Q_PROPERTY(int activeDay READ activeDay NOTIFY activeControllerChanged FINAL)
+
 public:
     explicit AtramentView(QQuickItem *parent = nullptr);
     ~AtramentView() override;
@@ -223,6 +259,48 @@ public:
     // In a selectionCommand handler: the editor took the command (PageView's own default is skipped).
     Q_INVOKABLE void acceptSelectionCommand() { m_commandTaken = true; }
     QRectF selectionRect() const { return m_selectionRect; }
+
+    // "journal": the stream (see above).
+    QObject *daysModel() const { return m_daysModel.data(); }
+    void setDaysModel(QObject *model);
+    QQuickItem *streamHeader() const { return m_streamHeader.data(); }
+    void setStreamHeader(QQuickItem *item);
+    QQuickItem *streamFooter() const { return m_streamFooter.data(); }
+    void setStreamFooter(QQuickItem *item);
+    QObject *activeController() const;
+    int activeDay() const;
+    // The days listed, the days made (near the view), day `row`'s controller (null: not made).
+    Q_INVOKABLE int dayCount() const;
+    Q_INVOKABLE int madeDayCount() const;
+    Q_INVOKABLE QObject *dayController(int row) const;
+    Q_INVOKABLE int dayOfController(QObject *controller) const;
+    // Scrolls to day `row` (its top at the view's top; `contain`: the least that shows it), to the
+    // day of `date` or the nearest earlier one (false: none), by `dy` px.
+    Q_INVOKABLE void scrollToDay(int row, bool contain);
+    Q_INVOKABLE bool scrollToDate(const QString &date);
+    Q_INVOKABLE void scrollBy(qreal dy);
+    // Day `row` made, shown and the one written in (the stream's find goes on there); the day of
+    // `controller` the one written in.
+    Q_INVOKABLE void activateDay(int row);
+    Q_INVOKABLE void activateController(QObject *controller);
+    // Starts writing in day `row` (its last block, or the journal template's first empty block).
+    Q_INVOKABLE bool beginDay(int row);
+    // { date, offset }: the day at the view's top and how far into it (px); {} at the very top.
+    Q_INVOKABLE QVariantMap viewState() const;
+    Q_INVOKABLE void restoreViewState(const QVariantMap &state);
+    // Where day `row`'s section, its block `block` and its parts ("date", "open", "prompt") are in
+    // this item by the last frame (−1 / (−1, −1): not drawn).
+    Q_INVOKABLE qreal dayTop(int row) const;
+    Q_INVOKABLE qreal dayHeight(int row) const;
+    Q_INVOKABLE qreal dayRowTop(int row, int block) const;
+    Q_INVOKABLE qreal dayRowHeight(int row, int block) const;
+    Q_INVOKABLE QPointF dayPoint(int row, const QString &part) const;
+    // A file renamed (the days follow it), the notebook's journal mode changed (each day's mode).
+    Q_INVOKABLE void followRename(const QString &oldPath, const QString &newPath);
+    Q_INVOKABLE void refreshModes();
+    // The day's folds were restored from the notebook's (its changes are told from now on:
+    // dayFoldStateChanged).
+    Q_INVOKABLE void markFoldsRestored(QObject *controller);
 
 Q_SIGNALS:
     void viewChanged();
@@ -312,10 +390,29 @@ Q_SIGNALS:
     void selectionCommand(const QString &command, int row);
     void touchSelectionChanged();
     void selectionRectChanged();
+    // "journal".
+    void journalChanged();
+    void dayOptionsChanged();
+    void journalLookChanged();
+    // The day written in changed (before the signal of the day that made it so).
+    void activeControllerChanged();
+    // A day's date or "Open as page" (`source`: Ctrl+E in it — its Markdown source).
+    void openAsPageRequested(const QString &date, bool source);
+    // The prompt of a day without a note: the editor decides (reading mode), then beginDay().
+    void beginRequested(int row);
+    // A day's controller made (near the view), loaded, about to go (far away); its folds changed
+    // (after markFoldsRestored), a change from elsewhere merged into it.
+    void dayMade(QObject *controller);
+    void dayLoaded(QObject *controller);
+    void dayReleased(QObject *controller);
+    void dayFoldStateChanged(QObject *controller);
+    void dayExternallyChanged(QObject *controller, bool merged);
 
 protected:
     void componentComplete() override;
     void placeHostedChildren() override;
+    // "journal": a press on a day's hosted row makes that day the active one first.
+    bool childMouseEventFilter(QQuickItem *child, QEvent *event) override;
     // Vim's own Ctrl keys win over the window's shortcuts in its command modes (InlineEditor's
     // Keys.onShortcutOverride, BlockEditor.vimOwnsShortcut).
     bool event(QEvent *event) override;
@@ -405,4 +502,47 @@ private:
     qreal m_dragBottomInset = 0;
     bool m_commandTaken = false;
     QRectF m_selectionRect;
+
+    // A page drawn here: the "page" view's, or in "journal" the active day's (none before one is).
+    bool hasPage() const;
+    // The pages the looks and the callbacks go to: the page, or every day made.
+    template<class F>
+    void forEachPage(F &&f);
+    // The page's (or a day's) part of the setup: its signals, its editing callbacks, its tables',
+    // its looks (styleOne: without the geometry in "journal", which is the stream's per day).
+    struct PageHandle;
+    void connectPageSignals(const PageHandle &page);
+    void connectEditing(const PageHandle &page);
+    void connectTablesOf(const PageHandle &page);
+    void styleOne(const PageHandle &page);
+    void styleTablesOf(const PageHandle &page);
+    void extrasOf(const PageHandle &page);
+    void touchSelectionOf(const PageHandle &page);
+    // "journal".
+    struct Journal;
+    std::unique_ptr<Journal> m_journal;
+    void attachJournal();
+    void applyJournal();
+    void applyJournalLook();
+    void applyDayOptions();
+    void activatePage(std::uint64_t pageId);
+    void journalActiveChanged(int day);
+    void placeStreamEdges();
+    void tellStreamEdges();
+    QPointer<QObject> m_daysModel;
+    QPointer<QObject> m_editorHost;
+    bool m_daysActive = true;
+    bool m_dayReadOnly = false;
+    bool m_dayAllowNewBlockIds = true;
+    QVariantMap m_dayPalette;
+    QString m_dayLocale;
+    QString m_dayNow;
+    QString m_journalTemplate;
+    qreal m_documentGutter = 36;
+    qreal m_bottomInset = 0;
+    QPointer<QObject> m_streamSelection;
+    QPointer<QObject> m_streamFind;
+    QVariantMap m_journalLook;
+    QPointer<QQuickItem> m_streamHeader;
+    QPointer<QQuickItem> m_streamFooter;
 };

@@ -6782,6 +6782,40 @@ and `tst_content_journals_span_qml(_touch)_dayitem` run the journal's self-tests
 and touch input through the drawn days). Numbers: docs/PERFORMANCE.md "Z10 stage A2: a journal day
 as one item".
 
+### The journal stream drawn by Atrament: one list, no item per day
+
+With the editor drawn by Atrament (Settings → Editor → "Draw the editor with Atrament",
+`AppSettings.editorAtrament`; `--atrament-editor` for the self-tests) the stream is one Atrament list
+instead of the `ListView` of `ContentJournalDay` items (docs/ATRAMENT.md "The journal stream as one
+list"; `qml/editor/EditorAtramentJournal.qml`, loaded by JournalsView by its file name):
+
+* **A row per day**: the line between days, the date (today larger; "Today" / "Yesterday" as a badge;
+  phones: the weekday and the word as a small line above the date), "Open as page" (phones: its
+  icon), then the day's blocks — drawn by Atrament as a page's are — or, for a day without a note,
+  the prompt whose tap begins the day from the journal template. A tap on the date or "Open as page"
+  opens the day as a page; Ctrl+E opens it in source mode.
+* **Only the days near the view exist**: their PageControllers are made a screen before they scroll
+  in and go two screens after they left (they save as they go), except the day written in, one being
+  edited, with blocks selected or zoomed into. A day above the view measured later moves nothing on
+  screen (the list's anchor is a day and an offset into it).
+* **One editor for the stream** (JournalsView's `streamEditor`, a BlockEditor without rows of its
+  own): its controller is the day being written in — the day a tap, a key, a menu or a selection
+  is in becomes that day first, the day before stops editing (unless a selection spans several
+  days). The touch toolbar docks on the stream's frame as before; the side panel, the find bar's
+  current match, Vim, Back's zoom and the stream's commands act on that day.
+* **Across days**: ↓ on the last line of a day's last block edits the next day's first block (the
+  caret at the same x), ↑ on the first line of its first block the day above's last one — days
+  without blocks are passed (the QML stream stops at a day's edge); Enter at a day's end makes a
+  block in that day, Backspace at a day's start merges nothing into the day above. Shift+↑/↓ past
+  a day's edge and a mouse drag from one day into another select blocks of several days
+  (StreamSelection, as above); the find bar tints its matches in every day.
+* **Kept as QML**: the missed reminders, the days' count and "Go to day…" above the days, the empty
+  journal's hint below them, a day's rows Atrament does not draw yet (its BlockDelegates, as on a
+  page) — placed over the list.
+* Not yet: the zoom's breadcrumb above a day zoomed into, the selection's drag scrolling the stream at
+  its edges (the wheel and Shift+click reach farther days), a long day laid out only where it shows
+  (a day is laid out whole, as ContentJournalDay builds all its blocks).
+
 ### Pictures hold their pixels only near the view
 
 A page created whole has every picture's frame from the start. The frame is cheap; the picture
