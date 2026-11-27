@@ -3,8 +3,10 @@
 // a sync with nothing to do, edits on either side, both sides in different fields (merged) and in
 // the same one (the newer wins, or both stay), deletions both ways with the guard, a recurring task
 // completed in Brulion, a second device of the same notebook, events changed in Brulion (the
-// outbox and its conflicts), Polish text, broken members, a server that cannot be reached.
+// outbox and its conflicts), events changed by brulion-cli (its inbox, taken under the device's
+// lock), Polish text, broken members, a server that cannot be reached.
 #include "caldav/calendarsync.h"
+#include "caldav/eventchange.h"
 #include "fakecaldav.h"
 
 #include "index/vaultindex.h"
@@ -13,6 +15,8 @@
 
 #include <QDir>
 #include <QFile>
+#include <QLockFile>
+#include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -164,6 +168,7 @@ private Q_SLOTS:
     void movedLineKeepsSyncing();
     void movedSubtaskUpdatesRelatedTo();
     void eventsChangedHere();
+    void eventsFromTheInbox();
     void brokenMembersAndOffline();
 };
 
@@ -677,6 +682,99 @@ void TestCalDavTasks::eventsChangedHere()
     dev.run();
     QVERIFY(!server.member(u"praca"_s, u"nowe-wydarzenie.ics"_s));
     Q_UNUSED(etag);
+}
+
+void TestCalDavTasks::eventsFromTheInbox()
+{
+    FakeCalDav server;
+    server.addCalendar(u"praca"_s, praca());
+    server.putMember(u"praca"_s, u"stand.ics"_s,
+                     vevent(u"stand"_s, u"DTSTART;TZID=Europe/Warsaw:20261116T093000\r\nDTEND;TZID=Europe/Warsaw:20261116T094500\r\n"
+                                        u"RRULE:FREQ=DAILY;COUNT=5\r\nSUMMARY:Stand-up\r\n"_s));
+    Device dev(&server);
+    dev.run();
+    const QString folder = dev.store->folder();
+    int minute = 0;
+    const auto post = [&folder, &minute](EventIntent i) {
+        i.at = QDateTime(QDate(2026, 11, 20), QTime(9, minute++), QTimeZone::UTC);
+        i.id = newIntentId(i.at);
+        if (i.calendarId.isEmpty())
+            i.calendarId = u"c-1"_s;
+        return postIntent(folder, i);
+    };
+    // brulion-cli asked: a meeting, one stand-up left out, an event of a calendar gone, a change of
+    // an event that is not there — and a file that is no change at all.
+    EventIntent create;
+    create.kind = EventIntent::Kind::Create;
+    create.uid = u"brulion-event-cli"_s;
+    create.patch.title = u"Spotkanie z Łucją"_s;
+    create.patch.times.start = EventMoment(DateSpec{QDate(2026, 11, 23), QTime(10, 0)});
+    create.patch.reminderMinutes = 15;
+    QVERIFY(post(create));
+    EventIntent skip;
+    skip.kind = EventIntent::Kind::Delete;
+    skip.uid = u"stand"_s;
+    skip.instance = instanceFromText(u"20261118T093000@Europe/Warsaw"_s);
+    QVERIFY(post(skip));
+    EventIntent gone = create;
+    gone.calendarId = u"c-9"_s;
+    QVERIFY(post(gone));
+    EventIntent missing;
+    missing.uid = u"brak"_s;
+    missing.patch.title = u"Nic"_s;
+    QVERIFY(post(missing));
+    QFile broken(inboxFolder(folder) + u"/20261120T095900000-zepsuty.json"_s);
+    QVERIFY(broken.open(QIODevice::WriteOnly));
+    broken.write("{\"kind\": \"cre");
+    broken.close();
+    // Taken at once, before any run: shown, waiting to be sent, the inbox empty; the refused ones
+    // in the log with what was wrong.
+    QSignalSpy changed(dev.sync.get(), &CalendarSync::calendarChanged);
+    const int logged = dev.store->log().size();
+    QCOMPARE(dev.sync->takeInbox(), 2);
+    QVERIFY(pendingIntents(folder).isEmpty());
+    QCOMPARE(dev.state().outbox.size(), 2);
+    QVERIFY(!changed.isEmpty());
+    const QList<LogEntry> log = dev.store->log().mid(logged);
+    QCOMPARE(log.size(), 3);
+    for (const LogEntry &e : log) {
+        QCOMPARE(e.kind, LogEntry::Kind::Error);
+        QCOMPARE(e.code, u"cli-change"_s);
+    }
+    QVERIFY(log.at(0).text.contains(u"No calendar"_s));
+    QVERIFY(log.at(1).text.contains(u"No event"_s));
+    QCOMPARE(log.at(1).name, u"Praca"_s);
+    QVERIFY(log.at(2).text.contains(u"zepsuty"_s));
+    // Sent with the next run.
+    dev.run();
+    QVERIFY(dev.state().outbox.isEmpty());
+    const QString made = memberOfUid(server, u"brulion-event-cli"_s);
+    QVERIFY(memberText(server, made).contains(u"SUMMARY:Spotkanie z Łucją"_s));
+    QVERIFY(memberText(server, made).contains(u"DTSTART;TZID=Europe/Warsaw:20261123T100000"_s));
+    QVERIFY(memberText(server, made).contains(u"TRIGGER:-PT15M"_s));
+    QVERIFY(memberText(server, u"stand.ics"_s).contains(u"EXDATE;TZID=Europe/Warsaw:20261118T093000"_s));
+    // Taken twice (its file came back): still one event; the run takes it as it starts.
+    QVERIFY(post(create));
+    dev.run();
+    QVERIFY(pendingIntents(folder).isEmpty());
+    int copies = 0;
+    for (const QString &name : server.memberNames(u"praca"_s))
+        copies += memberText(server, name).contains(u"UID:brulion-event-cli"_s) ? 1 : 0;
+    QCOMPARE(copies, 1);
+    // Another process of the device syncs (it holds the lock): the inbox waits for it.
+    EventIntent rename;
+    rename.uid = u"brulion-event-cli"_s;
+    rename.patch.title = u"Spotkanie z Łucją i Kubą"_s;
+    QVERIFY(post(rename));
+    {
+        QLockFile other(folder + u"/sync.lock"_s);
+        QVERIFY(other.tryLock(0));
+        QCOMPARE(dev.sync->takeInbox(), 0);
+        QCOMPARE(pendingIntents(folder).size(), 1);
+    }
+    QCOMPARE(dev.sync->takeInbox(), 1);
+    dev.run();
+    QVERIFY(memberText(server, made).contains(u"SUMMARY:Spotkanie z Łucją i Kubą"_s));
 }
 
 void TestCalDavTasks::brokenMembersAndOffline()

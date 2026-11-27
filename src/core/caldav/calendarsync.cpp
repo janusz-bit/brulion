@@ -1,5 +1,6 @@
 #include "caldav/calendarsync.h"
 
+#include "caldav/eventchange.h"
 #include "caldav/tasksync_p.h"
 #include "index/vaultindex.h"
 #include "log/categories.h"
@@ -19,28 +20,6 @@ namespace brulion::caldav {
 using namespace Qt::StringLiterals;
 
 namespace {
-
-QString fileNameFor(const QString &uid)
-{
-    QString out;
-    for (const QChar c : uid) {
-        if (c.isLetterOrNumber() || c == u'-' || c == u'_' || c == u'.')
-            out += c;
-        else
-            out += u'-';
-    }
-    if (out.isEmpty())
-        out = u"event"_s;
-    return out.left(120) + u".ics"_s;
-}
-
-QString calendarPath(const QString &url)
-{
-    QString p = QUrl(url).path(QUrl::FullyDecoded);
-    if (!p.endsWith(u'/'))
-        p += u'/';
-    return p;
-}
 
 /// The kind ("VEVENT", "VTODO") and UID of a member's data.
 std::pair<QString, QString> kindOf(const QByteArray &data)
@@ -216,8 +195,9 @@ bool CalendarSync::begin()
             return false;
         }
     }
-    // What another process wrote meanwhile.
+    // What another process wrote meanwhile, and what brulion-cli asked for.
     m_store->reload();
+    applyInbox();
     return true;
 }
 
@@ -308,6 +288,8 @@ void CalendarSync::finish()
     Q_EMIT runningChanged();
     for (const auto &w : waiters)
         w(report);
+    if (std::exchange(m_inboxAfterRun, false))
+        takeInbox();
 }
 
 void CalendarSync::log(LogEntry entry)
@@ -796,7 +778,7 @@ void CalendarSync::syncCalendar(const CalendarEntry &entry)
                     EventChange copy;
                     copy.kind = EventChange::Kind::Create;
                     copy.uid = uid;
-                    copy.path = calendarPath(job->entry.url) + fileNameFor(uid);
+                    copy.path = newEventPath(job->entry, uid);
                     copy.data = withUid(change.data, uid);
                     copy.at = change.at;
                     job->state.resources.insert(copy.path, Resource{{}, uid, u"VEVENT"_s, copy.data});
@@ -816,6 +798,72 @@ void CalendarSync::syncCalendar(const CalendarEntry &entry)
     (*sendOutbox)();
 }
 
+int CalendarSync::takeInbox()
+{
+    if (m_store->folder().isEmpty())
+        return 0;
+    if (m_running) {
+        m_inboxAfterRun = true;
+        return 0;
+    }
+    QLockFile lock(m_store->folder() + u"/sync.lock"_s);
+    lock.setStaleLockTime(0);
+    if (!lock.tryLock(0) && lock.error() == QLockFile::LockFailedError)
+        return 0; // another process of the device syncs: the next run takes them
+    m_store->reload();
+    return applyInbox();
+}
+
+int CalendarSync::applyInbox()
+{
+    const QList<PendingIntent> pending = pendingIntents(m_store->folder());
+    if (pending.isEmpty())
+        return 0;
+    const CalendarSettings settings = m_store->settings();
+    TodoContext context;
+    context.now = now();
+    context.zone = m_zone;
+    int queued = 0;
+    for (const PendingIntent &p : pending) {
+        const IntentOutcome outcome = p.intent ? applyIntent(settings, *p.intent, context) : IntentOutcome::Refused;
+        if (!p.intent)
+            logRefused({}, {}, u"The file is no change of an event: "_s + p.file);
+        if (outcome == IntentOutcome::Kept)
+            continue; // not saved: taken again later
+        queued += outcome == IntentOutcome::Queued ? 1 : 0;
+        QFile::remove(inboxFolder(m_store->folder()) + u'/' + p.file);
+    }
+    return queued;
+}
+
+CalendarSync::IntentOutcome CalendarSync::applyIntent(const CalendarSettings &settings, const EventIntent &intent,
+                                                      const TodoContext &context)
+{
+    const CalendarEntry *entry = settings.calendar(intent.calendarId);
+    EventProblem why = entry ? EventProblem::None : writableProblem(settings, intent.calendarId);
+    std::optional<EventChange> change;
+    if (entry)
+        change = plannedChange(*entry, m_store->state(entry->id), intent, context, &why);
+    if (change)
+        return queueEvent(entry->id, *change) ? IntentOutcome::Queued : IntentOutcome::Kept;
+    // Nothing left to delete is done; anything else is told in the log.
+    const bool gone = why == EventProblem::NotFound || why == EventProblem::NoOccurrence;
+    if (intent.kind != EventIntent::Kind::Delete || !gone)
+        logRefused(intent.calendarId, entry ? entry->name : QString(), problemText(why) + u" ("_s + intent.uid + u')');
+    return IntentOutcome::Refused;
+}
+
+void CalendarSync::logRefused(const QString &calendarId, const QString &name, const QString &text)
+{
+    LogEntry e;
+    e.kind = LogEntry::Kind::Error;
+    e.calendar = calendarId;
+    e.name = name;
+    e.code = u"cli-change"_s;
+    e.text = text;
+    log(e);
+}
+
 bool CalendarSync::queueEvent(const QString &calendarId, EventChange change)
 {
     const CalendarSettings settings = m_store->settings();
@@ -824,36 +872,10 @@ bool CalendarSync::queueEvent(const QString &calendarId, EventChange change)
         return false;
     CalendarState state = m_store->state(calendarId);
     if (change.path.isEmpty())
-        change.path = calendarPath(entry->url) + fileNameFor(change.uid);
+        change.path = newEventPath(*entry, change.uid);
     if (!change.at.isValid())
         change.at = now().toUTC();
-    const auto known = state.resources.constFind(change.path);
-    if (change.kind != EventChange::Kind::Create && change.ifMatch.isEmpty() && known != state.resources.constEnd())
-        change.ifMatch = known->etag;
-    // One change per member waits: a later one takes the place of an earlier one.
-    for (qsizetype i = 0; i < state.outbox.size(); ++i) {
-        EventChange &earlier = state.outbox[i];
-        if (earlier.path != change.path)
-            continue;
-        if (earlier.kind == EventChange::Kind::Create && change.kind == EventChange::Kind::Delete) {
-            state.outbox.removeAt(i);
-            state.resources.remove(change.path);
-            m_store->saveState(calendarId, state);
-            Q_EMIT calendarChanged(calendarId);
-            return true;
-        }
-        if (earlier.kind == EventChange::Kind::Create)
-            change.kind = EventChange::Kind::Create;
-        change.ifMatch = earlier.ifMatch;
-        state.outbox.removeAt(i);
-        break;
-    }
-    if (change.kind == EventChange::Kind::Delete)
-        state.resources.remove(change.path);
-    else
-        state.resources.insert(change.path, Resource{known != state.resources.constEnd() ? known->etag : QString(), change.uid,
-                                                     u"VEVENT"_s, change.data});
-    state.outbox.append(change);
+    addToOutbox(state, std::move(change));
     const bool ok = m_store->saveState(calendarId, state);
     Q_EMIT calendarChanged(calendarId);
     Q_EMIT localChange();

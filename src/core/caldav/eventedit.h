@@ -13,6 +13,7 @@
 #include <QString>
 #include <QTime>
 
+#include <functional>
 #include <optional>
 
 namespace brulion::caldav {
@@ -46,6 +47,13 @@ QByteArray patchOccurrence(const QByteArray &ics, const QString &uid, const io::
 /// any) removed; empty when the series is not there.
 QByteArray excludeOccurrence(const QByteArray &ics, const QString &uid, const io::ical::DateTimeValue &instance,
                              const TodoContext &context);
+/// `ics` with the left-out occurrences (EXDATE) and the exceptions (RECURRENCE-ID) of the series
+/// `uid` named anew: `rename` gives each one's new start on the device's clock, written the way
+/// DTSTART is. A series whose start moved keeps them naming its occurrences. `ics` as it was when
+/// the series is not there.
+QByteArray renameInstances(const QByteArray &ics, const QString &uid,
+                           const std::function<DateSpec(const io::ical::DateTimeValue &)> &rename,
+                           const TodoContext &context);
 /// A DATE / DATE-TIME value as RECURRENCE-ID and EXDATE write it ("20261120T090000" with its TZID).
 QString formatDateTimeValue(const io::ical::DateTimeValue &value);
 
