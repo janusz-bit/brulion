@@ -4,12 +4,15 @@
 #include "ui/app.h"
 
 #include <QCoreApplication>
+#include <QGuiApplication>
+#include <QInputMethod>
 #include <QDebug>
 #include <QTimer>
 
 #ifdef BRULION_HAS_ATRAMENT_EDITOR
 #include "blocklistmodel.h"
 #include "editorhost.h"
+#include "pagecontroller.h"
 #include "pageview.h"
 #endif
 
@@ -73,8 +76,143 @@ at::Color atColor(const QColor &c)
 {
     return {float(c.redF()), float(c.greenF()), float(c.blueF()), float(c.alphaF())};
 }
+
+int qtModifiers(const at::Modifiers &m)
+{
+    Qt::KeyboardModifiers q;
+    if (m.control)
+        q |= Qt::ControlModifier;
+    if (m.alt)
+        q |= Qt::AltModifier;
+    if (m.shift)
+        q |= Qt::ShiftModifier;
+    if (m.platform)
+        q |= Qt::MetaModifier;
+    return int(q.toInt());
+}
 } // namespace
 #endif
+
+void AtramentView::setPageController(QObject *controller)
+{
+    if (controller == m_pageController)
+        return;
+    m_pageController = controller;
+    Q_EMIT pageControllerChanged();
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (!m_pageModel) {
+        if (auto *c = qobject_cast<brulion::editor::PageController *>(controller)) {
+            if (!m_attached)
+                setPageModel(c->blocks());
+        }
+    }
+    connectController();
+#endif
+}
+
+int AtramentView::editRow() const
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_page)
+        return m_page->entity.read(runtime().app).editState().row;
+#endif
+    return -1;
+}
+
+QString AtramentView::editText() const
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_page) {
+        const std::u16string text = m_page->entity.read(runtime().app).editState().text;
+        return QString(reinterpret_cast<const QChar *>(text.data()), qsizetype(text.size()));
+    }
+#endif
+    return {};
+}
+
+int AtramentView::editCursor() const
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_page)
+        return m_page->entity.read(runtime().app).editState().cursor;
+#endif
+    return 0;
+}
+
+QRectF AtramentView::editCaretRect() const
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_page) {
+        const at::Rect r = m_page->entity.read(runtime().app).editState().caret;
+        return {r.left(), r.top(), r.width(), r.height()};
+    }
+#endif
+    return {};
+}
+
+void AtramentView::commitComposition()
+{
+    // The input method's own word first (it keeps it outside the text), then the field's.
+    QGuiApplication::inputMethod()->commit();
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_page)
+        m_page->entity.update(runtime().app, [](brulion::editor::atr::PageView &page,
+                                                at::Context<brulion::editor::atr::PageView> &cx) {
+            page.commitComposition(cx);
+        });
+#endif
+}
+
+void AtramentView::connectController()
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (!m_page)
+        return;
+    using namespace brulion::editor::atr;
+    auto *controller = qobject_cast<brulion::editor::PageController *>(m_pageController.data());
+    // (A controller of another model than the page's is none.)
+    if (controller && controller->blocks() != m_pageModel.data())
+        controller = nullptr;
+    QPointer<AtramentView> guard = this;
+    m_page->entity.update(runtime().app, [guard, controller](PageView &page, at::Context<PageView> &cx) {
+        page.onEditRequest = [guard](int row, int cursor, const at::Modifiers &modifiers) {
+            if (!guard)
+                return false;
+            Q_EMIT guard->editRequested(row, cursor, qtModifiers(modifiers));
+            return true;
+        };
+        page.onEditingStarted = [guard] {
+            // The keyboard comes here when a block Atrament edits is edited (a new block, Enter,
+            // ↑/↓ from the QML around, the find bar…).
+            if (guard && !guard->hasActiveFocus())
+                guard->forceActiveFocus(Qt::OtherFocusReason);
+        };
+        page.onEscape = [guard] {
+            if (guard)
+                Q_EMIT guard->escapePressed();
+        };
+        page.onUndo = [guard](bool redo) {
+            if (guard)
+                Q_EMIT guard->undoRequested(redo);
+        };
+        page.onFollowLink = [guard](int row, int cursor, bool newPane) {
+            if (guard)
+                Q_EMIT guard->followLinkRequested(row, cursor, newPane);
+        };
+        page.onEditStateChanged = [guard] {
+            if (guard)
+                Q_EMIT guard->editStateChanged();
+        };
+        page.onSuggestionKey = [guard](std::u16string_view key) {
+            if (!guard || !guard->m_suggestionsOpen)
+                return false;
+            Q_EMIT guard->suggestionKeyPressed(QString(reinterpret_cast<const QChar *>(key.data()), qsizetype(key.size())));
+            return true;
+        };
+        page.setController(controller, cx);
+    });
+#endif
+}
 
 void AtramentView::applyStyle()
 {
@@ -102,6 +240,9 @@ void AtramentView::applyStyle()
         p.guide = atColor(m_guideColor);
         p.background = atColor(m_backgroundColor);
         page.setStyle(m, p);
+        page.setSelectionLook({atColor(m_bandColor), atColor(m_ringColor), float(m_bandRadius)});
+        page.setEditLook(atColor(m_caretColor), atColor(m_selectionColor),
+                         std::u16string(u16View(m_placeholderText)), cx);
         cx.notify();
     });
 #endif
@@ -167,6 +308,7 @@ void AtramentView::attachView()
                     };
                 });
         applyStyle();
+        connectController();
         attach(r.app, at::AnyView{m_page->entity.id(), &at::renderView<brulion::editor::atr::PageView>});
         m_attached = true;
         return;

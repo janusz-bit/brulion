@@ -13,13 +13,22 @@
 // Ctrl+arrows by word, Home/End by line, Shift extends, Backspace/Delete (Ctrl: a word), Ctrl+A,
 // Ctrl+C/X/V, Ctrl+Z / Ctrl+Shift+Z / Ctrl+Y, Enter (a new line when multiline, else Submitted),
 // the mouse: click, drag, Shift+click, double click (a word), triple click (all).
+//
+// Styled text (docs/ATRAMENT.md M2, "A styled TextInput"): `setStyler(f)` gives the text spans
+// from a function of the text (the edited block's Markdown highlighted: markers dimmed, bold bold,
+// code in its face), asked again whenever the text changes — the spans refine the inherited text
+// style as a Text element's do. `setColors` sets the caret's and the selection's colours.
+// An owner around the field sees its changes as events: Changed (the text), SelectionChanged
+// (the caret or the selection moved, the text changed too).
 
 #include "ui/app.h"
 #include "ui/element.h"
 #include "ui/platform.h"
 #include "ui/style.h"
+#include "ui/text.h"
 #include "ui/window.h"
 
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -37,6 +46,8 @@ struct TextInputOptions {
     // The field's accessible name ("Szukaj"); without one a screen reader names it by the
     // placeholder, which is otherwise its description.
     std::u16string label;
+    Color caretColor = rgb(0x8b93ff);
+    Color selectionColor = rgba(0x8b93ff55);
 };
 
 class TextInput {
@@ -48,6 +59,11 @@ public:
     struct Submitted {
         std::u16string text;
     };
+    struct SelectionChanged {
+        InputHandler::Selection selection;
+    };
+    // The spans of a text (ranges in UTF-16 offsets of it), in order.
+    using Styler = std::function<std::vector<TextSpan>(std::u16string_view text)>;
 
     explicit TextInput(Context<TextInput> &cx);
     TextInput(Context<TextInput> &cx, Options options);
@@ -61,6 +77,13 @@ public:
     bool multiline() const { return m_options.multiline; }
     const Options &options() const { return m_options; }
     void setLabel(std::u16string_view label, Context<TextInput> &cx);
+    void setPlaceholder(std::u16string_view placeholder, Context<TextInput> &cx);
+    void setStyler(Styler styler, Context<TextInput> &cx);
+    void setColors(Color caret, Color selection, Context<TextInput> &cx);
+    // The spans of the current text (the styler's, computed once per text).
+    const std::vector<TextSpan> &spans() const;
+    // Forgets the undo history (an owner that keeps its own: the editor's undo stack).
+    void clearUndo();
 
     // Editing operations (what keys and the input method do), each one an undo step.
     void replace(Range range, std::u16string_view text, Context<TextInput> &cx);
@@ -90,6 +113,8 @@ public:
     std::optional<Rect> boundsForRange(Range range) const;
     std::optional<int> offsetForPoint(Point point) const;
     std::optional<Rect> bounds() const { return m_layout ? std::optional<Rect>(m_bounds) : std::nullopt; }
+    // The text as laid out in the last frame (nullptr before the first).
+    const TextLayout *layout() const { return m_layout.get(); }
     bool caretVisible() const { return m_caretVisible; }
 
     // Set by the element when it is laid out and painted.
@@ -105,6 +130,7 @@ private:
     };
     void pushUndo();
     void changed(Context<TextInput> &cx);
+    void selectionMoved(Context<TextInput> &cx);
     void restartBlink(Context<TextInput> &cx);
     void scheduleBlink(Context<TextInput> &cx);
     int clampOffset(int offset) const;
@@ -115,6 +141,10 @@ private:
     InputHandler::Selection m_selection;
     std::optional<Range> m_marked;
     FocusHandle m_focus;
+    Styler m_styler;
+    mutable std::vector<TextSpan> m_spans; // the styler's, for m_spansRevision's text
+    std::uint64_t m_textRevision = 1;
+    mutable std::uint64_t m_spansRevision = 0;
     std::vector<Snapshot> m_undo;
     std::vector<Snapshot> m_redo;
     bool m_coalesceTyping = false;

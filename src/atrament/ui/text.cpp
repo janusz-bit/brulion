@@ -161,6 +161,11 @@ void Text::prepaint(Rect bounds, Window &window, App &)
     const bool wraps = m_whiteSpace != WhiteSpace::NoWrap;
     if (!m_layout || (wraps && (!m_layout->wrapWidth() || std::abs(*m_layout->wrapWidth() - bounds.width()) > 0.01f)))
         m_layout = layoutAt(wraps ? std::optional<float>(bounds.width()) : std::nullopt);
+    if (m_layoutHandle) {
+        m_layoutHandle->layout = m_layout;
+        m_layoutHandle->bounds = bounds;
+        m_layoutHandle->frame = window.frameCount();
+    }
     if (m_links.empty() || !m_layout)
         return;
     m_linkState = &window.elementState<LinkState>();

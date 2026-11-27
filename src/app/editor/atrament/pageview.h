@@ -10,6 +10,21 @@
 // estimated height; the QML delegate placed over it comes with the host (`foreignRows()` lists
 // them per frame for that).
 //
+// Editing (step 2, "Editing text rows"; pageediting.cpp): with a PageController
+// (setController()), the row the controller edits — when Atrament draws it and it is a paragraph,
+// a list item, a task, a heading or a quote — shows a TextInput over the block's `editText`
+// instead of its rendered text, styled by `setEditStyler()` (the highlighter's rules). Typing
+// goes to PageController::setEditText (the controller's undo stack, input rules, normalisation —
+// what it gives back through editTextReset is shown); the editor's keys (Enter splits, Backspace
+// at the start merges or leaves a list, Delete at the end joins the next block, Tab / Shift+Tab,
+// Alt+↑/↓ move the block, ↑/↓ past the first or last line go to the block above or below at the
+// caret's x, Ctrl+Enter the next task status, Ctrl+. folds, Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z the
+// page's undo, Esc stops editing) are caught before the field (a capture listener) and become
+// controller calls. A click or a tap on a drawn row edits it at the character under the pointer
+// (the rendered text's display ↔ source map); an input method's line break in a one-line block
+// splits it, a paste with line breaks becomes blocks (PageController::pasteText), as in the QML
+// editor (InlineEditor.qml, BlockEditor.handleEditorKeyCode).
+//
 //   auto page = app.newEntity<PageView>(model);   // a BlockListModel the caller keeps alive
 //   AtramentItem::attach(app, page)               // or a TestWindow in tests
 #pragma once
@@ -24,11 +39,14 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
+#include <unordered_map>
 #include <vector>
 
 namespace brulion::editor {
 
 class BlockListModel;
+class PageController;
 
 namespace atr {
 
@@ -80,6 +98,13 @@ public:
     BlockListModel *model() const { return m_model.data(); }
     // A new look (the theme changed): every row is laid out again.
     void setStyle(const PageMetrics &metrics, const PagePalette &palette);
+    // The band under selected blocks (Theme.bgSelected, Theme.focusRing, Theme.radiusSm).
+    struct SelectionLook {
+        atrament::Color band = atrament::rgba(0x3b5bdb22);
+        atrament::Color ring = atrament::rgb(0x3b5bdb);
+        float radius = 6;
+    };
+    void setSelectionLook(const SelectionLook &look);
     const PageMetrics &metrics() const { return m_metrics; }
     const PagePalette &palette() const { return m_palette; }
     // What a click asks of the editor: a link of row `row` (its href: `page:`, `tag:`, a URL…)
@@ -97,8 +122,71 @@ public:
     // Whether a model row is Atrament's to draw (its roles as the model gives them).
     bool drawsRow(int row) const;
 
+    // --- editing (pageediting.cpp)
+    // The page's controller (its `blocks()` must be the view's model); none: read only.
+    void setController(PageController *controller, atrament::Context<PageView> &cx);
+    PageController *controller() const;
+    // Whether Atrament edits model row `row` when it is the controller's editing row.
+    bool editsRow(int row) const;
+    // The row the field edits now (−1: none) and the field (null before the first edit).
+    int editedRow() const;
+    const atrament::Entity<atrament::TextInput> *input() const { return m_input ? &*m_input : nullptr; }
+    // The edited text's spans (the editor's highlighting of the block's Markdown); none: plain.
+    void setEditStyler(atrament::TextInput::Styler styler, atrament::Context<PageView> &cx);
+    // The field's look: its caret and selection colours, the placeholder of an empty block.
+    void setEditLook(atrament::Color caret, atrament::Color selection, std::u16string placeholder,
+                     atrament::Context<PageView> &cx);
+    // Where a click or a tap on drawn row `row` at window point `p` puts the caret: an offset of
+    // the block's `editText` (−1: not known — the row was not drawn in the last frame).
+    int editCursorAt(int row, atrament::Point p) const;
+    // The editText offset on the first (`lastLine` false) or last line of drawn row `row` nearest
+    // to window x `x` (↑/↓ into the row); −1 when not known.
+    int editCursorOnLine(int row, float x, bool lastLine) const;
+    // The rendered text of drawn row `row` as laid out in the last frame (nullptr: not drawn).
+    const atrament::TextLayoutHandle *rowText(int row) const;
+    // What the host does instead of the view's own handling (each unset: the view's default).
+    // A click or a tap asking to edit `row` at `cursor` (modifiers: Shift / Ctrl+click select
+    // blocks in the QML editor) — true when the host handled it.
+    std::function<bool(int row, int cursor, const atrament::Modifiers &modifiers)> onEditRequest;
+    // A row Atrament edits took the editing (the host gives the item the keyboard).
+    std::function<void()> onEditingStarted;
+    // Esc in the field (default: PageController::stopEditing).
+    std::function<void()> onEscape;
+    // Ctrl+Z / Ctrl+Y (default: PageController::undo / redo).
+    std::function<void(bool redo)> onUndo;
+    // Alt+Enter: the link at the caret (default: onLink with PageController::linkAtCursor).
+    std::function<void(int row, int cursor, bool newPane)> onFollowLink;
+    // The field's text, caret or composition changed (the editor's suggestions follow them).
+    std::function<void()> onEditStateChanged;
+    // A key the suggestion list takes while it is open ("up", "down", "enter", "tab", "escape";
+    // no modifiers) — true when it took it, before the editor's own meaning.
+    std::function<bool(std::u16string_view key)> onSuggestionKey;
+    // The field's state for the host (suggestions, the toolbar): its text (a composition
+    // included), the caret, the caret's rectangle in window px; nothing while no row is edited.
+    struct EditState {
+        int row = -1;
+        std::u16string text;
+        int cursor = 0;
+        int anchor = 0;
+        std::optional<atrament::Range> composition;
+        atrament::Rect caret;
+    };
+    EditState editState() const;
+    // Ends the input method's composition (the word becomes text the controller has).
+    void commitComposition(atrament::Context<PageView> &cx);
+
 private:
     atrament::AnyElement renderRow(std::size_t row);
+    // Editing (pageediting.cpp).
+    void controllerEditingChanged(atrament::Context<PageView> &cx);
+    void controllerTextReset(int row, const QString &text, int cursor, atrament::Context<PageView> &cx);
+    void loadInput(int row, int cursor, atrament::Context<PageView> &cx);
+    void inputChanged(atrament::Context<PageView> &cx);
+    void inputSelectionChanged(atrament::Context<PageView> &cx);
+    bool editorKey(const atrament::Keystroke &key, atrament::Window &window, atrament::Context<PageView> &cx);
+    void rowClicked(std::size_t row, const atrament::ClickEvent &click, atrament::Window &window,
+                    atrament::Context<PageView> &cx);
+    bool editableView(const QString &view, bool drawable) const;
 
     QPointer<BlockListModel> m_model;
     std::unique_ptr<PageRows> m_rows;
@@ -109,6 +197,28 @@ private:
     std::vector<QMetaObject::Connection> m_connections;
     std::vector<std::size_t> m_drawn;
     std::vector<std::size_t> m_foreign;
+
+    // Editing (pageediting.cpp).
+    QPointer<PageController> m_controller;
+    std::vector<QMetaObject::Connection> m_controllerConnections;
+    std::optional<atrament::Entity<atrament::TextInput>> m_input;
+    std::vector<atrament::Subscription> m_inputSubscriptions;
+    quint64 m_editUid = 0;     // the block the field shows (0: none)
+    std::u16string m_lastText; // the text last given to or taken from the controller
+    bool m_softBreak = false;  // the next line break in the field is Shift+Enter's
+    bool m_focusInput = false; // the field takes the focus in the next frame
+    bool m_revealEdited = false; // the edited row is scrolled into view in the next frame
+    atrament::TextInput::Styler m_editStyler;
+    // The text of each drawn row in the last frame, by block uid (clicks, ↑/↓ into a row).
+    std::unordered_map<quint64, atrament::TextLayoutHandle> m_rowText;
+    std::unordered_map<quint64, std::uint64_t> m_rowTextFrame;
+    atrament::Color m_editCaret = atrament::rgb(0x3b5bdb);
+    atrament::Color m_editSelection = atrament::rgba(0x3b5bdb40);
+    std::u16string m_editPlaceholder;
+    std::uint64_t m_frame = 0;
+    atrament::EntityId m_selfId = 0;
+    atrament::App *m_app = nullptr;
+    SelectionLook m_selectionLook;
 };
 
 } // namespace atr

@@ -154,6 +154,39 @@ struct Keys {
     }
 };
 
+// An editor around a field: the outer element sees the keys first (captureKeyDown) and keeps
+// Enter from the field; every other key reaches the field's own listener.
+struct Capture {
+    FocusHandle focus;
+    std::vector<std::u16string> log;
+    explicit Capture(Context<Capture> &cx)
+        : focus(cx.newFocusHandle())
+    {
+    }
+    AnyElement render(Window &, Context<Capture> &cx)
+    {
+        return div()
+                .sizeFull()
+                .captureKeyDown(cx.listener([](Capture &self, const KeyDownEvent &e, Window &w, Context<Capture> &) {
+                    self.log.push_back(u"capture:" + e.keystroke.toString());
+                    if (e.keystroke.key == u"enter")
+                        w.stopPropagation();
+                }))
+                .onKeyDown(cx.listener([](Capture &self, const KeyDownEvent &e, Window &, Context<Capture> &) {
+                    self.log.push_back(u"outer:" + e.keystroke.toString());
+                }))
+                .child(div()
+                                .id(u"field")
+                                .w(100)
+                                .h(50)
+                                .trackFocus(focus)
+                                .onKeyDown(cx.listener(
+                                        [](Capture &self, const KeyDownEvent &e, Window &, Context<Capture> &) {
+                                            self.log.push_back(u"field:" + e.keystroke.toString());
+                                        })));
+    }
+};
+
 // A minimal text field: its own InputHandler over a string.
 struct Field {
     FocusHandle focus;
@@ -300,6 +333,7 @@ private Q_SLOTS:
     void cursorFollowsHover();
     void keysFocusAndBindings();
     void keySequences();
+    void captureSeesKeysFirst();
     void inputHandlerTyping();
     void wheelScrolls();
     void uniformListIsVirtual();
@@ -539,6 +573,18 @@ void TestAtramentUi::keySequences()
     // A broken-off sequence: ctrl-k then x — x is handled on its own.
     h.tw.simulateKeystrokes(u"ctrl-k x ctrl-k ctrl-s");
     QCOMPARE(actions(), (std::vector<std::u16string> { u"save", u"save" }));
+}
+
+void TestAtramentUi::captureSeesKeysFirst()
+{
+    Harness h;
+    Entity<Capture> capture = h.app.newEntity<Capture>();
+    h.open(capture);
+    h.tw.simulateClick({ 20, 20 });
+    h.tw.simulateKeystrokes(u"x enter");
+    // x: seen on the way down, then the field's, then bubbling out; Enter: stopped on the way down.
+    const std::vector<std::u16string> expected { u"capture:x", u"field:x", u"outer:x", u"capture:enter" };
+    QCOMPARE(capture.read(h.app).log, expected);
 }
 
 void TestAtramentUi::inputHandlerTyping()

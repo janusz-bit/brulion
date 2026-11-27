@@ -1904,23 +1904,74 @@ FocusScope {
         editor.suggestionTrigger = detected.map
         editor.suggestionRow = edit.row
         editor.suggestionTarget = edit
+        editor.suggestionCaretItem = null
         QmlCall.set(popup, "trigger", editor.suggestionTrigger)
         QmlCall.set(popup, "row", editor.suggestionRow)
         QmlCall.set(popup, "target", editor.suggestionTarget)
+        QmlCall.set(popup, "caretItem", editor.suggestionCaretItem)
         QmlCall.call(popup, "show")
     }
 
     /// SuggestionModel.detect()'s trigger.
     MapHolder { id: detected }
 
+    /// updateCompletion() for the page drawn by Atrament (EditorAtramentPage): its field is no
+    /// TextEdit — the text (a composition included), the caret and the caret's box in `item`.
+    function updateCompletionAt(item: Item, row: int, text: string, caret: int, box: rect): void {
+        if (!item || !item.activeFocus || row < 0 || readOnly) {
+            closeSuggestions()
+            return
+        }
+        detected.map = suggestionModel.detect(text, caret)
+        if (detected.map.mode === "") {
+            closeSuggestions()
+            return
+        }
+        suggestionModel.setTrigger(detected.map)
+        if (suggestionModel.count === 0) {
+            closeSuggestions()
+            return
+        }
+        const popup = suggestionPopup()
+        editor.suggestionTrigger = detected.map
+        editor.suggestionRow = row
+        editor.suggestionTarget = null
+        editor.suggestionCaretItem = item
+        QmlCall.set(popup, "trigger", editor.suggestionTrigger)
+        QmlCall.set(popup, "row", editor.suggestionRow)
+        QmlCall.set(popup, "target", editor.suggestionTarget)
+        QmlCall.set(popup, "caretItem", item)
+        QmlCall.set(popup, "caretBox", box)
+        QmlCall.call(popup, "show")
+    }
+    /// The suggestion list's keys from the page drawn by Atrament (up, down, enter, tab, escape):
+    /// true when the list took the key.
+    function suggestionKey(key: string): bool {
+        if (!suggestionsOpen)
+            return false
+        switch (key) {
+        case "up": QmlCall.call1(suggestions, "move", -1); return true
+        case "down": QmlCall.call1(suggestions, "move", 1); return true
+        case "enter":
+        case "tab":
+            acceptSuggestion(QmlCall.integer(QmlCall.get(suggestions, "currentIndex")))
+            return true
+        case "escape": closeSuggestions(); return true
+        }
+        return false
+    }
+
     function acceptSuggestion(index: int): void {
         const edit = suggestions ? editor.suggestionTarget : null
-        if (!controller || !edit || index < 0 || index >= suggestionModel.count)
+        const caretItem = suggestions && !edit ? editor.suggestionCaretItem : null
+        if (!controller || (!edit && !caretItem) || index < 0 || index >= suggestionModel.count)
             return
         // The trigger counted the composed word: make it text before replacing it.
         chosenItem.map = suggestionModel.get(index)
-        if (EditorInput.commitPreedit(edit))
+        if (edit && EditorInput.commitPreedit(edit))
             updateCompletion(edit)
+        if (caretItem)
+            QmlCall.call(caretItem, "commitComposition")
         chosenTrigger.map = editor.suggestionTrigger
         const row = editor.suggestionRow + 0 // (a typed copy: passed on after other calls)
         closeSuggestions()
@@ -3382,6 +3433,8 @@ FocusScope {
     property var suggestionTrigger: ({})
     property int suggestionRow: -1
     property InlineEditor suggestionTarget: null
+    /// The page drawn by Atrament the popup was opened for (updateCompletionAt()).
+    property Item suggestionCaretItem: null
     function suggestionPopup(): T.Popup {
         if (!suggestions) {
             editor._popupValues = { editorItem: editor, model: suggestionModel }

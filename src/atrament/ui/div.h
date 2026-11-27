@@ -116,6 +116,10 @@ public:
     Div &&onScrollWheel(ScrollListener f) &&;
     Div &&onHover(HoverListener f) &&;
     Div &&onKeyDown(KeyDownListener f) &&;
+    // A key down seen on its way to the focused element, before anything inside handles it (the
+    // capture phase): an editor's keys around a text field (stopPropagation() keeps it from the
+    // field). GPUI's capture_key_down.
+    Div &&captureKeyDown(KeyDownListener f) &&;
     Div &&onKeyUp(KeyUpListener f) &&;
     Div &&onAction(std::u16string_view action, ActionListener f) &&;
     // The style while hovered / pressed / focused (applied over the base style when painting).
@@ -213,6 +217,7 @@ private:
     ArenaVector<ScrollListener> m_scroll;
     ArenaVector<HoverListener> m_hoverListeners;
     ArenaVector<KeyDownListener> m_keyDown;
+    ArenaVector<KeyDownListener> m_captureKeyDown;
     ArenaVector<KeyUpListener> m_keyUp;
     ArenaVector<ActionEntry> m_actions;
     StyleRefinement m_hoverStyle;

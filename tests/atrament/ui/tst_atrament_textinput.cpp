@@ -77,6 +77,8 @@ private Q_SLOTS:
     void imeBoundsFollowCaret();
     void caretStaysInView();
     void fingerDragsNoSelection();
+    void stylerSpansAndSelectionEvents();
+    void textLayoutHandle();
 };
 
 void TestAtramentTextInput::typesPolishText()
@@ -356,3 +358,95 @@ void TestAtramentTextInput::fingerDragsNoSelection()
 
 QTEST_GUILESS_MAIN(TestAtramentTextInput)
 #include "tst_atrament_textinput.moc"
+
+void TestAtramentTextInput::stylerSpansAndSelectionEvents()
+{
+    Harness h(true);
+    int asked = 0;
+    int moved = 0;
+    InputHandler::Selection last;
+    Subscription sub = h.app.subscribe<TextInput::SelectionChanged>(
+            h.form.read(h.app).field.id(), [&](const TextInput::SelectionChanged &e, App &) {
+                ++moved;
+                last = e.selection;
+            });
+    // Every "ż" red, asked once per text.
+    h.form.read(h.app).field.update(h.app, [&](TextInput &t, Context<TextInput> &cx) {
+        t.setStyler(
+                [&asked](std::u16string_view text) {
+                    ++asked;
+                    std::vector<TextSpan> spans;
+                    for (std::size_t i = 0; i < text.size(); ++i) {
+                        if (text[i] == u'ż') {
+                            TextStyleRefinement red;
+                            red.color = rgb(0xff0000);
+                            spans.push_back({{int(i), int(i) + 1}, red});
+                        }
+                    }
+                    return spans;
+                },
+                cx);
+        t.setColors(rgb(0x00ff00), rgba(0x0000ff40), cx);
+    });
+    h.tw.simulateTyping(u"żżż");
+    QVERIFY(asked >= 1);
+    const int afterTyping = asked;
+    h.tw.settle();
+    h.tw.draw();
+    QCOMPARE(asked, afterTyping); // the same text: no new spans
+    QCOMPARE(h.input().spans().size(), std::size_t(3));
+    bool red = false;
+    for (int y = 10; y < 40 && !red; ++y)
+        for (int x = 10; x < 50 && !red; ++x)
+            red = h.tw.pixel(x, y).r > 180 && h.tw.pixel(x, y).g < 100;
+    QVERIFY(red);
+    // The caret moved by a key: one event with the new selection; the text unchanged.
+    moved = 0;
+    h.tw.simulateKeystrokes(u"left");
+    QCOMPARE(moved, 1);
+    QCOMPARE(last.focus, 2);
+    h.tw.simulateKeystrokes(u"shift-left");
+    QCOMPARE(last.anchor, 2);
+    QCOMPARE(last.focus, 1);
+    // A layout is there for an owner to ask (↑/↓ across fields of an editor).
+    QVERIFY(h.input().layout());
+    QCOMPARE(h.input().layout()->text(), std::u16string(u"żżż"));
+    // The owner keeps the undo history: the field forgets its own.
+    h.form.read(h.app).field.update(h.app, [](TextInput &t, Context<TextInput> &cx) {
+        t.clearUndo();
+        t.undo(cx);
+    });
+    QCOMPARE(h.text(), std::u16string(u"żżż"));
+}
+
+namespace {
+
+struct Tracked {
+    TextLayoutHandle handle;
+    AnyElement render(Window &, Context<Tracked> &)
+    {
+        return div().sizeFull().p(20).textSize(16).child(div().w(120).child(text(u"Zażółć gęślą jaźń").trackLayout(handle)));
+    }
+};
+
+} // namespace
+
+void TestAtramentTextInput::textLayoutHandle()
+{
+    std::shared_ptr<TestPlatform> platform = std::make_shared<TestPlatform>();
+    App app{platform, loadFonts()};
+    TestWindow &tw = platform->newWindow({300, 200});
+    Entity<Tracked> view = app.newEntity<Tracked>();
+    Window &w = app.openWindow(tw, view);
+    QVERIFY(!view.read(app).handle.layout());
+    tw.settle();
+    const TextLayoutHandle &handle = view.read(app).handle;
+    QVERIFY(handle.layout());
+    QCOMPARE(handle.frame(), w.frameCount());
+    QCOMPARE(handle.bounds().left(), 20.0f);
+    QVERIFY(handle.layout()->lines().size() >= 2); // wrapped at 120 px
+    // A point before "gęślą" is offset 7; points left of the text clamp to its start.
+    const Rect caret = handle.layout()->caretRect(7).translated(handle.bounds().origin);
+    QCOMPARE(handle.offsetAt({caret.left() + 0.5f, caret.top() + caret.height() / 2}).value_or(-1), 7);
+    QCOMPARE(handle.offsetAt({0, handle.bounds().top() + 2}).value_or(-1), 0);
+}

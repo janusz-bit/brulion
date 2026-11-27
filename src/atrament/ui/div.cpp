@@ -85,6 +85,12 @@ Div &&Div::onKeyDown(KeyDownListener f) &&
     return std::move(*this);
 }
 
+Div &&Div::captureKeyDown(KeyDownListener f) &&
+{
+    m_captureKeyDown.push_back(f);
+    return std::move(*this);
+}
+
 Div &&Div::onKeyUp(KeyUpListener f) &&
 {
     m_keyUp.push_back(f);
@@ -449,7 +455,7 @@ void Div::paint(Rect bounds, Window &window, App &app)
         window.setCursorStyle(m_hitbox, *s.cursor);
 
     const bool node = bool(m_focus) || !m_keyContext.empty() || !m_keyDown.empty() || !m_keyUp.empty()
-            || !m_actions.empty();
+            || !m_captureKeyDown.empty() || !m_actions.empty();
     if (node)
         window.pushDispatchNode(m_focus.id(), m_keyContext);
     registerMouseListeners(window);
@@ -635,6 +641,18 @@ void Div::registerMouseListeners(Window &window)
 void Div::registerKeyListeners(Window &window)
 {
     Div *self = this;
+    if (!m_captureKeyDown.empty()) {
+        window.onKeyEvent([self](const PlatformInput &input, DispatchPhase phase, Window &w, App &app) {
+            const auto *down = std::get_if<KeyDownEvent>(&input);
+            if (!down || phase != DispatchPhase::Capture)
+                return;
+            for (const KeyDownListener &l : self->m_captureKeyDown) {
+                l(*down, w, app);
+                if (!w.propagating())
+                    return;
+            }
+        });
+    }
     if (!m_keyDown.empty() || !m_keyUp.empty() || (m_focus && !m_click.empty())) {
         window.onKeyEvent([self](const PlatformInput &input, DispatchPhase phase, Window &w, App &app) {
             if (phase != DispatchPhase::Bubble)

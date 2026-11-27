@@ -22,6 +22,10 @@ T.Popup {
     property var trigger: ({})
     property int row: -1
     final property InlineEditor target: null
+    /// Instead of an InlineEditor: an item and the caret's box in it — the page drawn by Atrament
+    /// (EditorAtramentPage), whose field is no TextEdit.
+    property Item caretItem: null
+    property rect caretBox
     property int currentIndex: 0
     signal activated(int index)
 
@@ -45,7 +49,7 @@ T.Popup {
     implicitHeight: Math.min(list.contentHeight, rowHeight * (Theme.touchUi ? 5 : 8)) + topPadding + bottomPadding + headerHeight
 
     function show(): void {
-        if (!target)
+        if (!target && !caretItem)
             return
         place()
         if (!visible)
@@ -58,14 +62,17 @@ T.Popup {
     /// while open: the list scrolls under the caret (the toolbar appearing, the caret kept
     /// visible, the keyboard sliding in) and the list of items grows.
     function place(): void {
-        if (!target || !editor)
+        if ((!target && !caretItem) || !editor)
             return
-        editor.mapPoint(target, editor, target.caretRect.x, target.caretRect.y)
+        if (target)
+            editor.mapPoint(target, editor, target.caretRect.x, target.caretRect.y)
+        else
+            editor.mapPoint(caretItem, editor, caretBox.x, caretBox.y)
         const caretX = editor.mapped.x
         const caretY = editor.mapped.y
         const h = implicitHeight
         const bottomLimit = editor.visibleBottom()
-        const below = caretY + target.caretRect.height + 4
+        const below = caretY + (target ? target.caretRect.height : caretBox.height) + 4
         const above = caretY - h - 4
         x = Math.max(Theme.space2, Math.min(caretX - Theme.space3, editor.width - width - Theme.space2))
         const y0 = below + h <= bottomLimit || above < Theme.space1 ? below : above

@@ -42,6 +42,26 @@ class AtramentView : public brulion::atrament::AtramentItem {
     Q_PROPERTY(QColor linkColor MEMBER m_linkColor NOTIFY styleChanged FINAL)
     Q_PROPERTY(QColor guideColor MEMBER m_guideColor NOTIFY styleChanged FINAL)
     Q_PROPERTY(QColor backgroundColor MEMBER m_backgroundColor NOTIFY styleChanged FINAL)
+    // "page", editing (docs/ATRAMENT.md M2 step 2): the editor's PageController (its `blocks` is the
+    // page model, which it sets when none is given); without one the page is read only. The edited
+    // text's caret and selection colours, an empty block's placeholder.
+    Q_PROPERTY(QObject *pageController READ pageController WRITE setPageController NOTIFY pageControllerChanged FINAL)
+    Q_PROPERTY(QColor caretColor MEMBER m_caretColor NOTIFY styleChanged FINAL)
+    Q_PROPERTY(QColor selectionColor MEMBER m_selectionColor NOTIFY styleChanged FINAL)
+    Q_PROPERTY(QString placeholderText MEMBER m_placeholderText NOTIFY styleChanged FINAL)
+    // Selected blocks' band (Theme.bgSelected, Theme.focusRing, Theme.radiusSm).
+    Q_PROPERTY(QColor bandColor MEMBER m_bandColor NOTIFY styleChanged FINAL)
+    Q_PROPERTY(QColor ringColor MEMBER m_ringColor NOTIFY styleChanged FINAL)
+    Q_PROPERTY(qreal bandRadius MEMBER m_bandRadius NOTIFY styleChanged FINAL)
+    // The editor's suggestion list is open: its keys (↑, ↓, Enter, Tab, Esc) go to it
+    // (suggestionKeyPressed) before the field's or the editor's meaning.
+    Q_PROPERTY(bool suggestionsOpen MEMBER m_suggestionsOpen NOTIFY suggestionsOpenChanged FINAL)
+    // The edited block's field (−1, "" while none): its row, text (a composition included), caret,
+    // and the caret's rectangle in this item.
+    Q_PROPERTY(int editRow READ editRow NOTIFY editStateChanged FINAL)
+    Q_PROPERTY(QString editText READ editText NOTIFY editStateChanged FINAL)
+    Q_PROPERTY(int editCursor READ editCursor NOTIFY editStateChanged FINAL)
+    Q_PROPERTY(QRectF editCaretRect READ editCaretRect NOTIFY editStateChanged FINAL)
 
 public:
     explicit AtramentView(QQuickItem *parent = nullptr);
@@ -51,6 +71,14 @@ public:
     void setView(const QString &view);
     QObject *pageModel() const { return m_pageModel.data(); }
     void setPageModel(QObject *model);
+    QObject *pageController() const { return m_pageController.data(); }
+    void setPageController(QObject *controller);
+    int editRow() const;
+    QString editText() const;
+    int editCursor() const;
+    QRectF editCaretRect() const;
+    // Ends the input method's composition in the edited block (the word becomes text).
+    Q_INVOKABLE void commitComposition();
 
     // The process's Atrament App, made on first use.
     static brulion::atrament::App &atramentApp();
@@ -62,6 +90,21 @@ Q_SIGNALS:
     void linkActivated(int row, const QString &link);
     void taskToggled(int row);
     void styleChanged();
+    void pageControllerChanged();
+    // "page", editing: a click or a tap asks to edit `row` with the caret at `cursor` (−1: not
+    // known) — the editor decides (BlockEditor.blockTappedWith for Shift / Ctrl, else
+    // startEditing); `modifiers` are Qt::KeyboardModifiers.
+    void editRequested(int row, int cursor, int modifiers);
+    // Esc in the edited block (BlockEditor.stopEditing(true)); Ctrl+Z / Ctrl+Y (undoStep);
+    // Alt+Enter on a link (followLinkAtCursor).
+    void escapePressed();
+    void undoRequested(bool redo);
+    void followLinkRequested(int row, int cursor, bool newPane);
+    void suggestionsOpenChanged();
+    void editStateChanged();
+    // A key for the open suggestion list: "up", "down", "enter", "tab", "escape" (the editor's
+    // suggestionKey()).
+    void suggestionKeyPressed(const QString &key);
 
 protected:
     void componentComplete() override;
@@ -90,4 +133,14 @@ private:
     QColor m_linkColor{0x3b, 0x5b, 0xdb};
     QColor m_guideColor{0x8c, 0x95, 0x9f, 0x59};
     QColor m_backgroundColor{Qt::white};
+    // Editing.
+    void connectController();
+    QPointer<QObject> m_pageController;
+    QColor m_caretColor{0x3b, 0x5b, 0xdb};
+    QColor m_selectionColor{0x3b, 0x5b, 0xdb, 0x40};
+    QString m_placeholderText;
+    bool m_suggestionsOpen = false;
+    QColor m_bandColor{0x3b, 0x5b, 0xdb, 0x22};
+    QColor m_ringColor{0x3b, 0x5b, 0xdb};
+    qreal m_bandRadius = 6;
 };

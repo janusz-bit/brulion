@@ -21,6 +21,7 @@
 #include "ui/window.h"
 
 #include <memory>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -40,6 +41,36 @@ struct TextLink {
     ClickListener onClick;
 };
 
+// The paragraph a Text laid out, shared with code outside the frame (`trackLayout`): where a
+// click on the element's row falls in its text, the caret an editor places from ↑/↓ — after the
+// frame, the element itself is gone. Filled in prepaint; `frame` is the window's frame count then.
+class TextLayoutHandle {
+public:
+    struct State {
+        std::shared_ptr<const TextLayout> layout;
+        Rect bounds; // window logical px
+        std::uint64_t frame = 0;
+    };
+    TextLayoutHandle()
+        : m_state(std::make_shared<State>())
+    {
+    }
+    const TextLayout *layout() const { return m_state->layout.get(); }
+    Rect bounds() const { return m_state->bounds; }
+    std::uint64_t frame() const { return m_state->frame; }
+    // The text offset nearest to a window point (nullopt before the element was laid out).
+    std::optional<int> offsetAt(Point windowPoint) const
+    {
+        if (!m_state->layout)
+            return std::nullopt;
+        return m_state->layout->offsetAt(windowPoint - m_state->bounds.origin);
+    }
+    std::shared_ptr<State> shared() const { return m_state; }
+
+private:
+    std::shared_ptr<State> m_state;
+};
+
 class Text final : public Element {
 public:
     explicit Text(std::u16string_view text);
@@ -47,6 +78,12 @@ public:
     Text &&spans(std::span<const TextSpan> spans) &&;
     Text &&span(Range range, TextStyleRefinement style) &&;
     Text &&link(Range range, TextLink::ClickListener onClick) &&;
+    // Shares the layout of every frame with a handle (above).
+    Text &&trackLayout(const TextLayoutHandle &handle) &&
+    {
+        m_layoutHandle = handle.shared();
+        return std::move(*this);
+    }
     Text &&id(ElementId id) &&
     {
         m_id = id;
@@ -84,6 +121,7 @@ private:
     WhiteSpace m_whiteSpace = WhiteSpace::Normal;
     App *m_app = nullptr;
     std::shared_ptr<const TextLayout> m_layout;
+    std::shared_ptr<TextLayoutHandle::State> m_layoutHandle;
 };
 
 inline Text text(std::u16string_view s)

@@ -2,6 +2,7 @@
 
 #include "blocklistmodel.h"
 #include "editorhost.h"
+#include "pagecontroller.h"
 #include "renderedtextitem.h"
 
 #include <QAbstractItemModel>
@@ -168,6 +169,13 @@ PageView::~PageView()
 {
     for (const QMetaObject::Connection &c : m_connections)
         QObject::disconnect(c);
+    for (const QMetaObject::Connection &c : m_controllerConnections)
+        QObject::disconnect(c);
+}
+
+void PageView::setSelectionLook(const SelectionLook &look)
+{
+    m_selectionLook = look;
 }
 
 void PageView::setStyle(const PageMetrics &metrics, const PagePalette &palette)
@@ -201,10 +209,32 @@ bool PageView::drawsRow(int row) const
     return text.drawable() && drawable(index.data(BlockListModel::ViewRole).toString());
 }
 
-at::AnyElement PageView::render(at::Window &, at::Context<PageView> &)
+at::AnyElement PageView::render(at::Window &window, at::Context<PageView> &cx)
 {
     m_drawn.clear();
     m_foreign.clear();
+    // Editing: the field takes the focus when a row of Atrament's starts being edited, and the
+    // edited row is scrolled into view (a split made a row under the view's end, ↑/↓ went off it).
+    if (const int edited = editedRow(); edited >= 0 && m_input) {
+        if (m_focusInput)
+            m_input->read(cx.app()).focusHandle().focus(window);
+        if (m_revealEdited)
+            m_handle.scrollToRow(std::size_t(edited), at::ListPosition::Nearest);
+    }
+    m_focusInput = false;
+    m_revealEdited = false;
+    // The text of rows not drawn for a while is forgotten (the handles of the rows on screen stay).
+    const std::uint64_t frame = window.frameCount();
+    for (auto it = m_rowTextFrame.begin(); it != m_rowTextFrame.end();) {
+        if (it->second + 2 < frame) {
+            m_rowText.erase(it->first);
+            it = m_rowTextFrame.erase(it);
+        } else {
+            ++it;
+        }
+    }
+    m_frame = frame;
+    m_selfId = cx.entityId();
     PageView *self = this;
     return at::div()
             .sizeFull()
@@ -244,10 +274,23 @@ at::AnyElement PageView::renderRow(std::size_t row)
     const float marker = marked ? (m.documentMode ? m.listIndent : m.bulletColumn) : 0;
     const at::ElementId id = at::ElementId::number(index.data(BlockListModel::UidRole).toString().toULongLong());
     // A row: the text column (contentX, contentWidth) inside the list's width.
+    // A selected block is drawn on a band (BlockPartSelectionBand: one band over a range of
+    // blocks, rounded at its ends, a line down its left edge; a block alone framed).
+    const QString edge = index.data(BlockListModel::SelectionEdgeRole).toString();
     auto line = [&] {
         at::Div d = at::div().id(id).pl(m.contentX).py(m.rowPad);
         if (m.contentWidth > 0)
             std::move(d).maxW(m.contentX + m.contentWidth);
+        if (!edge.isEmpty()) {
+            const bool start = edge == u"single" || edge == u"first";
+            const bool end = edge == u"single" || edge == u"last";
+            const float r = m_selectionLook.radius;
+            std::move(d).bg(m_selectionLook.band).roundedT(start ? r : 0).roundedB(end ? r : 0);
+            if (edge == u"single")
+                std::move(d).border(1).borderColor(m_selectionLook.ring.fadedBy(0.65f));
+            else
+                std::move(d).borderL(2).borderColor(m_selectionLook.ring.fadedBy(0.4f));
+        }
         return d;
     };
 
@@ -266,7 +309,14 @@ at::AnyElement PageView::renderRow(std::size_t row)
     const markdown::RenderedText &text = *rendered.d;
     const std::vector<at::TextSpan> spans = renderedSpans(text, m_palette);
     const bool closed = task == u"done" || task == u"cancelled";
+    const quint64 uid = index.data(BlockListModel::UidRole).toString().toULongLong();
+    const bool edited = m_input && uid == m_editUid && editableView(view, true);
     at::Text body = at::text(u16View(text.text)).id(u"text").spans(spans);
+    // Where a click lands in the text, and ↑/↓ into the row, after the frame.
+    if (!edited) {
+        std::move(body).trackLayout(m_rowText[uid]);
+        m_rowTextFrame[uid] = m_frame;
+    }
     // Each link a hit region of the text (adjacent runs of one href are one link).
     PageView *self = this;
     for (qsizetype i = 0; i < text.runs.size();) {
@@ -340,11 +390,42 @@ at::AnyElement PageView::renderRow(std::size_t row)
     at::Div column = at::div().flex1().minW(0);
     if (view == u"quote")
         std::move(column).borderL(3).borderColor(m_palette.guide).pl(12).textColor(m_palette.muted);
-    if (closed)
+    // (The edited text of a closed task is written plainly: InlineEditor strikes nothing.)
+    if (closed && !edited)
         std::move(column).lineThrough().textColor(m_palette.muted);
+    const at::EntityId selfId = m_selfId;
+    if (edited) {
+        // The edited row: the field over the block's editText in the text's place, and the
+        // editor's keys caught before the field sees them.
+        std::move(column).child(*m_input);
+        std::move(content).child(std::move(column));
+        return line()
+                .captureKeyDown([selfId](const at::KeyDownEvent &e, at::Window &w, at::App &a) {
+                    bool handled = false;
+                    a.updateEntity<PageView>(selfId, [&](PageView &v, at::Context<PageView> &c) {
+                        handled = v.editorKey(e.keystroke, w, c);
+                    });
+                    if (handled)
+                        w.stopPropagation();
+                })
+                .child(std::move(content));
+    }
     std::move(column).child(std::move(body));
     std::move(content).child(std::move(column));
-    return line().child(std::move(content));
+    at::Div drawn = line().child(std::move(content));
+    if (m_controller && !m_controller->readOnly()) {
+        // A click or a tap edits the block at the character under it (links and the task's box
+        // take their own clicks first). No node of its own for screen readers: the row's text is.
+        std::move(drawn)
+                .role(at::Role::None)
+                .cursorText()
+                .onClick([selfId, row](const at::ClickEvent &click, at::Window &w, at::App &a) {
+                    a.updateEntity<PageView>(selfId, [&](PageView &v, at::Context<PageView> &c) {
+                        v.rowClicked(row, click, w, c);
+                    });
+                });
+    }
+    return drawn;
 }
 
 } // namespace brulion::editor::atr

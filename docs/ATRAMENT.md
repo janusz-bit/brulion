@@ -469,8 +469,8 @@ The targets in M5 are estimates of what the change can reach, not measurements.
 
 The design of M2: the page and journal block editor drawn by Atrament, inside today's QML shell,
 behind a setting, replacing `BlockEditor.qml` one kind of row at a time. This section is the plan
-its code follows (and changes first); built so far: `list()` (below) and the first part of step 1
-"Reading" (its entry under "Steps").
+its code follows (and changes first); built so far: `list()` (below), step 1 "Reading" and step 2
+"Editing text rows" (their entries under "Steps").
 
 ### What stays
 
@@ -529,7 +529,17 @@ In **Atrament** (`src/atrament/ui`, Qt-free, generic — nothing Brulion-specifi
   a link node named by the range's text that a screen reader activates.
 * **A styled `TextInput`**: the input's text with spans from a callback (the edited block's
   Markdown highlighted: markers dimmed, bold bold, code in its face), so editing keeps the look of
-  `InlineEditor.qml`'s `MarkdownHighlighter`.
+  `InlineEditor.qml`'s `MarkdownHighlighter`. **Built**: `TextInput::setStyler(f)` — `f(text)`
+  gives the spans, asked once per text (a revision counter), applied over the inherited style as a
+  `Text`'s spans are; `setColors(caret, selection)`, `setPlaceholder`, `clearUndo()` (an owner
+  with an undo stack of its own), `layout()`, and the event `SelectionChanged` next to `Changed`.
+* **Keys before the field**: `div().captureKeyDown(f)` — a key down on its way to the focused
+  element, in the capture phase (GPUI's `capture_key_down`): an editor around a text field sees
+  Enter, Backspace, Tab, ↑/↓ first and stops the ones it takes. **Built** (`ui/div.h`).
+* **A text's layout after the frame**: `Text::trackLayout(handle)` — a `TextLayoutHandle` the
+  element fills in prepaint with its laid-out paragraph and bounds, so code outside the frame
+  resolves a click to an offset (`offsetAt`) or finds the x of a caret on a line. **Built**
+  (`ui/text.h`).
 
 In the **app** (`src/app/editor/atrament/`, may use QtCore; only in builds with Atrament):
 
@@ -542,9 +552,13 @@ In the **app** (`src/app/editor/atrament/`, may use QtCore; only in builds with 
   `QTextDocument`; its rules move into a function from a block's source to style ranges, used by
   both the QML highlighter and the Atrament input (one set of rules, tested once).
 * **Keymaps**: the editor's keys (Enter splits, Backspace at the start merges, Tab / Shift+Tab
-  indent, Alt+↑/↓ move, Ctrl+Enter toggles the task…) as actions in a key context `BlockEditor`,
-  each one `PageController` call; the edited row's caret and the row to focus come from the
-  `EditResult`.
+  indent, Alt+↑/↓ move, Ctrl+Enter toggles the task…), each one `PageController` call; the edited
+  row's caret and the row to focus come from the `EditResult`. **Built** as a capture listener on
+  the edited row (`PageView::editorKey`), not as keymap actions: Atrament's key bindings run after
+  the focused element's own key listeners, and the field takes Enter, Backspace, Delete, ↑/↓
+  itself — the editor's meaning depends on the caret (Backspace merges only at the start, ↑ leaves
+  the block only from its first line), which a binding cannot see. Rebindable keys come with the
+  app's keymap settings.
 * **Layout cache**: a block's laid-out text is kept by (uid, revision, width) while its row is
   shown and one frame after (Atrament's generational caches); a row off screen costs its
   `BlockEntry` and its height in the tree — the < 2 KB per block of the gate.
@@ -595,6 +609,38 @@ scrolling, `tst_atrament_editor`) before the next:
 2. **Editing text rows.** The styled input in the edited row: typing, the keymaps, Enter / Backspace
    / Tab through `PageController`, input methods as in M1 (composition is one undo step), the caret
    kept above the keyboard, suggestions, input rules, slash commands.
+   **Built** (2026-11-27, `src/app/editor/atrament/pageediting.cpp`): with a `PageController`
+   (`PageView::setController`; `AtramentView.pageController`), the controller's editing row —
+   when Atrament draws it and it is a paragraph, a list item, a task, a heading or a quote — is a
+   `TextInput` over the block's `editText` in the text's place, styled by `setEditStyler`.
+   Typing goes to `PageController::setEditText` (one undo stack: the controller's; its input
+   rules and normalisation come back through `editTextReset` and are shown); a word an input
+   method composes stays the field's until it is committed (the controller never sees half a word:
+   a composed word is one step), and every command key commits it first. The keys
+   (`PageView::editorKey`, BlockEditor.handleEditorKeyCode's): Enter splits (Shift+Enter, or Enter
+   in a quote with its "> ", a line break), Backspace at the start merges with the block above —
+   a task loses its marker first, a document's list item leaves the list —, Delete at the end
+   joins the next block, Tab / Shift+Tab indent (a document: list items only), Alt+↑/↓ move the
+   block, ↑ on the first line and ↓ on the last go to the block above / below with the caret at
+   the same x (through that row's drawn text), Ctrl+Enter the next task status, Ctrl+. folds,
+   Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z the page's undo (`BlockEditor.undoStep`), Ctrl+C / Ctrl+X the
+   controller's exact copy, Ctrl+V its paste (Markdown into blocks, HTML as Markdown, a picture
+   as an attachment), Alt+Enter follows the link at the caret, Esc stops editing and selects the
+   block (`BlockEditor.stopEditing(true)`: the selection's band is drawn, its keys are the QML
+   list's for now). A click or a tap on a drawn row edits it at the character under the pointer —
+   the row's text layout (`trackLayout`) gives the display offset, the rendered text's display ↔
+   source map the source one, `renderOffset` and `editOffset` the `editText`'s; Shift / Ctrl+click
+   and the touch selection mode go to `BlockEditor.blockTappedWith`. An input method's line break
+   in a one-line block splits it and a paste with line breaks becomes blocks
+   (`PageController::pasteText`), as in InlineEditor. Suggestions: the field's state
+   (`AtramentView.editText`, `editCursor`, `editCaretRect`, `editStateChanged`) drives
+   `BlockEditor.updateCompletionAt`, the popup is placed at Atrament's caret (`SuggestionPopup.
+   caretItem` / `caretBox`), its keys come back while it is open (`suggestionsOpen`,
+   `suggestionKeyPressed`) and accepting one commits the composition first
+   (`AtramentView.commitComposition`); slash commands follow. An empty paragraph shows "Type / for
+   commands". Tested by `tests/atrament/editor/tst_atrament_editing`. **Not yet**: spell marks and
+   the find bar's tint in the edited text, Vim, the touch toolbar's formatting buttons (they act on
+   an InlineEditor), the reminder chips while editing.
 3. **Selection.** Block selection (Shift+click, Shift+arrows, a mouse's drag across rows), its band,
    copy / cut / paste through `PageController`'s selection; on a phone the long press and the
    handles.

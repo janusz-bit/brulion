@@ -1,2 +1,4 @@
 brulion_add_test(tst_atrament_editor SOURCES tst_atrament_editor.cpp LIBS brulion_editor_atrament)
 target_compile_definitions(tst_atrament_editor PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+brulion_add_test(tst_atrament_editing SOURCES tst_atrament_editing.cpp LIBS brulion_editor_atrament)
+target_compile_definitions(tst_atrament_editing PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")

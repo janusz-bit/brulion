@@ -36,7 +36,9 @@ public:
         FontRun run;
         run.face = resolveFace(m_app, base);
         run.fontSize = base.fontSize;
-        m_runs.push_back(run);
+        run.features = base.fontFeatures;
+        m_baseRun = run;
+        buildRuns(base);
         LayoutStyle style;
         style.flexGrow = 1;
         TextInputElement *self = this;
@@ -77,8 +79,8 @@ public:
         const bool empty = m_input->text().empty();
         if (focused && !range.isEmpty() && !empty) {
             for (const Rect &r : m_layout->selectionRects(range))
-                window.paintQuad(r.translated(bounds.origin), Background::solid(rgba(0x8b93ff55)), {}, transparent(),
-                        Corners::all(2));
+                window.paintQuad(r.translated(bounds.origin), Background::solid(m_input->options().selectionColor), {},
+                        transparent(), Corners::all(2));
         }
         if (empty) {
             // The placeholder, faded, in the same layout position.
@@ -86,10 +88,7 @@ public:
             const TextPaintStyle style { m_textColor.fadedBy(0.45f), std::nullopt, false, std::nullopt };
             window.paintText(*placeholder, bounds.origin, std::span<const TextPaintStyle>(&style, 1));
         } else {
-            const TextPaintStyle styles[] = {
-                { m_textColor, std::nullopt, false, std::nullopt },
-            };
-            window.paintText(*m_layout, bounds.origin, styles);
+            window.paintText(*m_layout, bounds.origin, std::span<const TextPaintStyle>(m_paint.data(), m_paint.size()));
             if (const auto marked = m_input->markedRange()) {
                 for (const Rect &r : m_layout->selectionRects(*marked))
                     window.paintQuad(Rect::fromXYWH(r.left(), r.bottom() - 2, r.width(), 1).translated(bounds.origin),
@@ -99,7 +98,7 @@ public:
         if (focused && m_input->caretVisible()) {
             const Rect caret = m_layout->caretRect(sel.focus).translated(bounds.origin);
             window.paintQuad(Rect::fromXYWH(caret.left() - 0.5f, caret.top() + 1, 1.5f, std::max(2.0f, caret.height() - 2)),
-                    Background::solid(rgb(0x8b93ff)), {}, transparent(), {});
+                    Background::solid(m_input->options().caretColor), {}, transparent(), {});
         }
         if (focused) {
             auto *handler = Arena::current()->make<Handler>();
@@ -207,9 +206,7 @@ private:
         style.wrapWidth = m_whiteSpace == WhiteSpace::NoWrap ? std::nullopt : wrap;
         style.lineHeight = m_lineHeight;
         const std::u16string &text = m_input->text();
-        FontRun run = m_runs.front();
-        run.length = int(text.size());
-        return m_app.textSystem().layout(text, std::span<const FontRun>(&run, 1), style);
+        return m_app.textSystem().layout(text, std::span<const FontRun>(m_runs.data(), m_runs.size()), style);
     }
 
     std::shared_ptr<const TextLayout> placeholderLayout()
@@ -217,9 +214,59 @@ private:
         ParagraphStyle style;
         style.lineHeight = m_lineHeight;
         const std::u16string_view text = m_placeholder;
-        FontRun run = m_runs.front();
+        FontRun run = m_baseRun;
         run.length = int(text.size());
         return m_app.textSystem().layout(text, std::span<const FontRun>(&run, 1), style);
+    }
+
+    // The text's font runs and paint styles: the inherited style, refined by the styler's spans
+    // over the pieces they cover (as a Text element's spans).
+    void buildRuns(const TextStyle &base)
+    {
+        auto paintStyle = [](const TextStyle &t) {
+            return TextPaintStyle { t.color, t.underline, t.strikethrough, t.background };
+        };
+        const int length = int(m_input->text().size());
+        const std::vector<TextSpan> &spans = m_input->spans();
+        if (spans.empty()) {
+            FontRun run = m_baseRun;
+            run.length = length;
+            m_runs.push_back(std::move(run));
+            m_paint.push_back(paintStyle(base));
+            return;
+        }
+        ArenaVector<int> cuts;
+        cuts.push_back(0);
+        cuts.push_back(length);
+        for (const TextSpan &sp : spans) {
+            cuts.push_back(std::clamp(sp.range.start, 0, length));
+            cuts.push_back(std::clamp(sp.range.end, 0, length));
+        }
+        std::sort(cuts.begin(), cuts.end());
+        cuts.erase(std::unique(cuts.begin(), cuts.end()), cuts.end());
+        for (std::size_t i = 0; i + 1 < cuts.size(); ++i) {
+            const int a = cuts[i];
+            const int b = cuts[i + 1];
+            TextStyle style = base;
+            for (const TextSpan &sp : spans) {
+                if (sp.range.start <= a && sp.range.end >= b)
+                    sp.style.applyTo(style);
+            }
+            FontRun run;
+            run.length = b - a;
+            run.face = resolveFace(m_app, style);
+            run.fontSize = style.fontSize;
+            run.features = style.fontFeatures;
+            run.styleIndex = std::uint32_t(m_paint.size());
+            m_runs.push_back(std::move(run));
+            m_paint.push_back(paintStyle(style));
+        }
+        if (length == 0 && m_runs.empty()) {
+            FontRun run = m_baseRun;
+            run.length = 0;
+            m_runs.push_back(std::move(run));
+            m_paint.push_back(paintStyle(base));
+        }
     }
 
 public:
@@ -230,6 +277,8 @@ private:
     EntityId m_id;
     TextInput *m_input;
     ArenaVector<FontRun> m_runs;
+    ArenaVector<TextPaintStyle> m_paint;
+    FontRun m_baseRun;
     float m_lineHeight = 0;
     Color m_textColor;
     WhiteSpace m_whiteSpace = WhiteSpace::Normal;
@@ -301,9 +350,55 @@ void TextInput::pushUndo()
 void TextInput::changed(Context<TextInput> &cx)
 {
     m_preferredX = -1;
+    ++m_textRevision;
     restartBlink(cx);
     cx.emit(Changed { int(m_text.size()) });
+    cx.emit(SelectionChanged { m_selection });
     cx.notify();
+}
+
+void TextInput::selectionMoved(Context<TextInput> &cx)
+{
+    cx.emit(SelectionChanged { m_selection });
+}
+
+void TextInput::setPlaceholder(std::u16string_view placeholder, Context<TextInput> &cx)
+{
+    if (m_options.placeholder == placeholder)
+        return;
+    m_options.placeholder = std::u16string(placeholder);
+    cx.notify();
+}
+
+void TextInput::setStyler(Styler styler, Context<TextInput> &cx)
+{
+    m_styler = std::move(styler);
+    m_spansRevision = 0;
+    m_spans.clear();
+    cx.notify();
+}
+
+void TextInput::setColors(Color caret, Color selection, Context<TextInput> &cx)
+{
+    m_options.caretColor = caret;
+    m_options.selectionColor = selection;
+    cx.notify();
+}
+
+const std::vector<TextSpan> &TextInput::spans() const
+{
+    if (m_spansRevision != m_textRevision) {
+        m_spansRevision = m_textRevision;
+        m_spans = m_styler ? m_styler(m_text) : std::vector<TextSpan>{};
+    }
+    return m_spans;
+}
+
+void TextInput::clearUndo()
+{
+    m_undo.clear();
+    m_redo.clear();
+    m_coalesceTyping = false;
 }
 
 void TextInput::restartBlink(Context<TextInput> &cx)
@@ -398,9 +493,12 @@ bool TextInput::performAccessibilityAction(const AccessibilityActionRequest &req
 
 void TextInput::setSelection(int anchor, int focus, Context<TextInput> &cx)
 {
+    const InputHandler::Selection before = m_selection;
     m_selection = { clampOffset(anchor), clampOffset(focus) };
     m_coalesceTyping = false;
     restartBlink(cx);
+    if (m_selection.anchor != before.anchor || m_selection.focus != before.focus)
+        selectionMoved(cx);
     cx.notify();
 }
 
