@@ -385,13 +385,6 @@ QByteArray movedAlong(const QByteArray &ics, const QString &uid, const CalendarD
             context);
 }
 
-std::optional<EventChange> filled(EventChange change, EventProblem *problem)
-{
-    if (change.data.isEmpty())
-        return failed(problem, EventProblem::NotFound);
-    return change;
-}
-
 std::optional<EventChange> newChange(const CalendarEntry &calendar, const EventIntent &intent,
                                      const TodoContext &context, EventChange change, EventProblem *problem,
                                      EventEdit *result)
@@ -425,7 +418,7 @@ std::optional<EventChange> existingChange(const CalendarData &data, const Calend
             change.kind = EventChange::Kind::Delete;
         else
             change.data = excludeOccurrence(ics, intent.uid, *intent.instance, context);
-        return one ? filled(std::move(change), problem) : std::optional<EventChange>(std::move(change));
+        return change;
     }
     const auto edit = editedFields(current, intent.patch, &why);
     if (!edit)
@@ -435,7 +428,7 @@ std::optional<EventChange> existingChange(const CalendarData &data, const Calend
                                    context);
     if (result)
         *result = *edit;
-    return filled(std::move(change), problem);
+    return change;
 }
 
 /// The change waiting for the same member taken out of `state`'s outbox, its kind (still new to
@@ -548,8 +541,10 @@ bool readReminder(const QJsonObject &json, EventPatch *patch)
     const QJsonValue v = json.value(u"reminderMinutes"_s);
     if (v.isUndefined())
         return true;
-    const double minutes = v.toDouble(-2);
-    if (!v.isDouble() || minutes != double(qint64(minutes)) || minutes < -1 || minutes > MaxReminderMinutes)
+    if (!v.isDouble())
+        return false;
+    const double minutes = v.toDouble();
+    if (minutes != double(qint64(minutes)) || minutes < -1 || minutes > MaxReminderMinutes)
         return false;
     patch->reminderMinutes = int(minutes);
     return true;
@@ -666,10 +661,19 @@ constexpr ProblemWords Problems[] = {
         {EventProblem::OccurrenceRule, u"occurrence_rule", u"One occurrence has no recurrence of its own"},
 };
 
+constexpr bool problemsInOrder()
+{
+    for (std::size_t i = 0; i < std::size(Problems); ++i) {
+        if (std::size_t(Problems[i].problem) != i)
+            return false;
+    }
+    return std::size(Problems) == std::size_t(EventProblem::OccurrenceRule) + 1;
+}
+static_assert(problemsInOrder(), "one row per EventProblem, in its order");
+
 const ProblemWords &wordsOf(EventProblem problem)
 {
-    const auto it = std::ranges::find(Problems, problem, &ProblemWords::problem);
-    return it == std::end(Problems) ? Problems[0] : *it;
+    return Problems[std::size_t(problem)];
 }
 
 } // namespace
@@ -697,10 +701,12 @@ std::optional<EventFields> eventFields(const CalendarData &data, const QString &
                                        const std::optional<io::ical::DateTimeValue> &instance, const QTimeZone &zone,
                                        EventProblem *problem)
 {
+    tell(problem, EventProblem::None);
     const Members m = membersOf(data, uid, instance);
-    tell(problem, m.any < 0 ? EventProblem::NotFound : EventProblem::None);
-    if (m.any < 0)
+    if (m.any < 0) {
+        tell(problem, EventProblem::NotFound);
         return std::nullopt;
+    }
     const auto [index, o] = chosenOccurrence(data, m, instance, zone);
     if (!o) {
         tell(problem, EventProblem::NoOccurrence);
@@ -818,18 +824,16 @@ QString instanceText(const io::ical::DateTimeValue &instance)
 
 std::optional<io::ical::DateTimeValue> instanceFromText(const QString &text)
 {
-    static const QRegularExpression form(u"^\\d{8}(T\\d{6}Z?)?(@[^@\\s]+)?$"_s);
-    if (!form.match(text).hasMatch())
+    static const QRegularExpression form(u"^(\\d{8}(?:T\\d{6}Z?)?)(?:@([^@\\s]+))?$"_s);
+    const auto m = form.match(text);
+    if (!m.hasMatch())
         return std::nullopt;
-    const qsizetype at = text.indexOf(u'@');
     io::ical::Property p;
     p.name = u"RECURRENCE-ID"_s;
-    p.value = at < 0 ? text : text.first(at);
-    if (at >= 0)
-        p.params.insert(u"TZID"_s, text.sliced(at + 1));
-    if (p.value.size() == 8)
-        p.params.insert(u"VALUE"_s, u"DATE"_s);
-    const auto v = io::ical::parseDateTime(p);
+    p.value = m.captured(1);
+    if (m.hasCaptured(2))
+        p.params.insert(u"TZID"_s, m.captured(2));
+    const auto v = io::ical::parseDateTime(p); // (eight digits: a date)
     if (!v || !v->date.isValid() || (v->time && !v->time->isValid()))
         return std::nullopt;
     return v;
@@ -861,13 +865,11 @@ bool postIntent(const QString &calendarsFolder, const EventIntent &intent)
     if (QFile::exists(path))
         return false; // written once
     QSaveFile f(path);
-    if (!f.open(QIODevice::WriteOnly))
-        return false;
-    f.write(QJsonDocument(intent.toJson()).toJson(QJsonDocument::Compact));
-    if (!f.commit())
-        return false;
-    QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
-    return true;
+    const bool written = f.open(QIODevice::WriteOnly)
+                         && f.write(QJsonDocument(intent.toJson()).toJson(QJsonDocument::Compact)) >= 0 && f.commit();
+    if (written)
+        QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+    return written;
 }
 
 QList<PendingIntent> pendingIntents(const QString &calendarsFolder, int max)

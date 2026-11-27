@@ -9,7 +9,9 @@
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonDocument>
+#include <QRegularExpression>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -104,6 +106,14 @@ CalendarState praca()
     add(u"dziwny.ics"_s, u"dziwny"_s,
         vevent(u"dziwny"_s, u"DTSTART:20261001T080000Z\r\nDTEND:20261001T090000Z\r\nRRULE:FREQ=WEEKLY;COUNT=4\r\n"
                             u"SUMMARY:Cztery razy\r\n"_s));
+    add(u"pierwszy.ics"_s, u"pierwszy"_s,
+        vevent(u"pierwszy"_s, u"DTSTART:20261005T080000\r\nDTEND:20261005T083000\r\nRRULE:FREQ=WEEKLY\r\n"
+                              u"EXDATE:20261005T080000,20261012T080000\r\nSUMMARY:Bez pierwszego\r\n"_s));
+    add(u"odwolane.ics"_s, u"odwolane"_s,
+        vevent(u"odwolane"_s, u"DTSTART:20261106T120000\r\nSTATUS:CANCELLED\r\nSUMMARY:Odwołane\r\n"_s));
+    add(u"zaproszenie.ics"_s, u"zaproszenie"_s,
+        vevent(u"zaproszenie"_s, u"RECURRENCE-ID:20261110T100000\r\nDTSTART:20261110T110000\r\n"
+                                 u"DTEND:20261110T120000\r\nSUMMARY:Jedno spotkanie z serii\r\n"_s));
     add(u"kawa.ics"_s, u"kawa"_s,
         vevent(u"kawa"_s, u"DTSTART;TZID=Europe/Warsaw:20261021T100000\r\nDTEND;TZID=Europe/Warsaw:20261021T103000\r\n"
                           u"SUMMARY:Kawa z Łucją\r\n"_s));
@@ -168,6 +178,11 @@ private Q_SLOTS:
     void createdTwiceIsOnce();
     void changed();
     void occurrenceChanged();
+    void occurrenceOfTheFirstEvent();
+    void seriesMadeAllDay();
+    void paths_data();
+    void paths();
+    void uids();
     void acrossTheClockChange();
     void deleted();
     void refused_data();
@@ -209,6 +224,8 @@ void TestCalDavEventChange::editedTimes_data()
                                        << "2026-12-01 23:00/2026-12-02 01:00";
     QTest::newRow("new with an end day and time")
             << "" << "2026-12-01 22:00" << "2026-12-02 02:00" << -1 << "2026-12-01 22:00/2026-12-02 02:00";
+    QTest::newRow("new ending another day: an hour later then")
+            << "" << "2026-12-01 10:00" << "2026-12-02" << -1 << "2026-12-01 10:00/2026-12-02 11:00";
     QTest::newRow("new at a time by the flag") << "" << "2026-12-01" << "" << 0 << "2026-12-01 09:00/2026-12-01 10:00";
     QTest::newRow("new without a day") << "" << "" << "" << -1 << "no_start";
     QTest::newRow("new at a time alone") << "" << "10:00" << "" << -1 << "no_start";
@@ -225,6 +242,8 @@ void TestCalDavEventChange::editedTimes_data()
             << timed << "2026-11-23 14:00" << "" << -1 << "2026-11-23 14:00/2026-11-23 14:45";
     QTest::newRow("a time alone: its day") << timed << "08:00" << "" << -1 << "2026-11-20 08:00/2026-11-20 08:45";
     QTest::newRow("late: over midnight") << timed << "23:50" << "" << -1 << "2026-11-20 23:50/2026-11-21 00:35";
+    QTest::newRow("its end at its start: no length")
+            << timed << "" << "09:30" << -1 << "2026-11-20 09:30/2026-11-20 09:30";
     QTest::newRow("its end alone") << timed << "" << "12:00" << -1 << "2026-11-20 09:30/2026-11-20 12:00";
     QTest::newRow("its end as a day: its end time")
             << timed << "" << "2026-11-21" << -1 << "2026-11-20 09:30/2026-11-21 10:15";
@@ -358,6 +377,13 @@ void TestCalDavEventChange::fields_data()
             << "dziwny" << "" << "2026-10-01 10:00/2026-10-01 11:00" << "Cztery razy"
             << "" << -1 << true;
     QTest::newRow("no such event") << "brak" << "" << "not_found" << "" << "" << -1 << false;
+    QTest::newRow("a series without its first day") << "pierwszy" << "" << "2026-10-05 08:00/2026-10-05 08:30"
+                                                    << "Bez pierwszego" << "every week" << -1 << true;
+    QTest::newRow("cancelled") << "odwolane" << "" << "no_occurrence" << "" << "" << -1 << false;
+    QTest::newRow("a lone exception: itself") << "zaproszenie" << "" << "2026-11-10 11:00/2026-11-10 12:00"
+                                              << "Jedno spotkanie z serii" << "" << -1 << true;
+    QTest::newRow("a lone exception: another occurrence") << "zaproszenie" << "20261117T100000" << "no_occurrence"
+                                                          << "" << "" << -1 << false;
 }
 
 void TestCalDavEventChange::fields()
@@ -378,11 +404,14 @@ void TestCalDavEventChange::fields()
         return;
     }
     QVERIFY2(f, qPrintable(problemCode(problem)));
+    QCOMPARE(problem, EventProblem::None);
     QCOMPARE(describe(f->edit), expected);
     QCOMPARE(f->edit.title, title);
     QCOMPARE(f->edit.rule, rule);
     QCOMPARE(f->edit.reminderMinutes, reminder);
     QCOMPARE(f->recurring, recurring);
+    QVERIFY(!f->edit.ruleChanged); // what the event is, not an edit of it
+    QVERIFY(!f->edit.reminderChanged);
     QCOMPARE(f->path, Home + uid + u".ics"_s);
     QCOMPARE(data.events.at(f->event).uid, uid);
     if (uid == u"dziwny")
@@ -452,8 +481,11 @@ void TestCalDavEventChange::changed()
     // The title alone: the event stays at its instant (written on the device's clock now).
     EventIntent i = intent(EventIntent::Kind::Change, u"nowy-jork"_s);
     i.patch.title = u"Rozmowa z Nowym Jorkiem (przełożona)"_s;
-    auto change = plannedChange(pracaEntry(), praca(), i, context());
+    EventEdit result;
+    auto change = plannedChange(pracaEntry(), praca(), i, context(), nullptr, &result);
     QVERIFY(change);
+    QCOMPARE(result.title, i.patch.title);
+    QCOMPARE(describe(result), u"2026-11-20 15:00/2026-11-20 16:00"_s);
     QCOMPARE(change->kind, EventChange::Kind::Update);
     QCOMPARE(change->path, Home + u"nowy-jork.ics"_s);
     QVERIFY(change->data.contains("SUMMARY:Rozmowa z Nowym Jorkiem (przełożona)"));
@@ -471,6 +503,24 @@ void TestCalDavEventChange::changed()
                           u"2026-11-04 11:00 Zażółć gęślą jaźń"_s}));
     QVERIFY(change->data.contains("RRULE:FREQ=WEEKLY"));
     QVERIFY(change->data.contains("TRIGGER:-PT10M"));
+    // A series renamed only: its left-out days stay as the server wrote them.
+    i = intent(EventIntent::Kind::Change, u"pierwszy"_s);
+    i.patch.title = u"Bez dwóch pierwszych"_s;
+    change = plannedChange(pracaEntry(), praca(), i, context());
+    QVERIFY(change);
+    QVERIFY2(change->data.contains("EXDATE:20261005T080000,20261012T080000"), change->data.constData());
+    // An event without a length moved: still without one.
+    CalendarState chwila;
+    chwila.resources.insert(
+            Home + u"chwila.ics"_s,
+            Resource{u"\"1\""_s, u"chwila"_s, u"VEVENT"_s,
+                     ics(vevent(u"chwila"_s, u"DTSTART;TZID=Europe/Warsaw:20261021T100000\r\n"
+                                             u"DTEND;TZID=Europe/Warsaw:20261021T100000\r\nSUMMARY:Chwila\r\n"_s))});
+    i = intent(EventIntent::Kind::Change, u"chwila"_s);
+    i.patch.times.start = EventMoment(DateSpec{QDate(2026, 10, 22), std::nullopt});
+    change = plannedChange(pracaEntry(), chwila, i, context());
+    QVERIFY(change);
+    QVERIFY(change->data.contains("DTEND;TZID=Europe/Warsaw:20261022T100000\r\n"));
     // An all-day event made a timed one.
     i = intent(EventIntent::Kind::Change, u"urlop"_s);
     i.patch.times.start = EventMoment(QTime(8, 0));
@@ -505,6 +555,94 @@ void TestCalDavEventChange::occurrenceChanged()
     addToOutbox(state, *change);
     QCOMPARE(shown(state, u"stand"_s, QDate(2026, 10, 19), QDate(2026, 10, 25)),
              QStringList{u"2026-10-23 12:00 Zażółć (przeniesione na piątek)"_s});
+}
+
+void TestCalDavEventChange::occurrenceOfTheFirstEvent()
+{
+    // The series is the calendar's only event: still an exception of its own, the series kept.
+    CalendarState state;
+    state.resources.insert(Home + u"stand.ics"_s, praca().resources.value(Home + u"stand.ics"_s));
+    EventIntent i = intent(EventIntent::Kind::Change, u"stand"_s, u"20261111T100000@Europe/Warsaw"_s);
+    i.patch.title = u"Tylko ten jeden"_s;
+    const auto change = plannedChange(pracaEntry(), state, i, context());
+    QVERIFY(change);
+    QVERIFY(change->data.contains("RECURRENCE-ID;TZID=Europe/Warsaw:20261111T100000"));
+    QVERIFY(change->data.contains("SUMMARY:Zażółć gęślą jaźń\r\n"));
+    // A lone exception (an invitation to one meeting) changed as it is.
+    i = intent(EventIntent::Kind::Change, u"zaproszenie"_s, u"20261110T100000"_s);
+    i.patch.title = u"Jedno spotkanie — przeniesione"_s;
+    i.patch.times.start = EventMoment(QTime(15, 0));
+    const auto lone = plannedChange(pracaEntry(), praca(), i, context());
+    QVERIFY(lone);
+    QCOMPARE(QString::fromUtf8(lone->data).count(u"BEGIN:VEVENT"_s), 1);
+    QVERIFY(lone->data.contains("SUMMARY:Jedno spotkanie — przeniesione"));
+    QVERIFY(lone->data.contains("DTSTART;TZID=Europe/Warsaw:20261110T150000"));
+}
+
+void TestCalDavEventChange::seriesMadeAllDay()
+{
+    // The stand-up's series all-day from now on: its left-out day and its exception become days.
+    EventIntent i = intent(EventIntent::Kind::Change, u"stand"_s);
+    i.patch.times.allDay = true;
+    CalendarState state = praca();
+    auto change = plannedChange(pracaEntry(), state, i, context());
+    QVERIFY(change);
+    QVERIFY(change->data.contains("DTSTART;VALUE=DATE:20261014"));
+    QVERIFY(change->data.contains("EXDATE;VALUE=DATE:20261028"));
+    QVERIFY(change->data.contains("RECURRENCE-ID;VALUE=DATE:20261021"));
+    addToOutbox(state, *change);
+    QCOMPARE(shown(state, u"stand"_s, QDate(2026, 10, 14), QDate(2026, 11, 4)),
+             (QStringList{u"2026-10-14 00:00 Zażółć gęślą jaźń"_s, u"2026-10-23 12:00 Zażółć (przeniesione)"_s,
+                          u"2026-11-04 00:00 Zażółć gęślą jaźń"_s}));
+    // And back at 08:15, a day later: they follow again, at the new time.
+    i = intent(EventIntent::Kind::Change, u"stand"_s);
+    i.patch.times.start = EventMoment(DateSpec{QDate(2026, 10, 15), QTime(8, 15)});
+    change = plannedChange(pracaEntry(), state, i, context());
+    QVERIFY(change);
+    QVERIFY(change->data.contains("EXDATE;TZID=Europe/Warsaw:20261029T081500"));
+    QVERIFY(change->data.contains("RECURRENCE-ID;TZID=Europe/Warsaw:20261022T081500"));
+    addToOutbox(state, *change);
+    QCOMPARE(shown(state, u"stand"_s, QDate(2026, 10, 14), QDate(2026, 11, 5)),
+             (QStringList{u"2026-10-15 08:15 Zażółć gęślą jaźń"_s, u"2026-10-23 12:00 Zażółć (przeniesione)"_s,
+                          u"2026-11-05 08:15 Zażółć gęślą jaźń"_s}));
+}
+
+void TestCalDavEventChange::paths_data()
+{
+    QTest::addColumn<QString>("url");
+    QTest::addColumn<QString>("uid");
+    QTest::addColumn<QString>("path");
+    QTest::newRow("as it is") << "https://dav.example.pl/dav/praca/" << "brulion-event-a1_b.2"
+                              << "/dav/praca/brulion-event-a1_b.2.ics";
+    QTest::newRow("no slash") << "https://dav.example.pl/dav/praca" << "x" << "/dav/praca/x.ics";
+    QTest::newRow("unsafe letters") << "https://dav.example.pl/dav/praca/" << "spotkanie@serwer.pl/1 ż"
+                                    << "/dav/praca/spotkanie-serwer.pl-1-ż.ics";
+    QTest::newRow("encoded folder") << "https://dav.example.pl/dav/m%C3%B3j/" << "x" << "/dav/mój/x.ics";
+    QTest::newRow("no uid") << "https://dav.example.pl/dav/praca/" << "" << "/dav/praca/event.ics";
+    QTest::newRow("a long uid") << "https://dav.example.pl/dav/praca/" << QString(200, u'a')
+                                << u"/dav/praca/"_s + QString(120, u'a') + u".ics"_s;
+}
+
+void TestCalDavEventChange::paths()
+{
+    QFETCH(QString, url);
+    QFETCH(QString, uid);
+    QFETCH(QString, path);
+    CalendarEntry c = pracaEntry();
+    c.url = url;
+    QCOMPARE(newEventPath(c, uid), path);
+}
+
+void TestCalDavEventChange::uids()
+{
+    static const QRegularExpression form(u"^brulion-event-[a-z0-9]{16}$"_s);
+    const QString a = newEventUid();
+    const QString b = newEventUid();
+    QVERIFY2(form.match(a).hasMatch(), qPrintable(a));
+    QVERIFY(a != b);
+    static const QRegularExpression id(u"^20261120T090102003-[a-z0-9]{8}$"_s);
+    const QString i = newIntentId(QDateTime(QDate(2026, 11, 20), QTime(10, 1, 2, 3), QTimeZone("Europe/Warsaw")));
+    QVERIFY2(id.match(i).hasMatch(), qPrintable(i));
 }
 
 void TestCalDavEventChange::acrossTheClockChange()
@@ -782,6 +920,11 @@ void TestCalDavEventChange::intentJson()
     c.patch.rule = u"every year"_s;
     QCOMPARE(EventIntent::fromJson(c.toJson())->patch, c.patch);
     QCOMPARE(c.toJson().value(u"start"_s).toString(), u"2026-12-24"_s);
+    // At the limits: still an intent.
+    EventIntent longest = intent(EventIntent::Kind::Change, QString(1000, u'u'));
+    longest.patch.title = QString(2000, u'ż');
+    longest.patch.reminderMinutes = 366 * 1440;
+    QVERIFY(EventIntent::fromJson(longest.toJson()));
     const EventIntent d = intent(EventIntent::Kind::Delete, u"urlop"_s);
     const auto dBack = EventIntent::fromJson(d.toJson());
     QVERIFY(dBack);
@@ -800,8 +943,10 @@ void TestCalDavEventChange::malformedIntents_data()
     QTest::newRow("a day that is none") << "start" << QJsonValue(u"2026-13-45"_s);
     QTest::newRow("an hour that is none") << "end" << QJsonValue(u"25:00"_s);
     QTest::newRow("a time in words") << "start" << QJsonValue(u"jutro o 10"_s);
+    QTest::newRow("a day at an hour that is none") << "start" << QJsonValue(u"2026-11-04T25:61"_s);
     QTest::newRow("an occurrence that is none") << "instance" << QJsonValue(u"wczoraj"_s);
     QTest::newRow("a title too long") << "title" << QJsonValue(QString(2001, u'ż'));
+    QTest::newRow("a UID too long") << "uid" << QJsonValue(QString(1001, u'u'));
     QTest::newRow("a description too long") << "description" << QJsonValue(QString(20'001, u'a'));
     QTest::newRow("a number for a title") << "title" << QJsonValue(7);
     QTest::newRow("a reminder of years") << "reminderMinutes" << QJsonValue(10'000'000);
@@ -844,8 +989,11 @@ void TestCalDavEventChange::inbox()
     const QString file = inboxFolder(folder) + u'/' + first.id + u".json"_s;
     QVERIFY(QFile::exists(file));
 #ifndef Q_OS_WIN
-    QCOMPARE(QFile::permissions(file) & (QFile::ReadGroup | QFile::ReadOther | QFile::WriteGroup | QFile::WriteOther),
-             QFile::Permissions());
+    for (const QString &path : {file, inboxFolder(folder), folder}) {
+        QCOMPARE(QFile::permissions(path)
+                         & (QFile::ReadGroup | QFile::ReadOther | QFile::WriteGroup | QFile::WriteOther),
+                 QFile::Permissions());
+    }
 #endif
     // A broken file and an unfinished one (no .json yet) beside them.
     QFile broken(inboxFolder(folder) + u"/20261120T090300000-zepsuty.json"_s);
@@ -863,8 +1011,24 @@ void TestCalDavEventChange::inbox()
     QVERIFY(!pending.at(1).intent);
     QCOMPARE(pending.at(2).intent->uid, u"urlop"_s);
     QCOMPARE(pendingIntents(folder, 1).size(), 1);
-    // Reading takes nothing away.
+    // Reading takes nothing away; none or a negative number asked: none.
     QCOMPARE(pendingIntents(folder).size(), 3);
+    QVERIFY(pendingIntents(folder, 0).isEmpty());
+    QVERIFY(pendingIntents(folder, -5).isEmpty());
+    QVERIFY(pendingIntents({}).isEmpty());
+    // Written once: the same id again, no folder, an id that is no file name, a folder that is a
+    // file — refused.
+    QVERIFY(!postIntent(folder, first));
+    QVERIFY(!postIntent({}, later));
+    EventIntent odd = later;
+    odd.id = u"../poza"_s;
+    QVERIFY(!postIntent(folder, odd));
+    QFile plain(dir.filePath(u"plik"_s));
+    QVERIFY(plain.open(QIODevice::WriteOnly));
+    plain.close();
+    odd.id = newIntentId(QDateTime(QDate(2026, 11, 20), QTime(9, 6), QTimeZone::UTC));
+    QVERIFY(!postIntent(dir.filePath(u"plik"_s), odd));
+    QVERIFY(postIntent(folder, odd));
 }
 
 QTEST_GUILESS_MAIN(TestCalDavEventChange)
