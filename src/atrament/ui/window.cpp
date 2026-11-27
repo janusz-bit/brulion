@@ -1052,8 +1052,11 @@ void Window::paintTextGlyphs(const TextLayout &layout, Point origin, std::span<c
                 segments.push_back(Segment { g.styleIndex, x, x, g.face, g.fontSize, shiftAt(g.cluster) });
             }
         }
+        // (A truncated paragraph's last line: under its ellipsis too.)
+        const bool clamped = layout.truncated() && &line == &layout.lines().back();
         if (!segments.empty())
-            segments.back().x1 = std::max(segments.back().x0, layout.caretX(line.end, CaretAffinity::Upstream));
+            segments.back().x1 = std::max(segments.back().x0, clamped ? line.x + line.width
+                                                                      : layout.caretX(line.end, CaretAffinity::Upstream));
         for (std::uint32_t i = line.firstGlyph; i < end; ++i) {
             const PositionedGlyph &g = glyphs[i];
             paintGlyph(g.face, g.glyph, g.fontSize, { origin.x + g.position.x, origin.y + g.position.y },

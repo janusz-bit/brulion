@@ -123,6 +123,7 @@ private Q_SLOTS:
     void aligned();
     void wrappedLinesEachAligned();
     void textInputAligned();
+    void lineClampEndsWithAnEllipsis();
 };
 
 void TestAtramentAlign::aligned_data()
@@ -246,6 +247,58 @@ void TestAtramentAlign::textInputAligned()
     tw.simulateClick({float(inkLeft) + 1, t.bounds()->center().y});
     tw.settle();
     QCOMPARE(input.read(app).selection().focus, 0);
+}
+
+namespace {
+
+// A long paragraph in a narrow column clamped to one line.
+struct Clamped {
+    TextLayoutHandle handle;
+    int lines = 1;
+    AnyElement render(Window &, Context<Clamped> &)
+    {
+        return div().sizeFull().bg(white()).p(kRowLeft).child(
+                div().id(u"cell").flexCol().w(120).textSize(16).textColor(black()).fontFamily(u"Brulion Inter")
+                        .lineClamp(lines)
+                        .child(text(u"Zażółć gęślą jaźń, chrząszcz brzmi w trzcinie").trackLayout(handle)));
+    }
+};
+
+} // namespace
+
+void TestAtramentAlign::lineClampEndsWithAnEllipsis()
+{
+    auto platform = std::make_shared<TestPlatform>();
+    App app{platform, loadFonts()};
+    TestWindow &tw = platform->newWindow({500, 120}, 1);
+    Entity<Clamped> clamped = app.newEntity<Clamped>();
+    Window &w = app.openWindow(tw, clamped);
+    w.setAccessibilityEnabled(true);
+    tw.settle();
+    const TextLayoutHandle &handle = clamped.read(app).handle;
+    QVERIFY(handle.layout());
+    QVERIFY(handle.layout()->truncated());
+    QCOMPARE(int(handle.layout()->lines().size()), 1);
+    // One line tall, inside its column, and the ink of the ellipsis at the line's end.
+    QCOMPARE(handle.bounds().height(), handle.layout()->lines().front().height);
+    const auto [inkLeft, inkRight] = inkColumns(tw, 10, 40);
+    QVERIFY(inkRight <= int(kRowLeft + 120));
+    // (The ellipsis' dots: ink up to its side bearing before the line's end.)
+    const float end = handle.bounds().left() + handle.layout()->lines().front().width;
+    QVERIFY2(float(inkRight) > end - 6 && float(inkRight) <= end + 1, qPrintable(QStringLiteral("%1 / %2").arg(inkRight).arg(end)));
+    // A screen reader reads it all.
+    bool whole = false;
+    for (const AccessibilityNode *n : w.accessibilityTree().nodes())
+        whole = whole || n->name == std::u16string_view(u"Zażółć gęślą jaźń, chrząszcz brzmi w trzcinie");
+    QVERIFY(whole);
+    // Two lines: taller, still clamped.
+    clamped.update(app, [](Clamped &c, Context<Clamped> &cx) {
+        c.lines = 2;
+        cx.notify();
+    });
+    tw.settle();
+    QCOMPARE(int(clamped.read(app).handle.layout()->lines().size()), 2);
+    QVERIFY(clamped.read(app).handle.layout()->truncated());
 }
 
 QTEST_GUILESS_MAIN(TestAtramentAlign)

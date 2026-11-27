@@ -507,6 +507,65 @@ void TextLayout::Builder::wrap(TextLayout &layout, const FontCollection &fonts, 
     if (n == 0)
         lines.push_back(TextLine{});
 
+    // At most maxLines lines: the last one shown ends with an ellipsis where text was left out.
+    layout.m_truncated = false;
+    if (style.maxLines > 0 && lines.size() > std::size_t(style.maxLines)) {
+        lines.resize(std::size_t(style.maxLines));
+        TextLine &last = lines.back();
+        layout.m_truncated = true;
+        // The ellipsis in the font of the text before it (a fallback's when that has none; three
+        // full stops when nobody has one).
+        auto runOf = [&](int offset) {
+            auto it = std::upper_bound(runs.begin(), runs.end(), offset,
+                                       [](int o, const ResolvedRun &run) { return o < run.end; });
+            return it == runs.end() ? runs.size() - 1 : std::size_t(it - runs.begin());
+        };
+        const ResolvedRun &run = runs[runOf(std::max(last.start, last.end - 1))];
+        PositionedGlyph mark;
+        mark.fontSize = run.fontSize;
+        mark.styleIndex = run.styleIndex;
+        int marks = 1;
+        float advance = 0;
+        auto glyphOf = [&](FaceId face, char32_t c) -> bool {
+            hb_font_t *font = fonts.hbFont(face);
+            hb_codepoint_t g = 0;
+            if (!font || !hb_font_get_nominal_glyph(font, c, &g))
+                return false;
+            mark.face = face;
+            mark.glyph = g;
+            advance = float(hb_font_get_glyph_h_advance(font, g)) * run.fontSize
+                      / float(std::max(1, fonts.unitsPerEm(face)));
+            return true;
+        };
+        if (!glyphOf(run.face, U'\u2026')) {
+            const FaceId fallback = fonts.faceFor(U'\u2026', run.face);
+            if (fallback == kNoFace || !glyphOf(fallback, U'\u2026')) {
+                marks = 3;
+                glyphOf(run.face, U'.');
+            }
+        }
+        const float ellipsis = advance * float(marks);
+        // Shortened by whole graphemes until the ellipsis fits; no spaces before it.
+        const float room = wrapWidth ? *wrapWidth + kWidthEpsilon : std::numeric_limits<float>::infinity();
+        int cut = visibleEnd(last.start, last.end);
+        while (cut > last.start && widthOf(last.start, cut) + ellipsis > room) {
+            auto it = std::lower_bound(graphemes.begin(), graphemes.end(), cut);
+            cut = it == graphemes.begin() ? last.start : std::max(last.start, *std::prev(it));
+            cut = visibleEnd(last.start, cut);
+        }
+        last.end = cut;
+        last.next = n;
+        last.width = widthOf(last.start, cut) + ellipsis;
+        // The glyphs from the cut on go; the ellipsis follows the rest, at the cut.
+        glyphs.erase(std::find_if(glyphs.begin(), glyphs.end(), [cut](const PositionedGlyph &g) { return g.cluster >= cut; }),
+                     glyphs.end());
+        mark.cluster = cut;
+        for (int k = 0; k < marks; ++k) {
+            mark.position = {X[std::size_t(cut)] + advance * float(k), 0};
+            glyphs.push_back(mark);
+        }
+    }
+
     // Line metrics from the runs' own fonts (not their fallbacks', so an emoji never makes a line
     // taller), CSS's half-leading, and the glyphs placed on their lines.
     struct RunMetrics {
@@ -832,7 +891,8 @@ TextLayout TextLayout::Builder::rewrap(const FontCollection &fonts, const TextLa
                                        std::span<const FontRun> runs, const ParagraphStyle &style)
 {
     const std::u16string &text = layout.m_text;
-    if (layout.m_offsetX.size() != text.size() + 1 || layout.m_lines.empty())
+    // (A truncated layout lacks the glyphs it left out: shaped again.)
+    if (layout.m_offsetX.size() != text.size() + 1 || layout.m_lines.empty() || layout.m_truncated)
         return build(fonts, text, runs, style);
     TextLayout out;
     out.m_text = text;

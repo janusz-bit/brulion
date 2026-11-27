@@ -30,6 +30,12 @@
 // or asks the layout needs no offset of their own. The box is ParagraphStyle::alignWidth wide,
 // else the wrap width, else as wide as the widest line.
 //
+// At most so many lines (ParagraphStyle::maxLines; CSS's `line-clamp`): the lines after them are
+// left out and the last one shown ends with an ellipsis ("…", in the font of the text before it)
+// where text was left out, shortened by whole graphemes until the ellipsis fits the wrap width
+// (spaces before it dropped). Its `next` is the text's end; offsets after its end are at its end
+// for carets and hit tests; truncated() says it happened.
+//
 // Inline boxes (an icon, a checkbox in a line): a run with `inlineBox` is laid out as one box of
 // that size instead of glyphs — its text (U+FFFC, or no-break spaces reserved for it) keeps its
 // offsets but is never drawn. The line reserves the box's width, and its ascent and descent count
@@ -146,6 +152,9 @@ public:
     // widest line) and how.
     float boxWidth() const { return m_boxWidth; }
     TextAlign align() const { return m_align; }
+    // Lines were left out (ParagraphStyle::maxLines): the last line ends with an ellipsis glyph
+    // (the last of glyphs(), its cluster the line's end).
+    bool truncated() const { return m_truncated; }
     // The widest line (without hanging spaces) and the lines' height: what the text needs, not
     // its box (an aligned line may start further right).
     Size size() const { return m_size; }
@@ -196,6 +205,7 @@ private:
     std::optional<float> m_wrapWidth;
     float m_boxWidth = 0;
     TextAlign m_align = TextAlign::Left;
+    bool m_truncated = false;
     Size m_size;
     float m_minContentWidth = 0;
     float m_maxContentWidth = 0;
@@ -216,6 +226,9 @@ struct ParagraphStyle {
     // widest line); see "Alignment" above.
     TextAlign align = TextAlign::Left;
     std::optional<float> alignWidth = std::nullopt;
+    // At most so many lines, the last one ending with an ellipsis where text was left out (0: no
+    // limit); see above.
+    int maxLines = 0;
 };
 
 class FontCollection;

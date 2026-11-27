@@ -77,6 +77,9 @@ struct TextStyle {
     float lineHeightScale = 0; // × fontSize when > 0 (and lineHeight is 0)
     TextAlign align = TextAlign::Left;
     WhiteSpace whiteSpace = WhiteSpace::Normal;
+    // A Text shows at most so many lines, the last one ending with "…" where text was left out
+    // (0: all; CSS's `line-clamp`). A TextInput shows all.
+    int maxLines = 0;
     std::optional<UnderlineStyle> underline;
     bool strikethrough = false;
     std::optional<TextBackground> background; // a shape under the text
@@ -108,6 +111,7 @@ struct TextStyleRefinement {
     std::optional<float> lineHeightScale;
     std::optional<TextAlign> align;
     std::optional<WhiteSpace> whiteSpace;
+    std::optional<int> maxLines;
     std::optional<std::optional<UnderlineStyle>> underline;
     std::optional<bool> strikethrough;
     std::optional<std::optional<TextBackground>> background;
@@ -118,7 +122,7 @@ struct TextStyleRefinement {
     bool isEmpty() const
     {
         return !fontFamily && !fontSize && !fontWeight && !fontStyle && !color && !lineHeight && !lineHeightScale
-                && !align && !whiteSpace && !underline && !strikethrough && !background && !fontFeatures
+                && !align && !whiteSpace && !maxLines && !underline && !strikethrough && !background && !fontFeatures
                 && !overline && !baselineShift;
     }
     void applyTo(TextStyle &s) const;
@@ -372,6 +376,8 @@ public:
     Self &&textCenter() && { return set([](Style &s) { s.text.align = TextAlign::Center; }); }
     Self &&textRight() && { return set([](Style &s) { s.text.align = TextAlign::Right; }); }
     Self &&whitespaceNowrap() && { return set([](Style &s) { s.text.whiteSpace = WhiteSpace::NoWrap; }); }
+    // At most `lines` lines of text, the last one ending with "…" where text was left out (0: all).
+    Self &&lineClamp(int lines) && { return set([lines](Style &s) { s.text.maxLines = std::max(0, lines); }); }
     Self &&underline(UnderlineStyle u = {}) && { return set([u](Style &s) { s.text.underline = u; }); }
     Self &&lineThrough() && { return set([](Style &s) { s.text.strikethrough = true; }); }
     Self &&fontFeatures(std::u16string f) && { return set([f = std::move(f)](Style &s) { s.text.fontFeatures = f; }); }

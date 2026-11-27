@@ -184,6 +184,15 @@ public:
   layout moved by its line's x, rewrapping, the cache) and `tests/atrament/ui/tst_atrament_align`
   (the glyphs' ink against a link's node and click, the handle's offsets, an object's box, wrapped
   lines, a field's caret).
+* **Line clamp** (`lineClamp(n)` on an element, `TextStyle::maxLines`; `ParagraphStyle::
+  maxLines`): at most n lines; when text was left out the last one is shortened by whole graphemes
+  until "…" (U+2026 in the font of the text before it, a fallback's, else three full stops) fits
+  the wrap width, spaces before it dropped, and ends with it — CSS's `line-clamp` with
+  `text-overflow: ellipsis`. The text keeps its offsets: the last line's `next` is the text's end,
+  offsets past its end are at its end for carets and hit tests, `TextLayout::truncated()` says it
+  happened (a truncated layout is shaped again when rewrapped: it lacks the glyphs it left out). A
+  screen reader reads the whole text; a `TextInput` shows all of it. Tested by
+  `tst_atrament_text_layout` (`maxLines`) and `tst_atrament_align`.
 * **Background shapes** (`TextBackground`, `ui/style.h`: a span's `style.background`): a pill
   (`pill`), a rounded box (`radius`) or a square box behind a span's glyphs, `paddingX` beyond them
   on each side, `inset` in from their extent — the fonts' ascent above and descent below the
@@ -1053,8 +1062,8 @@ scrolling, `tst_atrament_editor`) before the next:
    alignments (`:--`, `:-:`, `--:`), TableBlockView's natural column widths (the header's lines and
    each cell's visible text measured by Atrament's text layout, 56…280 px) shared out in proportion
    to them on a wider page (flex-grow), a table wider than the page scrolled sideways inside its row
-   (the wheel with Shift, a touchpad, a finger), a cell longer than its column wrapped (the QML table
-   elides it). A click or a tap on a cell edits it at the character under the pointer
+   (the wheel with Shift, a touchpad, a finger), a cell longer than its column on one line ending
+   with "…" (a header: its `<br>` lines; "Text", line clamp), as TableBlockView elides it. A click or a tap on a cell edits it at the character under the pointer
    (`BlockListModel::tableCellText`: the cell rendered with its source map; a formula as written,
    the caret at its end): a TextInput styled by EditStyler's Inline rules, each change written by
    `PageController::setTableCell(…, typing)` (one undo step per cell, nothing waits for the cell to
@@ -1080,7 +1089,7 @@ scrolling, `tst_atrament_editor`) before the next:
    change the table, `BlockEditor.editTableCell` finds no QML table to edit), Enter on a selected
    table editing its first cell, the touch toolbar's cell tools (the next cell, undo / redo, More)
    and the cell kept above them, a long press on a cell's chip (its menu), tooltips (a formula's
-   error, link previews), an ellipsis for a cell longer than its column, dragging the sideways
+   error, link previews), dragging the sideways
    scroll bar, the app's Alt+← / Alt+→ (Back, Forward) still taking those keys before the cell,
    Qt's table interfaces for screen readers (`QAccessibleTableInterface`: rows and columns counted,
    a cell's coordinates). Each cell is aligned by Atrament's own text alignment ("Text": its links,

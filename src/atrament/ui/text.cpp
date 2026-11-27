@@ -76,6 +76,7 @@ void Text::buildRuns(Window &window)
     m_lineHeight = base.resolvedLineHeight();
     m_align = base.align;
     m_whiteSpace = base.whiteSpace;
+    m_maxLines = base.maxLines;
     auto paintStyle = [](const TextStyle &s) {
         return TextPaintStyle { s.color, s.underline, s.strikethrough, s.background, s.overline };
     };
@@ -164,6 +165,7 @@ std::shared_ptr<const TextLayout> Text::layoutAt(std::optional<float> wrapWidth,
     ParagraphStyle style;
     style.wrapWidth = m_whiteSpace == WhiteSpace::NoWrap ? std::nullopt : wrapWidth;
     style.lineHeight = m_lineHeight;
+    style.maxLines = m_maxLines;
     // Aligned in the element's box: the wrap width, or (not wrapping) the box prepaint gives.
     style.align = m_align;
     if (m_align != TextAlign::Left)

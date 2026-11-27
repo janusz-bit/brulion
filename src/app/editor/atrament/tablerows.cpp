@@ -8,7 +8,8 @@
 // under the header) and the columns, formula cells tinted; each cell's text is its rendering
 // (`html`, the InlineRenderer's) read into RenderedText and drawn with renderedSpans() — links,
 // chips, tags clickable through Text::link —, aligned as its column says (formulas right without
-// one), in the header's weight for the header, wrapped inside its column when it is wider. The
+// one), in the header's weight for the header, on one line ending with "…" when it is longer (a
+// header: its lines). The
 // columns get TableBlockView's natural widths (tableColumnWidths(), measured by Atrament's text
 // layout) and share what the page has beyond them in proportion to them (flex-grow), as the QML
 // table stretches them; a table wider than the page scrolls sideways inside its row.
@@ -447,6 +448,8 @@ at::AnyElement PageView::renderTableCell(std::size_t row, quint64 uid, const Tab
         std::move(body).child(*m_cellInput);
         return std::move(d).child(std::move(body));
     }
+    // One line (a header: its `<br>` lines), a longer text ending with "…" (TableBlockView's elide).
+    std::move(body).lineClamp(header ? grid.headerLines : 1);
     switch (shownAlign(grid, r, c)) {
     case TableAlign::Right: std::move(body).textRight(); break;
     case TableAlign::Center: std::move(body).textCenter(); break;

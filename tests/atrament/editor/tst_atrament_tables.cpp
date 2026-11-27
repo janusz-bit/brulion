@@ -275,14 +275,22 @@ void TestAtramentTables::gridGeometry()
     QCOMPARE(two.cell(-1, 0, 0).height(), look.rowHeight + look.lineHeight);
     QCOMPARE(two.cell(-1, 1, 0).height(), look.rowHeight + look.lineHeight);
     QCOMPARE(two.shown(-1, 0, 0), u"Nazwa\npozycji"_s);
-    // A cell longer than the widest column (280 px) wraps inside it: its row grows.
+    // A cell longer than the widest column (280 px) ends with "…" on its one line, as the QML
+    // table elides it: its row keeps its height.
     Harness wrapped(u"| Opis | Ilość |\n| --- | --- |\n| Bardzo długi opis pozycji, który na pewno nie zmieści się w jednej "
                     "linii kolumny tabeli | 1 |\n"_s);
     QVERIFY2(wrapped.cell(0, 0, 0).width() >= 280, qPrintable(QString::number(wrapped.cell(0, 0, 0).width())));
     const at::TextLayoutHandle *long_ = wrapped.view().cellText(0, 0, 0);
-    QVERIFY(long_ && long_->layout() && long_->layout()->lines().size() >= 2);
-    QVERIFY(wrapped.cell(0, 0, 0).height() > look.rowHeight);
-    QCOMPARE(wrapped.cell(0, 1, 0).height(), wrapped.cell(0, 0, 0).height());
+    QVERIFY(long_ && long_->layout());
+    QCOMPARE(int(long_->layout()->lines().size()), 1);
+    QVERIFY(long_->layout()->truncated());
+    QVERIFY(long_->layout()->lines().front().width <= wrapped.cell(0, 0, 0).width() - 2 * look.cellPadding + 0.01f);
+    QCOMPARE(wrapped.cell(0, 0, 0).height(), look.rowHeight);
+    QCOMPARE(wrapped.cell(0, 1, 0).height(), look.rowHeight);
+    // Edited, the whole text is in its field.
+    wrapped.page.update(wrapped.app, [](PageView &v, at::Context<PageView> &cx) { QVERIFY(v.editCell(0, 0, 0, -1, cx)); });
+    wrapped.tw.settle();
+    QVERIFY(wrapped.inputText().endsWith(u"kolumny tabeli"_s));
 }
 
 void TestAtramentTables::gridLook()

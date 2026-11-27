@@ -172,6 +172,8 @@ private Q_SLOTS:
     void rewrapMatches();
     void aligned_data();
     void aligned();
+    void maxLines_data();
+    void maxLines();
     void emptyText();
     void severalFonts();
     void lineHeightOverride();
@@ -777,6 +779,83 @@ void TestAtramentTextLayout::aligned()
     QVERIFY(cachedLeft != cached);
     QCOMPARE(cached->lines().front().x, l.lines().front().x);
     QCOMPARE(system.layout(t, runs, style), cached);
+}
+
+void TestAtramentTextLayout::maxLines_data()
+{
+    QTest::addColumn<QString>("text");
+    QTest::addColumn<float>("wrap"); // < 0: none
+    QTest::addColumn<int>("maxLines");
+    QTest::addColumn<int>("align");
+    QTest::newRow("one line of a paragraph") << polishParagraph(2) << 120.0f << 1 << int(TextAlign::Left);
+    QTest::newRow("two lines of a paragraph") << polishParagraph(4) << 150.0f << 2 << int(TextAlign::Left);
+    QTest::newRow("right-aligned") << polishParagraph(6) << 120.0f << 1 << int(TextAlign::Right);
+    QTest::newRow("lines of their own") << u"raz dwa\ntrzy cztery\npięć"_s << -1.0f << 2 << int(TextAlign::Left);
+    QTest::newRow("a word longer than the line") << u"Konstantynopolitańczykówna"_s << 60.0f << 1 << int(TextAlign::Left);
+    QTest::newRow("an empty line last") << u"raz\n\ntrzy"_s << -1.0f << 2 << int(TextAlign::Left);
+}
+
+void TestAtramentTextLayout::maxLines()
+{
+    // At most maxLines lines, the last one ending with an ellipsis that fits.
+    QFETCH(QString, text);
+    QFETCH(float, wrap);
+    QFETCH(int, maxLines);
+    QFETCH(int, align);
+    const std::u16string t = u16(text);
+    const FontRun runs[] = {run(int(t.size()), m_fonts.interRegular, 16, 3)};
+    ParagraphStyle all;
+    if (wrap >= 0)
+        all.wrapWidth = wrap;
+    all.align = TextAlign(align);
+    ParagraphStyle clamped = all;
+    clamped.maxLines = maxLines;
+    const TextLayout full = layoutParagraph(*m_fonts.fonts, t, runs, all);
+    const TextLayout l = layoutParagraph(*m_fonts.fonts, t, runs, clamped);
+    QVERIFY(full.lines().size() > std::size_t(maxLines));
+    QVERIFY(!full.truncated());
+    checkLayout(l);
+    QVERIFY(l.truncated());
+    QCOMPARE(l.lines().size(), std::size_t(maxLines));
+    // The lines before the last as they were; the last one shortened, its rest left out.
+    for (int i = 0; i + 1 < maxLines; ++i) {
+        QCOMPARE(l.lines()[std::size_t(i)].start, full.lines()[std::size_t(i)].start);
+        QCOMPARE(l.lines()[std::size_t(i)].end, full.lines()[std::size_t(i)].end);
+    }
+    const TextLine &last = l.lines().back();
+    const TextLine &was = full.lines()[std::size_t(maxLines - 1)];
+    QCOMPARE(last.start, was.start);
+    QVERIFY(last.end <= was.end);
+    QCOMPARE(last.next, l.length());
+    QVERIFY(last.end == last.start || t[std::size_t(last.end - 1)] != u' ');
+    if (wrap >= 0)
+        QVERIFY2(last.width <= wrap + 0.01f, qPrintable(QString::number(last.width)));
+    QCOMPARE(l.size().height, last.top + last.height);
+    // The ellipsis: the last glyph, at the line's end, as the text before it is styled.
+    QVERIFY(!l.glyphs().empty());
+    const PositionedGlyph &mark = l.glyphs().back();
+    QCOMPARE(mark.cluster, last.end);
+    QCOMPARE(mark.styleIndex, 3u);
+    QVERIFY(std::abs(mark.position.x - l.caretX(last.end, CaretAffinity::Upstream)) < 1e-3f);
+    for (std::uint32_t g = last.firstGlyph; g + 1 < last.firstGlyph + last.glyphCount; ++g)
+        QVERIFY(l.glyphs()[g].cluster < last.end);
+    if (TextAlign(align) == TextAlign::Right)
+        QVERIFY(std::abs(last.x + last.width - wrap) < 1e-3f);
+    // The text left out is at the line's end for carets and hit tests.
+    QVERIFY(std::abs(l.caretX(l.length()) - l.caretX(last.end, CaretAffinity::Upstream)) < 1e-3f);
+    QVERIFY(l.offsetAt({last.x + last.width + 50, last.top + last.height / 2}) <= last.end);
+    // Rewrapped without the limit: the whole text again; the text system keeps them apart.
+    compareLayouts(rewrapParagraph(*m_fonts.fonts, l, runs, all), full);
+    compareLayouts(rewrapParagraph(*m_fonts.fonts, full, runs, clamped), l);
+    TextSystem system(m_fonts.fonts);
+    QVERIFY(system.layout(t, runs, all) != system.layout(t, runs, clamped));
+    QVERIFY(system.layout(t, runs, clamped)->truncated());
+    // Text that fits: nothing changes.
+    ParagraphStyle roomy = all;
+    roomy.maxLines = int(full.lines().size());
+    const TextLayout fits = layoutParagraph(*m_fonts.fonts, t, runs, roomy);
+    QVERIFY(!fits.truncated());
+    compareLayouts(fits, full);
 }
 
 void TestAtramentTextLayout::emptyText()

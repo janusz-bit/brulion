@@ -11,6 +11,9 @@
 // layout places it in the element's box (TextLayout "Alignment"): its links' hit regions, its
 // inline objects, its layout handle's offsets and its nodes for screen readers with it.
 //
+// `lineClamp(n)` on an element around it: at most n lines, the last one ending with "…" where text
+// was left out (TextLayout::truncated()); a screen reader still reads the whole text.
+//
 // Links (hit regions in text, docs/ATRAMENT.md M2 "What is new"): `.link(range, onClick)` makes a
 // range of the text clickable — the pointing hand over it, underlined while hovered, a click (or a
 // finger's tap) runs `onClick` and goes no further, and a screen reader finds a link node named by
@@ -183,6 +186,7 @@ private:
     float m_lineHeight = 0;
     TextAlign m_align = TextAlign::Left;
     WhiteSpace m_whiteSpace = WhiteSpace::Normal;
+    int m_maxLines = 0;
     App *m_app = nullptr;
     std::shared_ptr<const TextLayout> m_layout;
     std::shared_ptr<TextLayoutHandle::State> m_layoutHandle;
