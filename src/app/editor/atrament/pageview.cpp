@@ -6,6 +6,7 @@
 #include "renderedtextitem.h"
 
 #include <QAbstractItemModel>
+#include <QCoreApplication>
 
 #include <algorithm>
 #include <cmath>
@@ -83,7 +84,9 @@ bool drawable(const QString &view)
 } // namespace
 
 PageView::PageView(at::Context<PageView> &cx, BlockListModel *model, PageMetrics metrics, PagePalette palette)
-    : m_model(model)
+    : m_foldNames{QCoreApplication::translate("BlockDelegate", "Expand"),
+                  QCoreApplication::translate("BlockDelegate", "Collapse")}
+    , m_model(model)
     , m_rows(std::make_unique<PageRows>())
     , m_extents(*m_rows)
     , m_metrics(metrics)
@@ -336,12 +339,62 @@ at::AnyElement PageView::renderRow(std::size_t row)
     }
 
     at::Div content = at::div().flexRow().itemsStart().pl(textX - marker);
+    float firstLine = m.lineHeight;
     if (view == u"heading") {
         const int level = std::clamp(index.data(BlockListModel::HeadingLevelRole).toInt(), 0, 6);
-        std::move(content)
-                .textSize(m.headingSizes[level])
-                .lineHeight(std::round(m.headingSizes[level] * 1.3f))
-                .fontBold();
+        firstLine = std::round(m.headingSizes[level] * 1.3f);
+        std::move(content).textSize(m.headingSizes[level]).lineHeight(firstLine).fontBold();
+    }
+    const at::EntityId foldSelf = m_selfId;
+    if (!m.documentMode && index.data(BlockListModel::HasChildrenRole).toBool()) {
+        // The fold arrow (BlockPartFoldArrow): left of the bullet, shown while folded, under the
+        // mouse or on touch; a chevron pointing right when folded, down when open.
+        const bool collapsed = index.data(BlockListModel::CollapsedRole).toBool();
+        const bool shown = collapsed || m.touch || uid == m_hoveredUid;
+        const at::Color ink = m_palette.muted.fadedBy(collapsed ? 0.9f : 0.6f);
+        const float w = m.arrowColumn;
+        std::move(content).child(
+                at::div()
+                        .id(u"fold")
+                        .absolute()
+                        .left(textX - marker - w + 2)
+                        .top(0)
+                        .w(w)
+                        .h(firstLine)
+                        .opacity(shown ? 1.0f : 0.0f)
+                        .cursorPointer()
+                        .role(at::Role::Button)
+                        .expanded(!collapsed)
+                        .ariaLabel(collapsed ? u16View(m_foldNames[0]) : u16View(m_foldNames[1]))
+                        .onClick([foldSelf, row](const at::ClickEvent &, at::Window &, at::App &a) {
+                            a.updateEntity<PageView>(foldSelf, [row](PageView &v, at::Context<PageView> &) {
+                                if (v.m_controller)
+                                    v.m_controller->toggleFold(int(row));
+                            });
+                        })
+                        .child(at::canvas([collapsed, ink](at::Rect b, at::Window &win, at::App &) {
+                                   const at::Point c{b.left() + b.width() / 2, b.top() + b.height() / 2};
+                                   const float r = 3.5f; // half the chevron's span
+                                   const float t = 1.6f; // its stroke
+                                   win.paintPath(ink, [&](at::Window::PathPainter &p) {
+                                       if (collapsed) { // >
+                                           p.moveTo({c.x - r / 2 - t / 2, c.y - r});
+                                           p.lineTo({c.x + r / 2 + t / 2, c.y});
+                                           p.lineTo({c.x - r / 2 - t / 2, c.y + r});
+                                           p.lineTo({c.x - r / 2 - t / 2 - t * 0.8f, c.y + r - t * 0.6f});
+                                           p.lineTo({c.x + r / 2 + t / 2 - t * 1.4f, c.y});
+                                           p.lineTo({c.x - r / 2 - t / 2 - t * 0.8f, c.y - r + t * 0.6f});
+                                       } else { // v
+                                           p.moveTo({c.x - r, c.y - r / 2 - t / 2});
+                                           p.lineTo({c.x, c.y + r / 2 + t / 2});
+                                           p.lineTo({c.x + r, c.y - r / 2 - t / 2});
+                                           p.lineTo({c.x + r - t * 0.6f, c.y - r / 2 - t / 2 - t * 0.8f});
+                                           p.lineTo({c.x, c.y + r / 2 + t / 2 - t * 1.4f});
+                                           p.lineTo({c.x - r + t * 0.6f, c.y - r / 2 - t / 2 - t * 0.8f});
+                                       }
+                                       p.close();
+                                   });
+                               }).sizeFull()));
     }
     if (!task.isEmpty()) {
         // The task's box in the bullet's place: filled when done or cancelled.
@@ -413,6 +466,16 @@ at::AnyElement PageView::renderRow(std::size_t row)
     std::move(column).child(std::move(body));
     std::move(content).child(std::move(column));
     at::Div drawn = line().child(std::move(content));
+    if (!m.documentMode && index.data(BlockListModel::HasChildrenRole).toBool())
+        std::move(drawn).onHover([selfId, uid](bool hovered, at::Window &, at::App &a) {
+            a.updateEntity<PageView>(selfId, [&](PageView &v, at::Context<PageView> &c) {
+                const quint64 now = hovered ? uid : (v.m_hoveredUid == uid ? 0 : v.m_hoveredUid);
+                if (now != v.m_hoveredUid) {
+                    v.m_hoveredUid = now;
+                    c.notify();
+                }
+            });
+        });
     if (m_controller && !m_controller->readOnly()) {
         // A click or a tap edits the block at the character under it (links and the task's box
         // take their own clicks first). No node of its own for screen readers: the row's text is.

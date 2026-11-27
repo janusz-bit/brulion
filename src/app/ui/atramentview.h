@@ -37,6 +37,8 @@ class AtramentView : public brulion::atrament::AtramentItem {
     Q_PROPERTY(qreal listIndent MEMBER m_listIndent NOTIFY styleChanged FINAL)
     Q_PROPERTY(qreal contentX MEMBER m_contentX NOTIFY styleChanged FINAL)
     Q_PROPERTY(qreal contentWidth MEMBER m_contentWidth NOTIFY styleChanged FINAL)
+    Q_PROPERTY(qreal arrowColumn MEMBER m_arrowColumn NOTIFY styleChanged FINAL)
+    Q_PROPERTY(bool touchUi MEMBER m_touchUi NOTIFY styleChanged FINAL)
     Q_PROPERTY(QColor textColor MEMBER m_textColor NOTIFY styleChanged FINAL)
     Q_PROPERTY(QColor mutedColor MEMBER m_mutedColor NOTIFY styleChanged FINAL)
     Q_PROPERTY(QColor linkColor MEMBER m_linkColor NOTIFY styleChanged FINAL)
@@ -143,4 +145,6 @@ private:
     QColor m_bandColor{0x3b, 0x5b, 0xdb, 0x22};
     QColor m_ringColor{0x3b, 0x5b, 0xdb};
     qreal m_bandRadius = 6;
+    qreal m_arrowColumn = 16;
+    bool m_touchUi = false;
 };

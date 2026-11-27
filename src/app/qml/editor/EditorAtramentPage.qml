@@ -32,6 +32,8 @@ AtramentView {
     listIndent: editor ? editor.listIndent : 27
     contentX: editor ? editor.contentX : 0
     contentWidth: editor ? editor.contentWidth : 0
+    arrowColumn: editor ? editor.arrowColumn : 16
+    touchUi: Theme.touchUi
     textColor: Theme.fg
     mutedColor: Theme.fgMuted
     linkColor: Theme.link

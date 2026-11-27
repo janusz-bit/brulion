@@ -83,6 +83,8 @@ struct PageMetrics {
     float lineHeight = 24;
     float headingSizes[7] = {16, 28, 23, 20, 18, 16, 15}; // by heading level (0: body)
     float taskBox = 14;
+    float arrowColumn = 16;    // the fold arrow's column, left of the bullet (an outline)
+    bool touch = false;        // a touch UI: fold arrows always shown
 };
 
 class PageView {
@@ -176,6 +178,8 @@ public:
     void commitComposition(atrament::Context<PageView> &cx);
 
 private:
+    // The fold arrow's names for screen readers ("Expand", "Collapse": BlockDelegate's texts).
+    QString m_foldNames[2];
     atrament::AnyElement renderRow(std::size_t row);
     // Editing (pageediting.cpp).
     void controllerEditingChanged(atrament::Context<PageView> &cx);
@@ -219,6 +223,7 @@ private:
     atrament::EntityId m_selfId = 0;
     atrament::App *m_app = nullptr;
     SelectionLook m_selectionLook;
+    quint64 m_hoveredUid = 0; // the row under the mouse (its fold arrow shows)
 };
 
 } // namespace atr

@@ -231,6 +231,8 @@ void AtramentView::applyStyle()
         m.listIndent = float(m_listIndent);
         m.contentX = float(m_contentX);
         m.contentWidth = float(m_contentWidth);
+        m.arrowColumn = float(m_arrowColumn);
+        m.touch = m_touchUi;
         m.headingSizes[0] = m.fontSize;
         PagePalette p = page.palette();
         p.text = atColor(m_textColor);

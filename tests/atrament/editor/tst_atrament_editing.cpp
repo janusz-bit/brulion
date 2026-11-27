@@ -113,6 +113,8 @@ private Q_SLOTS:
     void controllerEditingFromOutside();
     void stylerColoursTheField();
     void readOnlyPageDoesNotEdit();
+    void foldArrowFolds();
+    void selectedBlocksOnABand();
 };
 
 void TestAtramentEditing::clickEditsAtTheCharacter()
@@ -408,6 +410,62 @@ void TestAtramentEditing::readOnlyPageDoesNotEdit()
     h.tw.settle();
     QCOMPARE(h.controller.editingRow(), -1);
     QCOMPARE(h.view().editedRow(), -1);
+}
+
+void TestAtramentEditing::foldArrowFolds()
+{
+    Harness h(u"- rodzic z dziećmi\n  - dziecko pierwsze\n  - dziecko drugie\n- sąsiad\n"_s);
+    // The app's outline gutter: the arrow's column left of the bullet's.
+    h.page.update(h.app, [](PageView &v, at::Context<PageView> &cx) {
+        PageMetrics m = v.metrics();
+        m.gutter = m.arrowColumn + m.bulletColumn;
+        v.setStyle(m, v.palette());
+        cx.notify();
+    });
+    h.tw.settle();
+    QVERIFY(h.model()->isRowVisible(1));
+    // The arrow's middle: its column left of the bullet, on the first line.
+    const at::Point arrow{2 + 16 / 2.0f - 2 + 0.0f, 3 + 12};
+    auto inkAt = [&](at::Point p) {
+        for (int y = int(p.y) - 4; y <= int(p.y) + 4; ++y)
+            for (int x = int(p.x) - 4; x <= int(p.x) + 4; ++x)
+                if (h.tw.pixel(x, y).r < 200)
+                    return true;
+        return false;
+    };
+    // Hidden until the mouse is over the row.
+    QVERIFY(!inkAt(arrow));
+    h.tw.simulateMouseMove({200, 15});
+    h.tw.settle();
+    QVERIFY(inkAt(arrow));
+    h.tw.simulateClick(arrow);
+    h.tw.settle();
+    QVERIFY(!h.model()->isRowVisible(1));
+    QVERIFY(!h.model()->isRowVisible(2));
+    QCOMPARE(h.controller.editingRow(), -1); // the arrow's click edits nothing
+    // Folded: shown without the mouse.
+    h.tw.simulateMouseMove({200, 300});
+    h.tw.settle();
+    QVERIFY(inkAt(arrow));
+    h.tw.simulateClick(arrow);
+    h.tw.settle();
+    QVERIFY(h.model()->isRowVisible(1));
+}
+
+void TestAtramentEditing::selectedBlocksOnABand()
+{
+    Harness h(u"- jeden\n- dwa\n- trzy\n"_s);
+    const at::Pixel before = h.tw.pixel(590, 14);
+    h.controller.selectRange(0, 1);
+    h.tw.settle();
+    QCOMPARE(h.model()->index(0).data(BlockListModel::SelectionEdgeRole).toString(), u"first"_s);
+    // The band under the selected rows, none under the third.
+    const at::Pixel band = h.tw.pixel(590, 14);
+    QVERIFY(band.r != before.r || band.g != before.g || band.b != before.b);
+    const auto *third = h.view().rowText(2);
+    QVERIFY(third);
+    const at::Pixel free = h.tw.pixel(590, int(third->bounds().top() + 4));
+    QCOMPARE(free.r, before.r);
 }
 
 QTEST_MAIN(TestAtramentEditing)
