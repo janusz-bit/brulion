@@ -361,7 +361,24 @@ dragging; the wheel does as before.
   nothing) and the finger scrolls nothing until it lifts (a block's touch selection mode). Inside
   the focused field only a listener whose hitbox lies within the field's bounds — something drawn
   in its text: an inline object's `onLongPress`, a reminder chip's menu — runs instead of the
-  platform's selection.
+  platform's selection. The
+  listener may keep the finger as a drag (`Window::dragAfterLongPress()`): its moves and its
+  release then reach the elements' mouse listeners — still no scroll, and the release clicks
+  nothing (the press was cancelled) — a block's selection extended as the finger moves, blocks
+  dragged to another place.
+* **Drags an element claims.** A finger's or a pen's press on an element that claims its drag
+  (`div().claimTouchDrag()`, `Window::claimTouchDrag(hitbox)`: a grip at a selection's end, a
+  slider's thumb, a handle) is that element's from the press on: no wait, no slop, no container
+  scrolls, no long press — the press, every move and the release reach the mouse listeners at
+  once, as a mouse's do, also inside a list that scrolls the same way (the topmost claim under the
+  finger; a cancelled touch ends it with a cancelled release, over nothing). Over a hosted Qt
+  Quick item the item takes such a press from the child (below).
+* **Edge scrolling** (`ui/edgescroll.h`): a drag held near a scrolling view's top or bottom edge
+  (a selection dragged past what is shown, a row being moved) scrolls the view by itself —
+  `edgeScrollSpeed(y, top, bottom)`, px per 16 ms frame, the QML editor's curve: a zone of a fifth
+  of the view (16–56 px), from 2 px at its inner side to at most 40 — and `EdgeScroller` steps it on
+  the app's timers (the virtual clock in tests) while the pointer stays in the zone; the view's
+  owner moves its content and follows what came under the pointer.
 * **Through Qt** (`qt/qthost.h`) the item takes `QTouchEvent`s itself (`setAcceptTouchEvents`):
   the first finger down is the pointer until it lifts, with the events' times; `TouchCancel`, or
   the grab taken away (a Drawer's edge, a Flickable around: `touchUngrabEvent`, and
@@ -380,11 +397,11 @@ dragging; the wheel does as before.
   child that keeps its grab (`keepTouchGrab` / `keepMouseGrab`: a slider, an inner Flickable
   dragging its own way) keeps the drag; a drag nothing scrolls stays the child's; a tap is the
   child's; a finger on a flinging list stops it and drags on, a press the child never gets. A
-  press that no child takes reaches the item as any other. The wheel a child leaves reaches the
-  item by Qt Quick's own delivery.
-* Left for later: two fingers (pinch, two-finger scroll), an overscroll effect, a drag an element
-  claims in a container's own direction (a vertical slider in a vertical list: today the list
-  takes it), smooth programmatic scrolling.
+  press on an element of the window's that claims its drag (a selection's grip over a hosted row)
+  is the item's at once: the child never has it. A press that no child takes reaches the item as
+  any other. The wheel a child leaves reaches the item by Qt Quick's own delivery.
+* Left for later: two fingers (pinch, two-finger scroll), an overscroll effect, smooth
+  programmatic scrolling.
 
 ### Accessibility
 
@@ -769,7 +786,12 @@ Qt Quick's own nodes. Each step below turns kinds of foreign rows into Atrament 
 * A hosted editor's caret (a code block's InlineEditor) stays in view: `BlockEditor.ensureVisible`
   asks the page drawn by Atrament (`AtramentView.revealArea` → `PageView::reveal` →
   `ListHandle::scrollBy`, taken by the list in its next frame as the wheel's offset is).
-* **Not yet**: the editor's find highlight and block selection over hosted rows.
+* A selected hosted row is on the page's band like the rows Atrament draws: the band (and the
+  touch selection mode's grips) is painted in the row's box, under its delegate, which draws none of
+  its own here (BlockDelegate's band and grips are off `usesAtrament`); a grip there takes the
+  finger from the delegate (`claimTouchDrag`, "Touch" above). The find bar's matches in a hosted
+  row are its delegate's own, as in the QML editor (a code block or a table tints none there
+  either; a block the find bar edits shows its match selected in its InlineEditor).
 
 ### Steps
 
@@ -893,13 +915,46 @@ scrolling, `tst_atrament_editor`) before the next:
    the spelling's), the highlight menu from that text menu.
 3. **Selection.** Block selection (Shift+click, Shift+arrows, a mouse's drag across rows), its band,
    copy / cut / paste through `PageController`'s selection; on a phone the long press and the
-   handles. **Built so far** (2026-11-27): the band (`selectionEdge`), Shift+click and Ctrl+click
+   handles. **Built** (2026-11-27; `src/app/editor/atrament/pageselection.cpp`, `pagedrag.cpp`):
+   the band (`selectionEdge`) in BlockPartSelectionBand's geometry — a block alone framed from its
+   own level, a range one straight band from the column's edge, a little past the text column on
+   the right; also under hosted rows —, Shift+click and Ctrl+click
    (`BlockEditor.blockTappedWith`), Shift+↑/↓ out of the edited block, Ctrl+A twice, Esc, a
    mouse's press dragged from one block into another (`PageView::dragOver`: the row under the
    pointer from the list's anchor; its release edits nothing; `dragSelectRequested` →
-   `leaveEditingForSelection` + `selectRange`), a finger's long press (the touch selection mode);
-   the selection's keys, copy, cut and paste are still the QML list's (it takes the keyboard). Not
-   yet: the touch grips, the edge auto-scroll while dragging, a drag across the journal's days.
+   `leaveEditingForSelection` + `selectRange`), a finger's long press (the touch selection mode).
+   **The selection's keys are the page's**: the page keeps the keyboard while blocks are selected
+   (BlockEditor's `keysHolder` is the AtramentView, not the list), and a listener on the window's
+   root dispatch node takes every key no focused element took (`PageView::selectionKey`,
+   BlockEditor.handleSelectionKeyCode's): Shift+↑/↓ extend or shrink the selection, ↑/↓ move it
+   (with none: ↓ the first block, ↑ the last), Alt+↑/↓ move the blocks, Tab / Shift+Tab indent
+   them, Ctrl+Enter their tasks' next status (a parent selected alone: itself), Ctrl+. folds, Enter
+   edits (a table: its delegate takes the keys), Delete / Backspace, Ctrl+C / Ctrl+Insert, Ctrl+X /
+   Shift+Delete, Ctrl+V / Shift+Insert, Ctrl+A, Ctrl+Z / Ctrl+Y, Esc, Android's Back. Each asks
+   the host first (`onSelectionCommand` → `AtramentView.selectionCommand(command, row)` →
+   `BlockEditor.atramentSelectionCommand`, `acceptSelectionCommand()`): copies, cuts, deletions and
+   pastes with their toasts, Esc and Back leaving the selection mode, the task status menu
+   (Ctrl+Shift+Enter), source mode (Ctrl+E), the block reference (Ctrl+Shift+C), the journal
+   stream's selection over several days (refused, or extended across the day's edge), a selection
+   with gaps that does not move; the rest the page does through `PageController`, scrolling the
+   selected row into view (`PageView::revealRow`, also `AtramentView.revealRow` for
+   BlockEditor.ensureRowVisible). The selection's Ctrl keys win over application-wide shortcuts
+   (`Keys.onShortcutOverride` on the AtramentView). **Touch**: in the touch selection mode
+   (`AtramentView.selectionGrips`, BlockEditor.selectionGrips) the band's first and last rows carry
+   BlockSelectionGrip's grips (a round 18 px grip in a 44 px hit area, inside the window's edge,
+   named for screen readers) that claim the finger's drag (`claimTouchDrag`: no scroll, also over a
+   hosted row's delegate) — the other end stays, the finger moves this one; a long press goes on as
+   a drag that extends the selection from its anchor (`Window::dragAfterLongPress`; "One by one",
+   `selectionPicking`, picks only). **Edge scrolling**: a mouse's drag selection, a grip's or a long
+   press's drag held near the view's top or bottom edge (above the touch toolbar:
+   `dragBottomInset`) scrolls the page (`EdgeScroller` → `ListHandle::scrollBy`), the selection
+   following the rows that come under the pointer (where they are since the last frame:
+   `lastY`); a drag's moves and release are the page's (a capture listener: no hover, no click).
+   `AtramentView.selectionRect` is where the band is (its rows shown) for the selection's tools.
+   Tested by `tests/atrament/editor/tst_atrament_selection` (the selection self-test's checks;
+   `tests/atrament/ui/tst_atrament_drag` for the gestures). Not yet: a drag across the journal's
+   days (a day's page does not scroll; the journal list's edge scrolling), Vim's keys over a
+   selection.
 4. **Structure.** Folding, zoom into a block, drag to move, dates and reminders chips, the journal
    — a stream of days as sections of one list (what `JournalDayItem` draws today).
    **Built so far** (2026-11-27): folding (the arrows, step 2's entry), the bullet's zoom, and the
@@ -909,7 +964,17 @@ scrolling, `tst_atrament_editor`) before the next:
    `AtramentView.contentHeight` → `BlockEditor.atramentContentHeight` → the day's
    `fitEditorHeight()`); the journal's list scrolls (a wheel Atrament does not take goes on to it)
    and keeps the caret in view (`BlockEditor.ensureVisible` through its `scroller`). The stream as
-   one Atrament list (no item per day) is the next stage.
+   one Atrament list (no item per day) is the next stage. **Drag to move** (`pagedrag.cpp`; the QML
+   editor has none): an outline's bullet (a list item's marker, also a document's) pressed with the
+   mouse and dragged past 4 px moves its block — the selection when it is in it, else the block
+   alone, selected — and a finger's long press on a selected block while the grips show moves the
+   selection; a drop line (2 px of Theme.focusRing with a dot at its start, from the blocks' text
+   column to the column's right edge) shows the nearest gap between the moved blocks' siblings, none
+   over their own place; the release drops them there in one undo step
+   (`PageController::moveSelectionNextTo(sibling, after)`: Alt+↑/↓ as often as it takes; the
+   siblings in `selectionSiblings()`), the blocks staying selected; the edge scrolling as in step 3;
+   the release clicks nothing (a bullet's click without a drag still zooms). Not yet: a drop into
+   another parent (a level deeper or shallower) or across the journal's days.
 5. **Blocks with views.** Code (the input with the code highlighter), tables, math (Brulion Math's
    glyphs through Atrament's text), charts and Mermaid (their core layouts painted as Atrament paths),
    pictures (`img`), queries, transclusions, properties. When nothing is foreign, M2's gate is

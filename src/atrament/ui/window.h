@@ -238,6 +238,18 @@ public:
     // release clicks nothing) and the finger scrolls nothing until it lifts.
     using LongPressListener = Fn<void(Point position, Window &, App &)>;
     void onLongPress(HitboxId hitbox, LongPressListener listener);
+    // From a long-press listener: the finger goes on as a drag of the elements' — its moves and its
+    // release reach the mouse listeners (the press was cancelled: the release clicks nothing), and
+    // it still scrolls nothing (a block's selection extended, or blocks moved, as the finger moves).
+    void dragAfterLongPress();
+    // A finger's (or a pen's) press on `hitbox` is the elements' own drag from its start: no wait,
+    // no scroll, no long press — the press, the moves and the release reach the mouse listeners at
+    // once, as a mouse's do (a grip at a selection's end, a slider's thumb, a handle to drag a row
+    // by; in a container that scrolls the same way too). Also over a hosted Qt Quick item
+    // (qthost.h "Hosted children"). `div().claimTouchDrag()`.
+    void claimTouchDrag(HitboxId hitbox);
+    // A press at `position` would be claimed (on the frame on screen).
+    bool touchDragClaimedAt(Point position) const;
     using ActionListener = Fn<void(Window &, App &)>;
     void onAction(std::u16string_view action, ActionListener listener);
     // The focused element takes text through `handler` (an arena object of this frame).
@@ -354,6 +366,7 @@ private:
             LongPressListener listener;
         };
         std::vector<LongPressEntry> longPressListeners; // in paint order
+        std::vector<HitboxId> touchDragClaims;          // claimTouchDrag()
         std::vector<ScrollTarget> scrollTargets; // in prepaint order: outer containers first
         std::uint64_t inputFocus = 0;
         InputHandler *inputHandler = nullptr;
@@ -436,6 +449,7 @@ private:
         Scrolling, // the drag scrolls `target`; the elements' press was cancelled (or never given)
         Held,      // a long press in the focused field: it selects, the finger scrolls nothing
         LongPressed, // an element took the long press: its press was cancelled, nothing scrolls
+        Claimed,     // claimTouchDrag(), or dragAfterLongPress(): the elements' drag, nothing scrolls
     };
     struct TouchGesture {
         TouchPhaseState phase = TouchPhaseState::None;

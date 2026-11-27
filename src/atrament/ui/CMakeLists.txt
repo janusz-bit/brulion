@@ -4,6 +4,7 @@ brulion_add_atrament_module(ui
         app.cpp app.h
         atrament.h
         div.cpp div.h
+        edgescroll.cpp edgescroll.h
         element.cpp element.h
         events.cpp events.h
         keymap.cpp keymap.h

@@ -804,6 +804,117 @@ private:
     // Code blocks' line numbers (pagecode.cpp): CodeBlockView's gutter, each line of the code
     // numbered on its first visual line.
     atrament::AnyElement codeLineNumbers(std::size_t row, const QString &code, bool edited);
+    // --- Block selection: its keys, its band and grips, drags that select blocks or move them
+    // (pageselection.cpp, pagedrag.cpp; docs/ATRAMENT.md "The block editor in Atrament (M2)", steps
+    // 3 "Selection" and 4 "Structure": drag to move). The QML editor's counterparts:
+    // BlockEditor.handleSelectionKeyCode, BlockPartSelectionBand, BlockSelectionGrip, its drag.
+public:
+    // What a selection key asks of the host first (the QML editor's own parts: toasts, menus, the
+    // journal stream's selection over several days, gaps it explains); its name is the QML's.
+    enum class SelectionCommand : std::uint8_t {
+        Copy,           // Ctrl+C, Ctrl+Insert (default: PageController::copySelection)
+        Cut,            // Ctrl+X, Shift+Delete (cutSelection)
+        Delete,         // Delete, Backspace (deleteSelection)
+        Paste,          // Ctrl+V, Shift+Insert (pasteOverSelection)
+        Escape,         // Esc (clearSelection)
+        Back,           // Android's Back (nothing: the shell's)
+        Edit,           // Enter (startEditing the selected block)
+        TaskMenu,       // Ctrl+Shift+Enter (nothing)
+        SourceMode,     // Ctrl+E (nothing)
+        CopyReference,  // Ctrl+Shift+C (nothing)
+        // Asked before the view does them itself: the host takes them only to refuse (a selection
+        // with gaps, over several days) or to do them its way (the journal stream's days).
+        Indent, Outdent, MoveUp, MoveDown, CycleTasks, ExtendUp, ExtendDown,
+        ExtendPastTop,  // Shift+↑ / Shift+↓ at the page's first / last block (the day above / below)
+        ExtendPastBottom,
+        Extended,       // after Shift+↑/↓ moved the selection's end (touch: the selection's tools)
+    };
+    static std::u16string_view commandName(SelectionCommand command);
+    // The host's part of a selection key: true when it took the command (did it, or refused it with
+    // a word); unset or false: the view's default (above).
+    std::function<bool(SelectionCommand command, int row)> onSelectionCommand;
+    // A key while no block is edited (blocks selected, or none yet): Shift+↑/↓ extend or shrink the
+    // selection (past the page's edge: the host's), ↑/↓ move it (with none: the first / last
+    // block), Alt+↑/↓ move the blocks, Tab / Shift+Tab indent them, Ctrl+Enter their tasks' next
+    // status, Ctrl+. folds, Enter edits, Delete / Backspace delete, Ctrl+C / X / V, Ctrl+A every
+    // block, Ctrl+Z / Ctrl+Y undo (onUndo), Esc. True when it took the key.
+    bool selectionKey(const atrament::Keystroke &key, atrament::Context<PageView> &cx);
+    // The touch selection mode: its grips at the band's ends (BlockEditor.selectionGrips) and its
+    // "One by one" (`picking`: a long press picks a block, no drag follows).
+    void setTouchSelection(bool grips, bool picking, atrament::Context<PageView> &cx);
+    bool touchGrips() const { return m_touchGrips; }
+    // The grips' look (Theme.link, Theme.bg) and the drop line's (Theme.focusRing).
+    void setDragLook(atrament::Color grip, atrament::Color gripBorder, atrament::Color dropLine,
+                     atrament::Context<PageView> &cx);
+    // The room an overlay covers at the view's bottom (the touch toolbar): a drag scrolls the page
+    // above it.
+    void setDragBottomInset(float px) { m_dragBottomInset = std::max(0.0f, px); }
+    // The selection's band in the window by the last frame: its first and last rows shown (nothing
+    // when none is) — where the host may place the selection's tools.
+    std::optional<atrament::Rect> selectionBounds() const;
+    // A drag of blocks in progress: selecting (a mouse's press dragged across blocks, a finger's
+    // after a long press, a grip) or moving them (a bullet's, a selected block's long press).
+    enum class DragKind : std::uint8_t { None, Select, Extend, Move };
+    DragKind dragKind() const { return m_drag.active ? m_drag.kind : DragKind::None; }
+    // Where the blocks being moved would go: before or after sibling `sibling` (its subtree), the
+    // line drawn there (window px, by the last frame). Nothing when there is no such place (the
+    // pointer over the blocks' own place).
+    struct DropTarget {
+        int sibling = -1;
+        bool after = false;
+        atrament::Rect line;
+    };
+    std::optional<DropTarget> dropTarget() const;
+    // The edge scrolling's speed now (px per 16 ms; 0: none).
+    float dragScrollSpeed() const { return m_edgeScroll.speed(); }
+
+private:
+    // The band under a selected row (BlockPartSelectionBand's geometry), its grips in the touch
+    // selection mode; null when the row is not selected.
+    std::optional<atrament::AnyElement> selectionBand(int row);
+    atrament::AnyElement selectionGrip(bool atStart, float left, float right);
+    // A long press on a drawn row: the touch selection mode (onLongPressRow) and a drag that
+    // extends it, or — on a block of the selection while its grips show — a drag that moves it.
+    void rowLongPressed(int row, atrament::Point p, atrament::Window &window, atrament::Context<PageView> &cx);
+    // A press on an outline's bullet (a list item's marker): a drag past a few px moves the block.
+    void bulletPressed(int row, atrament::Point p, atrament::Context<PageView> &cx);
+    void beginDrag(DragKind kind, int fixedRow, atrament::Point p, bool active, atrament::Context<PageView> &cx);
+    void dragMoved(atrament::Point p, atrament::Context<PageView> &cx);
+    void dragReleased(bool cancelled, atrament::Context<PageView> &cx);
+    void dragUpdate(atrament::Context<PageView> &cx);
+    // A move of this pointer belongs to the drag (a mouse's to a mouse's, a finger's or a pen's to
+    // theirs).
+    bool followsPointer(atrament::PointerKind pointer) const;
+    void updateDropTarget();
+    // The row under window point `p` for a drag (the nearest above or below the rows, the pointer
+    // held into the view), as the rows are now (scrolled since the last frame: by that much).
+    int dragRowAt(atrament::Point p) const;
+    float scrolledSinceFrame() const;
+    std::optional<atrament::Rect> listViewport() const;
+    // What the frame paints for drags: the drop line, the listeners that follow a drag (capture:
+    // the rows under it see none of its moves, nothing is clicked by its release).
+    atrament::AnyElement dragLayer();
+    // The selection's keys: a listener on the window's root dispatch node, which every key reaches
+    // (nothing focused, or after the focused element and the rows around it passed it on).
+    atrament::AnyElement keyLayer();
+    struct BlockDrag {
+        DragKind kind = DragKind::None;
+        bool active = false;  // a bullet's press becomes a drag only past a few px
+        quint64 uid = 0;      // Move: the pressed block; Extend: the fixed end's block
+        atrament::Point start;
+        atrament::Point last;
+        atrament::PointerKind pointer = atrament::PointerKind::Mouse;
+        std::optional<DropTarget> drop;
+    } m_drag;
+    atrament::EdgeScroller m_edgeScroll;
+    bool m_touchGrips = false;
+    bool m_touchPicking = false;
+    float m_dragBottomInset = 0;
+    float m_viewWidth = 0;
+    atrament::Color m_gripColor = atrament::rgb(0x3b5bdb);
+    atrament::Color m_gripBorder = atrament::rgb(0xffffff);
+    atrament::Color m_dropColor = atrament::rgb(0x3b5bdb);
+    QString m_gripNames[2];
 };
 
 } // namespace atr

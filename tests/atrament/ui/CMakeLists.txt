@@ -14,3 +14,5 @@ brulion_add_test(tst_atrament_inline SOURCES tst_atrament_inline.cpp LIBS brulio
 target_compile_definitions(tst_atrament_inline PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 brulion_add_test(tst_atrament_vectorpaint SOURCES tst_atrament_vectorpaint.cpp LIBS brulion_atrament_ui)
 target_compile_definitions(tst_atrament_vectorpaint PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+brulion_add_test(tst_atrament_drag SOURCES tst_atrament_drag.cpp LIBS brulion_atrament_ui)
+target_compile_definitions(tst_atrament_drag PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")

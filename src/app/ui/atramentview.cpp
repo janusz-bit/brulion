@@ -63,6 +63,7 @@ AtramentView::AtramentView(QQuickItem *parent)
     connect(this, &AtramentView::findChanged, this, &AtramentView::applyFind);
     connect(this, &AtramentView::spellCheckChanged, this, &AtramentView::applyExtras);
     connect(this, &AtramentView::vimSessionChanged, this, &AtramentView::applyExtras);
+    connect(this, &AtramentView::touchSelectionChanged, this, &AtramentView::applyTouchSelection);
 }
 
 AtramentView::~AtramentView()
@@ -358,6 +359,15 @@ void AtramentView::connectController()
             if (guard)
                 Q_EMIT guard->editStateChanged();
         };
+        page.onSelectionCommand = [guard](PageView::SelectionCommand command, int row) {
+            if (!guard)
+                return false;
+            const std::u16string_view name = PageView::commandName(command);
+            guard->m_commandTaken = false;
+            Q_EMIT guard->selectionCommand(QString(reinterpret_cast<const QChar *>(name.data()), qsizetype(name.size())),
+                                           row);
+            return guard && guard->m_commandTaken;
+        };
         page.onSuggestionKey = [guard](std::u16string_view key) {
             if (!guard || !guard->m_suggestionsOpen)
                 return false;
@@ -531,9 +541,24 @@ void AtramentView::applyStyle()
                            media, cx);
         page.setEditLook(atColor(m_caretColor), atColor(m_selectionColor),
                          std::u16string(u16View(m_placeholderText)), std::u16string(u16View(m_editLabel)), cx);
+        // The grips (BlockSelectionGrip: Theme.link on Theme.bg) and the drop line (Theme.focusRing).
+        page.setDragLook(atColor(m_linkColor), atColor(m_backgroundColor), atColor(m_ringColor), cx);
         cx.notify();
     });
     applyTableStyle();
+#endif
+}
+
+void AtramentView::applyTouchSelection()
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (!m_page)
+        return;
+    using namespace brulion::editor::atr;
+    m_page->entity.update(runtime().app, [this](PageView &page, at::Context<PageView> &cx) {
+        page.setTouchSelection(m_selectionGrips, m_selectionPicking, cx);
+        page.setDragBottomInset(float(m_dragBottomInset));
+    });
 #endif
 }
 
@@ -677,6 +702,7 @@ void AtramentView::attachView()
         applyStyle();
         connectTables();
         applyExtras();
+        applyTouchSelection();
         m_page->host = std::make_unique<brulion::editor::atr::ForeignRowHost>(this, r.app, m_page->entity, model);
         m_page->host->setDelegate(m_delegate);
         m_page->host->setHeader(m_header);
@@ -765,6 +791,15 @@ void AtramentView::placeHostedChildren()
 #ifdef BRULION_HAS_ATRAMENT_EDITOR
     if (m_page && m_page->host)
         m_page->host->place();
+    // Where the frame put the selection's band (the selection's tools may follow it).
+    if (m_page) {
+        const std::optional<at::Rect> band = m_page->entity.read(runtime().app).selectionBounds();
+        const QRectF rect = band ? QRectF(band->left(), band->top(), band->width(), band->height()) : QRectF();
+        if (rect != m_selectionRect) {
+            m_selectionRect = rect;
+            Q_EMIT selectionRectChanged();
+        }
+    }
 #endif
 }
 

@@ -14,6 +14,8 @@ qt_add_library(brulion_editor_atrament STATIC
     pagechips.cpp
     pagevim.cpp
     pagecode.cpp
+    pageselection.cpp
+    pagedrag.cpp
     editstyles.h editstyles.cpp
     foreignrows.h foreignrows.cpp
     foreignhost.h foreignhost.cpp

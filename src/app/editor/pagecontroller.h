@@ -683,6 +683,15 @@ public:
     /// Alt+↑ / Alt+↓: the selected sibling blocks move together (BlockDocument::moveRangeUp/Down).
     Q_INVOKABLE bool moveSelectionUp();
     Q_INVOKABLE bool moveSelectionDown();
+    /// Drag to move (the page drawn by Atrament, docs/ATRAMENT.md M2 step 4): the selected sibling
+    /// blocks go before (`after` false) or after the subtree of `sibling`, a sibling of theirs (the
+    /// same parent) — Alt+↑ / Alt+↓ as often as it takes, one undo step. False when nothing moved
+    /// (no selection, gaps in it, `sibling` none of their siblings or inside it, the place where they
+    /// are already, the zoomed block, above the page's properties).
+    Q_INVOKABLE bool moveSelectionNextTo(int sibling, bool after);
+    /// The siblings of the selection's top blocks (their parent's children, or the page's top-level
+    /// blocks) in order, the selected ones too; empty when it could not move (as above).
+    QList<int> selectionSiblings() const;
     /// Ctrl+Enter: every visible list item and paragraph the selection spans gets the status that
     /// follows the first one's (none → todo → doing → done → none). One undo step. The rows from
     /// one end to the other — the picked blocks of a selection with gaps: a parent selected alone

@@ -253,6 +253,19 @@ bool Window::touchDown(const MouseDownEvent &down)
         cancelTouchPress();
         endTouch();
     }
+    if (!down.scrollOnly && touchDragClaimedAt(down.position)) {
+        // An element drags with this finger from its press on (a grip, a thumb): at once, never a
+        // scroll, no long press.
+        stopFling();
+        m_touch.down = down;
+        m_touch.last = down.position;
+        m_touch.velocity.add(touchSeconds(down.time), down.position);
+        m_touchScrolled = false;
+        m_touch.phase = TouchPhaseState::Claimed;
+        m_touch.decided = true;
+        dispatchMouse(down);
+        return true;
+    }
     ScrollState *caught = nullptr;
     bool caughtX = false;
     bool caughtY = false;
@@ -360,6 +373,30 @@ void Window::touchLongPressed()
     }
 }
 
+void Window::dragAfterLongPress()
+{
+    if (m_touch.phase == TouchPhaseState::LongPressed)
+        m_touch.phase = TouchPhaseState::Claimed;
+}
+
+void Window::claimTouchDrag(HitboxId hitbox)
+{
+    if (m_building && hitbox)
+        m_building->touchDragClaims.push_back(hitbox);
+}
+
+bool Window::touchDragClaimedAt(Point position) const
+{
+    const Frame &f = rendered();
+    if (f.touchDragClaims.empty())
+        return false;
+    for (HitboxId h : hitsAt(f, position)) {
+        if (std::find(f.touchDragClaims.begin(), f.touchDragClaims.end(), h) != f.touchDragClaims.end())
+            return true;
+    }
+    return false;
+}
+
 bool Window::touchMove(const MouseMoveEvent &move)
 {
     if (m_touch.phase == TouchPhaseState::None)
@@ -380,7 +417,7 @@ bool Window::touchMove(const MouseMoveEvent &move)
         }
         return true;
     }
-    if (m_touch.phase == TouchPhaseState::Held)
+    if (m_touch.phase == TouchPhaseState::Held || m_touch.phase == TouchPhaseState::Claimed)
         return dispatchMouse(move);
     if (m_touch.phase == TouchPhaseState::LongPressed)
         return true; // taken by the long press: no scroll, no drag
@@ -443,7 +480,8 @@ bool Window::beginTouchScroll(Point dragged)
 void Window::cancelTouchPress()
 {
     // Waiting: the elements never had the press.
-    if (m_touch.phase != TouchPhaseState::Pressed && m_touch.phase != TouchPhaseState::Held)
+    if (m_touch.phase != TouchPhaseState::Pressed && m_touch.phase != TouchPhaseState::Held
+        && m_touch.phase != TouchPhaseState::Claimed)
         return;
     MouseUpEvent cancel;
     cancel.position = m_touch.last;
@@ -486,6 +524,10 @@ bool Window::touchUp(const MouseUpEvent &up)
         cancelTouchPress();
     } else if (m_touch.phase == TouchPhaseState::LongPressed) {
         // The long press was the gesture: its release clicks nothing (the press was cancelled).
+    } else if (m_touch.phase == TouchPhaseState::Claimed) {
+        // The elements' own drag ends (after a long press its release clicks nothing either).
+        m_defaultPrevented = false;
+        dispatchMouse(up);
     } else if (m_touch.phase == TouchPhaseState::Scrolling) {
         if (ScrollState *st = liveScrollTarget(m_touch.target)) {
             Point d = previous - up.position;

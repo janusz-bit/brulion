@@ -148,6 +148,15 @@ class AtramentView : public brulion::atrament::AtramentItem {
     // highlight).
     Q_PROPERTY(int editSelectionStart READ editSelectionStart NOTIFY editStateChanged FINAL)
     Q_PROPERTY(int editSelectionEnd READ editSelectionEnd NOTIFY editStateChanged FINAL)
+    // "page", the block selection (docs/ATRAMENT.md M2 steps 3 and 4: pageselection.cpp,
+    // pagedrag.cpp): the touch selection mode's grips shown (BlockEditor.selectionGrips) and its
+    // "One by one" (BlockEditor.pickMode); the room the touch toolbar covers at the bottom (a drag
+    // scrolls the page above it); the selection's band in this item (its rows shown; empty when
+    // none is) for the selection's tools.
+    Q_PROPERTY(bool selectionGrips MEMBER m_selectionGrips NOTIFY touchSelectionChanged FINAL)
+    Q_PROPERTY(bool selectionPicking MEMBER m_selectionPicking NOTIFY touchSelectionChanged FINAL)
+    Q_PROPERTY(qreal dragBottomInset MEMBER m_dragBottomInset NOTIFY touchSelectionChanged FINAL)
+    Q_PROPERTY(QRectF selectionRect READ selectionRect NOTIFY selectionRectChanged FINAL)
 
 public:
     explicit AtramentView(QQuickItem *parent = nullptr);
@@ -211,6 +220,9 @@ public:
     void setVimSession(QObject *vim);
     int editSelectionStart() const;
     int editSelectionEnd() const;
+    // In a selectionCommand handler: the editor took the command (PageView's own default is skipped).
+    Q_INVOKABLE void acceptSelectionCommand() { m_commandTaken = true; }
+    QRectF selectionRect() const { return m_selectionRect; }
 
 Q_SIGNALS:
     void viewChanged();
@@ -291,6 +303,15 @@ Q_SIGNALS:
     void reminderChipActivated(int row, int from, int to, bool menu, qreal x, qreal y);
     // Vim took a key of the edited block (BlockEditor.afterVimKey).
     void vimKeyHandled();
+    // "page": a key of the block selection asks the editor first (pageview.h SelectionCommand:
+    // "copy", "cut", "delete", "paste", "escape", "back", "edit", "taskMenu", "sourceMode",
+    // "copyReference"; "indent", "outdent", "moveUp", "moveDown", "cycleTasks", "extendUp",
+    // "extendDown" only to refuse them or do them its way; "extendPastTop", "extendPastBottom" at
+    // the page's edge; "extended" after the selection's end moved) — the handler calls
+    // acceptSelectionCommand() when it took it. `row` is the selection's focus end.
+    void selectionCommand(const QString &command, int row);
+    void touchSelectionChanged();
+    void selectionRectChanged();
 
 protected:
     void componentComplete() override;
@@ -377,4 +398,11 @@ private:
     QPointer<QObject> m_spellCheck;
     QColor m_spellColor{0xc0, 0x39, 0x2b};
     QPointer<QObject> m_vimSession;
+    // The block selection.
+    void applyTouchSelection();
+    bool m_selectionGrips = false;
+    bool m_selectionPicking = false;
+    qreal m_dragBottomInset = 0;
+    bool m_commandTaken = false;
+    QRectF m_selectionRect;
 };

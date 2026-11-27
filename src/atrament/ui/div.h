@@ -119,6 +119,10 @@ public:
     // cancelled, no click follows.
     using LongPressListener = Fn<void(Point position, Window &, App &)>;
     Div &&onLongPress(LongPressListener f) &&;
+    // A finger's or a pen's press on it is its own drag from the start (Window::claimTouchDrag): its
+    // mouse listeners get the press at once and every move, never a scroll of a container around
+    // it, no long press — a grip, a thumb, a handle.
+    Div &&claimTouchDrag() &&;
     Div &&onKeyDown(KeyDownListener f) &&;
     // A key down seen on its way to the focused element, before anything inside handles it (the
     // capture phase): an editor's keys around a text field (stopPropagation() keeps it from the
@@ -235,6 +239,7 @@ private:
     AccessibilityProps *m_access = nullptr;
     bool m_blockMouse = false;
     bool m_hideScrollbar = false;
+    bool m_claimTouchDrag = false;
 
     // Set during prepaint, used in paint.
     NodeId m_layout = kNoNode;

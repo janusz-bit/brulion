@@ -831,6 +831,18 @@ bool AtramentItem::filterHostedPoint(QQuickItem *child, QPointerEvent *event, co
             endHostedTouch(p);
         if (keeps)
             return false;
+        if (m_window->touchDragClaimedAt(p)) {
+            // An element of the window's own drags with this finger (Window::claimTouchDrag: a grip
+            // over a hosted row): the item takes it from the press on, the child never has it.
+            MouseDownEvent down;
+            down.position = p;
+            down.modifiers = modifiersFromQt(event->modifiers());
+            down.pointer = pointer;
+            down.time = time;
+            m_mouse = p;
+            send(down);
+            break;
+        }
         m_hostedTouch = {point.id(), pointer, point.state(), point.timestamp(), point.scenePosition()};
         MouseDownEvent down;
         down.position = p;
