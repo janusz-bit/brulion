@@ -1175,6 +1175,8 @@ void TestAtramentEditing::taskMenuAtTheCaret()
     QCOMPARE(h.inputCaret(), caret);
     const std::optional<at::Point> p = h.view().editPoint(caret);
     QVERIFY(p && std::abs(at.x - p->x) < 2 && at.y > p->y);
+}
+
 void TestAtramentEditing::textMenuOnARightClick()
 {
     // InlineEditor's text menu (BlockEditor.openTextMenu): a right-click in the edited text, the

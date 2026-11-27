@@ -812,12 +812,11 @@ QtObject {
     // misspelled word marked (not a known one, not in code, a link or a tag), a right-click on it
     // (a tap with a finger) opening the spelling's menu with its corrections first, a correction
     // replacing the word with the caret after it, one undo step bringing it back.
-    readonly property list<string> polishWords: ["ala", "ma", "kota", "kot", "psa", "zapisz", "jest", "fajny", "notatnik"]
+    // (The word lists of the spelling's and the text menu's steps.)
+    readonly property list<string> polishWords: ["ala", "ma", "kota", "kot", "psa", "i", "zapisz", "jest", "fajny", "notatnik"]
     readonly property list<string> englishWords: ["meeting", "team"]
     function spellMenu(): BMenu { return editor.textMenu }
     function spellMenuOpen(): bool { return test.spellMenu() !== null && test.spellMenu().opened }
-    function suggestion(text: string): T.MenuItem {
-        const menu = test.spellMenu()
 
     // The edited text's menu (InlineEditor's right-click, BlockEditor.openTextMenu) on the page drawn
     // by Atrament: a right-click in the edited text opens it and no block menu, the selection kept;
@@ -1010,8 +1009,6 @@ QtObject {
     }
 
     function sourceHas(text: string): bool { return Js.indexOf(page.sourceText, text) >= 0 }
-    readonly property list<string> polishWords: ["ala", "ma", "kota", "kot", "psa", "i"]
-    readonly property list<string> englishWords: ["team"]
     function openMenuPage(): void {
         if (window.at()) {
             page.stopEditing()
