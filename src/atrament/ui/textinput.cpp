@@ -64,11 +64,24 @@ public:
     void prepaint(Rect bounds, Window &window, App &) override
     {
         m_layout = layoutAt(bounds.width());
-        m_input->setLaidOut(m_layout, bounds);
+        m_input->setLaidOut(m_layout, bounds, m_baseRun.fontSize);
         // The caret stays in view: when the field takes the focus, when it moves or the text
         // changes, and when the window gets another size (an on-screen keyboard came up).
         if (m_input->revealWanted(m_input->focusHandle().isFocused(window), window.viewportSize()))
             window.revealRect(m_layout->caretRect(m_input->selection().focus).translated(bounds.origin).dilated(8));
+        // The objects that take presses: a hitbox over each one's box, the pointing hand.
+        for (const PlacedInlineBox &box : m_layout->inlineBoxes()) {
+            const Object *object = objectAt(box.start);
+            if (!object || (!object->object->onClick && !object->object->onLongPress))
+                continue;
+            const Rect r = box.bounds.translated(bounds.origin);
+            const HitboxId hitbox = window.insertHitbox(r);
+            window.setCursorStyle(hitbox, CursorStyle::PointingHand);
+            // (The handlers copied: the field's spans may be styled anew before the events of this
+            // frame are over.)
+            m_objectHitboxes.push_back(
+                    ObjectHitbox{hitbox, object->range, r, object->object->onClick, object->object->onLongPress});
+        }
     }
 
     void paint(Rect bounds, Window &window, App &) override
@@ -93,6 +106,7 @@ public:
             window.paintText(*placeholder, bounds.origin, std::span<const TextPaintStyle>(&style, 1));
         } else {
             window.paintTextGlyphs(*m_layout, bounds.origin, paints);
+            paintObjects(bounds, window);
             if (const auto marked = m_input->markedRange()) {
                 for (const Rect &r : m_layout->selectionRects(*marked))
                     window.paintQuad(Rect::fromXYWH(r.left(), r.bottom() - 2, r.width(), 1).translated(bounds.origin),
@@ -100,20 +114,131 @@ public:
             }
         }
         if (focused && m_input->caretVisible()) {
-            const Rect caret = m_layout->caretRect(sel.focus).translated(bounds.origin);
-            window.paintQuad(Rect::fromXYWH(caret.left() - 0.5f, caret.top() + 1, 1.5f, std::max(2.0f, caret.height() - 2)),
-                    Background::solid(m_input->options().caretColor), {}, transparent(), {});
+            if (const std::optional<Rect> caret = m_input->caretBox()) {
+                // A block over the text, translucent (the character stays readable under it).
+                const Color c = m_input->options().caretShape == CaretShape::Block
+                        ? m_input->options().caretColor.fadedBy(0.45f)
+                        : m_input->options().caretColor;
+                window.paintQuad(*caret, Background::solid(c), {}, transparent(),
+                        m_input->options().caretShape == CaretShape::Block ? Corners::all(1) : Corners {});
+            }
         }
-        if (focused) {
+        if (focused && !m_input->readOnly()) {
             auto *handler = Arena::current()->make<Handler>();
             handler->app = &m_app;
             handler->id = m_id;
             window.handleInput(m_input->focusHandle(), handler);
         }
+        registerObjectListeners(window);
         describeAccessibility(bounds, window);
     }
 
 private:
+    // An inline object of the spans as laid out: its object (in the input's spans) and its text.
+    struct Object {
+        const InlineObject *object = nullptr;
+        Range range;
+    };
+    struct ObjectHitbox {
+        HitboxId hitbox = 0;
+        Range range;
+        Rect bounds;
+        std::function<void(const ClickEvent &, Rect, Window &)> onClick;
+        std::function<void(Point, Rect, Window &)> onLongPress;
+    };
+
+    const Object *objectAt(int start) const
+    {
+        for (const Object &o : m_objects)
+            if (o.range.start == start)
+                return &o;
+        return nullptr;
+    }
+
+    // Each object's painter after the glyphs, with its box, the baseline, its colour and size.
+    void paintObjects(Rect bounds, Window &window)
+    {
+        if (m_objects.empty())
+            return;
+        const Rect mask = window.contentMask();
+        for (const PlacedInlineBox &box : m_layout->inlineBoxes()) {
+            const Object *object = objectAt(box.start);
+            if (!object || !object->object->paint)
+                continue;
+            const TextLine &line = m_layout->lines()[std::size_t(box.line)];
+            InlineObjectPaint p;
+            p.bounds = box.bounds.translated(bounds.origin);
+            if (!p.bounds.intersects(mask) && !p.bounds.isEmpty())
+                continue; // off screen
+            p.baseline = bounds.top() + line.baseline;
+            p.range = object->range;
+            if (box.styleIndex < m_paint.size()) {
+                p.color = m_paint[box.styleIndex].color;
+                p.fontSize = m_pieceSizes[box.styleIndex];
+            }
+            object->object->paint(p, window);
+        }
+    }
+
+    // The presses of objects that take them, before the field's own (its caret stays): a click
+    // (the press and the release over the same object, any button) and a finger held on one.
+    void registerObjectListeners(Window &window)
+    {
+        if (m_objectHitboxes.empty())
+            return;
+        TextInputElement *self = this; // the listeners live in this frame's arena with it
+        for (const ObjectHitbox &h : m_objectHitboxes) {
+            if (!h.onLongPress)
+                continue;
+            const ObjectHitbox *hb = &h;
+            window.onLongPress(h.hitbox, [self, hb](Point at, Window &w, App &) {
+                if (TextInput *t = self->m_app.tryGet<TextInput>(self->m_id))
+                    t->objectPress().reset();
+                const auto onLongPress = hb->onLongPress; // (it may style the field anew)
+                onLongPress(at, hb->bounds, w);
+            });
+        }
+        window.onMouseEvent([self](const PlatformInput &input, DispatchPhase phase, Window &w, App &) {
+            if (phase != DispatchPhase::Bubble)
+                return;
+            TextInput *t = self->m_app.tryGet<TextInput>(self->m_id);
+            if (!t)
+                return;
+            if (const auto *down = std::get_if<MouseDownEvent>(&input)) {
+                if (down->scrollOnly)
+                    return;
+                for (const ObjectHitbox &h : self->m_objectHitboxes) {
+                    if (h.onClick && w.isHovered(h.hitbox)) {
+                        t->objectPress() = TextInput::ObjectPress{h.range, *down};
+                        w.stopPropagation();
+                        return;
+                    }
+                }
+                return;
+            }
+            const auto *up = std::get_if<MouseUpEvent>(&input);
+            if (!up || !t->objectPress())
+                return;
+            const TextInput::ObjectPress press = *t->objectPress();
+            t->objectPress().reset();
+            if (up->cancelled)
+                return;
+            for (const ObjectHitbox &h : self->m_objectHitboxes) {
+                if (h.range.start == press.range.start && h.onClick && w.isHovered(h.hitbox)) {
+                    ClickEvent click;
+                    click.down = press.down;
+                    click.up = *up;
+                    // (A copy: the click may change the text, and with it the spans.)
+                    const auto onClick = h.onClick;
+                    const Rect box = h.bounds;
+                    w.stopPropagation();
+                    onClick(click, box, w);
+                    return;
+                }
+            }
+        });
+    }
+
     // Fills the text input's node (its div's): the text, the selection, the label and placeholder.
     void describeAccessibility(Rect bounds, Window &window)
     {
@@ -123,7 +248,7 @@ private:
         const TextInputOptions &o = m_input->options();
         AccessibilityStates &st = node->states;
         st.focusable = true;
-        st.editable = true;
+        st.editable = !o.readOnly;
         st.multiline = m_input->multiline();
         st.password = o.purpose == InputHandler::Purpose::Password;
         const std::u16string &text = m_input->text();
@@ -237,8 +362,21 @@ private:
             run.length = length;
             m_runs.push_back(std::move(run));
             m_paint.push_back(paintStyle(base));
+            m_pieceSizes.push_back(base.fontSize);
             return;
         }
+        // The inline objects, in text order, without overlaps (the first given wins), as a Text's.
+        for (const TextSpan &sp : spans) {
+            const Range r { std::clamp(sp.range.start, 0, length), std::clamp(sp.range.end, 0, length) };
+            if (!sp.object || r.isEmpty())
+                continue;
+            const bool overlaps = std::any_of(m_objects.begin(), m_objects.end(),
+                    [&](const Object &o) { return o.range.start < r.end && r.start < o.range.end; });
+            if (!overlaps)
+                m_objects.push_back(Object { &*sp.object, r });
+        }
+        std::sort(m_objects.begin(), m_objects.end(),
+                [](const Object &a, const Object &b) { return a.range.start < b.range.start; });
         ArenaVector<int> cuts;
         cuts.push_back(0);
         cuts.push_back(length);
@@ -248,6 +386,16 @@ private:
         }
         std::sort(cuts.begin(), cuts.end());
         cuts.erase(std::unique(cuts.begin(), cuts.end()), cuts.end());
+        // An object is one piece (one run): nothing cuts inside it.
+        if (!m_objects.empty()) {
+            cuts.erase(std::remove_if(cuts.begin(), cuts.end(),
+                               [this](int c) {
+                                   return std::any_of(m_objects.begin(), m_objects.end(),
+                                           [c](const Object &o) { return o.range.start < c && c < o.range.end; });
+                               }),
+                    cuts.end());
+        }
+        std::size_t nextObject = 0;
         for (std::size_t i = 0; i + 1 < cuts.size(); ++i) {
             const int a = cuts[i];
             const int b = cuts[i + 1];
@@ -262,14 +410,21 @@ private:
             run.fontSize = style.fontSize;
             run.features = style.fontFeatures;
             run.styleIndex = std::uint32_t(m_paint.size());
+            if (nextObject < m_objects.size() && m_objects[nextObject].range.start == a) {
+                const InlineObjectSize &size = m_objects[nextObject++].object->size;
+                const float unit = size.em ? style.fontSize : 1.0f;
+                run.inlineBox = InlineBox { size.width * unit, size.ascent * unit, size.descent * unit };
+            }
             m_runs.push_back(std::move(run));
             m_paint.push_back(paintStyle(style));
+            m_pieceSizes.push_back(style.fontSize);
         }
         if (length == 0 && m_runs.empty()) {
             FontRun run = m_baseRun;
             run.length = 0;
             m_runs.push_back(std::move(run));
             m_paint.push_back(paintStyle(base));
+            m_pieceSizes.push_back(base.fontSize);
         }
     }
 
@@ -282,6 +437,9 @@ private:
     TextInput *m_input;
     ArenaVector<FontRun> m_runs;
     ArenaVector<TextPaintStyle> m_paint;
+    ArenaVector<float> m_pieceSizes; // the font size of each paint style
+    ArenaVector<Object> m_objects; // the inline objects laid out, in text order
+    ArenaVector<ObjectHitbox> m_objectHitboxes;
     FontRun m_baseRun;
     float m_lineHeight = 0;
     Color m_textColor;
@@ -309,11 +467,12 @@ int TextInput::clampOffset(int offset) const
     return std::clamp(offset, 0, int(m_text.size()));
 }
 
-void TextInput::setLaidOut(std::shared_ptr<const TextLayout> layout, Rect bounds)
+void TextInput::setLaidOut(std::shared_ptr<const TextLayout> layout, Rect bounds, float fontSize)
 {
     m_layout = std::move(layout);
     m_origin = bounds.origin;
     m_bounds = bounds;
+    m_fontSize = fontSize;
 }
 
 std::optional<Rect> TextInput::boundsForRange(Range range) const
@@ -389,6 +548,81 @@ void TextInput::setColors(Color caret, Color selection, Context<TextInput> &cx)
     cx.notify();
 }
 
+void TextInput::setCaret(CaretShape shape, bool blinks, Context<TextInput> &cx)
+{
+    if (m_options.caretShape == shape && m_options.caretBlinks == blinks)
+        return;
+    m_options.caretShape = shape;
+    m_options.caretBlinks = blinks;
+    restartBlink(cx);
+    cx.notify();
+}
+
+void TextInput::setReadOnly(bool readOnly, Context<TextInput> &cx)
+{
+    if (m_options.readOnly == readOnly)
+        return;
+    m_options.readOnly = readOnly;
+    // (An input method's composition cannot go on in a field that takes no text.)
+    if (readOnly && m_marked) {
+        m_marked.reset();
+        m_compositionUndo = false;
+    }
+    cx.notify();
+}
+
+void TextInput::restyle(Context<TextInput> &cx)
+{
+    m_spansRevision = 0;
+    cx.notify();
+}
+
+int TextInput::previousStop(int offset) const
+{
+    if (m_layout && m_layout->text() == m_text)
+        return m_layout->previousCaretStop(offset);
+    return previousGraphemeBoundary(m_text, offset);
+}
+
+int TextInput::nextStop(int offset) const
+{
+    if (m_layout && m_layout->text() == m_text)
+        return m_layout->nextCaretStop(offset);
+    return nextGraphemeBoundary(m_text, offset);
+}
+
+std::optional<Rect> TextInput::caretBox() const
+{
+    if (!m_layout || m_layout->text() != m_text)
+        return std::nullopt;
+    const int focus = clampOffset(m_selection.focus);
+    const Rect caret = m_layout->caretRect(focus);
+    const CaretShape shape = m_options.caretShape;
+    if (shape == CaretShape::Bar)
+        return Rect::fromXYWH(caret.left() - 0.5f, caret.top() + 1, 1.5f, std::max(2.0f, caret.height() - 2))
+                .translated(m_origin);
+    // A block or a line: not while something is selected (the selection shows the place).
+    if (!m_selection.range().isEmpty())
+        return std::nullopt;
+    // As wide as the character after the caret on its line; half an em at a line's end (before a
+    // line break, after the last character).
+    const int line = m_layout->lineIndex(focus);
+    const TextLine &l = m_layout->lines()[std::size_t(line)];
+    float width = 0;
+    if (focus < l.end) {
+        const int next = m_layout->nextCaretStop(focus);
+        if (m_layout->lineIndex(next, CaretAffinity::Upstream) == line)
+            width = m_layout->caretX(next, CaretAffinity::Upstream) - caret.left();
+    }
+    if (width < 1)
+        width = std::max(2.0f, (m_fontSize > 0 ? m_fontSize : caret.height() / 1.5f) / 2);
+    if (shape == CaretShape::Block)
+        return Rect::fromXYWH(caret.left(), caret.top(), width, caret.height()).translated(m_origin);
+    // Underline: under the glyphs, at the line's descent.
+    const float y = l.top + l.baseline + std::max(1.0f, l.descent * 0.6f);
+    return Rect::fromXYWH(caret.left(), std::min(y, caret.bottom() - 2), width, 2).translated(m_origin);
+}
+
 const std::vector<TextSpan> &TextInput::spans() const
 {
     if (m_spansRevision != m_textRevision) {
@@ -408,13 +642,19 @@ void TextInput::clearUndo()
 void TextInput::restartBlink(Context<TextInput> &cx)
 {
     m_caretVisible = true;
-    if (m_blinking)
+    if (m_blinking && m_options.caretBlinks)
         scheduleBlink(cx);
+    else
+        m_blink = {};
 }
 
 void TextInput::scheduleBlink(Context<TextInput> &cx)
 {
     m_blink = cx.setTimeout(kBlink, [](TextInput &t, Context<TextInput> &c) {
+        if (!t.m_options.caretBlinks) {
+            t.m_caretVisible = true;
+            return;
+        }
         t.m_caretVisible = !t.m_caretVisible;
         c.notify();
         t.scheduleBlink(c);
@@ -478,6 +718,8 @@ bool TextInput::performAccessibilityAction(const AccessibilityActionRequest &req
     case AccessibilityAction::Click:
     case AccessibilityAction::Focus: m_focus.focus(window); return true;
     case AccessibilityAction::SetValue:
+        if (m_options.readOnly)
+            return false;
         // One undo step, as a paste over everything would be.
         m_marked.reset();
         m_coalesceTyping = false;
@@ -485,6 +727,8 @@ bool TextInput::performAccessibilityAction(const AccessibilityActionRequest &req
         m_coalesceTyping = false;
         return true;
     case AccessibilityAction::ReplaceText:
+        if (m_options.readOnly)
+            return false;
         m_marked.reset();
         m_coalesceTyping = false;
         replace(request.range, normalized(request.text), cx);
@@ -521,7 +765,7 @@ void TextInput::deleteBackward(bool word, Context<TextInput> &cx)
     }
     if (sel.start == 0)
         return;
-    const int from = word ? previousWordStart(m_text, sel.start) : previousGraphemeBoundary(m_text, sel.start);
+    const int from = word ? previousWordStart(m_text, sel.start) : previousStop(sel.start);
     m_coalesceTyping = false;
     replace({ from, sel.start }, u"", cx);
 }
@@ -535,7 +779,7 @@ void TextInput::deleteForward(bool word, Context<TextInput> &cx)
     }
     if (sel.start >= int(m_text.size()))
         return;
-    const int to = word ? nextWordEnd(m_text, sel.start) : nextGraphemeBoundary(m_text, sel.start);
+    const int to = word ? nextWordEnd(m_text, sel.start) : nextStop(sel.start);
     m_coalesceTyping = false;
     replace({ sel.start, to }, u"", cx);
 }
@@ -677,7 +921,7 @@ bool TextInput::handleKey(const Keystroke &k, Window &window, Context<TextInput>
         if (!m.shift && !sel.isEmpty() && !word)
             moveCaret(sel.start, false, cx);
         else
-            moveCaret(word ? previousWordStart(m_text, focus) : previousGraphemeBoundary(m_text, focus), m.shift, cx);
+            moveCaret(word ? previousWordStart(m_text, focus) : previousStop(focus), m.shift, cx);
         m_preferredX = -1;
         return true;
     }
@@ -685,7 +929,7 @@ bool TextInput::handleKey(const Keystroke &k, Window &window, Context<TextInput>
         if (!m.shift && !sel.isEmpty() && !word)
             moveCaret(sel.end, false, cx);
         else
-            moveCaret(word ? nextWordEnd(m_text, focus) : nextGraphemeBoundary(m_text, focus), m.shift, cx);
+            moveCaret(word ? nextWordEnd(m_text, focus) : nextStop(focus), m.shift, cx);
         m_preferredX = -1;
         return true;
     }
@@ -715,14 +959,19 @@ bool TextInput::handleKey(const Keystroke &k, Window &window, Context<TextInput>
         m_preferredX = x;
         return true;
     }
+    const bool readOnly = m_options.readOnly;
     if (k.key == u"backspace") {
-        deleteBackward(word, cx);
+        if (!readOnly)
+            deleteBackward(word, cx);
         return true;
     }
     if (k.key == u"delete") {
-        deleteForward(word, cx);
+        if (!readOnly)
+            deleteForward(word, cx);
         return true;
     }
+    if (k.key == u"enter" && readOnly && m_options.multiline)
+        return true;
     if (k.key == u"enter") {
         if (m_options.multiline && !m.control) {
             m_coalesceTyping = false;
@@ -742,14 +991,20 @@ bool TextInput::handleKey(const Keystroke &k, Window &window, Context<TextInput>
             return true;
         }
         if (k.key == u"x") {
-            cut(cx);
+            if (readOnly)
+                copy(cx.app());
+            else
+                cut(cx);
             return true;
         }
         if (k.key == u"v") {
-            paste(cx);
+            if (!readOnly)
+                paste(cx);
             return true;
         }
         if (k.key == u"z") {
+            if (readOnly)
+                return true;
             if (m.shift)
                 redo(cx);
             else
@@ -757,7 +1012,8 @@ bool TextInput::handleKey(const Keystroke &k, Window &window, Context<TextInput>
             return true;
         }
         if (k.key == u"y") {
-            redo(cx);
+            if (!readOnly)
+                redo(cx);
             return true;
         }
     }

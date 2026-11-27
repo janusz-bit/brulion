@@ -65,6 +65,12 @@ using InlineObjectPainter = std::function<void(const InlineObjectPaint &, Window
 struct InlineObject {
     InlineObjectSize size;
     InlineObjectPainter paint; // may be empty: the room is reserved, nothing is drawn
+    // In a TextInput's text (its styler's spans): the object takes the presses on its box — a
+    // click (any button: `up.button`; its box in window px) and a finger held on it (also in the
+    // focused field, where a long press is otherwise the platform's selection) — and the field's
+    // caret and selection stay where they are. A Text's objects take none (its links do).
+    std::function<void(const ClickEvent &, Rect box, Window &)> onClick = {};
+    std::function<void(Point at, Rect box, Window &)> onLongPress = {};
 };
 
 struct TextSpan {

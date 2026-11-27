@@ -1,5 +1,7 @@
 // Atrament's TextInput on the test platform: typing, graphemes and words, selection with keys
-// and the mouse, clipboard, undo, the input method's composition, single and multiple lines.
+// and the mouse, clipboard, undo, the input method's composition, single and multiple lines; the
+// caret's shapes (bar, block, underline), a read-only field, inline objects in its spans (one unit
+// for the caret, their own clicks and long presses).
 #include "text/fonts.h"
 #include "ui/atrament.h"
 #include "ui/testplatform.h"
@@ -7,6 +9,7 @@
 #include <QtTest>
 
 using namespace brulion::atrament;
+using namespace std::chrono_literals;
 
 namespace {
 
@@ -79,6 +82,10 @@ private Q_SLOTS:
     void fingerDragsNoSelection();
     void stylerSpansAndSelectionEvents();
     void textLayoutHandle();
+    void caretShapes();
+    void readOnlyField();
+    void inlineObjectsAreOneUnit();
+    void inlineObjectsTakeTheirPresses();
 };
 
 void TestAtramentTextInput::typesPolishText()
@@ -356,8 +363,6 @@ void TestAtramentTextInput::fingerDragsNoSelection()
     QVERIFY(h.sel().anchor != h.sel().focus);
 }
 
-QTEST_GUILESS_MAIN(TestAtramentTextInput)
-#include "tst_atrament_textinput.moc"
 
 void TestAtramentTextInput::stylerSpansAndSelectionEvents()
 {
@@ -450,3 +455,197 @@ void TestAtramentTextInput::textLayoutHandle()
     QCOMPARE(handle.offsetAt({caret.left() + 0.5f, caret.top() + caret.height() / 2}).value_or(-1), 7);
     QCOMPARE(handle.offsetAt({0, handle.bounds().top() + 2}).value_or(-1), 0);
 }
+
+namespace {
+
+// An object over [from, to) of the field's text: 30 px wide, its clicks and long presses counted.
+struct ObjectLog {
+    int painted = 0;
+    int clicks = 0;
+    int rightClicks = 0;
+    int longPresses = 0;
+    Rect box;
+};
+
+TextInput::Styler objectStyler(int from, int to, ObjectLog *log)
+{
+    return [from, to, log](std::u16string_view text) {
+        std::vector<TextSpan> spans;
+        if (int(text.size()) < to)
+            return spans;
+        InlineObject object;
+        object.size = InlineObjectSize{30, 12, 4};
+        object.paint = [log](const InlineObjectPaint &p, Window &w) {
+            ++log->painted;
+            log->box = p.bounds;
+            w.paintQuad(p.bounds, Background::solid(rgb(0x00c000)), {}, transparent(), {});
+        };
+        object.onClick = [log](const ClickEvent &click, Rect, Window &) {
+            if (click.up.button == MouseButton::Right)
+                ++log->rightClicks;
+            else
+                ++log->clicks;
+        };
+        object.onLongPress = [log](Point, Rect, Window &) { ++log->longPresses; };
+        spans.push_back(TextSpan{Range{from, to}, {}, std::move(object)});
+        return spans;
+    };
+}
+
+} // namespace
+
+void TestAtramentTextInput::caretShapes()
+{
+    Harness h;
+    h.tw.simulateTyping(u"Zażółć");
+    auto field = [&] { return h.form.read(h.app).field; };
+    field().update(h.app, [](TextInput &t, Context<TextInput> &cx) { t.setSelection(0, 0, cx); });
+    h.tw.settle();
+    // The bar: thin, before the character.
+    const Rect bar = h.input().caretBox().value_or(Rect{});
+    QVERIFY(bar.width() > 0 && bar.width() < 2);
+    const TextLayout *layout = h.input().layout();
+    QVERIFY(layout);
+    const float zWidth = layout->caretX(1) - layout->caretX(0);
+    // A block: over "Z", as wide as it, as tall as the line; steady.
+    field().update(h.app, [](TextInput &t, Context<TextInput> &cx) { t.setCaret(CaretShape::Block, false, cx); });
+    h.tw.settle();
+    const Rect block = h.input().caretBox().value_or(Rect{});
+    QCOMPARE(block.width(), zWidth);
+    QCOMPARE(block.left(), bar.left() + 0.5f);
+    QVERIFY(block.height() >= 14);
+    h.tw.advance(1200ms);
+    QVERIFY(h.input().caretVisible());
+    // Drawn over the glyph, in the caret's colour (translucent): the box is tinted.
+    const Pixel inside = h.tw.pixel(int(block.left() + block.width() / 2), int(block.top() + 2));
+    QVERIFY2(inside.b > inside.r + 20, "a block of the caret's colour over the character");
+    // At the text's end: half an em wide.
+    h.tw.simulateKeystrokes(u"end");
+    const Rect atEnd = h.input().caretBox().value_or(Rect{});
+    QCOMPARE(atEnd.width(), 8.0f); // 16 px text
+    // An underline: under the character, 2 px.
+    field().update(h.app, [](TextInput &t, Context<TextInput> &cx) {
+        t.setCaret(CaretShape::Underline, false, cx);
+        t.setSelection(1, 1, cx);
+    });
+    h.tw.settle();
+    const Rect line = h.input().caretBox().value_or(Rect{});
+    QCOMPARE(line.height(), 2.0f);
+    QCOMPARE(line.width(), layout->caretX(2) - layout->caretX(1));
+    QVERIFY(line.top() > block.top() + block.height() / 2);
+    // A selection shows the place instead: no block, no underline.
+    h.tw.simulateKeystrokes(u"shift-right");
+    QVERIFY(!h.input().caretBox());
+    // Back to the bar: it blinks again.
+    field().update(h.app, [](TextInput &t, Context<TextInput> &cx) { t.setCaret(CaretShape::Bar, true, cx); });
+    h.tw.settle();
+    QVERIFY(h.input().caretBox());
+    h.tw.advance(600ms);
+    QVERIFY(!h.input().caretVisible());
+}
+
+void TestAtramentTextInput::readOnlyField()
+{
+    Harness h;
+    h.tw.simulateTyping(u"gęślą");
+    auto field = [&] { return h.form.read(h.app).field; };
+    field().update(h.app, [](TextInput &t, Context<TextInput> &cx) { t.setReadOnly(true, cx); });
+    h.tw.settle();
+    // No input method: the window has no input handler; typed keys change nothing.
+    QVERIFY(!h.tw.inputHandler());
+    h.tw.simulateTyping(u"ż");
+    h.tw.simulateKeystrokes(u"backspace delete ctrl-x ctrl-z");
+    QCOMPARE(h.text(), std::u16string(u"gęślą"));
+    // The caret still moves and selects.
+    h.tw.simulateKeystrokes(u"home shift-right shift-right");
+    QCOMPARE(h.sel().anchor, 0);
+    QCOMPARE(h.sel().focus, 2);
+    h.platform->writeClipboard(u"x");
+    h.tw.simulateKeystrokes(u"ctrl-v");
+    QCOMPARE(h.text(), std::u16string(u"gęślą"));
+    // The owner's own edits still go in.
+    field().update(h.app, [](TextInput &t, Context<TextInput> &cx) { t.replace(Range{0, 1}, u"G", cx); });
+    QCOMPARE(h.text(), std::u16string(u"Gęślą"));
+    // Editable again: typing, and the input method.
+    field().update(h.app, [](TextInput &t, Context<TextInput> &cx) { t.setReadOnly(false, cx); });
+    h.tw.settle();
+    QVERIFY(h.tw.inputHandler());
+    h.tw.simulateKeystrokes(u"end");
+    h.tw.simulateTyping(u"ż");
+    QCOMPARE(h.text(), std::u16string(u"Gęśląż"));
+}
+
+void TestAtramentTextInput::inlineObjectsAreOneUnit()
+{
+    Harness h;
+    ObjectLog log;
+    // "ab" then an object over "⏰ jutro" (7 code units), then "cd".
+    h.tw.simulateTyping(u"ab⏰ jutrocd");
+    h.form.read(h.app).field.update(h.app, [&](TextInput &t, Context<TextInput> &cx) {
+        t.setStyler(objectStyler(2, 9, &log), cx);
+        t.setSelection(2, 2, cx);
+    });
+    h.tw.settle();
+    QVERIFY(log.painted > 0);
+    QCOMPARE(log.box.width(), 30.0f);
+    // → over the object at once, ← back.
+    h.tw.simulateKeystrokes(u"right");
+    QCOMPARE(h.sel().focus, 9);
+    h.tw.simulateKeystrokes(u"left");
+    QCOMPARE(h.sel().focus, 2);
+    // Shift+→ selects it whole.
+    h.tw.simulateKeystrokes(u"shift-right");
+    QCOMPARE(h.sel().anchor, 2);
+    QCOMPARE(h.sel().focus, 9);
+    // Backspace after it removes it whole; Delete before it too.
+    h.tw.simulateKeystrokes(u"right backspace");
+    QCOMPARE(h.text(), std::u16string(u"abcd"));
+    h.form.read(h.app).field.update(h.app, [](TextInput &t, Context<TextInput> &cx) {
+        t.setText(u"ab⏰ jutrocd", cx);
+        t.setSelection(2, 2, cx);
+    });
+    h.tw.settle();
+    h.tw.simulateKeystrokes(u"delete");
+    QCOMPARE(h.text(), std::u16string(u"abcd"));
+}
+
+void TestAtramentTextInput::inlineObjectsTakeTheirPresses()
+{
+    Harness h;
+    ObjectLog log;
+    h.tw.simulateTyping(u"ab⏰ jutrocd");
+    h.form.read(h.app).field.update(h.app, [&](TextInput &t, Context<TextInput> &cx) {
+        t.setStyler(objectStyler(2, 9, &log), cx);
+        t.setSelection(11, 11, cx);
+    });
+    h.tw.settle();
+    const Point middle{log.box.left() + log.box.width() / 2, log.box.top() + log.box.height() / 2};
+    // A click on the object is its own: the caret stays at the end.
+    h.tw.simulateClick(middle);
+    QCOMPARE(log.clicks, 1);
+    QCOMPARE(h.sel().focus, 11);
+    h.tw.simulateClick(middle, MouseButton::Right);
+    QCOMPARE(log.rightClicks, 1);
+    QCOMPARE(h.sel().focus, 11);
+    // A press on it released elsewhere is no click.
+    h.tw.simulateMouseDown(middle);
+    h.tw.simulateMouseUp({log.box.right() + 40, middle.y});
+    QCOMPARE(log.clicks, 1);
+    // Next to it the field's own: the caret goes there.
+    h.tw.simulateClick({log.box.right() + 1, middle.y});
+    QCOMPARE(h.sel().focus, 9);
+    // A finger held on it in the focused field: its long press, not the platform's selection.
+    h.tw.simulateTouchDown(middle);
+    h.tw.advance(600ms);
+    QCOMPARE(log.longPresses, 1);
+    h.tw.simulateTouchUp(middle);
+    QCOMPARE(log.clicks, 1);
+    QCOMPARE(h.sel().focus, 9);
+    // A tap on it: a click.
+    h.tw.simulateTap(middle);
+    h.tw.advance(200ms);
+    QCOMPARE(log.clicks, 2);
+}
+
+QTEST_GUILESS_MAIN(TestAtramentTextInput)
+#include "tst_atrament_textinput.moc"
