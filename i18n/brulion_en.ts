@@ -178,7 +178,7 @@
 <context>
     <name>BlockEditor</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1264"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1269"/>
         <source>Copied %n block(s) from several days</source>
         <translation>
             <numerusform>Copied %n block from several days</numerusform>
@@ -186,7 +186,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1266"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1271"/>
         <source>Copied %n block(s)</source>
         <translation>
             <numerusform>Copied %n block</numerusform>
@@ -194,7 +194,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1308"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1313"/>
         <source>Cut %n block(s)</source>
         <translation>
             <numerusform>Cut %n block</numerusform>
@@ -202,7 +202,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1324"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1329"/>
         <source>Deleted %n block(s)</source>
         <translation>
             <numerusform>Deleted %n block</numerusform>
@@ -210,7 +210,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1397"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1402"/>
         <source>Pasted %n picture(s) from the internet</source>
         <translation>
             <numerusform>Pasted %n picture from the internet</numerusform>
@@ -218,7 +218,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2679"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2738"/>
         <source>%n picture(s) saved to the notebook</source>
         <translation>
             <numerusform>%n picture saved to the notebook</numerusform>
@@ -606,7 +606,7 @@
 <context>
     <name>CodeSidebar</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/code/CodeSidebar.qml" line="592"/>
+        <location filename="../src/app/qml/code/CodeSidebar.qml" line="633"/>
         <source>The worktree has uncommitted changes in %n file(s): deleting it loses them.</source>
         <translation>
             <numerusform>The worktree has uncommitted changes in %n file: deleting it loses them.</numerusform>
@@ -1796,7 +1796,7 @@
 <context>
     <name>SettingsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1254"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1264"/>
         <source>%n word(s), kept on this device for all notebooks.</source>
         <translation>
             <numerusform>%n word, kept on this device for all notebooks.</numerusform>
@@ -1804,7 +1804,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3380"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3403"/>
         <source>%n warning(s) or error(s)</source>
         <translation>
             <numerusform>%n warning or error</numerusform>
@@ -1812,7 +1812,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3245"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3268"/>
         <source>Last check %1: %n reminder(s), the sync failed.</source>
         <translation>
             <numerusform>Last check %1: %n reminder, the sync failed.</numerusform>
@@ -1844,7 +1844,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2472"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2482"/>
         <source>%n device(s) paired. Another one scans a code.</source>
         <translation>
             <numerusform>%n device paired. Another one scans a code.</numerusform>
@@ -1852,7 +1852,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3069"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3092"/>
         <source>Type check: %n warning(s), %1</source>
         <translation>
             <numerusform>Type check: %n warning, %1</numerusform>
@@ -1860,7 +1860,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3247"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3270"/>
         <source>Last check %1: %n reminder(s).</source>
         <translation>
             <numerusform>Last check %1: %n reminder.</numerusform>
@@ -2988,7 +2988,7 @@
 <context>
     <name>brulion::shell::CommandModel</name>
     <message numerus="yes">
-        <location filename="../src/app/shell/commandmodel.cpp" line="710"/>
+        <location filename="../src/app/shell/commandmodel.cpp" line="712"/>
         <source>%n card(s) to study now</source>
         <translation>
             <numerusform>%n card to study now</numerusform>

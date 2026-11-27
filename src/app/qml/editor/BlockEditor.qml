@@ -1918,6 +1918,9 @@ FocusScope {
     /// updateCompletion() for the page drawn by Atrament (EditorAtramentPage): its field is no
     /// TextEdit — the text (a composition included), the caret and the caret's box in `item`.
     function updateCompletionAt(item: Item, row: int, text: string, caret: int, box: rect): void {
+        // (The caret's box kept before the calls below: a value argument read after calls is
+        // left to the interpreter, docs/UI.md "Compiled QML".)
+        editor.suggestionCaretBox = box
         if (!item || !item.activeFocus || row < 0 || readOnly) {
             closeSuggestions()
             return
@@ -1941,7 +1944,7 @@ FocusScope {
         QmlCall.set(popup, "row", editor.suggestionRow)
         QmlCall.set(popup, "target", editor.suggestionTarget)
         QmlCall.set(popup, "caretItem", item)
-        QmlCall.set(popup, "caretBox", box)
+        QmlCall.set(popup, "caretBox", editor.suggestionCaretBox)
         QmlCall.call(popup, "show")
     }
     /// The suggestion list's keys from the page drawn by Atrament (up, down, enter, tab, escape):
@@ -3433,8 +3436,9 @@ FocusScope {
     property var suggestionTrigger: ({})
     property int suggestionRow: -1
     property InlineEditor suggestionTarget: null
-    /// The page drawn by Atrament the popup was opened for (updateCompletionAt()).
+    /// The page drawn by Atrament the popup was opened for (updateCompletionAt()), its caret's box.
     property Item suggestionCaretItem: null
+    property rect suggestionCaretBox
     function suggestionPopup(): T.Popup {
         if (!suggestions) {
             editor._popupValues = { editorItem: editor, model: suggestionModel }
