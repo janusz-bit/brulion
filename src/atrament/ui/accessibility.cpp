@@ -18,7 +18,9 @@ bool takesNameFromContent(Role role)
     case Role::Heading:
     case Role::ListItem:
     case Role::Tab:
-    case Role::MenuItem: return true;
+    case Role::MenuItem:
+    case Role::Cell:
+    case Role::ColumnHeader: return true;
     default: return false;
     }
 }
@@ -48,6 +50,10 @@ std::u16string_view roleName(Role role)
     case Role::ProgressBar: return u"progressBar";
     case Role::Slider: return u"slider";
     case Role::Dialog: return u"dialog";
+    case Role::Table: return u"table";
+    case Role::Row: return u"row";
+    case Role::Cell: return u"cell";
+    case Role::ColumnHeader: return u"columnHeader";
     }
     return u"?";
 }

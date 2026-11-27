@@ -18,6 +18,7 @@
 #include "pagecontroller.h"
 #include "foreignhost.h"
 #include "pageview.h"
+#include "tablelayout.h"
 #endif
 
 using namespace Qt::StringLiterals;
@@ -477,6 +478,7 @@ void AtramentView::applyStyle()
                          std::u16string(u16View(m_placeholderText)), std::u16string(u16View(m_editLabel)), cx);
         cx.notify();
     });
+    applyTableStyle();
 #endif
 }
 
@@ -580,6 +582,7 @@ void AtramentView::attachView()
                     };
                 });
         applyStyle();
+        connectTables();
         m_page->host = std::make_unique<brulion::editor::atr::ForeignRowHost>(this, r.app, m_page->entity, model);
         m_page->host->setDelegate(m_delegate);
         m_page->host->setHeader(m_header);
@@ -652,4 +655,112 @@ void AtramentView::placeHostedChildren()
     if (m_page && m_page->host)
         m_page->host->place();
 #endif
+}
+
+// --- "page": tables drawn and edited by Atrament (editor/atrament/tablerows.cpp) -----------------
+
+void AtramentView::applyTableStyle()
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (!m_page)
+        return;
+    using namespace brulion::editor::atr;
+    m_page->entity.update(runtime().app, [this](PageView &page, at::Context<PageView> &cx) {
+        PageView::TableLook look;
+        auto colour = [this](const char *key, at::Color fallback) {
+            const QVariant v = m_tableLook.value(QString::fromLatin1(key));
+            const QColor c = v.metaType() == QMetaType::fromType<QColor>() ? v.value<QColor>() : QColor::fromString(v.toString());
+            return c.isValid() ? atColor(c) : fallback;
+        };
+        auto number = [this](const char *key, float fallback) {
+            bool ok = false;
+            const double d = m_tableLook.value(QString::fromLatin1(key)).toDouble(&ok);
+            return ok && d >= 0 ? float(d) : fallback;
+        };
+        auto family = [this](const char *key, const std::u16string &fallback) {
+            const QString f = m_tableLook.value(QString::fromLatin1(key)).toString();
+            return f.isEmpty() ? fallback : std::u16string(u16View(f));
+        };
+        look.background = colour("background", look.background);
+        look.headerBackground = colour("header", look.headerBackground);
+        look.border = colour("border", look.border);
+        look.borderStrong = colour("borderStrong", look.borderStrong);
+        look.borderSubtle = colour("borderSubtle", look.borderSubtle);
+        look.focusRing = colour("focusRing", look.focusRing);
+        look.formula = colour("formula", look.formula);
+        look.error = colour("error", look.error);
+        look.input = colour("input", look.input);
+        look.hover = colour("hover", look.hover);
+        look.fontFamily = family("fontFamily", look.fontFamily);
+        look.monoFamily = family("monoFamily", look.monoFamily);
+        look.fontSize = number("fontSize", look.fontSize);
+        look.lineHeight = number("lineHeight", look.lineHeight);
+        look.rowHeight = number("rowHeight", look.rowHeight);
+        look.cellPadding = number("cellPadding", look.cellPadding);
+        look.radius = number("radius", look.radius);
+        look.buttonHeight = number("buttonHeight", look.buttonHeight);
+        look.buttonTextSize = number("buttonTextSize", look.buttonTextSize);
+        page.setDrawsTables(m_drawsTables, look, cx);
+    });
+#endif
+}
+
+void AtramentView::connectTables()
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (!m_page)
+        return;
+    using namespace brulion::editor::atr;
+    QPointer<AtramentView> guard = this;
+    m_page->entity.update(runtime().app, [guard](PageView &page, at::Context<PageView> &) {
+        page.onCellEditRequest = [guard](int row, int tableRow, int column, int cursor, const at::Modifiers &modifiers) {
+            if (!guard)
+                return false;
+            Q_EMIT guard->tableCellTapped(row, tableRow, column, cursor, qtModifiers(modifiers));
+            return true;
+        };
+        page.onCellLink = [guard](int row, int tableRow, int column, const QString &href, at::Point p) {
+            if (guard)
+                Q_EMIT guard->tableLinkClicked(row, tableRow, column, href, p.x, p.y);
+        };
+        page.onCellMenu = [guard](int row, int tableRow, int column, at::Point p) {
+            if (!guard)
+                return;
+            // The table's size and the column's alignment, for the menu's Row and Column items.
+            auto *model = qobject_cast<brulion::editor::BlockListModel *>(guard->m_pageModel.data());
+            const TableGrid grid = model ? readTableGrid(model->index(row, 0)
+                                                                 .data(brulion::editor::BlockListModel::TableDataRole)
+                                                                 .toMap())
+                                         : TableGrid{};
+            QString align;
+            switch (grid.align(column)) {
+            case TableAlign::Left: align = QStringLiteral("left"); break;
+            case TableAlign::Center: align = QStringLiteral("center"); break;
+            case TableAlign::Right: align = QStringLiteral("right"); break;
+            case TableAlign::Default: break;
+            }
+            const QPointF scene = guard->mapToScene(QPointF(p.x, p.y));
+            Q_EMIT guard->tableCellMenuRequested(row, tableRow, column, grid.rowCount(), grid.columnCount(), align,
+                                                 scene.x(), scene.y());
+        };
+    });
+#endif
+}
+
+bool AtramentView::editTableCell(int row, int tableRow, int column, int cursor)
+{
+    bool done = false;
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_page)
+        m_page->entity.update(runtime().app, [&](brulion::editor::atr::PageView &page,
+                                                 at::Context<brulion::editor::atr::PageView> &cx) {
+            done = page.editCell(row, tableRow, column, cursor, cx);
+        });
+#else
+    Q_UNUSED(row)
+    Q_UNUSED(tableRow)
+    Q_UNUSED(column)
+    Q_UNUSED(cursor)
+#endif
+    return done;
 }

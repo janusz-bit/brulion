@@ -96,6 +96,7 @@ void PageView::setController(PageController *controller, at::Context<PageView> &
     m_controller = controller;
     m_editUid = 0;
     m_app = &cx.app();
+    connectTables(cx); // (tablerows.cpp)
     if (!controller)
         return;
     at::App *app = &cx.app();

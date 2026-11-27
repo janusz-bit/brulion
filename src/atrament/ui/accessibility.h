@@ -57,6 +57,12 @@ enum class Role : std::uint8_t {
     ProgressBar,
     Slider,
     Dialog,
+    // A grid of rows of cells (a Markdown table): rows of the table, cells of a row, the cells of
+    // its header row (each names its column).
+    Table,
+    Row,
+    Cell,
+    ColumnHeader,
 };
 
 // Roles named by the text inside them, as on the web (a button's name is its label); the text of

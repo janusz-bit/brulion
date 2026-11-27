@@ -482,6 +482,134 @@ private:
     ViewLook m_viewLook;
     bool m_drawsDiagrams = false;
     bool m_drawsMath = false;
+    // --- Tables drawn and edited by Atrament (tablerows.cpp, tablelayout.h; docs/ATRAMENT.md M2
+    // step 5 "Blocks with views", tables): TableBlockView's grid — the header on its sunken band,
+    // the rows' and the columns' lines, formula cells tinted and right-aligned, each cell's
+    // Markdown rendered as the QML table renders it (links and chips clickable), the columns'
+    // alignments and widths (scrolled sideways when wider than the page), "+ Row" / "+ Column"
+    // under it while it is edited or selected —, and a click on a cell editing it at the character
+    // under the pointer: PageController::setTableCell as it is typed (one undo step per cell),
+    // Tab / Shift+Tab the next / previous cell (a new row after the last), Enter the cell below,
+    // ↑/↓ across rows and out of the table to the blocks above and below, ←/→ at the text's edge
+    // the next cell, Ctrl+Enter a row below, Alt+arrows move the row or the column, Esc cancels the
+    // cell's typing and selects the table, Ctrl+Z / Ctrl+Y the page's undo (the cell stays edited).
+    // Off, and for a table showing its filter row: tables are foreign rows (the QML delegate).
+public:
+    struct TableLook {
+        atrament::Color background = atrament::rgb(0xffffff);           // Theme.bgElevated: the grid
+        atrament::Color headerBackground = atrament::rgb(0xf3f1ec);     // Theme.bgSunken
+        atrament::Color border = atrament::rgba(0x8c959f59);            // Theme.border: the frame
+        atrament::Color borderStrong = atrament::rgba(0x8c959f80);      // Theme.borderStrong: under the header
+        atrament::Color borderSubtle = atrament::rgba(0x8c959f33);      // Theme.borderSubtle: rows, columns
+        atrament::Color focusRing = atrament::rgb(0x3b5bdb);            // the frame (½) and the edited cell
+        atrament::Color formula = atrament::rgba(0x3b82f60f);           // Theme.info at 6 %: a formula cell
+        atrament::Color error = atrament::rgb(0xa8382d);                // Theme.dangerText: #ERR, #CYCLE
+        atrament::Color input = atrament::rgb(0xffffff);                // Theme.bgElevated2: the edited cell
+        atrament::Color hover = atrament::rgba(0x0000000e);             // Theme.bgHover: a button under the mouse
+        std::u16string fontFamily = u"Brulion Inter";                   // Theme.fontUi
+        std::u16string monoFamily = u"Brulion JetBrains Mono";          // Theme.fontMono: a formula edited
+        float fontSize = 14;                                            // Theme.textBase
+        float lineHeight = 20;                                          // Theme.lineHeightPx(textBase, 1.4)
+        float rowHeight = 32;                                           // 40 on touch UIs
+        float cellPadding = 12;                                         // Theme.space3
+        float radius = 10;                                              // Theme.radius
+        float buttonHeight = 28;                                        // Theme.controlHeightSm
+        float buttonTextSize = 12;                                      // Theme.textSm
+    };
+    void setDrawsTables(bool on, const TableLook &look, atrament::Context<PageView> &cx);
+    bool drawsTables() const { return m_drawsTables; }
+    // The cell being edited: its table's model row (−1: none), its row in the table (−1: the
+    // header) and its column.
+    struct TableCell {
+        int row = -1;
+        int tableRow = -1;
+        int column = -1;
+    };
+    TableCell editedCell() const;
+    // Edits cell (`tableRow`, `column`) of the table in model row `row` with the caret at `cursor`
+    // of its text (−1: its end); false when Atrament does not draw that table, the page is read
+    // only, or there is no such cell.
+    bool editCell(int row, int tableRow, int column, int cursor, atrament::Context<PageView> &cx);
+    // Ends the editing of the cell (what was typed stays).
+    void stopEditingCell(atrament::Context<PageView> &cx);
+    // The edited cell's field (null before the first cell is edited).
+    const atrament::Entity<atrament::TextInput> *cellInput() const { return m_cellInput ? &*m_cellInput : nullptr; }
+    // Where the last frame drew cell (`tableRow`, `column`) of the table in `row` (window px), and
+    // its text as laid out (nullptr: not drawn, or edited).
+    std::optional<atrament::Rect> cellBounds(int row, int tableRow, int column) const;
+    const atrament::TextLayoutHandle *cellText(int row, int tableRow, int column) const;
+    // Where a click on drawn cell (`tableRow`, `column`) at window point `p` puts the caret: an
+    // offset of the cell's text (−1: its end — a formula, a cell of several lines, not drawn).
+    int cellCursorAt(int row, int tableRow, int column, atrament::Point p) const;
+    // A click or a tap on a cell asks to edit it at `cursor` (the host decides: Shift / Ctrl+click
+    // select blocks, the touch selection mode) — true when the host handled it; unset: editCell().
+    std::function<bool(int row, int tableRow, int column, int cursor, const atrament::Modifiers &modifiers)>
+            onCellEditRequest;
+    // A link of a cell's text clicked at window point `at` (a date chip's dialog, a page, a tag);
+    // unset: onLink.
+    std::function<void(int row, int tableRow, int column, const QString &href, atrament::Point at)> onCellLink;
+    // A right-click on a cell at window point `at`: the block menu with the cell's Row and Column
+    // submenus (BlockEditor.openCellBlockMenuAt); unset: onBlockMenu.
+    std::function<void(int row, int tableRow, int column, atrament::Point at)> onCellMenu;
+
+private:
+    bool isTable(int row) const;
+    atrament::AnyElement renderTableRow(std::size_t row, const QModelIndex &index, float textX, atrament::Div line);
+    atrament::AnyElement renderTableCell(std::size_t row, quint64 uid, const struct TableGrid &grid, int r, int c,
+                                         bool firstBodyRow);
+    // The table of model row `row` as its `tableData` gives it now (cached while the role's map is
+    // the same) and its columns' natural widths.
+    struct TableEntry;
+    const TableEntry *tableEntry(int row) const;
+    void tableEditingRowChanged(atrament::Context<PageView> &cx);
+    void cellInputChanged(atrament::Context<PageView> &cx);
+    void commitCellComposition(atrament::Context<PageView> &cx);
+    bool tableKey(const atrament::Keystroke &key, atrament::Window &window, atrament::Context<PageView> &cx);
+    void cellClicked(std::size_t row, int tableRow, int column, const atrament::ClickEvent &click,
+                     atrament::Context<PageView> &cx);
+    void cellLinkClicked(std::size_t row, int tableRow, int column, const QString &href, atrament::Point at,
+                         atrament::Context<PageView> &cx);
+    // Cell (`tableRow`, `column`) of the table edited (its text written as typed), or a step the
+    // keys take: the cell below, the next one, the row above or below the table.
+    void goToCell(int row, int tableRow, int column, int cursor, atrament::Context<PageView> &cx);
+    void leaveTable(int row, bool up, float x, atrament::Context<PageView> &cx);
+    int columnAtX(quint64 uid, int columns, float x) const;
+    void focusCellInput(atrament::Context<PageView> &cx);
+    // Keeps the controller's signals while the view lives (setController's).
+    void connectTables(atrament::Context<PageView> &cx);
+    struct Connections {
+        std::vector<QMetaObject::Connection> list;
+        ~Connections();
+    } m_tableConnections;
+
+    bool m_drawsTables = false;
+    TableLook m_tableLook;
+    std::optional<atrament::Entity<atrament::TextInput>> m_cellInput;
+    std::vector<atrament::Subscription> m_cellSubscriptions;
+    quint64 m_cellUid = 0; // the edited cell's table (0: none)
+    int m_cellRow = -1;    // its row in the table (−1: the header)
+    int m_cellColumn = -1;
+    QString m_cellLastText; // what the field last gave the controller
+    // ↑/↓ out of a cell into another table: the caret's x and the way it went.
+    std::optional<float> m_tableNavX;
+    bool m_tableNavUp = false;
+    struct CellKey {
+        quint64 uid = 0;
+        int r = 0;
+        int c = 0;
+        bool operator==(const CellKey &) const = default;
+    };
+    struct CellKeyHash {
+        std::size_t operator()(const CellKey &k) const noexcept;
+    };
+    struct CellFrame {
+        atrament::TextLayoutHandle text;
+        atrament::Rect bounds;
+        std::uint64_t frame = 0;
+    };
+    mutable std::unordered_map<CellKey, CellFrame, CellKeyHash> m_cellFrames;
+    mutable std::unordered_map<quint64, std::shared_ptr<TableEntry>> m_tables;
+    std::uint64_t m_tablesPurged = 0;
 };
 
 } // namespace atr

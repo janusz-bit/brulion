@@ -354,6 +354,8 @@ bool PageView::drawsRow(int row) const
         return false;
     if (isPanel(row) || isDiagram(row) || isMath(row)) // (charts, diagrams, formulas: diagramrows.cpp)
         return true;
+    if (isTable(row)) // (tablerows.cpp)
+        return true;
     const QModelIndex index = m_model->index(row, 0);
     const auto text = index.data(BlockListModel::RenderedTextRole).value<RenderedTextRef>();
     return text.drawable() && drawable(index.data(BlockListModel::ViewRole).toString());
@@ -577,6 +579,8 @@ at::AnyElement PageView::renderRow(std::size_t row)
         }
         return codeRow;
     }
+    if (view == u"table" && isTable(int(row))) // a table drawn by Atrament (tablerows.cpp)
+        return renderTableRow(row, index, textX, line());
     if (!rendered.drawable() || !drawable(view)) {
         // A foreign row: its QML delegate's place (foreignrows.cpp).
         m_foreign.push_back(row);
