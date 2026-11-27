@@ -7642,7 +7642,21 @@ Nextcloud app password (`<app data>/secrets/caldav-<account>`). A second device 
   `RECURRENCE-ID`) and "Delete" (a series asks "This event" — an `EXDATE` — or "All events"). "New
   event" picks the calendar among the writable ones. Changes show at once (the calendar's cache) and
   are sent by a run that starts then; when the server changed the event meanwhile, the account's
-  policy decides (keep the newer by `LAST-MODIFIED`, or keep both — the edit as a new event).
+  policy decides (keep the newer by `LAST-MODIFIED`, or keep both — the edit as a new event). What
+  the dialog changed is all that changes (caldav/eventchange.h, the same decision `brulion-cli`
+  takes): a series edited from one of its occurrences keeps its own start unless its times were
+  changed, and a series moved keeps its left-out occurrences (`EXDATE`) and exceptions
+  (`RECURRENCE-ID`) on the occurrences they named.
+* **Changes from the command line** — `brulion-cli calendar add | edit | delete` and the MCP tools of
+  an AI agent (docs/CLI.md "Calendar events") leave each change as a file in
+  `<device state>/calendars/inbox/`; the app watches that folder while the notebook has CalDAV
+  calendars (not in the browser) and takes a new file about 0.1 s later under the calendars' lock
+  — the change is applied to the event as the app has it then, shown at once and sent by a run
+  that starts then, like the dialog's —, and every run takes what is waiting as it starts (a change
+  left while the app was closed, or while Android's background check held the lock). A change that
+  cannot be made (its event deleted on the server meanwhile, its calendar removed, a file that is
+  no change) is dropped with an error in "What happened": "A change of an event asked for from the
+  command line or by an AI agent could not be made." and the reason as its detail.
 * **The sync center's Calendars tab** (`qml/io/CalendarsPanel.qml`): the state ("Calendars updated
   today 10:32", offline, what failed), "Refresh all", deletions of synced tasks held back by the
   guard with their titles and "Delete them", a word on CORS in the browser; the subscriptions — the

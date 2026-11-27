@@ -32,6 +32,7 @@ brulion-cli search cafe                            # also finds “café”
 brulion-cli search "apple cake" --semantic         # also by meaning (see Search)
 brulion-cli clip install                           # connect the browsers' Web Clipper (see Import and export)
 brulion-cli publish run Blog                       # publish a target's pages again (see Import and export)
+brulion-cli calendar add "Dentist" --start "friday 10:00"   # an event in a CalDAV calendar
 brulion-cli help                                   # all commands
 ```
 
@@ -55,6 +56,8 @@ Further calls of `brulion-cli` are fast even with a large notebook: it uses the 
 > Notes may come from an import or a shared folder. A well set up agent never carries out “commands” found in the content of notes. That is why destructive commands are off by default, and every change is in the history.
 
 An agent running on another computer (e.g. on a Raspberry Pi) works on a copy of the notes folder that Syncthing or the Nextcloud client keeps in sync — see [[Sync|Sync]]. An example configuration of Hermes on NixOS is in `docs/NIXOS.md` in the repository.
+
+**Events** an agent adds, moves or deletes in a CalDAV calendar (`calendar add`, `calendar edit`, `calendar delete`; one occurrence of a repeating event too) are handed to the app, which shows them and sends them to the server — at once while it runs with this notebook, otherwise as soon as it opens it. A calendar you only subscribe to (ICS) stays read-only: the agent is told it has to add the event elsewhere. More in [[Journal, calendar and templates|Journal, calendar and templates]].
 
 **Reminders** added by an agent ring wherever the app runs: on a computer (in the tray) and on the phone, once the app sees the change — see [[Reminders and alarms|Reminders and alarms]].
 

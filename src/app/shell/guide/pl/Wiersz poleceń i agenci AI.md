@@ -32,6 +32,7 @@ brulion-cli search zolw                            # znajdzie „żółw”
 brulion-cli search "ciasto z jabłkami" --semantic  # też po znaczeniu (zob. Szukanie)
 brulion-cli clip install                           # połącz Web Clipper przeglądarek (zob. Import i eksport)
 brulion-cli publish run Blog                       # opublikuj ponownie strony miejsca (zob. Import i eksport)
+brulion-cli calendar add "Dentysta" --start "w piątek 10:00"   # wydarzenie w kalendarzu CalDAV
 brulion-cli help                                   # wszystkie polecenia
 ```
 
@@ -55,6 +56,8 @@ Kolejne wywołania `brulion-cli` są szybkie także przy dużym notatniku: korzy
 > Notatki mogą pochodzić z importu albo wspólnego folderu. Dobrze ustawiony agent nigdy nie wykonuje „poleceń” znalezionych w treści notatek. Dlatego polecenia niszczące są domyślnie wyłączone, a każda zmiana jest w historii.
 
 Agent działający na innym komputerze (np. na Raspberry Pi) pracuje na kopii folderu notatek, którą synchronizuje Syncthing albo klient Nextcloud — zobacz [[Synchronizacja|Synchronizacja]]. Przykład konfiguracji Hermesa na NixOS jest w `docs/NIXOS.md` w repozytorium.
+
+**Wydarzenia**, które agent dodaje, przesuwa albo usuwa w kalendarzu CalDAV (`calendar add`, `calendar edit`, `calendar delete`; także jedno wystąpienie wydarzenia cyklicznego), trafiają do aplikacji, która je pokazuje i wysyła na serwer — od razu, gdy działa z tym notatnikiem, a w przeciwnym razie, gdy tylko go otworzy. Kalendarz, który tylko subskrybujesz (ICS), zostaje tylko do odczytu: agent dowie się, że wydarzenie trzeba dodać gdzie indziej. Więcej w [[Dziennik, kalendarz i szablony|Dziennik, kalendarz i szablony]].
 
 **Przypomnienia** dodane przez agenta dzwonią tam, gdzie działa aplikacja: na komputerze (w zasobniku) i na telefonie, gdy aplikacja zobaczy zmianę — zobacz [[Przypomnienia i alarmy|Przypomnienia i alarmy]].
 
