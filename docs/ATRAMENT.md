@@ -793,6 +793,93 @@ Qt Quick's own nodes. Each step below turns kinds of foreign rows into Atrament 
   row are its delegate's own, as in the QML editor (a code block or a table tints none there
   either; a block the find bar edits shows its match selected in its InlineEditor).
 
+### The journal stream as one list
+
+M2 step 4's second stage: the journal stream (JournalsView's lazy `ListView` of `ContentJournalDay`
+items, each a FocusScope with its own `PageController` and autoHeight `BlockEditor` whose rows an
+`AtramentView` drew) becomes **one Atrament list with no QML item per day**, behind the same
+setting; with it off the QML stream stays as it is.
+
+**Decision: a row per day, each day's page a nested view.** The stream's `list()` has one row per
+day of the days' model — the day's *section*: the line between days, the day's heading (its date,
+"Today" / "Yesterday", "Open as page"), then the prompt of a day without a note or the day's
+page. A day's page is a `PageView` entity in **embedded mode**, drawn into the section as a nested
+view (`ViewElement`: an entity converts to an element): a column of its header, every block it
+shows and its footer — no list and no scrolling of its own. Considered and left: the days' blocks
+flattened into the stream's rows (a row per block, the days' `PageRows` behind one composite
+`RowExtents`). It would virtualize inside a long day, but every part of PageView that scrolls,
+reveals, drags, selects or hosts foreign rows works on one page's rows and its own list; a nested
+page keeps all of it, the stream's anchor — a day and an offset into it — is what
+`viewState()` already saves, and a day laid out whole is what the QML stream does (ContentJournalDay
+builds all of a day's blocks: BlockEditor.autoHeight). A long day is not virtualized inside yet
+(later: the embedded column laying out only the rows inside the window's content mask).
+
+**Embedded mode** (`PageView::setEmbedding(PageEmbedding *)`):
+* `render()` returns the page's column — the header, each shown row, the footer, the layers — at
+  the width the section gives it. Each row is wrapped in a box that remembers its layout node and
+  tells the page's `PageRows` its height in prepaint: after every frame the rows' heights are exact
+  and `rowBounds`, `rowAtY`, the drags' rows and the foreign rows' places work as in the page's own
+  list (they go from the header's frame and the rows' offsets).
+* What scrolls the page's list scrolls the embedding instead (`PageEmbedding`, the stream): a row
+  revealed — the edited one after Enter, ↑/↓ or a zoom, `revealRow`, a table's cell, Vim's zt / zz /
+  zb —, `reveal()` of a hosted caret, the drag's edge scrolling, the scroll since the last frame a
+  drag follows. A reveal is a part of the day's row: `ListHandle::scrollToRowPart(row, part,
+  position, margin)` (generic, `ui/measuredlist.h`), the part — a top and a height inside the row —
+  given by the page after the list laid the row out in that frame (`PageView::embeddedPart(row)`,
+  from the rows' layout nodes), so a block Enter just made is shown by its real height at once.
+* The block selection's key layer (keys no focused element took) is the active day's only
+  (`setKeysActive`); ↑ on the first line of a day's first block and ↓ on the last line of its last
+  block are the embedding's (`onPastEdge`): the stream edits the day above / below that has blocks,
+  the caret at the same x (the QML stream stops there). Enter and Backspace at a day's edges stay
+  inside the day (a new block at its end; Backspace at its first block's start merges nothing).
+
+**`JournalView`** (`src/app/editor/atrament/journalview.{h,cpp}`), an entity over the days' model
+(any `QAbstractItemModel` with JournalListModel's roles `date`, `path`, `exists`, `isToday`, found
+by name):
+* **Days near the view** — the rows the last frame showed and a screen above and below them — are
+  made in `render()`, before the list lays them out: the day's `PageController` from the host's
+  factory (`makeController`: its host, path, read-only state…), a PageView in embedded mode set up by
+  the host (`setUpPage`: looks, callbacks; the same as a page's). Days farther away are released
+  after the frame (their controllers save on destruction), unless being edited, with blocks
+  selected, zoomed into, or the active day: one PageView and controller per day near the view. A
+  day released keeps its measured height; heights are kept by date across the model's resets and
+  moves (a new day at midnight is inserted above: the anchor follows its day).
+* **The active day** (the one written in: the side panel's, the find bar's, Back's zoom, the
+  commands'): the day that started editing, selected blocks or zoomed (its controller's signals), or
+  that the host made active (`activateDay`); the day active before stops editing and loses its
+  selection, unless a selection over several days spans them (`spanActive`). `onActiveDayChanged`.
+* **The heading** (ContentJournalDay's): the long date (the host's `formatDate`) in the editor's
+  face, semibold, larger for today; "Today" / "Yesterday" as a badge; "Open as page" at the right —
+  compact (phones): the weekday and the badge's word as a small line above the date, the button an
+  icon; the date and the button open the day as a page (`onOpenAsPage`). A day without blocks
+  shows the prompt ("What's on today? Click to start writing." …) whose click begins the day
+  (`beginDay`: its last block edited, or the journal template's first empty block of a new page —
+  the file is made by the first edit; `onBeginRequested` lets the host refuse in reading mode). For
+  screen readers: the section a group named by the date, the date a heading, the button and the
+  prompt buttons.
+* **The stream's header and footer** (the missed reminders, "%n day(s) with notes", "Go to day…";
+  the empty journal's hint) are QML items placed over the list's header and footer, as a page's.
+* **Scrolling**: `scrollToDay(day, position)`, `scrollToDate(date)` (the day or the nearest earlier
+  one), `viewState()` / `restoreViewState()` (the day at the top and the offset into it), the
+  room the touch toolbar covers at the bottom (`setBottomInset`: reveals keep above it).
+* **Across days**: the find bar's matches tinted in every day (`setFind`), the days attached to the
+  stream's `StreamSelection` and `StreamFind` while they are made (Shift+↑/↓ past a day's edge and
+  the selection keys' `ExtendPastTop` / `ExtendPastBottom` extend the span into the next day;
+  Shift+click and taps go through the host as on a page).
+
+**Hosting**: `AtramentView { view: "journal" }` (qml/editor/EditorAtramentJournal.qml) takes the
+QML stream's place in JournalsView when the editor is drawn by Atrament. There is **one BlockEditor
+for the whole stream**, without rows of its own (`BlockEditor.atramentHost`: the stream's
+AtramentView is its page), whose `controller` is the active day's: every signal of a day (a click
+asking to edit, a link, a menu, a selection key…) makes that day the active one first
+(`AtramentView.activeController`, `activeDayChanged`), so the editor's functions — menus,
+suggestions, the touch toolbar docked on the stream's frame, Vim, the find bar's current match —
+act on that day with the handlers a page has (EditorAtramentPage's). The AtramentView's page API
+(`editRow`, `editText`, `revealRow`, `selectInEdited`, `rowTop`…) is the active day's. A day's
+foreign rows (its properties, what Atrament does not draw yet) are BlockDelegates over its rows
+as on a page (a `ForeignRowHost` per day made), their editor the stream's: a press on one makes its
+day the active one.
+
 ### Steps
 
 Each step ships behind the setting and is measured (memory per block, frame time while
@@ -964,7 +1051,8 @@ scrolling, `tst_atrament_editor`) before the next:
    `AtramentView.contentHeight` → `BlockEditor.atramentContentHeight` → the day's
    `fitEditorHeight()`); the journal's list scrolls (a wheel Atrament does not take goes on to it)
    and keeps the caret in view (`BlockEditor.ensureVisible` through its `scroller`). The stream as
-   one Atrament list (no item per day) is the next stage. **Drag to move** (`pagedrag.cpp`; the QML
+   one Atrament list (no item per day) is the second stage: "The journal stream as one list"
+   above. **Drag to move** (`pagedrag.cpp`; the QML
    editor has none): an outline's bullet (a list item's marker, also a document's) pressed with the
    mouse and dragged past 4 px moves its block — the selection when it is in it, else the block
    alone, selected — and a finger's long press on a selected block while the grips show moves the
