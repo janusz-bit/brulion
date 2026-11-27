@@ -466,6 +466,14 @@ platform the differences (`PlatformWindow::accessibilityChanged`): nodes added a
 topmost of each part), children changed, focus, name, description, value (with the old text),
 selection, states, role, the focused node's bounds, scrolling.
 
+**Tables**: a `Role::Table` node's `Row` children are its rows (other children — a filter's
+fields — are none), their `Cell` and `ColumnHeader` children its cells, in order; the Qt bridge
+gives a table Qt's `QAccessibleTableInterface` (rows and columns counted, the cell at a row and a
+column, a column's description from its header, the selected cells, rows and columns; selecting
+through it is the view's own keys') and its cells `QAccessibleTableCellInterface` (their row and
+column, an extent of one, the column's header cell, selected, the table). Tested by
+`tests/atrament/qt/tst_atrament_qt_accessibility` (`tableInterfaces`).
+
 **The Qt bridge** (`qt/qtaccessibility.h`): AtramentItem's `QAccessibleInterface` (from a factory,
 so it answers before Qt Quick's) has the root node's children as its own; every node an
 assistive technology asks for gets an object-less interface registered with Qt's cache — role and
@@ -1090,9 +1098,8 @@ scrolling, `tst_atrament_editor`) before the next:
    table editing its first cell, the touch toolbar's cell tools (the next cell, undo / redo, More)
    and the cell kept above them, a long press on a cell's chip (its menu), tooltips (a formula's
    error, link previews), dragging the sideways
-   scroll bar, the app's Alt+← / Alt+→ (Back, Forward) still taking those keys before the cell,
-   Qt's table interfaces for screen readers (`QAccessibleTableInterface`: rows and columns counted,
-   a cell's coordinates). Each cell is aligned by Atrament's own text alignment ("Text": its links,
+   scroll bar, the app's Alt+← / Alt+→ (Back, Forward) still taking those keys before the cell.
+   For screen readers the table has Qt's table interfaces ("Accessibility" above). Each cell is aligned by Atrament's own text alignment ("Text": its links,
    its layout handle's offsets and the caret a click puts where its glyphs are).
    **Pictures, files, embedded blocks and query results** (2026-11-27; `PageView::setDrawsMedia`,
    `src/app/editor/atrament/mediarows.cpp`, `queryrows.cpp`, `picturecache.h`; `AtramentView.

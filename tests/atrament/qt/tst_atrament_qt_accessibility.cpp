@@ -116,6 +116,25 @@ struct Tabs {
     }
 };
 
+// A grid of a header and two rows, one cell selected (as PageView's tables describe theirs).
+struct Grid {
+    AnyElement render(Window &, Context<Grid> &)
+    {
+        auto cell = [](std::u16string_view text, bool header, bool picked, std::uint64_t c) {
+            return div().id(ElementId::number(c)).w(80).h(24).role(header ? Role::ColumnHeader : Role::Cell)
+                    .selected(picked).child(std::u16string(text));
+        };
+        return div().sizeFull().flexCol().child(
+                div().role(Role::Table).ariaLabel(u"Tabela").flexCol()
+                        .child(div().id(u"head").flexRow().role(Role::Row)
+                                       .child(cell(u"Pozycja", true, false, 0)).child(cell(u"Cena", true, false, 1)))
+                        .child(div().id(u"r1").flexRow().role(Role::Row)
+                                       .child(cell(u"Płytki", false, false, 0)).child(cell(u"89", false, true, 1)))
+                        .child(div().id(u"r2").flexRow().role(Role::Row)
+                                       .child(cell(u"Klej", false, false, 0)).child(cell(u"45", false, true, 1))));
+    }
+};
+
 struct Recorded {
     QAccessible::Event type;
     QAccessible::Role role = QAccessible::NoRole;
@@ -191,6 +210,7 @@ private Q_SLOTS:
     void structureAndNames();
     void listViewport();
     void tabSelectionAsChecked();
+    void tableInterfaces();
 };
 
 void TestAtramentQtAccessibility::initTestCase()
@@ -467,6 +487,58 @@ void TestAtramentQtAccessibility::tabSelectionAsChecked()
     QVERIFY(checkedChange);
     AtramentAccessibility::setSelectionAsChecked(false);
     item.reset();
+}
+
+void TestAtramentQtAccessibility::tableInterfaces()
+{
+    std::shared_ptr<QtPlatform> platform = std::make_shared<QtPlatform>();
+    App app{platform, loadFonts()};
+    Entity<Grid> grid = app.newEntity<Grid>();
+    QQuickWindow window;
+    window.resize(320, 200);
+    auto *item = new AtramentItem(window.contentItem());
+    item->setSize(QSizeF(320, 200));
+    item->attach(app, AnyView{grid.id(), &renderView<Grid>});
+    QAccessibleInterface *root = QAccessible::queryAccessibleInterface(item);
+    QVERIFY(root);
+    QAccessibleInterface *table = childOf(root, QAccessible::Table, QStringLiteral("Tabela"));
+    QVERIFY(table);
+    QAccessibleTableInterface *t = table->tableInterface();
+    QVERIFY(t);
+    QCOMPARE(t->rowCount(), 3);
+    QCOMPARE(t->columnCount(), 2);
+    QCOMPARE(t->columnDescription(1), QStringLiteral("Cena"));
+    QAccessibleInterface *price = t->cellAt(1, 1);
+    QVERIFY(price);
+    QCOMPARE(price->role(), QAccessible::Cell);
+    QCOMPARE(price->text(QAccessible::Name), QStringLiteral("89"));
+    QCOMPARE(t->cellAt(0, 0)->role(), QAccessible::ColumnHeader);
+    QVERIFY(!t->cellAt(3, 0));
+    QVERIFY(!t->cellAt(0, 2));
+    // The selection: two cells of column 1 (the header's is not).
+    QCOMPARE(t->selectedCellCount(), 2);
+    QCOMPARE(t->selectedCells().size(), 2);
+    QVERIFY(!t->isColumnSelected(1));
+    QVERIFY(!t->isRowSelected(1));
+    QVERIFY(t->selectedRows().isEmpty());
+    // A cell knows where it is.
+    QAccessibleTableCellInterface *c = price->tableCellInterface();
+    QVERIFY(c);
+    QCOMPARE(c->rowIndex(), 1);
+    QCOMPARE(c->columnIndex(), 1);
+    QCOMPARE(c->rowExtent(), 1);
+    QCOMPARE(c->columnExtent(), 1);
+    QVERIFY(c->isSelected());
+    QCOMPARE(c->table(), table);
+    QCOMPARE(c->columnHeaderCells().size(), 1);
+    QCOMPARE(c->columnHeaderCells().front()->text(QAccessible::Name), QStringLiteral("Cena"));
+    QVERIFY(t->cellAt(0, 1)->tableCellInterface()->columnHeaderCells().isEmpty());
+    QVERIFY(!t->cellAt(1, 0)->tableCellInterface()->isSelected());
+    // Neither a row nor anything else is a table.
+    QVERIFY(!root->tableInterface());
+    QVERIFY(!table->child(0)->tableInterface());
+    QVERIFY(!table->tableCellInterface());
+    delete item;
 }
 
 QTEST_MAIN(TestAtramentQtAccessibility)
