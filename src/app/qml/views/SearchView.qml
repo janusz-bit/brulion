@@ -21,9 +21,9 @@ import Brulion
 // are kept in the route (back from a page returns to the results; a folder renamed or moved is
 // followed).
 //
-// Keys: the field has the focus whenever the view is shown, its query selected (on phones the
-// keyboard comes up); Up/Down move through the results, Enter opens (Ctrl+Enter in
-// the side panel), Escape clears.
+// Keys: the field has the focus whenever the view is shown, its query selected (not on touch
+// screens: the on-screen keyboard comes up only when the field is tapped); Up/Down move through
+// the results, Enter opens (Ctrl+Enter in the side panel), Escape clears.
 // Contract with the shell (qml/shell/ShellRouteView.qml): `route`, optional `title`.
 FocusScope {
     id: root
@@ -158,14 +158,17 @@ FocusScope {
         if (visible)
             takeFocus()
     }
-    /// The keyboard to the query, selected (typing replaces it), and on touch the on-screen
-    /// keyboard up: whenever the view is shown — made shown, shown the first time after being
-    /// built ahead, or shown again (kept while other views were).
+    /// The keyboard to the query, selected (typing replaces it): whenever the view is shown —
+    /// made shown, shown the first time after being built ahead, or shown again (kept while other
+    /// views were). Not on touch screens: the on-screen keyboard would come up over the recent
+    /// searches and the results whenever the tab is tapped; a tap on the field brings it.
     function takeFocus(): void {
+        if (Theme.touchUi) {
+            field.focus = false
+            return
+        }
         field.forceActiveFocus()
         field.selectAll()
-        if (Theme.touchUi)
-            DeviceInfo.showInputMethod()
     }
     onVisibleChanged: if (visible) takeFocus()
     onRouteChanged: followRoute()
@@ -601,7 +604,9 @@ FocusScope {
                         text: modelData
                         onClicked: {
                             root.applyQuery(modelData)
-                            field.forceActiveFocus()
+                            // (On touch the results, not the on-screen keyboard over them.)
+                            if (!Theme.touchUi)
+                                field.forceActiveFocus()
                         }
                     }
                 }
