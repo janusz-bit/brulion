@@ -10,6 +10,7 @@
 #pragma once
 
 #include "caldav/client.h"
+#include "caldav/eventchange.h"
 #include "caldav/events.h"
 #include "caldav/feed.h"
 #include "caldav/store.h"
@@ -90,6 +91,13 @@ public:
     /// An event created, changed or deleted in Brulion: shown at once (the calendar's cache), sent
     /// with the next run. `change.path` "" for a new event: one is made from its UID.
     bool queueEvent(const QString &calendarId, EventChange change);
+    /// Take the changes of events brulion-cli left in the inbox (eventchange.h): each one planned
+    /// against its calendar as the device holds it now (plannedChange()), queued as queueEvent()
+    /// queues the event dialog's and its file deleted; one that cannot be made is logged (code
+    /// "cli-change") and deleted too. Under the device's lock: a run takes them as it starts,
+    /// while one runs here they wait for its end, while another process's runs for the next. The
+    /// number queued.
+    int takeInbox();
 
     /// Find an account's calendars (the setup dialog): discovery with these credentials.
     void discover(const QString &server, const QString &user, const QString &password,
@@ -107,6 +115,12 @@ Q_SIGNALS:
 
 private:
     struct Run;
+    enum class IntentOutcome { Queued, Refused, Kept };
+    /// The inbox applied (the device's lock held).
+    int applyInbox();
+    IntentOutcome applyIntent(const CalendarSettings &settings, const EventIntent &intent, const TodoContext &context);
+    /// A change brulion-cli asked for that cannot be made, in the log (code "cli-change").
+    void logRefused(const QString &calendarId, const QString &name, const QString &text);
     /// A new run: the device's lock, the store read again; false when another process holds it
     /// (the run ends at once, cancelled).
     bool begin();
@@ -130,6 +144,7 @@ private:
     bool m_browser = false;
     bool m_running = false;
     bool m_cancel = false;
+    bool m_inboxAfterRun = false; ///< takeInbox() asked while a run ran
     std::unique_ptr<Run> m_run;
     QList<std::function<void(const CalendarRunReport &)>> m_waiters;
     CalendarRunReport m_last;

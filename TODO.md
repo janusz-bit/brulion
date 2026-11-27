@@ -295,8 +295,7 @@ done in the repository simply disappears from the list.
   invitations (attendees, iTIP) and free/busy; the alarms of an ICS subscription's events (they
   ring nothing); a task the server moved under another one (the notes keep the line's place), an
   `RRULE` inside a `RANGE=THISANDFUTURE` exception (ignored; clients normally split the series
-  instead); creating and editing events from `brulion-cli` and the MCP server (`calendar list` and
-  `calendar events` only read); Google's own CalDAV (it needs an OAuth sign-in — its secret iCal
+  instead); Google's own CalDAV (it needs an OAuth sign-in — its secret iCal
   address works as a subscription).
 * **Reminder chips in Markdown source mode and table cells** — in an edited block a ⏰ is a chip
   with its words, its menu and the caret over it as one unit (docs/UI.md); the source mode's

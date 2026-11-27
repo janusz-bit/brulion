@@ -1,11 +1,12 @@
 #include "caldav/store.h"
 
+#include "caldav/ids_p.h"
+
 #include <QDir>
 #include <QFile>
 #include <QFileDevice>
 #include <QJsonArray>
 #include <QJsonDocument>
-#include <QRandomGenerator>
 #include <QSaveFile>
 
 #include <algorithm>
@@ -430,12 +431,7 @@ void CalendarStore::clearLog()
 
 QString CalendarStore::newId(QChar kind)
 {
-    static constexpr char Alphabet[] = "abcdefghijklmnopqrstuvwxyz0123456789";
-    QString id(kind);
-    id += u'-';
-    for (int i = 0; i < 10; ++i)
-        id += QChar(QLatin1Char(Alphabet[QRandomGenerator::global()->bounded(36)]));
-    return id;
+    return QString(kind) + u'-' + detail::randomId(10);
 }
 
 } // namespace brulion::caldav

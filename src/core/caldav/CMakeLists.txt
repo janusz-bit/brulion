@@ -3,7 +3,8 @@
 # expanded into the days of a range (events.h), ICS subscriptions fetched with ETag /
 # Last-Modified (feed.h), a CalDAV client with discovery, sync-collection and the ctag / ETag
 # fallback (client.h), tasks (VTODO) mapped to task lines of the notes (taskmap.h) and synced both
-# ways (tasksync.h), events kept on the device and edited on the server (eventstore.h), the
+# ways (tasksync.h), events kept on the device and edited on the server (eventedit.h; changes of
+# them as one decision for the app and brulion-cli, with the inbox between the two: eventchange.h), the
 # configuration and caches on the device (store.h) and the run over all of them (calendarsync.h).
 # HTTP only through sync::HttpTransport (tests: tests/core/caldav/fakecaldav.h).
 # Public headers: caldav.h (overview) and the headers it includes.
@@ -14,11 +15,13 @@ brulion_add_core_module(caldav
         zones.h zones.cpp
         events.h events.cpp
         messages_p.h
+        ids_p.h
         feed.h feed.cpp
         davxml_p.h davxml.cpp
         client.h client.cpp
         taskmap.h taskmap.cpp
         eventedit.h
+        eventchange.h eventchange.cpp
         store.h store.cpp
         tasksync_p.h tasksync.cpp
         eventalarms.h eventalarms.cpp

@@ -55,7 +55,8 @@ MCP: `brulion-cli mcp --vault <folder>` serves the same commands as tools (`brul
 | Add a task | `task add "Zadzwonić do Łukasza" --due "w piątek" --remind "jutro 9:00" --every "co tydzień" --priority high` |
 | What is open / due | `task list` · `task list --due '<=+7d'` · `task list --query "status:open tag:praca sort:due"` |
 | Complete a task | `task done <ref>` with the `ref` from `task list` (also `doing`, `todo`, `cancel`, `defer`) |
-| Calendars | `calendar list` · `calendar events --from jutro --to 2026-12-01` (read only: the events of the calendars the app syncs, as its last sync left them) |
+| Calendars | `calendar list` · `calendar events --from jutro --to 2026-12-01` (the events of the calendars the app syncs, as its last sync left them; each with its `uid`, a series' occurrence with its `instance`) |
+| Add, move or delete an event (CalDAV only; ICS subscriptions are read-only) | `calendar add "Obiad z Zosią" --start "w piątek 13:00" --end 14:30 --reminder 15` · `calendar edit <uid> --start 2026-12-04` (only what is given changes; `--occurrence <instance or day>` for one occurrence) · `calendar delete <uid> [--occurrence …]` (destructive). Left for the app, which shows it and sends it to the server (`app.running` in the answer) |
 | Habits | `habit list` (today's checks, streaks, rate) · `habit tick Medytacja` · `habit skip Bieganie --date wczoraj` |
 | Reminders due soon | `remind list --upcoming 3` (stateless: keep your own "already told" state) |
 | Snooze a reminder | `remind snooze <ref> --minutes 30` |

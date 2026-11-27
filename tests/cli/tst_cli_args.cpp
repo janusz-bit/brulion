@@ -258,6 +258,11 @@ private Q_SLOTS:
                                "links",
                                "unlinked",
                                "calendar",
+                               "calendar.list",
+                               "calendar.events",
+                               "calendar.add",
+                               "calendar.edit",
+                               "calendar.delete",
                                "date.parse",
                                "calc",
                                "calc.page",
@@ -307,16 +312,17 @@ private Q_SLOTS:
         for (const char *id : {"app.open", "app.today", "app.capture"})
             QVERIFY2(!findCommand(QString::fromLatin1(id))->appControl, id);
         // Destructive as decided: replacing, renaming, moving, deleting and restoring — and removing
-        // what a publishing target published, or the target.
+        // what a publishing target published, or the target, and deleting a calendar's event.
         QStringList destructive;
         for (const Command &c : commands()) {
             if (c.destructive)
                 destructive.append(c.id);
         }
         destructive.sort();
-        QCOMPARE(destructive, (QStringList{u"file.delete"_s, u"folder.delete"_s, u"folder.move"_s, u"folder.rename"_s,
-                                           u"history.restore"_s, u"page.delete"_s, u"page.move"_s, u"page.rename"_s,
-                                           u"page.write"_s, u"publish.remove"_s, u"publish.unpublish"_s}));
+        QCOMPARE(destructive,
+                 (QStringList{u"calendar.delete"_s, u"file.delete"_s, u"folder.delete"_s, u"folder.move"_s,
+                              u"folder.rename"_s, u"history.restore"_s, u"page.delete"_s, u"page.move"_s,
+                              u"page.rename"_s, u"page.write"_s, u"publish.remove"_s, u"publish.unpublish"_s}));
         // Publishing: setting targets up is the user's (no MCP tool); a dry run and a publish are tools.
         for (const char *id :
              {"publish.add", "publish.set", "publish.include", "publish.exclude", "publish.secret", "publish.remove"})

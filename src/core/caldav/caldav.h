@@ -37,6 +37,11 @@
 //   eventedit.h    EventEdit (the event dialog), newEvent / patchEvent (the series) / patchOccurrence (an
 //                  override) / excludeOccurrence (EXDATE): what the server has and Brulion does not
 //                  show stays
+//   eventchange.h  EventIntent (create, change or delete an event — the series or one occurrence —
+//                  with only the fields given: EventPatch, EventTimes), eventFields (an event or
+//                  occurrence as the dialog shows it), editedFields, plannedChange (the EventChange
+//                  it makes; EventProblem when it cannot), addToOutbox, withIntents, the inbox
+//                  brulion-cli leaves intents in (postIntent / pendingIntents; the run takes them)
 //   eventalarms.h  the VALARMs of events as notifications the reminder scheduler rings (relative to
 //                  the start or end of every occurrence, or absolute; per calendar on / off)
 //   store.h        CalendarStore (<device state>/calendars/: settings — accounts, calendars,
@@ -44,12 +49,14 @@
 //                  members, tracked tasks, the outbox of events —, the log)
 //   calendarsync.h CalendarSync (a sync::SyncRunner): subscriptions that are due, every calendar
 //                  (outbox, changes, tasks reconciled with the notes, conflicts by the account's
-//                  policy, deletions behind a guard), queueEvent(), discover(); CalendarRunReport
+//                  policy, deletions behind a guard), queueEvent(), takeInbox(), discover();
+//                  CalendarRunReport
 #pragma once
 
 #include "caldav/calendarsync.h"
 #include "caldav/client.h"
 #include "caldav/eventalarms.h"
+#include "caldav/eventchange.h"
 #include "caldav/eventedit.h"
 #include "caldav/events.h"
 #include "caldav/feed.h"
