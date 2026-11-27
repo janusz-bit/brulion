@@ -123,12 +123,8 @@ done in the repository simply disappears from the list.
   (`scripts/wasm-smoke.mjs --extensions`).
 * **The app as code (`b.app`, live code): what is next** — the app's settings, theme tokens and
   eleven slots of the UI are scriptable, and agents change the running app live (docs/EXTENSIONS.md
-  "The app (`b.app`)", "Live code"). Still open: the built-in AI assistant's tools for the app (a
-  setting, a command, a theme page, a button: docs/EXTENSIONS.md "AI") for the model on the device —
-  they go to models on the network only (`ctx.appTools`), as the fine-tuned model learned the notes'
-  twelve tools: tasks for them in the bench and a training round first (docs/FINETUNE.md); the
-  bottom navigation's and the keyboard toolbar's extension buttons checked on a real phone (the
-  self-test's phone run has them); replacing a built-in view with an extension's (TiddlyWiki's shadow tiddlers for the journal or Tasks view);
+  "The app (`b.app`)", "Live code"). Still open: the bottom navigation's and the keyboard toolbar's
+  extension buttons checked on a real phone (the self-test's phone run has them); replacing a built-in view with an extension's (TiddlyWiki's shadow tiddlers for the journal or Tasks view);
   input rules (`b.app.inputRule`) in source mode too (its TextEdit has an undo stack of its own) and
   the tint of `b.app.tagStyle` in rows drawn by `PageItem` / `JournalDayItem` (behind their
   switches) and in exports.
