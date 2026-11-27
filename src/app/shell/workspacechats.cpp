@@ -1994,18 +1994,19 @@ bool WorkspaceChats::takePhoto(const QString &draft)
 
 void WorkspaceChats::connectCamera()
 {
-    platform::PhotoCamera *camera = platform::photoCamera();
-    if (camera && m_camera != camera) {
-        if (m_camera)
-            disconnect(m_camera, nullptr, this, nullptr);
-        m_camera = camera;
-        connect(camera, &platform::PhotoCamera::photosWaiting, this, &WorkspaceChats::takeCapturedPhotos);
-        connect(camera, &platform::PhotoCamera::failed, this, [this](const QString &purpose, const QString &why) {
-            if (!why.isEmpty()) // (none taken: nothing to say)
-                Q_EMIT captureFailed(purpose, why);
-        });
+    // (Once per camera: one replaced is deleted, its connections with it.)
+    if (platform::PhotoCamera *camera = platform::photoCamera()) {
+        connect(camera, &platform::PhotoCamera::photosWaiting, this, &WorkspaceChats::takeCapturedPhotos,
+                Qt::UniqueConnection);
+        connect(camera, &platform::PhotoCamera::failed, this, &WorkspaceChats::cameraFailed, Qt::UniqueConnection);
     }
     takeCapturedPhotos();
+}
+
+void WorkspaceChats::cameraFailed(const QString &draft, const QString &why)
+{
+    if (!why.isEmpty()) // (none taken: nothing to say)
+        Q_EMIT captureFailed(draft, why);
 }
 
 void WorkspaceChats::takeCapturedPhotos()
@@ -2540,9 +2541,7 @@ QSet<QString> WorkspaceChats::draftedPictures() const
 {
     QSet<QString> pictures;
     const LocalStore *local = m_workspace->vault() ? m_workspace->vault()->store() : nullptr;
-    if (!local)
-        return pictures;
-    const QJsonObject all = local->get(DraftsKey).toObject();
+    const QJsonObject all = local ? local->get(DraftsKey).toObject() : QJsonObject();
     for (const QJsonValue &value : all) {
         for (const QString &picture : Draft::from(value).pictures)
             pictures.insert(picture.toLower());

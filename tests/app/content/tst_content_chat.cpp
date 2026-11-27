@@ -836,12 +836,24 @@ private Q_SLOTS:
         QCOMPARE(chats->draftPictures(renamed), QStringList{drafted});
         QCOMPARE(chats->draft(renamed), u"Róże czy żonkile?"_s);
         QVERIFY(chats->draftPictures(conversation).isEmpty());
+        // A draft of text alone follows too; a conversation without one takes nothing along.
+        chats->setDraft(renamed, u"Sam tekst: ąę"_s);
+        const QString again = chats->rename(renamed, u"Ogród latem"_s);
+        QCOMPARE(chats->draft(again), u"Sam tekst: ąę"_s);
+        QVERIFY(chats->draftPictures(again).isEmpty());
+        chats->setDraft(again, QString(), {drafted});
+        const QString third = chats->rename(again, u"Ogród jesienią"_s);
+        QCOMPARE(chats->draftPictures(third), QStringList{drafted});
+        QCOMPARE(chats->draft(third), QString());
+        // A text longer than a draft keeps: its start.
+        chats->setDraft(third, QString(120001, u'ż'));
+        QCOMPARE(chats->draft(third).size(), 120000);
         // Pictures alone are a draft; both empty: none.
-        chats->setDraft(renamed, QString(), {drafted});
-        QCOMPARE(chats->draftPictures(renamed), QStringList{drafted});
-        chats->setDraft(renamed, QString(), {});
-        QVERIFY(chats->draftPictures(renamed).isEmpty());
-        QVERIFY(!ws->vault()->store()->get(u"chat/drafts"_s).toObject().contains(renamed.toLower()));
+        chats->setDraft(third, QString(), {drafted});
+        QCOMPARE(chats->draftPictures(third), QStringList{drafted});
+        chats->setDraft(third, QString(), {});
+        QVERIFY(chats->draftPictures(third).isEmpty());
+        QVERIFY(!ws->vault()->store()->get(u"chat/drafts"_s).toObject().contains(third.toLower()));
         // An older version's draft is its text; a broken entry nothing; a picture gone, left out.
         ws->vault()->store()->set(
                 u"chat/drafts"_s,
@@ -849,7 +861,7 @@ private Q_SLOTS:
                             {u"ai/zepsuta.md"_s, 42},
                             {u"ai/zdjęcia.md"_s,
                              QJsonObject{{u"text"_s, u"Ą"_s},
-                                         {u"pictures"_s, QJsonArray{drafted, u"assets/nie-ma.jpg"_s, 7}}}}});
+                                         {u"pictures"_s, QJsonArray{drafted, u"assets/nie-ma.jpg"_s, 7, drafted}}}}});
         QCOMPARE(chats->draft(u"AI/Stara.md"_s), u"Szkic sprzed wersji ze zdjęciami"_s);
         QVERIFY(chats->draftPictures(u"AI/Stara.md"_s).isEmpty());
         QCOMPARE(chats->draft(u"AI/Zepsuta.md"_s), QString());
@@ -863,14 +875,18 @@ private Q_SLOTS:
     // takes it once that notebook is open and puts it into the draft, the draft's text kept.
     void aPhotoGoesIntoTheDraftItWasTakenFor()
     {
-        auto *camera = new Camera;
-        platform::setPhotoCamera(camera);
-        const auto unregister = qScopeGuard([] { platform::setPhotoCamera(nullptr); });
         const QString conversation = u"AI/2026-11-15 Roślina.md"_s;
         auto ws = open({{conversation, u"- 🧑 Jaka to roślina?\n  czas:: 2026-11-15 09:00\n"_s}});
         const QString root = ws->vault()->rootPath();
         const QString notebook = ws->vault()->id();
         shell::WorkspaceChats *chats = ws->chats();
+        // No camera here (the desktop): none asked for.
+        QVERIFY(!chats->cameraAvailable());
+        QVERIFY(!chats->takePhoto(conversation));
+        // A camera there once the notebook is open (the phone's): used from the next photo on.
+        auto *camera = new Camera;
+        platform::setPhotoCamera(camera);
+        const auto unregister = qScopeGuard([] { platform::setPhotoCamera(nullptr); });
         QVERIFY(chats->cameraAvailable());
 
         // The app waits for it: into the draft at once, the field told; the cache's file goes.
@@ -899,6 +915,11 @@ private Q_SLOTS:
         QCOMPARE(failed.size(), 1);
         QCOMPARE(failed.first().at(0).toString(), conversation);
         QCOMPARE(failed.first().at(1).toString(), u"no camera app"_s);
+        // Asked again (each photo connects the camera of now): still one answer per signal.
+        QVERIFY(chats->takePhoto(conversation));
+        camera->answer(QString());
+        Q_EMIT camera->failed(conversation, u"no camera app"_s);
+        QCOMPARE(failed.size(), 2);
 
         // The process ends while the camera is in front; the photo comes when no app runs.
         QVERIFY(chats->takePhoto(conversation));

@@ -21,6 +21,14 @@ Q_DECLARE_METATYPE(QList<CapturedPhoto>)
 
 namespace {
 
+class Recognizer : public brulion::platform::SpeechRecognizer {
+public:
+    bool start(const QString &) override { return true; }
+    void stop() override { }
+    void cancel() override { }
+    bool listening() const override { return false; }
+};
+
 class Camera : public PhotoCamera {
 public:
     using PhotoCamera::answered;
@@ -97,6 +105,18 @@ private Q_SLOTS:
             QCOMPARE(fails.first().at(0).toString(), purpose);
             QCOMPARE(fails.first().at(1).toString(), why);
         }
+    }
+
+    void aRecognizerOfTheAppsOwn()
+    {
+        QCOMPARE(brulion::platform::speechRecognizer(), nullptr); // (the desktop's system has none)
+        QPointer<Recognizer> own = new Recognizer;
+        brulion::platform::setSpeechRecognizer(own);
+        QCOMPARE(brulion::platform::speechRecognizer(), own.data());
+        brulion::platform::setSpeechRecognizer(nullptr);
+        QCOMPARE(brulion::platform::speechRecognizer(), nullptr);
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        QVERIFY(!own);
     }
 
     void aCameraOfTheAppsOwn()

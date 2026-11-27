@@ -876,7 +876,6 @@ private:
     /// The app is active now (m_appActive, else the application's state).
     bool appActive() const;
     QPointer<QObject> m_speech; // the recognizer connected to (platform::SpeechRecognizer)
-    QPointer<QObject> m_camera; // the camera connected to (platform::PhotoCamera)
 
     // The messages waiting for a turn (by path, lower case) and those held after a stop or a
     // failure; kept in the notebook's device state.
@@ -907,6 +906,8 @@ private:
     /// notebook (placePhoto() each): when the notebook is ready, and when one is taken.
     void connectCamera();
     void takeCapturedPhotos();
+    /// The camera's failed(): captureFailed() unless no photo was taken (`why` "").
+    void cameraFailed(const QString &draft, const QString &why);
     /// The one place a photo of the camera goes: copied into the notebook as addPicture() stores a
     /// file, into the draft it was taken for (setDraft's), its cache file removed; photoTaken().
     void placePhoto(const platform::CapturedPhoto &photo);
