@@ -142,6 +142,19 @@ Everything through `gitcli::Client` (QProcess argument lists, never a shell; doc
   no branch of that name (`git for-each-ref refs/heads/`) — then `git worktree add -b <branch> -- <folder>
   <base or HEAD>`; a remote-tracking base (`origin/main`) is fetched first (`git fetch -- origin main`;
   offline, what is known of it). `worktreeCreated(project, folder, branch, error)`.
+* **The AI names the branch** (T3 Code's AI-made branch name), when the AI of Settings → Extensions → AI
+  is set up: before the worktree is made, the thread's first message (`title`) goes to it
+  (`setBranchNamer()`; Workspace's asks `codeai::branchName()`: a few lowercase words joined by hyphens,
+  no prefix), and `worktreeName(answer, title, prefix)` makes the name of the answer — its first line
+  or JSON's `branch`, a fence, quotes, a label and a prefix (`feature/…`) taken off
+  (`codeai::readBranchName()`; more than 64 characters is a sentence, no name), then `slug()` — when
+  `branchPrefix` + it is a valid branch name (`gitcli::isValidBranchName`). Anything else — no AI, a
+  failure, no answer within 20 seconds (`BranchNameTimeoutMs`; the question is stopped then), an answer
+  that is no name — gives today's name, the message's slug. The folder takes the same name; a name
+  taken gets `-2`, `-3` … as before. The message waits meanwhile (the header's spinner), as T3 Code's
+  agent waits for its name; the name is known before the worktree exists, so the thread's page names
+  its branch from the start and no branch is renamed under a running agent (T3 Code makes a temporary
+  branch and renames it). Another computer's project: that computer names it (below).
 * `listWorktrees(id)` → `worktreesListed(project, [{folder, branch, detached, exists}])` (not the
   project's own folder); `listBranches(folder)` → `branchesListed(folder, [{name, remote, current,
   isDefault (origin's HEAD, else main / master / trunk), worktree (the folder that has it checked out),
@@ -238,6 +251,19 @@ sub-conversations, scheduled conversations, notifications, unread marks, search.
   branch, folder, known, exists}`; `threadFolder(path)`; `setThreadWorktree(path, worktree, branch)`.
   `agentPartners()` lists the agents. `pullRequest` ("#123 Title") is its page's `pr:` and the
   agent's first context names it ("The branch checked out there is that of the pull request …").
+* **"Regenerate title"** (T3 Code's; the sidebar's thread menu — docs/UI.md "Code mode"):
+  `regenerateTitle(path)` (`shell/chattitles.cpp`) asks the AI of Settings → Extensions → AI
+  (`canRegenerateTitles`) for a title from the thread's messages and its name now —
+  `codeai::titleContext()`: "USER:" / "ASSISTANT:" sections, its first question, then the newest
+  questions, then the newest answers, each at most 2,000 characters (a longer one keeps its start and
+  end), 8,000 in all, pictures left out; `codeai::threadTitle()`: the lasting subject and outcome in the
+  language of the user's messages, 3 to 8 words, without the project's name, the name kept when it
+  fits. The answer read (`codeai::readTitle()`: its first line or JSON's `title`, a fence, a heading's
+  `#`, a label, quotes and trailing punctuation taken off, at most 60 characters cut at a word) renames
+  the page with its date kept (`rename()`): `titleRegenerated(path, newPath, "renamed" | "unchanged" |
+  "failed", message)` — the same name is kept, a page renamed or gone meanwhile, a name another
+  conversation has and the AI's failure say why. One question of a thread at a time
+  (`regeneratingTitle(path, titleSerial)`); closing the notebook stops them.
 * `threadsIn(folder)`: the threads that work in a folder (a deleted thread's worktree: does another one
   use it?); `runningIn(folder)`: a turn of one of them runs (no branch switch under it);
   `markUnread(path)`: the sidebar's "Mark unread"; `draftSerial`: drafts changed — a new thread's draft
@@ -285,7 +311,8 @@ and starts new ones there.
   folder. A thread's folder changed (its worktree set or gone): the next turn makes its session anew
   there.
 * **A new thread**: Local, or New worktree — made by the computer (`POST projects/<id>/worktrees`,
-  the same naming as `worktreeFor()`), whose folder and branch the thread's page then names.
+  the same naming as `worktreeFor()`, without the phone's AI), whose folder and branch the thread's page
+  then names.
 * **Checkpoints** are taken there, before the prompt reaches the agent; the computer tells the device
   (`_brulion/checkpoint`, also in the turn it keeps for a device that lost the stream), which records
   it as its own (`WorkspaceAgents::checkpointMade` → the thread's checkpoints).
@@ -382,22 +409,22 @@ thread's files opening the viewer at their line (`CodeView.openFileInViewer(path
 * Windows: Code mode's tests run there (CI: the terminal on ConPTY, git and gh with Windows paths,
   the Changes panel), not yet a session by hand with a real agent; a worktree of a repository whose
   paths pass 260 characters needs git's `core.longpaths`; a terminal before Windows 10 1809.
-* A pull request's text written by AI (the commit message is: "Write with AI"), and the rest of
-  docs/CODE-GIT.md "Not done (yet)".
+* The rest of docs/CODE-GIT.md "Not done (yet)".
 * Threads on the phone: committing, pushing, pull requests, the branch picker, reverting a turn and
   the terminal of a project of another computer (the phone shows its changes read-only); a new
   worktree there from another base than its HEAD in the UI; projects of two computers with the same id
   (the first computer's is listed).
 * t3.json's `stopOnSettle`, `runOnSettle`, `previewUrl` (no in-app browser), `worktreeSubmodules`,
-  sparse checkouts, multi-repository projects and custom worktree layouts; a branch name the AI makes
-  up for a new worktree (the prefix and the first message's slug only); automatic worktree cleanup
-  (by age, merged pull requests).
+  sparse checkouts, multi-repository projects and custom worktree layouts; T3 Code's branch naming
+  modes (a semantic prefix the AI picks, the user's own instructions for it); automatic worktree
+  cleanup (by age, merged pull requests).
 * Cloning: other hosts' repository lists (GitLab, Forgejo, Bitbucket — their addresses clone, their
   lists are not shown), T3 Code's "Clone into host folders" (`<host>/<owner>/<repo>`), a new project
   made from nothing (`git init` with a README, a GitHub repository published for it), copying a
   project's ignored files (`.env`) to a clone on another computer, cloning on a computer that shares
   its agents from the phone.
-* Settling and snoozing threads, "Regenerate title", dropping files on a thread's row, scratch threads
-  without a project.
+* Settling and snoozing threads, a title the AI gives a new thread by itself (its first message's
+  words name it; "Regenerate title" asks), dropping files on a thread's row, scratch threads without a
+  project.
 * Editing a project's files in the viewer, rendered Markdown, HTML and PDF files there, find within
   the file shown, mentions of threads and pull requests (docs/CODE-FILES.md "Not done").

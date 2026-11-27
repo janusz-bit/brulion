@@ -245,6 +245,7 @@ WorkspaceChats::WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extens
     connect(m_workspace, &Workspace::readyChanged, this, &WorkspaceChats::recoverAgentTurns);
     connect(m_extensions, &WorkspaceExtensions::aiSettingsChanged, this, [this] {
         Q_EMIT settingsChanged();
+        Q_EMIT titlesChanged(); // (canRegenerateTitles)
         startWaiting(); // (a provider on the network answers every conversation at once)
     });
     // The page of a turn renamed or moved: the turn follows it (its answer goes where it is now);
@@ -1479,6 +1480,7 @@ void WorkspaceChats::dismissFailure(const QString &path)
 
 void WorkspaceChats::reset()
 {
+    stopTitles();
     m_secrets->reset();
     m_agents->reset();
     m_waiting.clear();

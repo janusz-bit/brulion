@@ -1,5 +1,6 @@
 #include "codeprojects.h"
 
+#include "acp/codehost.h"
 #include "remoteprojects.h"
 
 #include <QDesktopServices>
@@ -118,27 +119,15 @@ void CodeProjects::setStorage(std::function<QByteArray()> load, std::function<vo
 
 QString CodeProjects::slug(const QString &text)
 {
-    // (Letters without their marks: "żółw" → "zolw"; "ł" has no decomposition.)
-    QString out;
-    bool dash = false;
-    for (const QChar c : text.normalized(QString::NormalizationForm_KD)) {
-        QChar a = c;
-        if (c == u'ł' || c == u'Ł')
-            a = u'l';
-        if (a.isLetterOrNumber() && a.unicode() < 128) {
-            if (dash && !out.isEmpty())
-                out += u'-';
-            out += a.toLower();
-            dash = false;
-        } else if (a.category() != QChar::Mark_NonSpacing) {
-            dash = true;
-        }
-        if (out.size() >= 40)
-            break;
-    }
-    while (out.endsWith(u'-'))
-        out.chop(1);
-    return out.isEmpty() ? u"project"_s : out;
+    return acp::projectSlug(text); // (the computer that shares its projects names them so too)
+}
+
+QString CodeProjects::slugOrEmpty(const QString &text)
+{
+    // (projectSlug()'s "project" is also what it gives when nothing of `text` is left: then `text`
+    // and a word after it give that word alone.)
+    const QString out = acp::projectSlug(text);
+    return out == u"project" && acp::projectSlug(QString(text + u" x"_s)) == u"x" ? QString() : out;
 }
 
 int CodeProjects::indexOf(const QString &id) const

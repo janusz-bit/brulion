@@ -14,7 +14,8 @@ import Brulion
 // its threads (kept per device: "code/collapsed"), its "+" starts a new thread there, its menu pins
 // it, opens its folder in the editor or the file manager, edits it (CodeProjectDialog: its name,
 // icon, defaults, scripts) and takes it off the list (its folder and threads stay). A thread's menu
-// (CodeThreadRow) renames it, pins it, marks it unread, copies its path, branch or link, starts a
+// (CodeThreadRow) renames it, regenerates its title (the AI's; the thread shown follows it, a name
+// kept or a failure is a toast), pins it, marks it unread, copies its path, branch or link, starts a
 // new thread in its worktree, archives or deletes it — a thread with a worktree of its own that no
 // other thread uses asks first whether the worktree goes too (CodeProjects.deletedWorktrees); Undo
 // brings both back. "Add a project…" picks a folder or clones a repository (CodeCloneDialog: your
@@ -197,6 +198,19 @@ Rectangle {
         }
         if (current)
             AppController.replaceRoute({ view: "code" })
+    }
+    // "Regenerate title" (a thread's menu): the thread shown follows its new name; a name kept or a
+    // failure is said.
+    Connections {
+        target: Workspace.chats
+        function onTitleRegenerated(path: string, newPath: string, outcome: string, message: string) {
+            if (outcome === "renamed" && path === sidebar.routePath)
+                AppController.replaceRoute({ view: "code", path: newPath })
+            else if (outcome === "unchanged")
+                AppController.toast(qsTr("Title kept: it already fits the thread."), "info")
+            else if (outcome === "failed")
+                AppController.toast(qsTr("The title could not be regenerated: %1").arg(message), "error")
+        }
     }
     Connections {
         target: Workspace.projects

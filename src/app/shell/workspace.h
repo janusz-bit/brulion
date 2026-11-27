@@ -838,6 +838,10 @@ Q_SIGNALS:
     void moveImpactReady(const QString &path, const QString &targetFolder, const QVariantMap &impact);
 
 private:
+    /// CodeProjects' branch namer: the AI of Settings → Extensions → AI asked for a new worktree's
+    /// branch name from the thread's first `message` (codeai::branchName) — done(its answer), or
+    /// done("") at once when it is not set up; what stops the question.
+    std::function<void()> askBranchName(const QString &message, std::function<void(const QString &)> done);
     void onVaultChanged(const QList<brulion::VaultChange> &changes);
     /// VaultIndex::changed: EditorHost::indexChanged — at once, but for the loader's merges
     /// (indexChunk()), which are passed on at most every kLoadNotifyMs (docs/PERFORMANCE.md, L1b).

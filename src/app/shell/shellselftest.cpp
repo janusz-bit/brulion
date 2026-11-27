@@ -8458,16 +8458,136 @@ void checkChatSideChat(QQuickWindow *window, AppController *app, const Check &ch
         focused->forceActiveFocus();
 }
 
+/// Code mode's AI in the self-test (checkCodeMode): a model of the device that answers by what it
+/// is asked — a commit message, a thread's title, a pull request's text, else a branch name.
+struct CodeModeModel : ai::LocalBackend {
+    QList<ai::Request> requests;
+    void send(const ai::Settings &, const ai::Request &request, std::function<void(const ai::Reply &)> done,
+              ai::PartialCallback, std::shared_ptr<std::atomic<bool>>) override
+    {
+        requests << request;
+        ai::Reply reply;
+        reply.ok = true;
+        reply.text = request.system.contains(u"git commit messages"_s) ? u"Popraw dodawanie w calc.py"_s
+                     : request.system.contains(u"coding thread"_s) ? u"Naprawa dodawania"_s
+                     : request.system.contains(u"pull request"_s)
+                             ? u"Popraw dodawanie\n\n## Summary\n- add dodaje zamiast odejmować"_s
+                             : u"popraw-dodawanie"_s;
+        reply.raw = "{}";
+        QTimer::singleShot(0, [done, reply] { done(reply); });
+    }
+    bool asked(const QString &text) const
+    {
+        return std::ranges::any_of(requests, [&text](const ai::Request &r) {
+            return !r.messages.isEmpty() && r.messages.first().content.contains(text);
+        });
+    }
+};
+
+#if QT_CONFIG(process)
+/// checkCodeMode's AI-written git texts (wide, git): Commit with the message left empty writes it
+/// and commits; the pull request's "Write with AI" fills its title and description.
+void checkCodeModeGitTexts(QQuickWindow *window, const Check &check, const QString &folder, const CodeModeModel &model)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    const auto named = [&](const QString &name) { return shownNamed(window->contentItem(), name); };
+    QQuickItem *changes = named(u"codeChanges"_s);
+    check(changes != nullptr, "the Changes panel is there");
+    if (!changes)
+        return;
+    // Commit with the message left empty: the AI writes it from the change, then it commits.
+    uidriver::callQml(changes, "openCommit");
+    check(waitFor([&] { return named(u"gitCommitMessage"_s) != nullptr && named(u"gitCommitAiNote"_s) != nullptr; }),
+          "the commit dialog says the AI writes a message left empty");
+    // (The dialogs are the panel's: its QObject children, not the window's.)
+    QObject *commitDialog = changes->findChild<QObject *>(u"gitCommitDialog"_s);
+    if (commitDialog)
+        uidriver::callQml(commitDialog, "tryAccept");
+    const auto lastSubject = [&folder] {
+        QProcess p;
+        p.start(u"git"_s, {u"-C"_s, folder, u"log"_s, u"-1"_s, u"--format=%s"_s});
+        p.waitForFinished(10000);
+        return QString::fromUtf8(p.readAllStandardOutput()).trimmed();
+    };
+    check(waitFor([&] { return lastSubject() == u"Popraw dodawanie w calc.py"; }, 10000),
+          "Commit with the field empty commits the AI's message");
+    check(model.asked(u"+    return a + b"_s), "the AI was asked with the checked file's change");
+    check(waitFor([&] { return named(u"gitCommitMessage"_s) == nullptr; }), "and the dialog closes");
+    // The pull request's "Write with AI": its title and description from the branch's commits.
+    uidriver::callQml(changes, "openPullRequest");
+    QPointF at;
+    if (steadyItem(window, [&] { return named(u"gitPullRequestWriteAi"_s); }, &at))
+        tapOrClick(window, at, touch);
+    check(waitFor([&] {
+              QQuickItem *title = named(u"gitPullRequestTitle"_s);
+              QQuickItem *body = named(u"gitPullRequestBody"_s);
+              return title && body && title->property("text").toString() == u"Popraw dodawanie"
+                     && body->property("text").toString().startsWith(u"## Summary"_s);
+          }),
+          "the pull request's “Write with AI” fills its title and description");
+    check(model.asked(u"Head branch: popraw"_s) && model.asked(u"Popraw dodawanie w calc.py"_s),
+          "asked with the branch's commits");
+    if (QObject *prDialog = changes->findChild<QObject *>(u"gitPullRequestDialog"_s))
+        QMetaObject::invokeMethod(prDialog, "reject");
+    check(waitFor([&] { return named(u"gitPullRequestTitle"_s) == nullptr; }), "Cancel closes it");
+    mouseMove(window, QPointF(1, 1));
+    closeToolTipsWaitingForDeletion(window);
+}
+#endif
+
+/// checkCodeMode's "Regenerate title" (wide): the thread's row's menu, the AI's name, the view
+/// following it — the thread's page now (`thread` when it was not renamed).
+QString checkCodeModeTitle(QQuickWindow *window, AppController *app, const Check &check, const CodeModeModel &model,
+                           const QString &thread)
+{
+    const bool touch = QCoreApplication::arguments().contains(u"--touch"_s);
+    const auto named = [&](const QString &name) { return shownNamed(window->contentItem(), name); };
+    clearToasts(window);
+    mouseMove(window, QPointF(1, 1));
+    QPointF at;
+    if (steadyItem(window, [&] { return named(u"codeThread"_s); }, &at))
+        mouseClick(window, at, Qt::RightButton);
+    QQuickItem *regenerate = steadyItem(window, [&] { return named(u"codeThreadRegenerateTitle"_s); }, &at);
+    check(regenerate != nullptr, "the thread's menu has Regenerate title");
+    if (regenerate)
+        tapOrClick(window, at, touch);
+    const QString renamed = u"AI/2026-11-26 Naprawa dodawania.md"_s;
+    check(waitFor([&] {
+              return app->workspace()->exists(renamed) && app->currentRoute().value(u"path"_s).toString() == renamed;
+          }),
+          "Regenerate title renames the thread, the view following it");
+    check(model.asked(u"The title now: Popraw dodawanie"_s), "the AI was asked with its name and messages");
+    closeMenus(window);
+    return app->workspace()->exists(renamed) ? renamed : thread;
+}
+
 /// Code mode (docs/CODE.md, docs/UI.md "Code mode"): a folder added as a project — a git repository
-/// with a change where git runs —, a thread of it (its partner runs nowhere: no agent needed) shown in
-/// the mode's view with its header, the sidebar's row (wide), the Changes panel's change (wide, git),
-/// the file picker (the palette's "Go to file…"), find in the thread (Ctrl+F); the project and the
-/// thread gone again, back in Notes mode.
+/// with a change on a branch of its own where git runs —, a thread of it (its partner runs nowhere: no
+/// agent needed) shown in the mode's view with its header, the sidebar's row (wide), the Changes
+/// panel's change (wide, git); the AI's texts (T3 Code's, a model of the device played): Commit with
+/// the message left empty writes it and commits, the pull request's "Write with AI" fills its title
+/// and description; the file picker (the palette's "Go to file…"), find in the thread (Ctrl+F); the
+/// thread's "Regenerate title" (wide: its row's menu) renames it, the view following; the project
+/// and the thread gone again, back in Notes mode.
 void checkCodeMode(QQuickWindow *window, AppController *app, const Check &check)
 {
     const auto named = [&](const QString &name) { return shownNamed(window->contentItem(), name); };
     const QPointer<QQuickItem> focused = window->activeFocusItem();
     const bool wide = window->width() >= 900;
+    CodeModeModel model;
+    WorkspaceExtensions *ext = app->workspace()->extensions();
+    const ai::Settings oldSettings = ext->aiSettings();
+    ai::LocalBackend *oldBackend = ext->localAi();
+    ai::Settings local;
+    local.provider = u"local"_s;
+    local.model = ai::localModels().first().id;
+    ext->setAi(local);
+    ext->setLocalAi(&model);
+    // (Back as it was on every way out: `model` goes with this function.)
+    const auto restoreAi = qScopeGuard([&] {
+        ext->setAi(oldSettings);
+        ext->setLocalAi(oldBackend);
+    });
     QTemporaryDir dir;
     const QString folder = dir.path() + u"/kalkulator"_s;
     QDir().mkpath(folder);
@@ -8481,9 +8601,10 @@ void checkCodeMode(QQuickWindow *window, AppController *app, const Check &check)
     if (!QStandardPaths::findExecutable(u"git"_s).isEmpty()) {
         git = true;
         for (const QStringList &args :
-             {QStringList{u"init"_s, u"-q"_s}, QStringList{u"add"_s, u"-A"_s},
-              QStringList{u"-c"_s, u"user.name=Ala"_s, u"-c"_s, u"user.email=ala@example.com"_s, u"commit"_s,
-                          u"-qm"_s, u"start"_s}})
+             {QStringList{u"init"_s, u"-q"_s, u"-b"_s, u"main"_s}, QStringList{u"config"_s, u"user.name"_s, u"Ala"_s},
+              QStringList{u"config"_s, u"user.email"_s, u"ala@example.com"_s},
+              QStringList{u"config"_s, u"commit.gpgsign"_s, u"false"_s}, QStringList{u"add"_s, u"-A"_s},
+              QStringList{u"commit"_s, u"-qm"_s, u"start"_s}, QStringList{u"switch"_s, u"-qc"_s, u"popraw"_s}})
             git = git && QProcess::execute(u"git"_s, QStringList{u"-C"_s, folder} + args) == 0;
         writeText(folder + u"/calc.py"_s, "def add(a, b):\n    return a + b\n");
     }
@@ -8493,7 +8614,7 @@ void checkCodeMode(QQuickWindow *window, AppController *app, const Check &check)
     check(!id.isEmpty(), "a folder becomes a project of Code mode");
     if (id.isEmpty())
         return;
-    const QString thread = u"AI/2026-11-26 Popraw dodawanie.md"_s;
+    QString thread = u"AI/2026-11-26 Popraw dodawanie.md"_s;
     app->workspace()->writeFile(thread, u"---\ntasks: ignore\npartner: nikt/rozmowa\nproject: "_s + id
                                             + u"\n---\n- 🧑 Popraw dodawanie w calc.py\n- 🤖 Gotowe: add dodaje.\n"_s);
     const QString mode = app->settings()->appMode();
@@ -8510,6 +8631,10 @@ void checkCodeMode(QQuickWindow *window, AppController *app, const Check &check)
         if (git)
             check(waitFor([&] { return named(u"gitChange_0"_s) != nullptr; }, 10000),
                   "the Changes panel shows the project's uncommitted change");
+#if QT_CONFIG(process)
+        if (git)
+            checkCodeModeGitTexts(window, check, folder, model);
+#endif
     }
     // The file picker: the palette's "Go to file…", Escape closes it.
     app->requestUiAction(u"code:findFile"_s);
@@ -8536,6 +8661,9 @@ void checkCodeMode(QQuickWindow *window, AppController *app, const Check &check)
         sendKey(window, Qt::Key_Escape);
         check(waitFor([&] { return named(u"chatFindField"_s) == nullptr; }), "Escape closes find in the thread");
     }
+    // "Regenerate title" in the thread's row's menu: the AI names it anew, the view follows.
+    if (wide)
+        thread = checkCodeModeTitle(window, app, check, model, thread);
     // Gone again: Notes mode, the thread to the trash, the project off the list.
     app->settings()->setAppMode(mode);
     app->workspace()->chats()->remove(thread);

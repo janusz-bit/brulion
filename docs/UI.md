@@ -1421,7 +1421,10 @@ docs/CODE-TERMINAL.md "Drawn by Atrament"); shown where agents run).
   while a program runs in its terminal (`codeThreadTerminalBusy`: TerminalRegistry.isBusy, T3 Code's
   "Terminal process running"), `git-branch` for a worktree of its own (its branch in a tooltip), when; the current one selected; "⋯"
   `codeThreadMore` on hover, a right click / long press: Rename… (`codeThreadRename`: a dialog
-  `codeRenameThreadDialog` / `codeRenameThreadField`), Pin / Unpin, Mark unread, New thread in this
+  `codeRenameThreadDialog` / `codeRenameThreadField`), Regenerate title (`codeThreadRegenerateTitle`,
+  while the AI of Settings → Extensions → AI is set up: T3 Code's — WorkspaceChats.regenerateTitle, the
+  AI names the thread anew from its messages; "Regenerating…" meanwhile; the thread shown follows its
+  new name, "Title kept" and a failure are toasts), Pin / Unpin, Mark unread, New thread in this
   worktree (or in the project's folder) `codeThreadNewHere`, Open in editor, Copy path / Copy branch /
   Copy link, Archive / Unarchive, Move to trash (`codeThreadDelete`). A thread with a worktree of its own
   that no other thread uses (`WorkspaceChats.threadsIn`) asks first (`codeDeleteThreadDialog`, unless

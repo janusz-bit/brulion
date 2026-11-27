@@ -212,7 +212,19 @@ public:
     /// context, no colour, no external diff or text conversion), each new file's first lines,
     /// MaxPatchChars at most ("…" when cut): patchReady(text) — "" when nothing could be read.
     Q_INVOKABLE void requestPatch(const QStringList &paths);
+    /// (codeai::MaxPatch: what a question sends at most.)
     static constexpr int MaxPatchChars = 60000;
+    /// The question for the AI's commit message of `patch` (requestPatch()'s) on this branch
+    /// (codeai::commitMessage): {system, prompt}.
+    Q_INVOKABLE QVariantMap commitQuestion(const QString &patch) const;
+    /// The question for the AI's pull request title and description (T3 Code's; GitPullRequestDialog's
+    /// "Write with AI", codeai::pullRequest): the branch's commits, stat and diff against `base` ("" the
+    /// default branch; a branch the remote has as that name first) — `git log base..HEAD`, `git diff
+    /// base...HEAD`, each bounded —: pullRequestQuestionReady(system, prompt, "") — or ("", "", why
+    /// not): no branch, no such base, nothing of its own.
+    Q_INVOKABLE void requestPullRequestQuestion(const QString &base);
+    /// The AI's answer to it read (codeai::readPullRequest): {title ("" none), body}.
+    Q_INVOKABLE QVariantMap pullRequestText(const QString &answer) const;
     /// Everything staged (`git add -A`) and committed with `message`; then pushed (`push` or
     /// `createPr`), then a pull request opened (`createPr`; `prTitle` "" = the message's first
     /// line): actionFinished("commit", ok, message, the pull request's url).
@@ -372,6 +384,7 @@ Q_SIGNALS:
     void diffReady(const QString &path, const QString &oldText, const QString &newText, bool binary, bool tooLarge);
     void diffFailed(const QString &path, const QString &message);
     void patchReady(const QString &text);
+    void pullRequestQuestionReady(const QString &system, const QString &prompt, const QString &error);
     /// An action ended: "commit", "push", "pull", "createBranch", "checkout", "pullRequest",
     /// "restore", "dropCheckpoints", "addWorktree", "removeWorktree" (and a failed "checkpoint").
     /// `message` is for the user; `url` a pull request's address (addWorktree: the new folder).
@@ -422,6 +435,13 @@ private:
     /// A pull request opened (the fork found first): finishAction(action, …) with its url.
     void openPullRequest(const QString &action, const QString &root, const gitcli::PullRequest &pr,
                          const QString &failurePrefix);
+    /// requestPullRequestQuestion()'s steps: the first of `candidates` that is a commit (else
+    /// "`named` is no branch"), then what the branch has that it has not → pullRequestQuestionReady().
+    void resolvePullRequestBase(const QString &named, const QStringList &candidates);
+    void readPullRequestRange(const QString &ref);
+    void failPullRequestQuestion(const QString &why);
+    /// True while the folder is the one of now (no setFolder() since): for answers that come later.
+    std::function<bool()> stillThisFolder() const;
 
     gitcli::Client m_client;
     QFileSystemWatcher m_watcher;

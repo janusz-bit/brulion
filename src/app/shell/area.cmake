@@ -88,7 +88,7 @@ qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/workspaceapp.cpp
     ${_brulion_shell_dir}/appscripting.h ${_brulion_shell_dir}/appscripting.cpp
     ${_brulion_shell_dir}/themepages.h ${_brulion_shell_dir}/themepages.cpp
-    ${_brulion_shell_dir}/workspacechats.h ${_brulion_shell_dir}/workspacechats.cpp
+    ${_brulion_shell_dir}/workspacechats.h ${_brulion_shell_dir}/workspacechats.cpp ${_brulion_shell_dir}/chattitles.cpp
     ${_brulion_shell_dir}/chatlineage.h ${_brulion_shell_dir}/chatlineage.cpp
     ${_brulion_shell_dir}/chatschedules.h ${_brulion_shell_dir}/chatschedules.cpp
     ${_brulion_shell_dir}/chatsecrets.h ${_brulion_shell_dir}/chatsecrets.cpp
@@ -141,7 +141,7 @@ target_link_libraries(brulion_shell
            brulion_core_writing
            brulion_core_encryption brulion_core_applock brulion_core_semantic
     PRIVATE Qt6::Network brulion_core_aireport brulion_core_tailscale brulion_core_appupdate brulion_core_util brulion_core_text brulion_core_sync brulion_core_io brulion_core_webpicture
-            brulion_core_github brulion_core_caldav brulion_core_clipper brulion_core_gitcli
+            brulion_core_github brulion_core_caldav brulion_core_clipper brulion_core_gitcli brulion_core_codeai
             brulion_core_drawing brulion_notify brulion_background
             brulion_ui_helpers # folderchoices.cpp: TextHelper's fuzzy ranking
             brulion_ui_memory # viewkeeper.cpp: MemoryPolicy's letGo()

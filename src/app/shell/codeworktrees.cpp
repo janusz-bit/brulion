@@ -7,6 +7,7 @@
 
 #include "codeprojects.h"
 
+#include "codeai/codeai.h"
 #include "gitcli/client.h"
 #include "remoteprojects.h"
 
@@ -14,8 +15,10 @@
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QJsonObject>
+#include <QPointer>
 #include <QRegularExpression>
 #include <QSet>
+#include <QTimer>
 
 #include <algorithm>
 
@@ -86,6 +89,41 @@ QVariantMap CodeProjects::worktreeFor(const QString &id, const QString &title) c
     return {{u"folder"_s, dir.filePath(name)}, {u"branch"_s, QString(m_branchPrefix + name)}};
 }
 
+QString CodeProjects::worktreeName(const QString &answer, const QString &title, const QString &prefix)
+{
+    const QString name = slugOrEmpty(codeai::readBranchName(answer));
+    return !name.isEmpty() && gitcli::isValidBranchName(QString(prefix + name)) ? name : slug(title);
+}
+
+void CodeProjects::nameWorktree(const QString &title, std::function<void(const QString &name)> done)
+{
+    if (!m_namer) {
+        done(slug(title));
+        return;
+    }
+    // Once: the answer, or the end of the wait (the question stopped then).
+    struct Wait {
+        bool over = false;
+        std::function<void()> stop;
+    };
+    const auto wait = std::make_shared<Wait>();
+    const QPointer<CodeProjects> self(this);
+    const auto finish = [self, wait, title, done = std::move(done)](const QString &answer) {
+        if (wait->over || !self)
+            return;
+        wait->over = true;
+        done(worktreeName(answer, title, self->m_branchPrefix));
+    };
+    QTimer::singleShot(m_namerTimeoutMs, this, [wait, finish] {
+        if (wait->over)
+            return;
+        if (wait->stop)
+            wait->stop();
+        finish(QString());
+    });
+    wait->stop = m_namer(title, finish);
+}
+
 void CodeProjects::freeName(const QString &folder, const QString &dir, const QString &base,
                             std::function<void(const QString &, const QString &)> done)
 {
@@ -113,13 +151,22 @@ bool CodeProjects::createWorktree(const QString &id, const QString &title, const
     if (repo.isEmpty() || !gitAvailable())
         return false;
     const QString from = base.trimmed();
-    const QString dir = QDir(worktreesRoot()).filePath(id);
-    const QString name = slug(title);
     const auto fail = [this, id](const QString &error) { Q_EMIT worktreeCreated(id, QString(), QString(), error); };
-    // (Never from inside the call: the caller sets up its wait after it returned.)
-    const auto failLater = [this, fail](const QString &error) {
-        QMetaObject::invokeMethod(this, [fail, error] { fail(error); }, Qt::QueuedConnection);
-    };
+    if (from.startsWith(u'-')) {
+        // (Never from inside the call: the caller sets up its wait after it returned.)
+        QMetaObject::invokeMethod(
+                this, [fail, error = tr("“%1” is no branch.").arg(from)] { fail(error); }, Qt::QueuedConnection);
+        return true;
+    }
+    // Named first (the AI's name for the thread's first message, or its slug), then made.
+    nameWorktree(title, [this, id, repo, from, fail](const QString &name) { makeWorktree(id, repo, from, name, fail); });
+    return true;
+}
+
+void CodeProjects::makeWorktree(const QString &id, const QString &repo, const QString &from, const QString &name,
+                                const std::function<void(const QString &error)> &fail)
+{
+    const QString dir = QDir(worktreesRoot()).filePath(id);
     // Made once the base is known (a remote-tracking one fetched first: the newest of it).
     const auto make = [this, id, repo, from, dir, name, fail] {
         freeName(repo, dir, name, [this, id, repo, from, dir, fail](const QString &branch, const QString &folderName) {
@@ -135,13 +182,9 @@ bool CodeProjects::createWorktree(const QString &id, const QString &title, const
                                });
         });
     };
-    if (from.isEmpty() || from.startsWith(u'-')) {
-        if (from.startsWith(u'-')) {
-            failLater(tr("“%1” is no branch.").arg(from));
-            return true;
-        }
+    if (from.isEmpty()) {
         make();
-        return true;
+        return;
     }
     gitcli::RunOptions ro;
     ro.readOnly = true;
@@ -157,7 +200,6 @@ bool CodeProjects::createWorktree(const QString &id, const QString &title, const
                    git()->git(repo, {u"fetch"_s, u"--"_s, from.section(u'/', 0, 0), from.section(u'/', 1)}, net,
                               [make](const gitcli::RunResult &) { make(); });
                });
-    return true;
 }
 
 bool CodeProjects::listWorktrees(const QString &id)
