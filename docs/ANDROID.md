@@ -1167,10 +1167,30 @@ RECORD_AUDIO permission (`MediaCapture.kt`, `src/platform/capture.h` / `capture_
 
 * **A photo**: `ACTION_IMAGE_CAPTURE` with `EXTRA_OUTPUT` a file of the app's cache
   (`cache/camera/photo-<ms>.jpg`) through the FileProvider `<package>.qtprovider` (`cache-path`,
-  `res/xml/qtprovider_paths.xml`), granted for that one photo; on `RESULT_OK` the file goes back to
-  C++ (`AndroidBridge::captured(0, {file})`), which copies it into the notebook's attachments folder
-  (`WorkspaceChats::addPicture`). Photos of earlier days are deleted from the cache when the next one
-  is taken.
+  `res/xml/brulion_provider_paths.xml`), granted for that one photo. Android may end the app's process
+  while the camera app is in front (a camera needs memory; "Don't keep activities" ends it every
+  time: Qt quits the process with its activity), and the camera's answer then starts a new process,
+  where nothing of the first is left but files. So the photo is durable state
+  (`CameraPhotos.kt`, written by `MediaCapture.kt` under a lock, whole — a temporary file renamed —
+  in `cache/camera/photos.json`):
+  * before the camera app starts, the photo being taken is written there with what asked for it
+    — the notebook (`Vault::id`) and the caller's purpose (the AI chat: the draft the photo goes
+    into) — `BrulionAndroid.takePhoto(context, notebook, purpose)`; at most one is pending, one the
+    camera never answered gives way to the next;
+  * the camera's answer (`BrulionAndroid.onActivityResult`, request `0x4205`), in whichever process
+    it comes, turns it into a **taken** photo when `RESULT_OK` and the file has bytes, else the
+    record and the file go; then `nativeCaptured(0, {taken: true})` (or `{purpose, cancelled}`,
+    `{purpose, error}`) while C++ runs — in a new process it does not yet, and nothing is lost;
+  * C++ takes the taken photos of its notebook (and those of none) once:
+    `BrulionAndroid.takePhotos(context, notebook)` hands them out and removes them from the record
+    (`AndroidBridge::takePhotos`, `platform::PhotoCamera::takePhotos`), when the notebook is ready
+    and on `{taken}`; another notebook's photos wait for theirs. `WorkspaceChats::placePhoto` copies
+    each into the notebook's attachments folder, removes the cache's file and adds the picture to
+    that conversation's draft (docs/UI.md "AI chat": the field shows it, now or when the
+    conversation is opened);
+  * old ones go when the next photo is taken: a pending photo after a day, a taken one whose
+    notebook never opened again after 30 days (at most 20 wait), and photo files no record names
+    after a day.
 * **Dictation**: `RecognizerIntent.ACTION_RECOGNIZE_SPEECH` (free form, one result, the UI's language
   as `EXTRA_LANGUAGE`: `pl-PL` / `en-GB`); the recognizer's dialog listens and its text goes into the
   chat's field at the caret (`AndroidBridge::captured(1, {text})`). A device without a recognizer
@@ -1179,8 +1199,8 @@ RECORD_AUDIO permission (`MediaCapture.kt`, `src/platform/capture.h` / `capture_
 * Both apps are found only when the manifest names their intents in `<queries>` (Android 11+
   package visibility): `BrulionAndroid.canCapture(context, kind)` (`resolveActivity`). The request
   codes are `0x4205` (photo) and `0x4206` (speech); the result arrives in
-  `BrulionAndroid.onActivityResult` and as `nativeCaptured(kind, json)` — `{file}` / `{text}`,
-  `{cancelled: true}` or `{error}`.
+  `BrulionAndroid.onActivityResult` and as `nativeCaptured(kind, json)` — a photo's `{taken}` (above),
+  dictation's `{text}`, `{cancelled: true}` or `{error}`.
 
 Still to be checked on a real phone: the camera app's round trip (the activity may be recreated
 while the camera is in front — the photo's path is kept only in memory), and dictation with Google's

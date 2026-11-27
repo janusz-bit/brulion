@@ -70,6 +70,7 @@ class Client;
 }
 
 namespace brulion::platform {
+struct CapturedPhoto;
 struct PickedFile;
 }
 
@@ -641,9 +642,11 @@ public:
     /// A recognizer of the app's own was registered (platform::setSpeechRecognizer()): the chat's
     /// microphone follows it from now on.
     void useSpeechRecognizer();
-    /// Asks the camera app for a photo: photoTaken(its vault path, stored as addPicture() stores a
-    /// file) or captureFailed(why) follow (nothing when none was taken). False: no camera here.
-    Q_INVOKABLE bool takePhoto();
+    /// Asks the camera app for a photo for the field of the conversation `draft` (a draft's path,
+    /// as setDraft() takes it). The photo goes into that draft — whoever waits for it, also when
+    /// the app's process ended while the camera was in front (Android) and the photo comes to the
+    /// next one: placePhoto(). False: no camera here, or it could not be asked.
+    Q_INVOKABLE bool takePhoto(const QString &draft);
     /// Starts listening, in the UI's language: dictated(text) when it is heard, dictationFailed(why)
     /// when not ("" cancelled). False when it cannot listen.
     Q_INVOKABLE bool startDictation();
@@ -703,7 +706,12 @@ public:
     /// conversation's): kept per conversation while another is shown, and over a restart (the
     /// notebook's device state, "chat/drafts"). setDraft() with "" forgets it.
     Q_INVOKABLE QString draft(const QString &path) const;
-    Q_INVOKABLE void setDraft(const QString &path, const QString &text);
+    /// The pictures in the field with the draft (vault paths, those still in the notebook): taken
+    /// with the camera for it, or attached and not sent.
+    Q_INVOKABLE QStringList draftPictures(const QString &path) const;
+    /// Keeps `text` and `pictures` as the draft of `path` (both empty: none). A picture it keeps
+    /// stays in the notebook when the notebook closes (those added and not sent go then).
+    Q_INVOKABLE void setDraft(const QString &path, const QString &text, const QStringList &pictures = {});
     /// A message as a quote for the field ("> …" lines and a blank line).
     Q_INVOKABLE QString quote(const QString &markdown) const;
     /// The page being named at `caret` of the field's `text` (as T3 Code's @-mentions): "@" and
@@ -780,8 +788,11 @@ Q_SIGNALS:
     /// The pictures pickPicturesInBrowser()'s pick `pick` stored, in the order picked (some may
     /// have been refused).
     void picturesPicked(int pick, const QStringList &paths);
-    void photoTaken(const QString &path);
-    void captureFailed(const QString &why);
+    /// A photo taken for the draft `draft` (takePhoto()) went into it: the picture `path` of the
+    /// notebook. A field showing that draft puts it among its pictures.
+    void photoTaken(const QString &draft, const QString &path);
+    /// No photo for the draft `draft`: why, for the user.
+    void captureFailed(const QString &draft, const QString &why);
     void dictationChanged();
     void dictationElapsedChanged();
     /// What dictation heard so far (a recognizer that tells), and at the end.
@@ -865,6 +876,7 @@ private:
     /// The app is active now (m_appActive, else the application's state).
     bool appActive() const;
     QPointer<QObject> m_speech; // the recognizer connected to (platform::SpeechRecognizer)
+    QPointer<QObject> m_camera; // the camera connected to (platform::PhotoCamera)
 
     // The messages waiting for a turn (by path, lower case) and those held after a stop or a
     // failure; kept in the notebook's device state.
@@ -891,6 +903,15 @@ private:
     void moveQueue(const QString &from, const QString &to);
     /// Connects the recognizer of now (it may come later: one of the app's own).
     void connectSpeech();
+    /// Connects the camera of now (platform::photoCamera()) and takes the photos waiting for this
+    /// notebook (placePhoto() each): when the notebook is ready, and when one is taken.
+    void connectCamera();
+    void takeCapturedPhotos();
+    /// The one place a photo of the camera goes: copied into the notebook as addPicture() stores a
+    /// file, into the draft it was taken for (setDraft's), its cache file removed; photoTaken().
+    void placePhoto(const platform::CapturedPhoto &photo);
+    /// Every picture some draft keeps (lower case).
+    QSet<QString> draftedPictures() const;
 
     QStringList m_removed; // the trash's paths of the last remove()
     /// The side chat `path` (beside a conversation of the notebook): no unread, no notification.

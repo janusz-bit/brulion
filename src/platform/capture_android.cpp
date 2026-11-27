@@ -1,5 +1,6 @@
 // capture.h on Android: the system's camera app and speech recognizer through AndroidBridge
-// (MediaCapture.kt): an intent each, its result as AndroidBridge::captured().
+// (MediaCapture.kt): an intent each, its result as AndroidBridge::captured() — a photo's kept in
+// the app's cache until AndroidBridge::takePhotos() hands it out.
 #include "capture.h"
 
 #include "android/androidbridge.h"
@@ -56,43 +57,53 @@ private:
     bool m_listening = false;
 };
 
+/// The system's camera app: MediaCapture.kt keeps each photo with what asked for it in the app's
+/// cache until takePhotos() hands it out — over the end of the app's process too.
+class AndroidPhotoCamera : public PhotoCamera {
+public:
+    explicit AndroidPhotoCamera(QObject *parent) : PhotoCamera(parent)
+    {
+        connect(AndroidBridge::instance(), &AndroidBridge::captured, this, [this](int kind, const QJsonObject &result) {
+            if (kind != kPhoto)
+                return;
+            if (result.value(u"taken"_s).toBool())
+                Q_EMIT photosWaiting();
+            else
+                Q_EMIT failed(result.value(u"purpose"_s).toString(), result.value(u"error"_s).toString());
+        });
+    }
+    bool take(const QString &notebook, const QString &purpose) override
+    {
+        return AndroidBridge::instance()->takePhoto(notebook, purpose);
+    }
+    QList<CapturedPhoto> takePhotos(const QString &notebook) override
+    {
+        return capturedPhotos(AndroidBridge::instance()->takePhotos(notebook));
+    }
+};
+
+/// The system's app of `kind` (made once, while the device has one).
+template<typename App>
+App *systemApp(int kind)
+{
+    static QPointer<App> app;
+    if (!app && AndroidBridge::instance()->canCapture(kind))
+        app = new App(AndroidBridge::instance());
+    return app;
+}
+
 } // namespace
 
 namespace detail {
 SpeechRecognizer *systemSpeechRecognizer()
 {
-    static QPointer<SpeechRecognizer> recognizer;
-    if (!recognizer && AndroidBridge::instance()->canCapture(kSpeech))
-        recognizer = new AndroidSpeechRecognizer(AndroidBridge::instance());
-    return recognizer;
+    return systemApp<AndroidSpeechRecognizer>(kSpeech);
+}
+
+PhotoCamera *systemPhotoCamera()
+{
+    return systemApp<AndroidPhotoCamera>(kPhoto);
 }
 } // namespace detail
-
-bool cameraAvailable()
-{
-    return AndroidBridge::instance()->canCapture(kPhoto);
-}
-
-bool takePhoto(std::function<void(const QString &, const QString &)> done)
-{
-    AndroidBridge *bridge = AndroidBridge::instance();
-    if (!bridge->canCapture(kPhoto))
-        return false;
-    // One answer for this photo: the connection goes with it.
-    auto connection = std::make_shared<QMetaObject::Connection>();
-    *connection = QObject::connect(
-            bridge, &AndroidBridge::captured, bridge, [connection, done](int kind, const QJsonObject &result) {
-                if (kind != kPhoto)
-                    return;
-                QObject::disconnect(*connection);
-                if (done)
-                    done(result.value(u"file"_s).toString(), result.value(u"error"_s).toString());
-            });
-    if (!bridge->capture(kPhoto, QString())) {
-        QObject::disconnect(*connection);
-        return false;
-    }
-    return true;
-}
 
 } // namespace brulion::platform

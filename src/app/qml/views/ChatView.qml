@@ -208,9 +208,9 @@ FocusScope {
     /// extension}).
     property list<var> partners
     readonly property bool choosesPartner: root.partners.length > 1
-    /// The field waits for dictation's text / a photo from the camera (this view asked for it).
+    /// The field waits for dictation's text (this view asked for it). (A photo from the camera goes
+    /// into the draft it was taken for, whoever waits: photoTaken.)
     property bool dictating: false
-    property bool takingPhoto: false
     /// Dictation records or makes what it heard into text for this view (the field waits).
     readonly property bool dictationBusy: root.dictating && (root.chats.listening || root.chats.recognizing)
     /// What a prompt link brought, said above the field ("" none) — with the warning tint when it
@@ -226,12 +226,9 @@ FocusScope {
     readonly property string shownPath: root.visible && root.conversationShown ? root.path : ""
     onShownPathChanged: root.register()
     Component.onDestruction: {
-        root.keepDraft()
+        root.keepDraft() // (its pictures too: they stay with it)
         if (root.registered !== "")
             Workspace.chats.showing(root.registered, false)
-        // Pictures picked but never sent: not left in the notebook.
-        for (let i = 0; i < root.attached.length; ++i)
-            Workspace.chats.dropPicture(root.attached[i])
         if (root.dictating)
             Workspace.chats.cancelDictation()
     }
@@ -425,15 +422,17 @@ FocusScope {
     /// The field's text as the draft of the conversation shown (`draftPath`).
     property string draftPath
     property bool draftLoaded: false
+    /// Its pictures with it: they stay with their conversation, and over the end of the app.
     function keepDraft(): void {
         if (root.draftLoaded)
-            root.chats.setDraft(root.draftPath, input.text)
+            root.chats.setDraft(root.draftPath, input.text, root.attached)
     }
     function loadDraft(): void {
         // (A new thread of Code mode: its project's draft — CodeSidebar shows it.)
         root.draftPath = root.path !== "" || !root.codeThread ? root.path : "code:" + AppController.routeText(root.route, "project")
         root.draftLoaded = true
-        input.text = root.chats.draft(root.path)
+        input.text = root.chats.draft(root.draftPath)
+        root.attached = root.chats.draftPictures(root.draftPath)
         input.cursorPosition = input.length
         root.recallIndex = -1
     }
@@ -668,6 +667,12 @@ FocusScope {
         if (tools.copyText(AppController.chatPromptLink(text, partner, page)))
             AppController.toast(qsTr("Prompt link copied: it opens a new conversation with this prompt, never sends it"), "success")
     }
+    // The app leaves the front (Android may end it then without a word) and the editors are saved:
+    // the field too, as its conversation's draft.
+    Connections {
+        target: Workspace
+        function onSaveOpenEditorsRequested() { root.keepDraft() }
+    }
     Connections {
         target: AppController
         // The palette's "AI: Copy prompt link": the draft being written.
@@ -711,8 +716,9 @@ FocusScope {
         return true
     }
     function takePhoto(): void {
-        root.takingPhoto = root.chats.takePhoto()
-        if (!root.takingPhoto)
+        // (The field kept first: Android may end the app while the camera app is in front.)
+        root.keepDraft()
+        if (!root.chats.takePhoto(root.draftPath))
             AppController.toast(qsTr("No camera app on this device"), "info")
     }
     function toggleDictation(): void {
@@ -788,17 +794,13 @@ FocusScope {
             root.picturePick = 0
             root.attached = unique
         }
-        function onPhotoTaken(path: string) {
-            if (!root.takingPhoto)
-                return
-            root.takingPhoto = false
-            root.attach(path)
+        function onPhotoTaken(draft: string, path: string) {
+            if (root.draftLoaded && draft === root.draftPath)
+                root.attach(path)
         }
-        function onCaptureFailed(why: string) {
-            if (!root.takingPhoto)
-                return
-            root.takingPhoto = false
-            AppController.toast(qsTr("No photo: %1").arg(why), "error")
+        function onCaptureFailed(draft: string, why: string) {
+            if (root.draftLoaded && draft === root.draftPath)
+                AppController.toast(qsTr("No photo: %1").arg(why), "error")
         }
         function onDictationPartial(text: string) {
             if (root.dictating)

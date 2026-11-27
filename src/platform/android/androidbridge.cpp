@@ -758,6 +758,22 @@ bool AndroidBridge::capture(int kind, const QString &language)
     return !failed("capture") && asked != JNI_FALSE;
 }
 
+bool AndroidBridge::takePhoto(const QString &notebook, const QString &purpose)
+{
+    const QJniObject context = appContext();
+    if (!context.isValid())
+        return false;
+    const jboolean asked = QJniObject::callStaticMethod<jboolean>(
+            kClass, "takePhoto", "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;)Z", context.object(),
+            QJniObject::fromString(notebook).object<jstring>(), QJniObject::fromString(purpose).object<jstring>());
+    return !failed("takePhoto") && asked != JNI_FALSE;
+}
+
+QJsonArray AndroidBridge::takePhotos(const QString &notebook)
+{
+    return callJson("takePhotos", notebook).array();
+}
+
 bool AndroidBridge::previewSound(const QJsonObject &choice)
 {
     const QJniObject context = appContext();
