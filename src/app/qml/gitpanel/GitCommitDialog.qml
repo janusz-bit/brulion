@@ -11,7 +11,11 @@ import Brulion
 // with the GitHub CLI). Only the checked files are committed (CodeGit.commitFiles: all of them →
 // everything; exactly the staged ones → the index as it is; else those files as they are, new ones
 // added) — the others stay as they are. The request goes to the owner (commitRequested), which
-// asks first when it would push to the repository's default branch.
+// asks first when it would push to the repository's default branch. The message can be written by
+// the AI (while the owner says it can: aiAvailable): "Write with AI" fills the field, and — T3 Code's
+// way — a commit asked for with the field left empty writes it first and then commits with it (a
+// note under the field says so; the AI's failure commits nothing). Without the AI an empty message
+// commits nothing, as before.
 //
 //   GitCommitDialog { id: commitDialog; git: panel.git
 //                     onCommitRequested: (message, paths, …) => panel.commitRequested(message, paths, …) }
@@ -33,25 +37,37 @@ BDialog {
     readonly property bool canPush: dialog.git !== null && (!dialog.git.detached || branchSwitch.checked)
     readonly property string subject: dialog.git !== null ? dialog.git.subjectOf(messageField.typedText) : ""
     readonly property string commitMode: dialog.git !== null ? dialog.git.commitModeFor(dialog.checked) : ""
+    /// The field is empty and the AI can write it: a commit asked for writes it first.
+    readonly property bool aiWritesMessage: dialog.aiAvailable && dialog.subject === ""
+    /// (A new branch named after a message the AI is still to write: named then.)
     readonly property bool branchOk: !branchSwitch.checked || (dialog.git !== null && dialog.git.isValidBranchName(branchField.typedText))
+                                     || (dialog.aiWritesMessage && !dialog.branchEdited)
 
     signal commitRequested(string message, list<string> paths, string newBranch, bool push, bool createPr,
                            string prTitle, string prBody, bool draft, string prBase)
     /// T3 Code's AI-written commit message: the owner can ask the AI (GitChangesPanel.aiAvailable)
     /// — "Write with AI" asks git for the checked files' changes (CodeGit.requestPatch), then the
     /// owner (writeRequested(system, prompt): CodeGit.commitQuestion) for the message, which comes
-    /// back by aiWritten().
+    /// back by aiWritten(). While it is written the files and the field wait (`busy`).
     property bool aiAvailable: false
     property bool aiWriting: false
+    /// The commit asked for with the field empty: it goes once the AI has written the message.
+    property bool commitAfterWriting: false
     signal writeRequested(string system, string prompt)
     function aiWritten(ok: bool, text: string): void {
         if (!dialog.aiWriting)
             return
         dialog.aiWriting = false
-        if (ok)
-            messageField.text = text
-        else
+        const commit = dialog.commitAfterWriting
+        dialog.commitAfterWriting = false
+        if (!ok) {
             dialog.aiError = text
+            return
+        }
+        messageField.text = text
+        // (Accepted as the button would: refused — a branch name made of it is none — it stays open.)
+        if (commit)
+            dialog.tryAccept()
     }
     property string aiError
     function writeWithAi(): void {
@@ -68,6 +84,7 @@ BDialog {
                 return
             if (text === "") {
                 dialog.aiWriting = false
+                dialog.commitAfterWriting = false
                 dialog.aiError = qsTr("The changes could not be read.")
                 return
             }
@@ -80,6 +97,7 @@ BDialog {
 
     function openFor(): void {
         dialog.aiWriting = false
+        dialog.commitAfterWriting = false
         dialog.aiError = ""
         messageField.text = ""
         prTitleField.text = ""
@@ -129,13 +147,27 @@ BDialog {
             : dialog.git.detached ? qsTr("%n of %1 file(s), on a detached HEAD", "", dialog.checked.length).arg(dialog.git.changeCount)
             : qsTr("%n of %1 file(s) on %2", "", dialog.checked.length).arg(dialog.git.changeCount).arg(dialog.git.branch)
     iconName: "git-commit-horizontal"
-    acceptText: dialog.choice === "pr" ? qsTr("Commit, push and create PR")
+    acceptText: dialog.commitAfterWriting ? qsTr("Writing the message…")
+              : dialog.choice === "pr" ? qsTr("Commit, push and create PR")
               : dialog.choice === "push" ? qsTr("Commit and push") : qsTr("Commit")
-    acceptEnabled: dialog.git !== null && !dialog.git.busy && dialog.subject !== "" && dialog.checked.length > 0
-                   && dialog.branchOk
+    acceptEnabled: dialog.git !== null && !dialog.git.busy && (dialog.subject !== "" || dialog.aiAvailable)
+                   && dialog.checked.length > 0 && dialog.branchOk
                    && (dialog.choice !== "pr" || dialog.titleEdited === false || Js.trim(prTitleField.typedText) !== "")
+    busy: dialog.aiWriting
     initialFocusItem: messageField
+    // (The field left empty: the AI writes the message first — busy holds the accept back —, then
+    // aiWritten() accepts.)
+    onAcceptRequested: {
+        if (dialog.aiWritesMessage && !dialog.aiWriting) {
+            dialog.commitAfterWriting = true
+            dialog.writeWithAi()
+        }
+    }
     onAccepted: dialog.request()
+    onClosed: {
+        dialog.aiWriting = false
+        dialog.commitAfterWriting = false
+    }
 
     // ---- The files ---------------------------------------------------------------------------------
     RowLayout {
@@ -165,6 +197,7 @@ BDialog {
             objectName: "gitCommitFiles"
             anchors.fill: parent
             anchors.margins: 1
+            enabled: !dialog.aiWriting
             clip: true
             model: dialog.git !== null ? dialog.git.changes : dialog.noRows
             boundsBehavior: Flickable.StopAtBounds
@@ -239,6 +272,7 @@ BDialog {
         objectName: "gitCommitMessage"
         Layout.fillWidth: true
         Layout.preferredHeight: 100
+        enabled: !dialog.aiWriting
         wrapMode: TextEdit.Wrap
         accessibleName: qsTr("Commit message")
         placeholderText: qsTr("A short summary, then a blank line and the details")
@@ -250,6 +284,15 @@ BDialog {
             if (!dialog.branchEdited)
                 branchField.text = dialog.git.branchNameFor(messageField.text)
         }
+    }
+    BText {
+        objectName: "gitCommitAiNote"
+        Layout.fillWidth: true
+        visible: dialog.aiWritesMessage && !dialog.aiWriting
+        text: qsTr("Left empty, the AI writes the message from the checked files' changes when you commit.")
+        variant: "small"
+        color: Theme.fgMuted
+        wrapMode: Text.Wrap
     }
     BSwitch {
         id: branchSwitch

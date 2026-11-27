@@ -359,9 +359,17 @@ changes / only the checked files as they are), the message (`gitCommitMessage`; 
 `gitCommitWriteAi` — T3 Code's AI-written message — while the owner says the AI can (`aiAvailable`):
 the checked files' changes from `CodeGit.requestPatch(paths)` → `patchReady(text)` (`git diff HEAD`
 of the tracked ones with two lines of context, a new file's first lines, at most
-`MaxPatchChars`), a question to the owner (`writeRequested(system, prompt)` → the panel's
-`writeWithAi`; CodeView's `AiAsk`, the AI of Settings → Extensions → AI, src/app/shell/aiask.h)
-whose answer fills the field (`aiWritten(ok, text)`; a failure under it: `gitCommitAiError`)), "Commit on a new
+`MaxPatchChars`), a question of them (`CodeGit.commitQuestion`) to the owner (`writeRequested(system,
+prompt)` → the panel's `writeWithAi`; CodeView's `AiAsk`, the AI of Settings → Extensions → AI,
+src/app/shell/aiask.h) whose answer fills the field (`aiWritten(ok, text)`; a failure under it:
+`gitCommitAiError`); while it is written the files and the field wait and the dialog is `busy`). **The
+field left empty** — T3 Code's way — with the AI there: a note says so (`gitCommitAiNote`: "Left empty,
+the AI writes the message from the checked files' changes when you commit."), and the commit asked for
+(the button, Ctrl+Enter: `acceptRequested`) writes the message first (the button "Writing the
+message…", busy) and then accepts as the button would — with the message in the field to see, the PR
+title and a new branch's name made of it as when typed; a branch name it makes that git refuses keeps
+the dialog open, the AI's failure commits nothing and says why. Without the AI an empty message
+commits nothing, as before; Cancel while it writes drops the answer. "Commit on a new
 branch" (`gitCommitNewBranch`, `gitCommitBranchName` — made of the message until edited), the choice
 `gitCommitChoice_commit` / `_push` / `_pr` (the last only with gh; push and PR not on a detached HEAD
 unless on a new branch), and for a pull request its title (`gitPrTitle`, the message's first line
@@ -432,8 +440,10 @@ too), the stashes (`gitStashList`: `gitStash_<i>` with `gitStashApply`, `gitStas
 
 ## Not done (yet)
 
-* A pull request's title and description written by AI (the commit message is: "Write with AI"), and
-  the message written by itself when the field is left empty (T3 Code's way: here a button asks).
+* The pull request of "Commit, push and create PR" written by AI as well (its title follows the
+  commit message's first line, its description is typed; the pull request dialog's "Write with AI"
+  writes both), and a repository's pull request template or the thread's conversation in the question
+  (T3 Code sends them).
 * A turn's changes exclude what the user changed between turns in T3 Code; here they count to the
   turn before them (the snapshots are of the whole working tree).
 * Hunks of untracked, conflicted or binary files; lines (not whole hunks) staged; the hunks of the

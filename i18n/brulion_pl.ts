@@ -13132,6 +13132,16 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <source>The repository&apos;s hooks run as with git commit. A file that still holds conflict markers is refused.</source>
         <translation>Hooki repozytorium działają jak przy git commit. Plik, w którym zostały znaczniki konfliktu, jest odrzucany.</translation>
     </message>
+    <message>
+        <location filename="../src/app/qml/gitpanel/GitCommitDialog.qml" line="150"/>
+        <source>Writing the message…</source>
+        <translation>AI pisze opis…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/gitpanel/GitCommitDialog.qml" line="292"/>
+        <source>Left empty, the AI writes the message from the checked files&apos; changes when you commit.</source>
+        <translation>Gdy zostawisz pole puste, AI napisze opis na podstawie zmian w zaznaczonych plikach, zanim zatwierdzisz.</translation>
+    </message>
 </context>
 <context>
     <name>GitDefaultBranchDialog</name>
