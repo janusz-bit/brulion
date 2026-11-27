@@ -111,6 +111,7 @@ private Q_SLOTS:
     void newWidthMeasuresAgain();
     void scrollToRow_data();
     void scrollToRow();
+    void scrollToRowPart();
     void rowsInsertedInFront();
     void fingerDrag();
     void accessibility();
@@ -350,6 +351,78 @@ void TestAtramentList::scrollToRow()
     });
     h.tw.settle();
     QCOMPARE(blocks.read(h.app).handle.scroll().offset.y, y);
+}
+
+void TestAtramentList::scrollToRowPart()
+{
+    // Rows of 100 px in a view of 200: a part of row 50 (a block inside a journal day) shown.
+    Harness h({100, 200});
+    Entity<Blocks> blocks = h.app.newEntity<Blocks>(100, 37.0f);
+    blocks.update(h.app, [](Blocks &b, Context<Blocks> &) {
+        b.height = [](std::size_t) { return 100.0f; };
+        b.marked = 50;
+    });
+    h.open(blocks);
+    int asked = 0;
+    int renderedWhenAsked = -1;
+    auto part = [&](float top, float height) {
+        return [&, top, height](Window &) -> std::optional<RowPart> {
+            ++asked;
+            renderedWhenAsked = blocks.read(h.app).rendered;
+            return RowPart{top, height};
+        };
+    };
+    // Start: the part's top (60 px into the row) at the view's top — asked once the row was laid out.
+    const int renderedBefore = blocks.read(h.app).rendered;
+    blocks.update(h.app, [&](Blocks &b, Context<Blocks> &cx) {
+        b.handle.scrollToRowPart(50, part(60, 20), ListPosition::Start);
+        cx.notify();
+    });
+    h.tw.settle();
+    QCOMPARE(asked, 1);
+    QVERIFY(renderedWhenAsked > renderedBefore);
+    QVERIFY(near(h.tw.pixel(50, 1), kRed));
+    QVERIFY(near(h.tw.pixel(50, 38), kRed));
+    QVERIFY(!near(h.tw.pixel(50, 42), kRed));
+    // Nearest, the part above the view, 5 px of air above it: the row's top 5 px above the view's.
+    blocks.update(h.app, [&](Blocks &b, Context<Blocks> &cx) {
+        b.handle.scrollToRowPart(50, part(10, 10), ListPosition::Nearest, 5, 5);
+        cx.notify();
+    });
+    h.tw.settle();
+    QVERIFY(near(h.tw.pixel(50, 1), kRed));
+    QVERIFY(near(h.tw.pixel(50, 93), kRed));
+    QVERIFY(!near(h.tw.pixel(50, 97), kRed));
+    // Nearest, the part below the view: its end and 10 px under it at the view's bottom.
+    blocks.update(h.app, [](Blocks &b, Context<Blocks> &cx) {
+        b.handle.scrollToRow(40);
+        cx.notify();
+    });
+    h.tw.settle();
+    blocks.update(h.app, [&](Blocks &b, Context<Blocks> &cx) {
+        b.handle.scrollToRowPart(50, part(80, 20), ListPosition::Nearest, 0, 10);
+        cx.notify();
+    });
+    h.tw.settle();
+    QVERIFY(near(h.tw.pixel(50, 92), kRed));
+    QVERIFY(!near(h.tw.pixel(50, 88), kRed));
+    // Nearest, the part in view: nothing moves; no part known: the whole row.
+    const float y = blocks.read(h.app).handle.scroll().offset.y;
+    blocks.update(h.app, [&](Blocks &b, Context<Blocks> &cx) {
+        b.handle.scrollToRowPart(50, part(20, 20), ListPosition::Nearest);
+        cx.notify();
+    });
+    h.tw.settle();
+    QCOMPARE(blocks.read(h.app).handle.scroll().offset.y, y);
+    blocks.update(h.app, [](Blocks &b, Context<Blocks> &cx) {
+        b.handle.scrollToRowPart(50, [](Window &) -> std::optional<RowPart> { return std::nullopt; },
+                                 ListPosition::Start);
+        cx.notify();
+    });
+    h.tw.settle();
+    QVERIFY(near(h.tw.pixel(50, 1), kRed));
+    QVERIFY(near(h.tw.pixel(50, 98), kRed));
+    QVERIFY(!near(h.tw.pixel(50, 102), kRed));
 }
 
 void TestAtramentList::rowsInsertedInFront()

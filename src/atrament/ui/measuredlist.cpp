@@ -335,32 +335,48 @@ void MeasuredList::prepaint(Rect bounds, Window &window, App &app)
     if (st.scrollTo) {
         const std::size_t row = std::min(*st.scrollTo, n - 1);
         const ListPosition position = st.scrollToPosition;
+        const RowPartResolver part = std::move(st.scrollToPart);
+        const float above = st.scrollToAbove;
+        const float below = st.scrollToBelow;
         st.scrollTo.reset();
+        st.scrollToPart = nullptr;
+        st.scrollToAbove = 0;
+        st.scrollToBelow = 0;
         st.atEnd = false;
         const float y = clampedY();
         st.atTop = false;
-        const float h = ex.isHidden(row) ? 0.0f : (measure(row), ex.heightOf(row));
-        const float top = lead + ex.offsetOf(row);
+        float h = ex.isHidden(row) ? 0.0f : (measure(row), ex.heightOf(row));
+        // A part of the row, where the layout just made put it (and the air around it).
+        float into = 0;
+        if (part && !ex.isHidden(row)) {
+            if (const std::optional<RowPart> p = part(window)) {
+                into = p->top;
+                h = std::max(0.0f, p->height);
+            }
+        }
+        into -= above;
+        h += above + below;
+        const float top = lead + ex.offsetOf(row) + into;
         switch (position) {
         case ListPosition::Start:
             st.anchorRow = row;
-            st.anchorInto = 0;
+            st.anchorInto = into;
             break;
         case ListPosition::Center:
             st.anchorRow = row;
-            st.anchorInto = (h - viewport) / 2;
+            st.anchorInto = into + (h - viewport) / 2;
             break;
         case ListPosition::End:
             st.anchorRow = row;
-            st.anchorInto = h - viewport;
+            st.anchorInto = into + h - viewport;
             break;
         case ListPosition::Nearest:
             if (top < y || h > viewport) {
                 st.anchorRow = row;
-                st.anchorInto = 0;
+                st.anchorInto = into;
             } else if (top + h > y + viewport) {
                 st.anchorRow = row;
-                st.anchorInto = h - viewport;
+                st.anchorInto = into + h - viewport;
             } else {
                 // In view: it stays where it is (also in the header's part of the list).
                 st.anchorRow = std::min(ex.rowAt(y - lead), n - 1);

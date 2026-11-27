@@ -632,6 +632,8 @@ In **Atrament** (`src/atrament/ui`, Qt-free, generic — nothing Brulion-specifi
   ready `RowExtents` (a Fenwick tree in 1/64 px, like `RowHeightTree`); a row measured as 0 is
   hidden (a fold) and never shown, a row the list lays out is at least 1 px; a `ListHandle`
   (`trackScroll`) shares the anchor: `scrollToRow(row, Start | Center | End | Nearest)`,
+  `scrollToRowPart(row, part, position, above, below)` — a part of a row (a block inside a journal day's
+  section) given by a resolver once the row is laid out in that frame, with air around it —,
   `rowsInserted` / `rowsRemoved` in front of the anchor (the top is sticky); a user's scroll
   re-anchors on the first measured row in view (rows above measured later move nothing on
   screen); a list scrolled to its end stays there (the rows filling the view from the bottom

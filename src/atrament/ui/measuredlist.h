@@ -38,7 +38,9 @@
 #include "ui/window.h"
 
 #include <cstddef>
+#include <algorithm>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <vector>
@@ -110,6 +112,16 @@ enum class ListPosition : std::uint8_t {
     Nearest, // the least scroll that shows it (none when it is in view)
 };
 
+// A part of a row: from `top` px below the row's top, `height` px tall (a block inside a journal
+// day's section).
+struct RowPart {
+    float top = 0;
+    float height = 0;
+};
+// Where the part is, asked once the list laid the row out in the frame that scrolls to it (nothing:
+// the whole row).
+using RowPartResolver = std::function<std::optional<RowPart>(Window &window)>;
+
 // The scroll position of a list() shared with the view that owns it.
 class ListHandle {
 public:
@@ -126,6 +138,9 @@ public:
         std::optional<std::size_t> focusedRow;
         std::optional<std::size_t> scrollTo;
         ListPosition scrollToPosition = ListPosition::Start;
+        RowPartResolver scrollToPart; // a part of the row (scrollToRowPart), else the whole row
+        float scrollToAbove = 0;      // air kept above and below it
+        float scrollToBelow = 0;
     };
 
     ListHandle() : m_state(std::make_shared<State>()) { }
@@ -134,6 +149,21 @@ public:
     {
         m_state->scrollTo = row;
         m_state->scrollToPosition = position;
+        m_state->scrollToPart = nullptr;
+        m_state->scrollToAbove = 0;
+        m_state->scrollToBelow = 0;
+    }
+    // The next frame shows a part of `row` there: [top, top + height) of it as `part` gives it once
+    // the row is laid out in that frame (so a part that just grew is shown by its real size), with
+    // `above` / `below` px of air at the view's edges. `part` giving nothing: the whole row.
+    void scrollToRowPart(std::size_t row, RowPartResolver part, ListPosition position, float above = 0,
+                         float below = 0)
+    {
+        m_state->scrollTo = row;
+        m_state->scrollToPosition = position;
+        m_state->scrollToPart = std::move(part);
+        m_state->scrollToAbove = std::max(0.0f, above);
+        m_state->scrollToBelow = std::max(0.0f, below);
     }
     // The next frame shows the list's very top, its header too (a page opened anew).
     void scrollToTop()
