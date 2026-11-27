@@ -4,6 +4,7 @@
 #include "editorhost.h"
 #include "pagecontroller.h"
 #include "renderedtextitem.h"
+#include "text/find.h"
 
 #include <QAbstractItemModel>
 #include <QCoreApplication>
@@ -181,6 +182,29 @@ void PageView::setSelectionLook(const SelectionLook &look)
     m_selectionLook = look;
 }
 
+void PageView::appendFindSpans(QStringView text, std::vector<at::TextSpan> &spans) const
+{
+    if (m_find.query.isEmpty())
+        return;
+    text::FindOptions options;
+    options.matchCase = m_find.matchCase;
+    options.matchDiacritics = m_find.matchDiacritics;
+    options.wholeWord = m_find.wholeWord;
+    for (const text::TextRange &r : text::findMatches(text, m_find.query, options)) {
+        at::TextStyleRefinement tint;
+        tint.background = std::optional<at::Color>(m_find.color);
+        spans.push_back({at::Range{int(r.start), int(r.end())}, tint});
+    }
+}
+
+void PageView::setFind(const QString &query, bool matchCase, bool matchDiacritics, bool wholeWord, at::Color color,
+                       at::Context<PageView> &cx)
+{
+    m_find = {query, matchCase, matchDiacritics, wholeWord, color};
+    applyEditStyler(cx);
+    cx.notify();
+}
+
 void PageView::setCalloutLook(const CalloutLook &look)
 {
     m_calloutLook = look;
@@ -341,7 +365,8 @@ at::AnyElement PageView::renderRow(std::size_t row)
     m_drawn.push_back(row);
 
     const markdown::RenderedText &text = *rendered.d;
-    const std::vector<at::TextSpan> spans = renderedSpans(text, m_palette);
+    std::vector<at::TextSpan> spans = renderedSpans(text, m_palette);
+    appendFindSpans(text.text, spans);
     const bool closed = task == u"done" || task == u"cancelled";
     const quint64 uid = index.data(BlockListModel::UidRole).toString().toULongLong();
     const bool edited = m_input && uid == m_editUid && editableView(view, true);

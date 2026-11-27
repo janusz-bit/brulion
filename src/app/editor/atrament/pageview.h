@@ -120,6 +120,12 @@ public:
         atrament::Color tint(const QString &type) const;
     };
     void setCalloutLook(const CalloutLook &look);
+    // The find bar's matches tinted in the rows, the edited one too (`query` empty: none).
+    void setFind(const QString &query, bool matchCase, bool matchDiacritics, bool wholeWord, atrament::Color color,
+                 atrament::Context<PageView> &cx);
+    // Selects [from, to) of the edited block's text (the find bar's current match), when `row` is
+    // the edited one; returns whether it was.
+    bool selectInEdited(int row, int from, int to, atrament::Context<PageView> &cx);
     const PageMetrics &metrics() const { return m_metrics; }
     const PagePalette &palette() const { return m_palette; }
     // What a click asks of the editor: a link of row `row` (its href: `page:`, `tag:`, a URL…)
@@ -248,6 +254,16 @@ private:
     SelectionLook m_selectionLook;
     quint64 m_hoveredUid = 0; // the row under the mouse (its fold arrow shows)
     CalloutLook m_calloutLook;
+    struct Find {
+        QString query;
+        bool matchCase = false;
+        bool matchDiacritics = false;
+        bool wholeWord = false;
+        atrament::Color color;
+    } m_find;
+    // The spans of the find bar's matches in `text`.
+    void appendFindSpans(QStringView text, std::vector<atrament::TextSpan> &spans) const;
+    void applyEditStyler(atrament::Context<PageView> &cx);
 };
 
 } // namespace atr

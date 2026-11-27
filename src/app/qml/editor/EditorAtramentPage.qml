@@ -97,6 +97,28 @@ AtramentView {
         if (root.editor)
             root.editor.selectAllBlocks()
     }
+    onEditingStarted: {
+        if (root.editor && !root.editor.findKeepsKeyboard && !root.activeFocus)
+            root.forceActiveFocus()
+        root.selectFindMatch()
+    }
+    // The find bar: its matches tinted, its current match selected in the edited block.
+    readonly property NoteFind find: editor ? editor.find : null
+    findQuery: find ? find.appliedQuery : ""
+    findMatchCase: find ? find.matchCase : false
+    findMatchDiacritics: find ? find.matchDiacritics : false
+    findWholeWord: find ? find.wholeWord : false
+    findColor: editor ? editor.findHitColor : "transparent"
+    function selectFindMatch(): void {
+        if (root.editor && root.editor.findSelectionRow >= 0
+                && root.selectInEdited(root.editor.findSelectionRow, root.editor.findSelectionFrom,
+                                       root.editor.findSelectionTo))
+            root.editor.clearFindSelection()
+    }
+    Connections {
+        target: root.editor
+        function onFindSelectionChanged() { root.selectFindMatch() }
+    }
     onSuggestionKeyPressed: key => {
         if (root.editor)
             root.editor.suggestionKey(key)

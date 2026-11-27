@@ -643,9 +643,14 @@ scrolling, `tst_atrament_editor`) before the next:
    while folded, always on touch; a click folds), the bullet's click zooming into its block, a
    right-click opening the block menu, Shift+↑/↓ past a block's text selecting blocks
    (`BlockEditor.extendBlocksFrom`), Ctrl+A on a block's whole text selecting every block.
-   Tested by `tests/atrament/editor/tst_atrament_editing`. **Not yet**: spell marks and
-   the find bar's tint in the edited text, Vim, the touch toolbar's formatting buttons (they act on
-   an InlineEditor), the reminder chips while editing.
+   The find bar's matches are tinted in the drawn rows and in the edited one
+   (`PageView::setFind`, `AtramentView.findQuery` …) and its current match is selected in the
+   edited block (`selectInEdited`); while the bar keeps the keyboard, a block it edits does not
+   take it (`AtramentView.editingStarted`: the QML around decides). The edited field is a text
+   input named "Block text" for screen readers, as InlineEditor.
+   Tested by `tests/atrament/editor/tst_atrament_editing`. **Not yet**: spell marks in the edited
+   text, Vim, the touch toolbar's formatting buttons (they act on an InlineEditor), the reminder
+   chips while editing.
 3. **Selection.** Block selection (Shift+click, Shift+arrows, a mouse's drag across rows), its band,
    copy / cut / paste through `PageController`'s selection; on a phone the long press and the
    handles.
@@ -671,8 +676,8 @@ scrolling, `tst_atrament_editor`) before the next:
 
 * Vim mode's block cursor and visual selection: the input's caret shape and a selection drawn by
   the view, or Vim stays on the QML editor until M3.
-* The find highlight (`withFindHighlight`) as spans of the `RenderedText` or as quads over its
-  selection rectangles.
+* ~~The find highlight~~: spans with a background over `text::findMatches` of the display text
+  (and of the edited text), built.
 * Spell marks (`renderTraced` anchors) as wavy underlines (the scene has them) mapped through the
   display ↔ source map.
 

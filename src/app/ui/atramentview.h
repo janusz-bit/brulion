@@ -60,6 +60,12 @@ class AtramentView : public brulion::atrament::AtramentItem {
     Q_PROPERTY(QColor selectionColor MEMBER m_selectionColor NOTIFY styleChanged FINAL)
     Q_PROPERTY(QString placeholderText MEMBER m_placeholderText NOTIFY styleChanged FINAL)
     Q_PROPERTY(QString editLabel MEMBER m_editLabel NOTIFY styleChanged FINAL)
+    // The find bar's query and options (NoteFind): its matches tinted with findColor.
+    Q_PROPERTY(QString findQuery MEMBER m_findQuery NOTIFY findChanged FINAL)
+    Q_PROPERTY(bool findMatchCase MEMBER m_findMatchCase NOTIFY findChanged FINAL)
+    Q_PROPERTY(bool findMatchDiacritics MEMBER m_findMatchDiacritics NOTIFY findChanged FINAL)
+    Q_PROPERTY(bool findWholeWord MEMBER m_findWholeWord NOTIFY findChanged FINAL)
+    Q_PROPERTY(QColor findColor MEMBER m_findColor NOTIFY findChanged FINAL)
     // Selected blocks' band (Theme.bgSelected, Theme.focusRing, Theme.radiusSm).
     Q_PROPERTY(QColor bandColor MEMBER m_bandColor NOTIFY styleChanged FINAL)
     Q_PROPERTY(QColor ringColor MEMBER m_ringColor NOTIFY styleChanged FINAL)
@@ -90,6 +96,8 @@ public:
     QRectF editCaretRect() const;
     // Ends the input method's composition in the edited block (the word becomes text).
     Q_INVOKABLE void commitComposition();
+    // Selects [from, to) of the edited block's text when `row` is edited here (the find bar's match).
+    Q_INVOKABLE bool selectInEdited(int row, int from, int to);
 
     // The process's Atrament App, made on first use.
     static brulion::atrament::App &atramentApp();
@@ -112,6 +120,10 @@ Q_SIGNALS:
     void undoRequested(bool redo);
     void followLinkRequested(int row, int cursor, bool newPane);
     void suggestionsOpenChanged();
+    void findChanged();
+    // A block Atrament edits started being edited (a click, Enter, the QML around): the item takes
+    // the keyboard unless the editor keeps it elsewhere (the find bar).
+    void editingStarted();
     void editStateChanged();
     // A key for the open suggestion list: "up", "down", "enter", "tab", "escape" (the editor's
     // suggestionKey()).
@@ -159,6 +171,12 @@ private:
     QColor m_selectionColor{0x3b, 0x5b, 0xdb, 0x40};
     QString m_placeholderText;
     QString m_editLabel;
+    void applyFind();
+    QString m_findQuery;
+    bool m_findMatchCase = false;
+    bool m_findMatchDiacritics = false;
+    bool m_findWholeWord = false;
+    QColor m_findColor{0x3b, 0x5b, 0xdb, 0x47};
     bool m_suggestionsOpen = false;
     QColor m_bandColor{0x3b, 0x5b, 0xdb, 0x22};
     QColor m_ringColor{0x3b, 0x5b, 0xdb};

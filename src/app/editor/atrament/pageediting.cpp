@@ -114,8 +114,31 @@ void PageView::setController(PageController *controller, at::Context<PageView> &
 void PageView::setEditStyler(at::TextInput::Styler styler, at::Context<PageView> &cx)
 {
     m_editStyler = std::move(styler);
-    if (m_input)
-        m_input->update(cx.app(), [this](at::TextInput &t, at::Context<at::TextInput> &c) { t.setStyler(m_editStyler, c); });
+    applyEditStyler(cx);
+}
+
+void PageView::applyEditStyler(at::Context<PageView> &cx)
+{
+    if (!m_input)
+        return;
+    // The highlighter's spans, then the find bar's matches over them.
+    at::TextInput::Styler styler;
+    if (m_editStyler || !m_find.query.isEmpty()) {
+        styler = [this](std::u16string_view text) {
+            std::vector<at::TextSpan> spans = m_editStyler ? m_editStyler(text) : std::vector<at::TextSpan>{};
+            appendFindSpans(QStringView(text.data(), qsizetype(text.size())), spans);
+            return spans;
+        };
+    }
+    m_input->update(cx.app(), [&styler](at::TextInput &t, at::Context<at::TextInput> &c) { t.setStyler(styler, c); });
+}
+
+bool PageView::selectInEdited(int row, int from, int to, at::Context<PageView> &cx)
+{
+    if (!m_input || row < 0 || editedRow() != row)
+        return false;
+    m_input->update(cx.app(), [&](at::TextInput &t, at::Context<at::TextInput> &c) { t.setSelection(from, to, c); });
+    return true;
 }
 
 void PageView::setEditLook(at::Color caret, at::Color selection, std::u16string placeholder, std::u16string label,
@@ -171,8 +194,7 @@ void PageView::loadInput(int row, int cursor, at::Context<PageView> &cx)
                 *m_input, [](PageView &v, const at::TextInput::SelectionChanged &, at::Context<PageView> &c) {
                     v.inputSelectionChanged(c);
                 }));
-        if (m_editStyler)
-            m_input->update(cx.app(), [this](at::TextInput &t, at::Context<at::TextInput> &c) { t.setStyler(m_editStyler, c); });
+        applyEditStyler(cx);
     }
     m_editUid = m_model->uidAt(row);
     const QString text = m_model->editTextAt(row);

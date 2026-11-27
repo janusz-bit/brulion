@@ -119,6 +119,7 @@ private Q_SLOTS:
     void bulletAndMenu();
     void calloutDrawnAndEdited();
     void editedBlockForScreenReaders();
+    void findMatchesTintedAndSelected();
 };
 
 void TestAtramentEditing::clickEditsAtTheCharacter()
@@ -562,6 +563,42 @@ void TestAtramentEditing::editedBlockForScreenReaders()
     // A row being read: its text, no button per row.
     QVERIFY2(tree.contains(u"drugi"_s), qPrintable(tree));
     QVERIFY2(!tree.contains(u"button \"drugi"_s), qPrintable(tree));
+}
+
+void TestAtramentEditing::findMatchesTintedAndSelected()
+{
+    Harness h(u"- Zażółć gęślą jaźń\n- bez trafienia\n- znów GESLA tutaj\n"_s);
+    h.page.update(h.app, [](PageView &v, at::Context<PageView> &cx) {
+        v.setFind(u"gęślą"_s, false, false, false, at::rgb(0x00ff00), cx);
+    });
+    h.tw.settle();
+    auto greenIn = [&](int row) {
+        const auto *t = h.view().rowText(row);
+        if (!t)
+            return false;
+        const at::Rect b = t->bounds();
+        for (int y = int(b.top()); y < int(b.bottom()); ++y)
+            for (int x = int(b.left()); x < int(b.right()); ++x) {
+                const auto p = h.tw.pixel(x, y);
+                if (p.g > 200 && p.r < 100 && p.b < 100)
+                    return true;
+            }
+        return false;
+    };
+    QVERIFY(greenIn(0));
+    QVERIFY(!greenIn(1));
+    QVERIFY(greenIn(2)); // without case or diacritics
+    // Edited: the match tinted in the field too, and selected as the find bar's current one.
+    h.controller.startEditing(2, 5);
+    h.tw.settle();
+    bool tinted = false;
+    for (const at::TextSpan &sp : h.view().input()->read(h.app).spans())
+        tinted = tinted || (sp.style.background && sp.style.background->has_value() && sp.range.start == 5);
+    QVERIFY(tinted);
+    h.page.update(h.app, [](PageView &v, at::Context<PageView> &cx) { QVERIFY(v.selectInEdited(2, 5, 10, cx)); });
+    QCOMPARE(h.view().input()->read(h.app).selection().range().start, 5);
+    QCOMPARE(h.view().input()->read(h.app).selection().range().end, 10);
+    h.page.update(h.app, [](PageView &v, at::Context<PageView> &cx) { QVERIFY(!v.selectInEdited(1, 0, 2, cx)); });
 }
 
 QTEST_MAIN(TestAtramentEditing)

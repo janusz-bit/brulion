@@ -46,6 +46,7 @@ AtramentView::AtramentView(QQuickItem *parent)
     : AtramentItem(parent)
 {
     connect(this, &AtramentView::styleChanged, this, &AtramentView::applyStyle);
+    connect(this, &AtramentView::findChanged, this, &AtramentView::applyFind);
 }
 
 AtramentView::~AtramentView()
@@ -163,6 +164,35 @@ void AtramentView::commitComposition()
 #endif
 }
 
+bool AtramentView::selectInEdited(int row, int from, int to)
+{
+    bool done = false;
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_page)
+        m_page->entity.update(runtime().app, [&](brulion::editor::atr::PageView &page,
+                                                 at::Context<brulion::editor::atr::PageView> &cx) {
+            done = page.selectInEdited(row, from, to, cx);
+        });
+#else
+    Q_UNUSED(row)
+    Q_UNUSED(from)
+    Q_UNUSED(to)
+#endif
+    return done;
+}
+
+void AtramentView::applyFind()
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (!m_page)
+        return;
+    m_page->entity.update(runtime().app, [this](brulion::editor::atr::PageView &page,
+                                                at::Context<brulion::editor::atr::PageView> &cx) {
+        page.setFind(m_findQuery, m_findMatchCase, m_findMatchDiacritics, m_findWholeWord, atColor(m_findColor), cx);
+    });
+#endif
+}
+
 void AtramentView::connectController()
 {
 #ifdef BRULION_HAS_ATRAMENT_EDITOR
@@ -183,9 +213,9 @@ void AtramentView::connectController()
         };
         page.onEditingStarted = [guard] {
             // The keyboard comes here when a block Atrament edits is edited (a new block, Enter,
-            // ↑/↓ from the QML around, the find bar…).
-            if (guard && !guard->hasActiveFocus())
-                guard->forceActiveFocus(Qt::OtherFocusReason);
+            // ↑/↓ from the QML around) — the QML around decides (the find bar keeps it).
+            if (guard)
+                Q_EMIT guard->editingStarted();
         };
         page.onEscape = [guard] {
             if (guard)
@@ -337,6 +367,7 @@ void AtramentView::attachView()
                     };
                 });
         applyStyle();
+        applyFind();
         connectController();
         attach(r.app, at::AnyView{m_page->entity.id(), &at::renderView<brulion::editor::atr::PageView>});
         m_attached = true;
