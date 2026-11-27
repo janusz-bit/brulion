@@ -94,7 +94,7 @@ brulion_add_test(tst_shell_workspace_pictures SOURCES tst_workspace_pictures.cpp
 # The editor's AI assistant on the real Workspace (WritingSession), an OpenAI-compatible server
 # played (../fakeaiserver.h): a rewrite streamed and put into the block as one undo step, a preset
 # waited for, a summary and a continuation of blocks, source mode's paragraph, Stop, failures; Code
-# mode's texts by the same AI: AiAsk, a new worktree's branch name.
+# mode's texts by the same AI: AiAsk, a new worktree's branch name, "Regenerate title".
 brulion_add_test(tst_shell_writingsession SOURCES tst_writingsession.cpp ../fakeaiserver.h
     LIBS brulion_shell brulion_editor Qt6::Network)
 # PDFs on the real Workspace (workspacepdf.cpp): "Open in another app" through a recording hook

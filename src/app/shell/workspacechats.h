@@ -42,6 +42,7 @@
 
 #include "agentlimits.h"
 #include "agentshare.h"
+#include "ai/ai.h"
 #include "agentusage.h"
 #include "chatlineage.h"
 #include "chatschedules.h"
@@ -235,6 +236,10 @@ class WorkspaceChats : public QObject {
     Q_PROPERTY(brulion::shell::ChatSecrets *secrets READ secrets CONSTANT FINAL)
     /// The webhooks of scheduled conversations: their server (hookserver.h).
     Q_PROPERTY(brulion::shell::HookServer *hooks READ hooks CONSTANT FINAL)
+    /// The AI of Settings → Extensions → AI is set up: regenerateTitle() can ask it.
+    Q_PROPERTY(bool canRegenerateTitles READ canRegenerateTitles NOTIFY titlesChanged FINAL)
+    /// Changes whenever a title's regeneration starts or ends (regeneratingTitle() asks again).
+    Q_PROPERTY(int titleSerial READ titleSerial NOTIFY titlesChanged FINAL)
     /// Changes whenever a thread's checkpoints change (checkpoints() asks again).
     Q_PROPERTY(int checkpointSerial READ checkpointSerial NOTIFY checkpointsChanged FINAL)
     /// Changes whenever a turn's work log is kept (workLog() asks again).
@@ -416,6 +421,16 @@ public:
     /// not be written.
     Q_INVOKABLE bool setPinned(const QString &path, bool on);
     Q_INVOKABLE bool setArchived(const QString &path, bool on);
+    /// T3 Code's "Regenerate title" (chattitles.cpp): the AI of Settings → Extensions → AI names the
+    /// conversation `path` anew from its messages (codeai::titleContext: its first and newest ones)
+    /// and its name now — kept when it fits, the page renamed (rename(): its date kept) when the AI
+    /// gives another: titleRegenerated(). False when nothing was asked: no AI set up, no
+    /// conversation with words at `path`, a regeneration of it on its way.
+    Q_INVOKABLE bool regenerateTitle(const QString &path);
+    /// A regeneration of `path`'s title is on its way (`serial`: titleSerial, for bindings).
+    Q_INVOKABLE bool regeneratingTitle(const QString &path, int serial = 0) const;
+    bool canRegenerateTitles() const;
+    int titleSerial() const { return m_titleSerial; }
 
     // ---- side chats (/btw) ------------------------------------------------------------------------
     /// "Ask a side question" (`/btw <question>`, the conversation's menu): a side chat of the
@@ -759,6 +774,10 @@ Q_SIGNALS:
     void questionWaiting(const QString &path, const QString &text);
     /// isUnread() or cameBack() of a conversation changed.
     void attentionChanged();
+    void titlesChanged();
+    /// regenerateTitle() of `path` ended: `outcome` "renamed" (its page is `newPath` now),
+    /// "unchanged" (the AI kept the name: `newPath` = `path`) or "failed" (`message` says why).
+    void titleRegenerated(const QString &path, const QString &newPath, const QString &outcome, const QString &message);
     /// A turn of `path` was answered, failed or asks something, and the user hears of it
     /// (setNotifyMode()): a system notification with `title`, the conversation's name, and
     /// `text` — the answer's first line, why it failed, what it asks (workspaceintegration.cpp
@@ -910,6 +929,20 @@ private:
 
     int m_autoArchiveDays = 0;
     QTimer m_settleTimer; // every hour while autoArchiveDays() > 0
+
+    // The titles being regenerated (by path, lower case → the question on its way, its number).
+    struct Titling {
+        quint64 id = 0;
+        ai::Pending pending;
+    };
+    QHash<QString, Titling> m_titling;
+    quint64 m_titleId = 0;
+    int m_titleSerial = 0;
+    /// regenerateTitle()'s answer `id` for `path`: the page renamed, or why not (titleRegenerated());
+    /// nothing for a question stopped or asked again since.
+    void titleAnswered(const QString &path, quint64 id, const ai::Reply &reply);
+    /// The questions of regenerateTitle() stopped (the notebook closed): no answer comes.
+    void stopTitles();
 };
 
 } // namespace brulion::shell

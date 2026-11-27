@@ -88,7 +88,7 @@ qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/workspaceapp.cpp
     ${_brulion_shell_dir}/appscripting.h ${_brulion_shell_dir}/appscripting.cpp
     ${_brulion_shell_dir}/themepages.h ${_brulion_shell_dir}/themepages.cpp
-    ${_brulion_shell_dir}/workspacechats.h ${_brulion_shell_dir}/workspacechats.cpp
+    ${_brulion_shell_dir}/workspacechats.h ${_brulion_shell_dir}/workspacechats.cpp ${_brulion_shell_dir}/chattitles.cpp
     ${_brulion_shell_dir}/chatlineage.h ${_brulion_shell_dir}/chatlineage.cpp
     ${_brulion_shell_dir}/chatschedules.h ${_brulion_shell_dir}/chatschedules.cpp
     ${_brulion_shell_dir}/chatsecrets.h ${_brulion_shell_dir}/chatsecrets.cpp

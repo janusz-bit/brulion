@@ -251,6 +251,19 @@ sub-conversations, scheduled conversations, notifications, unread marks, search.
   branch, folder, known, exists}`; `threadFolder(path)`; `setThreadWorktree(path, worktree, branch)`.
   `agentPartners()` lists the agents. `pullRequest` ("#123 Title") is its page's `pr:` and the
   agent's first context names it ("The branch checked out there is that of the pull request …").
+* **"Regenerate title"** (T3 Code's; the sidebar's thread menu — docs/UI.md "Code mode"):
+  `regenerateTitle(path)` (`shell/chattitles.cpp`) asks the AI of Settings → Extensions → AI
+  (`canRegenerateTitles`) for a title from the thread's messages and its name now —
+  `codeai::titleContext()`: "USER:" / "ASSISTANT:" sections, its first question, then the newest
+  questions, then the newest answers, each at most 2,000 characters (a longer one keeps its start and
+  end), 8,000 in all, pictures left out; `codeai::threadTitle()`: the lasting subject and outcome in the
+  language of the user's messages, 3 to 8 words, without the project's name, the name kept when it
+  fits. The answer read (`codeai::readTitle()`: its first line or JSON's `title`, a fence, a heading's
+  `#`, a label, quotes and trailing punctuation taken off, at most 60 characters cut at a word) renames
+  the page with its date kept (`rename()`): `titleRegenerated(path, newPath, "renamed" | "unchanged" |
+  "failed", message)` — the same name is kept, a page renamed or gone meanwhile, a name another
+  conversation has and the AI's failure say why. One question of a thread at a time
+  (`regeneratingTitle(path, titleSerial)`); closing the notebook stops them.
 * `threadsIn(folder)`: the threads that work in a folder (a deleted thread's worktree: does another one
   use it?); `runningIn(folder)`: a turn of one of them runs (no branch switch under it);
   `markUnread(path)`: the sidebar's "Mark unread"; `draftSerial`: drafts changed — a new thread's draft

@@ -6,7 +6,8 @@
 // (insertAfterBlock, one undo step, at the block's depth); source mode's paragraph at the caret;
 // Try again, Stop (what came is kept), a failure (no model set up, the server's error) and the
 // request counted in aiPending. Code mode's texts by the same AI (codeai): AiAsk's one question (the
-// commit message, the pull request), a new worktree's branch named from the thread's first message.
+// commit message, the pull request), a new worktree's branch named from the thread's first message,
+// a thread's title regenerated (renamed, kept, failed, nothing asked without the AI).
 #include "../fakeaiserver.h"
 
 #include "aiask.h"
@@ -14,6 +15,7 @@
 #include "codeprojects.h"
 #include "pagecontroller.h"
 #include "workspace.h"
+#include "workspacechats.h"
 #include "workspaceextensions.h"
 #include "writingsession.h"
 
@@ -127,6 +129,61 @@ private Q_SLOTS:
         QTRY_COMPARE_WITH_TIMEOUT(created.size(), 2, 20000);
         QCOMPARE(created.at(1).at(2).toString(), u"brulion/dodaj-rabat"_s);
         QCOMPARE(server.requests.size(), 1);
+    }
+
+    // "Regenerate title" (T3 Code's): the thread's messages and its name now asked about, the page
+    // renamed with its date kept; the same name again is kept; a failure said; one at a time;
+    // nothing asked without the AI set up or a conversation.
+    void anAiRegeneratesAThreadsTitle()
+    {
+        FakeAiServer server;
+        server.answers = {u"„Naprawa dodawania w kalkulatorze.”"_s, u"Title: Naprawa dodawania w kalkulatorze"_s,
+                          QString()};
+        auto ws = open(u"Dom.md"_s, u"- x\n"_s, server);
+        QVERIFY(ws);
+        const QString path = u"AI/2026-11-26 Popraw dodawanie.md"_s;
+        QVERIFY(ws->writeFile(path, u"---\ntasks: ignore\n---\n- 🧑 Popraw dodawanie w calc.py\n- 🤖 Gotowe: add dodaje.\n"_s));
+        brulion::shell::WorkspaceChats *chats = ws->chats();
+        QVERIFY(chats->canRegenerateTitles());
+        QSignalSpy done(chats, &brulion::shell::WorkspaceChats::titleRegenerated);
+        QSignalSpy titles(chats, &brulion::shell::WorkspaceChats::titlesChanged);
+        QVERIFY(chats->regenerateTitle(path));
+        QVERIFY(chats->regeneratingTitle(path));
+        QVERIFY(titles.size() >= 1);
+        QVERIFY(!chats->regenerateTitle(path)); // (one on its way)
+        QTRY_COMPARE_WITH_TIMEOUT(done.size(), 1, 10000);
+        const QString renamed = u"AI/2026-11-26 Naprawa dodawania w kalkulatorze.md"_s;
+        QCOMPARE(done.at(0).at(0).toString(), path);
+        QCOMPARE(done.at(0).at(1).toString(), renamed);
+        QCOMPARE(done.at(0).at(2).toString(), u"renamed"_s);
+        QVERIFY(ws->exists(renamed) && !ws->exists(path));
+        QVERIFY(!chats->regeneratingTitle(path));
+        QCOMPARE(server.requests.size(), 1);
+        const QString asked = FakeAiServer::lastUserText(server.requests.first());
+        QVERIFY2(asked.contains(u"The title now: Popraw dodawanie"_s), qPrintable(asked));
+        QVERIFY(asked.contains(u"USER:\nPopraw dodawanie w calc.py"_s));
+        QVERIFY(asked.contains(u"ASSISTANT:\nGotowe: add dodaje."_s));
+        // The same name: kept.
+        QVERIFY(chats->regenerateTitle(renamed));
+        QTRY_COMPARE_WITH_TIMEOUT(done.size(), 2, 10000);
+        QCOMPARE(done.at(1).at(1).toString(), renamed);
+        QCOMPARE(done.at(1).at(2).toString(), u"unchanged"_s);
+        // No title in the answer: said, nothing renamed.
+        QVERIFY(chats->regenerateTitle(renamed));
+        QTRY_COMPARE_WITH_TIMEOUT(done.size(), 3, 10000);
+        QCOMPARE(done.at(2).at(2).toString(), u"failed"_s);
+        QVERIFY(!done.at(2).at(3).toString().isEmpty());
+        QVERIFY(ws->exists(renamed));
+        QCOMPARE(ws->extensions()->aiPending(), 0);
+        // Nothing to ask about: a page that is no conversation, one that is not there.
+        QVERIFY(!chats->regenerateTitle(u"Dom.md"_s));
+        QVERIFY(!chats->regenerateTitle(u"AI/2026-11-26 Nie ma.md"_s));
+        QVERIFY(!chats->regenerateTitle(QString()));
+        // No AI set up: nothing asked.
+        ws->extensions()->setAi(brulion::ai::Settings{});
+        QVERIFY(!chats->canRegenerateTitles());
+        QVERIFY(!chats->regenerateTitle(renamed));
+        QCOMPARE(server.requests.size(), 3);
     }
 
     void aRewriteOfPartOfABlock()
