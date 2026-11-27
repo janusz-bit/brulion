@@ -127,7 +127,10 @@ FocusScope {
     /// Atrament is built: DeviceInfo.atrament; docs/ATRAMENT.md M2): pages and journal days (an
     /// autoHeight editor: its Atrament page is as tall as its blocks, the journal list scrolls).
     /// The list stays, without rows, as the holder of the keyboard.
-    readonly property bool usesAtrament: DeviceInfo.atrament && AppSettings.editorAtrament && !usesPageItem
+    readonly property bool usesAtrament: DeviceInfo.atrament && (AppSettings.editorAtrament || forceAtrament) && !usesPageItem
+    /// Draws the rows with Atrament whatever the setting (the playground's `atramenttest`: the
+    /// self-test never writes the device's settings).
+    property bool forceAtrament: false
     /// The blocks' height in the page drawn by Atrament (EditorAtramentPage.contentHeight): an
     /// autoHeight editor (a journal day) is as tall as them.
     property real atramentContentHeight: 0

@@ -273,6 +273,25 @@ if(TARGET brulion AND BRULION_DEV_QML_ENABLED AND EXISTS "${_brulion_qt_qml_root
                 ENVIRONMENT "${_playground_env}"
                 TIMEOUT ${_playground_timeout} FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected;SELFTEST FAIL")
         endforeach()
+        # The editor's self-test against the page drawn by Atrament (`--editor-script atramenttest`,
+        # qml/dev/AtramentSelfTest.qml; docs/ATRAMENT.md M2's gate): `selftest`'s outline and keys
+        # parts with real keys, typed letters and composed words through the window to the
+        # AtramentView — clicks editing at the character, splitting, merging, undo, the suggestions
+        # under Atrament's caret, Esc, folds, zooms, pastes, a composed word kept from the page, a
+        # block scrolled far away. Only where the app draws the editor with Atrament.
+        if(TARGET brulion_editor_atrament)
+            foreach(_atr "tst_editor_qml_atrament;1280x800;" "tst_editor_qml_atrament_touch;412x915;--touch")
+                list(GET _atr 0 _atr_test)
+                list(GET _atr 1 _atr_size)
+                list(GET _atr 2 _atr_touch)
+                add_test(NAME ${_atr_test}
+                    COMMAND brulion --editor --editor-script atramenttest --no-single-instance
+                        --size ${_atr_size} ${_atr_touch} --now "2026-10-15 10:00" --locale pl)
+                set_tests_properties(${_atr_test} PROPERTIES
+                    ENVIRONMENT "${_playground_env}"
+                    TIMEOUT ${_playground_timeout} FAIL_REGULAR_EXPRESSION "TypeError;ReferenceError;Binding loop detected;SELFTEST FAIL")
+            endforeach()
+        endif()
         # Path parts of a link to a page in a folder (`--editor-script linkpartstest`,
         # qml/dev/LinkPartsSelfTest.qml): [[Firma/Adam cośtam]] as two links — hover (one part
         # underlined), clicks / taps on a part, the page and the separator, the menus of a folder's

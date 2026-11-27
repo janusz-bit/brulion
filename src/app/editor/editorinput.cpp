@@ -126,6 +126,11 @@ int EditorInput::keyboardModifiers() const
     return int(QGuiApplication::keyboardModifiers());
 }
 
+QVariant EditorInput::inputMethodQuery(QQuickItem *item, int query) const
+{
+    return item ? item->inputMethodQuery(Qt::InputMethodQuery(query)) : QVariant();
+}
+
 void EditorInput::sendInputMethod(QQuickItem *item, const QString &preedit, const QString &commit) const
 {
     if (!item)

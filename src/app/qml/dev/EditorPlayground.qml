@@ -30,7 +30,8 @@ import Brulion
 // path parts of [[Folder/Page]] links with real input (LinkPartsSelfTest.qml) and exits, `linkparts`
 // / `linkparts-menu` show them (a part hovered / a folder part's menu); `propstest` checks the
 // page properties panel with real input (PropertiesSelfTest.qml) and exits; `readingtest` checks
-// reading mode with real input (ReadingSelfTest.qml) and exits; `spelltest` checks spell
+// reading mode with real input (ReadingSelfTest.qml) and exits; `atramenttest` runs the outline and
+// keys parts of `selftest` against the page drawn by Atrament (AtramentSelfTest.qml) and exits; `spelltest` checks spell
 // checking's marks and menu with real input on word lists (SpellingSelfTest.qml) and exits; `properties` /
 // `properties-phone` show the panel expanded on a page with every type; `copylink` /
 // `copylink-document` show the block menu's "Copy link" (outline / document),
@@ -394,6 +395,17 @@ ApplicationWindow {
             host: host
         }
     }
+    // ---- The editor's self-test against the page drawn by Atrament (`--editor-script atramenttest`)
+    Loader {
+        id: atramentTestLoader
+        active: false
+        sourceComponent: AtramentSelfTest {
+            appWindow: window
+            editor: editor
+            page: page
+            host: host
+        }
+    }
     // ---- The page properties panel (`--editor-script propstest`) --------------------------------
     Loader {
         id: propertiesTestLoader
@@ -532,6 +544,9 @@ ApplicationWindow {
             break
         case "readingtest":
             (readingTestLoader.item as ReadingSelfTest).steps()
+            break
+        case "atramenttest":
+            (atramentTestLoader.item as AtramentSelfTest).steps()
             break
         }
     }
@@ -4352,6 +4367,9 @@ ApplicationWindow {
             break
         case "readingtest":
             readingTestLoader.active = true
+            break
+        case "atramenttest":
+            atramentTestLoader.active = true
             break
         case "linkparts":
         case "linkparts-menu": {

@@ -91,6 +91,9 @@ public:
     /// An input-method event to `item`: composing text `preedit` (caret at its end) and/or the
     /// committed text `commit`.
     Q_INVOKABLE void sendInputMethod(QQuickItem *item, const QString &preedit, const QString &commit = QString()) const;
+    /// What `item` tells an input method (Qt::InputMethodQuery `query`): the self-tests' look at
+    /// what the keyboard sees of an item that is no TextEdit (the page drawn by Atrament).
+    Q_INVOKABLE QVariant inputMethodQuery(QQuickItem *item, int query) const;
 };
 
 } // namespace brulion::editor

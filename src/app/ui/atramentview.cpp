@@ -162,6 +162,28 @@ QRectF AtramentView::editCaretRect() const
     return {};
 }
 
+qreal AtramentView::rowTop(int row) const
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_page)
+        if (const auto r = m_page->entity.read(runtime().app).rowBounds(row))
+            return r->top();
+#endif
+    Q_UNUSED(row);
+    return -1;
+}
+
+qreal AtramentView::rowHeight(int row) const
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_page)
+        if (const auto r = m_page->entity.read(runtime().app).rowBounds(row))
+            return r->height();
+#endif
+    Q_UNUSED(row);
+    return -1;
+}
+
 void AtramentView::commitComposition()
 {
     // The input method's own word first (it keeps it outside the text), then the field's.

@@ -128,6 +128,7 @@ private Q_SLOTS:
     void revealScrollsTheLeast();
     void highlighterRulesColourTheField();
     void codeBlocksDrawnAndEdited();
+    void zoomOutKeepsEditedInView();
 };
 
 void TestAtramentEditing::clickEditsAtTheCharacter()
@@ -805,6 +806,31 @@ void TestAtramentEditing::codeBlocksDrawnAndEdited()
     // ↑ from the first line goes to the paragraph above.
     h.tw.simulateKeystrokes(u"ctrl-home up");
     QCOMPARE(h.controller.editingRow(), 0);
+}
+
+// Zooming out while a block far down the page is edited: the rows above it come back and the
+// edited block stays in view (selftest's "zooming out keeps the edited block in view").
+void TestAtramentEditing::zoomOutKeepsEditedInView()
+{
+    QString md;
+    for (int k = 0; k < 150; ++k)
+        md += u"- Wiersz %1 źdźbło\n"_s.arg(k);
+    Harness h(md);
+    const int row = 140;
+    h.controller.zoomInto(row);
+    h.controller.startEditing(row, -1);
+    h.tw.settle();
+    auto inView = [&](int r) {
+        const std::optional<at::Rect> b = h.view().rowBounds(r);
+        return b && b->top() >= -0.5f && b->bottom() <= 400.5f;
+    };
+    QVERIFY(inView(row));
+    h.controller.zoomOut();
+    h.tw.settle();
+    QCOMPARE(h.controller.editingRow(), row);
+    QVERIFY2(inView(row), qPrintable(QString::number(h.view().rowBounds(row) ? h.view().rowBounds(row)->top() : -1)));
+    h.tw.simulateTyping(u"ż");
+    QCOMPARE(h.editText(row), u"Wiersz 140 źdźbłoż"_s);
 }
 
 QTEST_MAIN(TestAtramentEditing)
