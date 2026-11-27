@@ -1122,53 +1122,74 @@ void WorkspaceAgents::stopProcess(const QString &id)
     delete p;
 }
 
+namespace {
+
+/// The agent's options, as remembered for its sessions, into `input`.
+void addOptions(const AgentConfig &config, acp::TurnInput &input)
+{
+    for (auto it = config.options.constBegin(); it != config.options.constEnd(); ++it)
+        input.config.insert(it.key(), it.value());
+}
+
+} // namespace
+
 acp::TurnInput WorkspaceAgents::baseInput(const AgentConfig &config, const Process *p, const QString &chatToken,
                                           bool child, const QString &codeFolder) const
 {
     acp::TurnInput input;
+    addOptions(config, input);
+    // (On another computer: that computer's notebook folder; its server gives the session Brulion's
+    // tools there.)
     if (config.isRemote()) {
-        // That computer's notebook folder; its server gives the session Brulion's tools there.
         input.cwd = config.root;
-        for (auto it = config.options.constBegin(); it != config.options.constEnd(); ++it)
-            input.config.insert(it.key(), it.value());
         return input;
     }
     input.cwd = QDir(codeFolder.isEmpty() ? m_workspace->rootPath() : codeFolder).absolutePath();
-    const QString program = config.tools ? toolsProgram() : QString();
-    if (!program.isEmpty()) {
-        // (A thread of Code mode works in a project: the app's tools without the notebook's.)
-        acp::McpServer server{u"brulion"_s, program,
-                              codeFolder.isEmpty() ? QStringList{u"mcp"_s, u"--vault"_s, input.cwd}
-                                                   : QStringList{u"mcp"_s, u"--no-notes"_s}};
-        // The tools that change the running app: they reach it with the process's grant (the
-        // token only in their environment, never in the arguments others can list). Not for a
-        // sub-conversation: an agent's task for another never gets more than the chat.
-        const bool live = p && !p->grant.isEmpty() && !child;
-        if (live) {
-            server.args << u"--app-control"_s;
-            server.env = {{u"BRULION_APP_TOKEN"_s, p->grant}, {u"BRULION_APP_CLIENT"_s, config.name}};
-        }
-        // The app's chat (other partners, sub-conversations of this conversation).
-        if (!chatToken.isEmpty()) {
-            if (!live) {
-                server.args << u"--app-chat"_s;
-                server.env << std::pair{u"BRULION_APP_CLIENT"_s, config.name};
-            }
-            server.env << std::pair{u"BRULION_APP_CHAT_TOKEN"_s, chatToken};
-        }
-        // Which app they reach (setAppInstance()): the agent may not pass on the environment its
-        // socket is found from.
-        if ((live || !chatToken.isEmpty()) && !m_appInstance.isEmpty())
-            server.env << std::pair{u"BRULION_APP_INSTANCE"_s, m_appInstance};
-        // (Without the notebook's tools and the app's, the server would have none.)
-        if (!codeFolder.isEmpty() && !live && chatToken.isEmpty())
-            server.command.clear();
-        if (!server.command.isEmpty())
-            input.mcpServers << server;
-    }
-    for (auto it = config.options.constBegin(); it != config.options.constEnd(); ++it)
-        input.config.insert(it.key(), it.value());
+    // The tools that change the running app: they reach it with the process's grant. Not for a
+    // sub-conversation: an agent's task for another never gets more than the chat.
+    const QString grant = p && !child ? p->grant : QString();
+    if (std::optional<acp::McpServer> server = toolsServer(config, input.cwd, codeFolder, grant, chatToken))
+        input.mcpServers << *server;
     return input;
+}
+
+std::optional<acp::McpServer> WorkspaceAgents::toolsServer(const AgentConfig &config, const QString &cwd,
+                                                           const QString &codeFolder, const QString &grant,
+                                                           const QString &chatToken) const
+{
+    const QString program = config.tools ? toolsProgram() : QString();
+    // (A thread of Code mode works in a project: the app's tools without the notebook's — none at
+    // all without the app's either.)
+    const bool app = !grant.isEmpty() || !chatToken.isEmpty();
+    if (program.isEmpty() || (!codeFolder.isEmpty() && !app))
+        return std::nullopt;
+    acp::McpServer server{u"brulion"_s, program,
+                          codeFolder.isEmpty() ? QStringList{u"mcp"_s, u"--vault"_s, cwd}
+                                               : QStringList{u"mcp"_s, u"--no-notes"_s}};
+    addAppAccess(server, config.name, grant, chatToken);
+    return server;
+}
+
+void WorkspaceAgents::addAppAccess(acp::McpServer &server, const QString &client, const QString &grant,
+                                   const QString &chatToken) const
+{
+    // The live tools: the grant's token only in their environment, never in the arguments others
+    // can list.
+    if (!grant.isEmpty()) {
+        server.args << u"--app-control"_s;
+        server.env = {{u"BRULION_APP_TOKEN"_s, grant}, {u"BRULION_APP_CLIENT"_s, client}};
+    }
+    // The app's chat (other partners, sub-conversations of this conversation).
+    if (!chatToken.isEmpty() && grant.isEmpty()) {
+        server.args << u"--app-chat"_s;
+        server.env << std::pair{u"BRULION_APP_CLIENT"_s, client};
+    }
+    if (!chatToken.isEmpty())
+        server.env << std::pair{u"BRULION_APP_CHAT_TOKEN"_s, chatToken};
+    // Which app they reach (setAppInstance()): the agent may not pass on the environment its
+    // socket is found from.
+    if ((!grant.isEmpty() || !chatToken.isEmpty()) && !m_appInstance.isEmpty())
+        server.env << std::pair{u"BRULION_APP_INSTANCE"_s, m_appInstance};
 }
 
 void WorkspaceAgents::run(const QString &path, const QString &partner, const QVariantList &history, const QString &page)

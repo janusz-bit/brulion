@@ -444,6 +444,14 @@ private:
     /// the notebook's: `mcp --no-notes`).
     acp::TurnInput baseInput(const AgentConfig &config, const Process *p, const QString &chatToken = QString(),
                              bool child = false, const QString &codeFolder = QString()) const;
+    /// Brulion's MCP server of a session in `cwd` (nullopt: none — tools off, no brulion-cli, or a
+    /// thread of Code mode without the app's tools): the live tools with `grant`, the chat with
+    /// `chatToken` (addAppAccess()).
+    std::optional<acp::McpServer> toolsServer(const AgentConfig &config, const QString &cwd, const QString &codeFolder,
+                                              const QString &grant, const QString &chatToken) const;
+    /// The arguments and environment of `server` that reach the running app as `client`.
+    void addAppAccess(acp::McpServer &server, const QString &client, const QString &grant,
+                      const QString &chatToken) const;
     /// Where a conversation's agent works when it is a thread of Code mode (docs/CODE.md): its
     /// folder (its worktree's, else its project's), the project's name and the worktree's branch;
     /// `project` "" for a conversation of the notebook; `error` why it cannot run here.
