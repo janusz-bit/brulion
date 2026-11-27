@@ -810,6 +810,7 @@ private Q_SLOTS:
         QTest::newRow("long: cut as slugs are") << u"fix-the-total-of-the-cart-for-returning-customers-now"_s
                                                << u"brulion/"_s << u"fix-the-total-of-the-cart-for-returning-c"_s;
         QTest::newRow("no answer") << QString() << u"brulion/"_s << u"popraw-liczenie-sumy-w-koszyku"_s;
+        QTest::newRow("the word project") << u"project"_s << u"brulion/"_s << u"project"_s;
         QTest::newRow("a sentence") << u"I would call it the cart fix, because it fixes the total of the cart for all"_s
                                     << u"brulion/"_s << u"popraw-liczenie-sumy-w-koszyku"_s;
         QTest::newRow("no letters a branch takes") << u"修复购物车"_s << u"brulion/"_s << u"popraw-liczenie-sumy-w-koszyku"_s;
@@ -885,15 +886,19 @@ private Q_SLOTS:
         QCOMPARE(created.size(), 3);
         QCOMPARE(gitOut(repo, {u"branch"_s, u"--list"_s, u"brulion/za-pozno"_s}), QString());
 
-        // An answer at once (no AI set up: ""), and one that is no name: today's name.
-        projects.setBranchNameTimeout(CodeProjects::BranchNameTimeoutMs);
-        projects.setBranchNamer([](const QString &, std::function<void(const QString &)> done) {
+        // An answer at once (no AI set up: ""): today's name; the wait's end after it does nothing.
+        stopped = 0;
+        projects.setBranchNamer([&stopped](const QString &, std::function<void(const QString &)> done) {
             done(QString());
-            return std::function<void()>();
+            return std::function<void()>([&stopped] { ++stopped; });
         });
         QVERIFY(projects.createWorktree(id, u"Dodaj rabat"_s));
         QTRY_COMPARE_WITH_TIMEOUT(created.size(), 4, 20000);
         QCOMPARE(created.at(3).at(2).toString(), u"brulion/dodaj-rabat"_s);
+        QTest::qWait(300);
+        QCOMPARE(created.size(), 4);
+        QCOMPARE(stopped, 0);
+        projects.setBranchNameTimeout(CodeProjects::BranchNameTimeoutMs);
         projects.setBranchNamer([](const QString &, std::function<void(const QString &)> done) {
             done(u"Oto moja propozycja nazwy gałęzi dla tej pracy, która opisuje dokładnie, co trzeba zrobić"_s);
             return std::function<void()>();

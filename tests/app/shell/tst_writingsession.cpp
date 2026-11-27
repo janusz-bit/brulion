@@ -7,7 +7,8 @@
 // Try again, Stop (what came is kept), a failure (no model set up, the server's error) and the
 // request counted in aiPending. Code mode's texts by the same AI (codeai): AiAsk's one question (the
 // commit message, the pull request), a new worktree's branch named from the thread's first message,
-// a thread's title regenerated (renamed, kept, failed, nothing asked without the AI).
+// a thread's title regenerated (renamed, kept, failed, nothing asked without the AI; the page deleted
+// or the name taken meanwhile, the notebook closed).
 #include "../fakeaiserver.h"
 
 #include "aiask.h"
@@ -123,10 +124,10 @@ private Q_SLOTS:
         QCOMPARE(server.requests.size(), 1);
         QVERIFY(FakeAiServer::lastUserText(server.requests.first()).contains(u"rabat źle się zaokrągla"_s));
         QCOMPARE(ws->extensions()->aiPending(), 0);
-        // No AI set up: nothing asked, the message's slug.
+        // No AI set up: nothing asked, the message's slug — at once, not after the wait for a name.
         ws->extensions()->setAi(brulion::ai::Settings{});
         QVERIFY(projects->createWorktree(id, u"Dodaj rabat"_s));
-        QTRY_COMPARE_WITH_TIMEOUT(created.size(), 2, 20000);
+        QTRY_COMPARE_WITH_TIMEOUT(created.size(), 2, brulion::shell::CodeProjects::BranchNameTimeoutMs / 4);
         QCOMPARE(created.at(1).at(2).toString(), u"brulion/dodaj-rabat"_s);
         QCOMPARE(server.requests.size(), 1);
     }
@@ -184,6 +185,52 @@ private Q_SLOTS:
         QVERIFY(!chats->canRegenerateTitles());
         QVERIFY(!chats->regenerateTitle(renamed));
         QCOMPARE(server.requests.size(), 3);
+    }
+
+    // While the AI writes the title: the page deleted meanwhile is left alone, a name another
+    // conversation has is said, the notebook closed stops the question (no answer comes).
+    void aRegeneratedTitleMeetsWhatChanged()
+    {
+        FakeAiServer server;
+        server.hold = true;
+        server.answers = {u"Nowa nazwa"_s, u"Zajęta nazwa"_s, u"Po zamknięciu"_s};
+        auto ws = open(u"Dom.md"_s, u"- x\n"_s, server);
+        QVERIFY(ws);
+        const QString page = u"---\ntasks: ignore\n---\n- 🧑 Popraw dodawanie\n- 🤖 Gotowe.\n"_s;
+        const QString path = u"AI/2026-11-26 Popraw dodawanie.md"_s;
+        QVERIFY(ws->writeFile(path, page));
+        brulion::shell::WorkspaceChats *chats = ws->chats();
+        QSignalSpy done(chats, &brulion::shell::WorkspaceChats::titleRegenerated);
+        // Deleted meanwhile.
+        QVERIFY(chats->regenerateTitle(path));
+        QTRY_COMPARE(server.waiting(), 1);
+        QVERIFY(!chats->remove(path).isEmpty());
+        server.release();
+        QTRY_COMPARE_WITH_TIMEOUT(done.size(), 1, 10000);
+        QCOMPARE(done.at(0).at(2).toString(), u"failed"_s);
+        QCOMPARE(done.at(0).at(1).toString(), path);
+        QVERIFY(!ws->exists(u"AI/2026-11-26 Nowa nazwa.md"_s));
+        // A name another conversation has.
+        QVERIFY(ws->writeFile(path, page));
+        QVERIFY(ws->writeFile(u"AI/2026-11-26 Zajęta nazwa.md"_s, page));
+        QVERIFY(chats->regenerateTitle(path));
+        QTRY_COMPARE(server.waiting(), 1);
+        server.release();
+        QTRY_COMPARE_WITH_TIMEOUT(done.size(), 2, 10000);
+        QCOMPARE(done.at(1).at(2).toString(), u"failed"_s);
+        QVERIFY(done.at(1).at(3).toString().contains(u"Zajęta nazwa"_s));
+        QVERIFY(ws->exists(path));
+        // The notebook closed: stopped, nothing said.
+        QSignalSpy titles(chats, &brulion::shell::WorkspaceChats::titlesChanged);
+        QVERIFY(chats->regenerateTitle(path));
+        QTRY_COMPARE(server.waiting(), 1);
+        chats->reset();
+        QVERIFY(!chats->regeneratingTitle(path));
+        QVERIFY(titles.size() >= 2);
+        server.release();
+        QTest::qWait(200);
+        QCOMPARE(done.size(), 2);
+        QVERIFY(ws->exists(path));
     }
 
     void aRewriteOfPartOfABlock()

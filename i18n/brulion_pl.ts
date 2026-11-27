@@ -39869,6 +39869,16 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <source>The branch has no commits that %1 does not have.</source>
         <translation>Gałąź nie ma commitów, których nie ma %1.</translation>
     </message>
+    <message>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="694"/>
+        <source>There is no base branch to compare with: choose one.</source>
+        <translation>Nie ma gałęzi bazowej do porównania: wybierz ją.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="696"/>
+        <source>“%1” cannot be the name of a branch.</source>
+        <translation>„%1” nie może być nazwą gałęzi.</translation>
+    </message>
 </context>
 <context>
     <name>brulion::ioviews::ConflictResolver</name>

@@ -128,6 +128,8 @@ private Q_SLOTS:
     void diff();
     void patchForTheAi();
     void questionsForTheAi();
+    void pullRequestQuestionAgainstTheRemote();
+    void pullRequestQuestionRefused();
     void commit();
     void commitAndPush();
     void commitPushAndPullRequest();
@@ -494,7 +496,7 @@ void TestCodeGit::questionsForTheAi()
     git.requestPullRequestQuestion(u"--output=/tmp/wynik"_s);
     QTRY_COMPARE_WITH_TIMEOUT(ready.count(), 4, Wait);
     QCOMPARE(ready.at(3).at(1).toString(), QString());
-    QVERIFY(!ready.at(3).at(2).toString().isEmpty());
+    QCOMPARE(ready.at(3).at(2).toString(), u"“--output=/tmp/wynik” cannot be the name of a branch."_s);
     // The default branch itself has nothing of its own: said.
     repo.git({u"switch"_s, u"-q"_s, u"main"_s});
     git.refresh();
@@ -514,6 +516,95 @@ void TestCodeGit::questionsForTheAi()
     QVERIFY(commit.value(u"system"_s).toString().contains(u"commit message"_s));
     QVERIFY(commit.value(u"prompt"_s).toString().startsWith(u"Branch: main\n"_s));
     QVERIFY(commit.value(u"prompt"_s).toString().endsWith(u"diff --git a/koszyk.py b/koszyk.py\n"_s));
+}
+
+// The base as the remote has it: the default branch's remote first for a name chosen (what the pull
+// request goes into), a branch only the remote has; answers for a folder left meanwhile are dropped.
+void TestCodeGit::pullRequestQuestionAgainstTheRemote()
+{
+    QTemporaryDir remoteDir;
+    const QString remote = QFileInfo(remoteDir.path()).canonicalFilePath() + u"/r.git"_s;
+    gitIn(remoteDir.path(), {u"init"_s, u"-q"_s, u"--bare"_s, u"r.git"_s});
+    Repo repo;
+    repo.write(u"koszyk.py"_s, "RABAT = 0\n");
+    repo.commitAll(u"Początek"_s);
+    repo.git({u"remote"_s, u"add"_s, u"origin"_s, remote});
+    repo.git({u"push"_s, u"-q"_s, u"-u"_s, u"origin"_s, u"main"_s, u"main:wydanie"_s});
+    repo.git({u"remote"_s, u"set-head"_s, u"origin"_s, u"main"_s});
+    repo.git({u"switch"_s, u"-q"_s, u"-c"_s, u"rabat"_s});
+    repo.write(u"koszyk.py"_s, "RABAT = 0.05\n");
+    repo.commitAll(u"Dodaj rabat"_s);
+    // (The local main falls behind the remote's: what the pull request goes into is the remote's.)
+    repo.git({u"branch"_s, u"-f"_s, u"main"_s, u"HEAD"_s});
+    CodeGit git;
+    git.setFolder(repo.root);
+    QTRY_COMPARE_WITH_TIMEOUT(git.defaultBranchRef(), u"origin/main"_s, Wait);
+    QTRY_COMPARE_WITH_TIMEOUT(git.branch(), u"rabat"_s, Wait);
+    QSignalSpy ready(&git, &CodeGit::pullRequestQuestionReady);
+    const auto ask = [&](const QString &base) {
+        const qsizetype before = ready.count();
+        git.requestPullRequestQuestion(base);
+        return QTest::qWaitFor([&] { return ready.count() > before; }, Wait) ? ready.last() : QList<QVariant>();
+    };
+    for (const QString &base : {QString(), u"main"_s, u"origin/main"_s}) {
+        const QList<QVariant> answer = ask(base);
+        QVERIFY2(!answer.isEmpty() && answer.at(1).toString().contains(u"Base branch: origin/main\n"_s), qPrintable(base));
+        QVERIFY(answer.at(1).toString().contains(u"Dodaj rabat"_s));
+    }
+    const QList<QVariant> remoteOnly = ask(u"wydanie"_s);
+    QVERIFY(!remoteOnly.isEmpty() && remoteOnly.at(1).toString().contains(u"Base branch: origin/wydanie\n"_s));
+
+    // The folder left while git answers (the repository known, then a new one still being read):
+    // nothing comes for the one left.
+    Repo other;
+    other.write(u"a.txt"_s, "a\n");
+    other.commitAll(u"a"_s);
+    const qsizetype before = ready.count();
+    git.requestPullRequestQuestion(QString());
+    git.setFolder(other.root);
+    git.requestPullRequestQuestion(QString());
+    git.setFolder(repo.root);
+    QTest::qWait(1500);
+    QCOMPARE(ready.count(), before);
+}
+
+// What is refused, each saying why: no base branch known, a detached HEAD, git's own failure.
+void TestCodeGit::pullRequestQuestionRefused()
+{
+    Repo repo;
+    repo.git({u"switch"_s, u"-q"_s, u"-c"_s, u"funkcja"_s}); // (no main, master or trunk: no default)
+    repo.write(u"a.txt"_s, "a\n");
+    repo.commitAll(u"a"_s);
+    repo.write(u"a.txt"_s, "b\n");
+    repo.commitAll(u"b"_s);
+    CodeGit git;
+    git.setFolder(repo.root);
+    QTRY_COMPARE_WITH_TIMEOUT(git.branch(), u"funkcja"_s, Wait);
+    QSignalSpy ready(&git, &CodeGit::pullRequestQuestionReady);
+    git.requestPullRequestQuestion(QString());
+    QTRY_COMPARE_WITH_TIMEOUT(ready.count(), 1, Wait);
+    QCOMPARE(ready.at(0).at(2).toString(), u"There is no base branch to compare with: choose one."_s);
+    repo.git({u"switch"_s, u"-q"_s, u"--detach"_s, u"HEAD~1"_s});
+    git.refresh();
+    QTRY_VERIFY_WITH_TIMEOUT(git.detached(), Wait);
+    git.requestPullRequestQuestion(u"funkcja"_s);
+    QTRY_COMPARE_WITH_TIMEOUT(ready.count(), 2, Wait);
+    QCOMPARE(ready.at(1).at(2).toString(), u"A pull request's text is written for a branch with commits."_s);
+#ifdef Q_OS_UNIX
+    // git failing to list the branch's commits: its message.
+    repo.git({u"switch"_s, u"-q"_s, u"funkcja"_s});
+    QTemporaryDir bin;
+    const QString fake = bin.filePath(u"git"_s);
+    writeFile(fake, "#!/bin/sh\nfor a in \"$@\"; do [ \"$a\" = log ] && { echo 'fatal: zepsuty log' >&2; exit 128; }; done\nexec '"
+                            + gitProgram().toUtf8() + "' \"$@\"\n");
+    QFile::setPermissions(fake, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+    git.setGitProgram(fake);
+    git.refresh();
+    QTRY_COMPARE_WITH_TIMEOUT(git.branch(), u"funkcja"_s, Wait);
+    git.requestPullRequestQuestion(u"HEAD~1"_s);
+    QTRY_COMPARE_WITH_TIMEOUT(ready.count(), 3, Wait);
+    QVERIFY2(ready.at(2).at(2).toString().contains(u"zepsuty log"_s), qPrintable(ready.at(2).at(2).toString()));
+#endif
 }
 
 void TestCodeGit::commit()

@@ -440,6 +440,8 @@ private:
     void resolvePullRequestBase(const QString &named, const QStringList &candidates);
     void readPullRequestRange(const QString &ref);
     void failPullRequestQuestion(const QString &why);
+    /// True while the folder is the one of now (no setFolder() since): for answers that come later.
+    std::function<bool()> stillThisFolder() const;
 
     gitcli::Client m_client;
     QFileSystemWatcher m_watcher;

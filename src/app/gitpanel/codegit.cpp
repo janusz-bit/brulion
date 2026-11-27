@@ -652,19 +652,24 @@ QStringList baseCandidates(const QString &named, bool chosen, const QString &def
     return out;
 }
 
-/// `commands` run in `root` one after another: done(their results, in order).
+/// `commands` run in `root` one after another: done(their results, in order) — while `wanted()`
+/// (the folder asked about is still the one shown): else nothing more runs, nothing is answered.
 void runEach(gitcli::Client &client, const QString &root, QList<QStringList> commands, gitcli::RunOptions options,
-             std::function<void(const QList<gitcli::RunResult> &)> done, QList<gitcli::RunResult> results = {})
+             std::function<bool()> wanted, std::function<void(const QList<gitcli::RunResult> &)> done,
+             QList<gitcli::RunResult> results = {})
 {
+    if (!wanted())
+        return;
     if (commands.isEmpty()) {
         done(results);
         return;
     }
     const QStringList args = commands.takeFirst();
     client.git(root, args, options,
-               [&client, root, commands, options, done, results](const gitcli::RunResult &r) mutable {
+               [&client, root, commands, options, wanted, done, results](const gitcli::RunResult &r) mutable {
                    results << r;
-                   runEach(client, root, std::move(commands), std::move(options), std::move(done), std::move(results));
+                   runEach(client, root, std::move(commands), std::move(options), std::move(wanted), std::move(done),
+                           std::move(results));
                });
 }
 
@@ -685,23 +690,27 @@ void CodeGit::requestPullRequestQuestion(const QString &base)
         const QString named = chosen.isEmpty() ? m_defaultBranchRef : chosen;
         if (!isRepo || m_branch.isEmpty() || !m_hasCommits)
             failPullRequestQuestion(tr("A pull request's text is written for a branch with commits."));
-        else if (named.isEmpty() || !gitcli::isSafeRevision(named))
-            failPullRequestQuestion(tr("“%1” is no branch to compare with.").arg(named));
+        else if (named.isEmpty())
+            failPullRequestQuestion(tr("There is no base branch to compare with: choose one."));
+        else if (!gitcli::isSafeRevision(named))
+            failPullRequestQuestion(tr("“%1” cannot be the name of a branch.").arg(named));
         else
             resolvePullRequestBase(named, baseCandidates(named, !chosen.isEmpty(), m_defaultBranchRef));
     });
 }
 
+std::function<bool()> CodeGit::stillThisFolder() const
+{
+    return [this, generation = m_generation] { return generation == m_generation; };
+}
+
 void CodeGit::resolvePullRequestBase(const QString &named, const QStringList &candidates)
 {
-    const int generation = m_generation;
     QList<QStringList> checks;
     for (const QString &c : candidates)
         checks << QStringList{u"rev-parse"_s, u"--verify"_s, u"--quiet"_s, c + u"^{commit}"_s};
-    runEach(m_client, m_info.topLevel, checks, readOptions(),
-            [this, generation, named, candidates](const QList<gitcli::RunResult> &found) {
-                if (generation != m_generation)
-                    return;
+    runEach(m_client, m_info.topLevel, checks, readOptions(), stillThisFolder(),
+            [this, named, candidates](const QList<gitcli::RunResult> &found) {
                 const qsizetype at = std::ranges::find_if(found, &gitcli::RunResult::ok) - found.begin();
                 if (at < candidates.size())
                     readPullRequestRange(candidates.at(at));
@@ -712,15 +721,12 @@ void CodeGit::resolvePullRequestBase(const QString &named, const QStringList &ca
 
 void CodeGit::readPullRequestRange(const QString &ref)
 {
-    const int generation = m_generation;
     const QStringList diff{u"diff"_s, u"--no-color"_s, u"--no-ext-diff"_s, u"--no-textconv"_s};
     const QList<QStringList> reads{{u"log"_s, u"--no-color"_s, u"-n"_s, u"200"_s, u"--format=%h %s%n%w(0,4,4)%b"_s,
                                     ref + u"..HEAD"_s, u"--"_s},
                                    diff + QStringList{u"--stat"_s, ref + u"...HEAD"_s, u"--"_s},
                                    diff + QStringList{u"-U2"_s, ref + u"...HEAD"_s, u"--"_s}};
-    runEach(m_client, m_info.topLevel, reads, readOptions(), [this, generation, ref](const QList<gitcli::RunResult> &r) {
-        if (generation != m_generation)
-            return;
+    runEach(m_client, m_info.topLevel, reads, readOptions(), stillThisFolder(), [this, ref](const QList<gitcli::RunResult> &r) {
         const QString commits = outputOf(r.at(0)).trimmed();
         if (!r.at(0).ok()) {
             failPullRequestQuestion(r.at(0).message());
