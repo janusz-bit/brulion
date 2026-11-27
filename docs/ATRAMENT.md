@@ -882,6 +882,34 @@ foreign rows (its properties, what Atrament does not draw yet) are BlockDelegate
 as on a page (a `ForeignRowHost` per day made), their editor the stream's: a press on one makes its
 day the active one.
 
+**Built** (2026-11-27): `ListHandle::scrollToRowPart` (`tests/atrament/ui/tst_atrament_list`),
+PageView's embedded mode (`pageembed.cpp`: `setEmbedding`, `takeReveal`, `embeddedPart`,
+`setKeysActive`, `setFooterTapHeight` — the strip under a day's blocks appends one —,
+`pointerReleased`, `pressedRow`), `JournalView` as above, with what the design left open decided
+so: a day's sections are known by date (the list's row ids, the heights kept across resets); days
+are made within a screen of the last frame's view and released beyond two (a little hysteresis);
+the stream's own defaults for the selection's keys past a day's edge (`StreamSelection.extendBy`)
+and Shift+↑/↓ from an edited block when the host takes neither; the selection's span moving into
+another day (`focusMoved`) makes it the active day and reveals the row, `revealRequested` scrolls
+to the day; a mouse's press on a block dragged into another day extends the span
+(`StreamSelection.extendFrom`); the docked toolbar is the list's bottom padding (its rows, reveals
+and the focused field's caret end above it); a word an input method composes in the day being left
+is committed first. AtramentView's "journal" (`daysModel`, `editorHost`, the days' options,
+`streamSelection`, `streamFind`, `journalLook`, `streamHeader` / `streamFooter`, `bottomInset`;
+`activeController`, `dayController`, `scrollToDay` / `scrollToDate` / `scrollBy`, `activateDay`,
+`beginDay`, `viewState` / `restoreViewState`, `dayTop` / `dayRowTop` / `dayPoint`, `followRename`,
+`refreshModes`, `markFoldsRestored`; signals `activeControllerChanged`, `openAsPageRequested`,
+`beginRequested`, `dayMade` / `dayLoaded` / `dayReleased`, `dayFoldStateChanged`,
+`dayExternallyChanged`); its looks and callbacks are per page (`forEachPage`), the touch selection
+mode and Vim the active day's. In the app: qml/editor/EditorAtramentJournal.qml,
+`BlockEditor.atramentHost`, JournalsView's `atramentStream` / `streamEditor` / `streamView` (docs/UI.md
+"The journal stream drawn by Atrament"). Tested by `tests/atrament/editor/tst_atrament_journal`
+(18 cases) and `tst_content_journals_atrament_qml` (ContentJournalsAtramentSelfTest.qml: the app
+with `--atrament-editor`). **Not yet**: the zoom's breadcrumb above a day zoomed into (a day's
+page header is empty), the edge scrolling of a drag across days, a long day laid out only where it
+shows, the QML stream's span self-test (`tst_content_journals_span_qml`) against this stream, a
+hosted row's delegate showing the active day's editing state while its own day is not active.
+
 ### Steps
 
 Each step ships behind the setting and is measured (memory per block, frame time while
@@ -1041,9 +1069,9 @@ scrolling, `tst_atrament_editor`) before the next:
    `lastY`); a drag's moves and release are the page's (a capture listener: no hover, no click).
    `AtramentView.selectionRect` is where the band is (its rows shown) for the selection's tools.
    Tested by `tests/atrament/editor/tst_atrament_selection` (the selection self-test's checks;
-   `tests/atrament/ui/tst_atrament_drag` for the gestures). Not yet: a drag across the journal's
-   days (a day's page does not scroll; the journal list's edge scrolling), Vim's keys over a
-   selection.
+   `tests/atrament/ui/tst_atrament_drag` for the gestures). A mouse's drag from one journal day into
+   another extends the stream's selection ("The journal stream as one list"). Not yet: the journal
+   list's edge scrolling during such a drag, Vim's keys over a selection.
 4. **Structure.** Folding, zoom into a block, drag to move, dates and reminders chips, the journal
    — a stream of days as sections of one list (what `JournalDayItem` draws today).
    **Built so far** (2026-11-27): folding (the arrows, step 2's entry), the bullet's zoom, and the
@@ -1053,8 +1081,8 @@ scrolling, `tst_atrament_editor`) before the next:
    `AtramentView.contentHeight` → `BlockEditor.atramentContentHeight` → the day's
    `fitEditorHeight()`); the journal's list scrolls (a wheel Atrament does not take goes on to it)
    and keeps the caret in view (`BlockEditor.ensureVisible` through its `scroller`). The stream as
-   one Atrament list (no item per day) is the second stage: "The journal stream as one list"
-   above. **Drag to move** (`pagedrag.cpp`; the QML
+   one Atrament list (no item per day) is the second stage, built (2026-11-27): "The journal
+   stream as one list" above. **Drag to move** (`pagedrag.cpp`; the QML
    editor has none): an outline's bullet (a list item's marker, also a document's) pressed with the
    mouse and dragged past 4 px moves its block — the selection when it is in it, else the block
    alone, selected — and a finger's long press on a selected block while the grips show moves the
@@ -1225,6 +1253,8 @@ scrolling, `tst_atrament_editor`) before the next:
   keyboard_touch…) drive the QML delegates and cannot run against Atrament; each script's checks
   get their counterpart in `tst_atrament_editor` as its step lands — the gate's "the editor's
   existing behaviour tests pass against it" is that list, complete.
+* `tests/atrament/editor/tst_atrament_journal`: the journal stream as one list ("The journal stream
+  as one list"); `tst_content_journals_atrament_qml`: its self-test in the app.
 * `tst_editor_qml_atrament` (desktop) and `tst_editor_qml_atrament_touch` (a phone, `--touch`):
   the editor playground's `atramenttest` (qml/dev/AtramentSelfTest.qml) runs the outline and keys
   parts of `selftest` against the page drawn by Atrament (`--atrament-editor`, `DevTools.atramentEditor`: the
