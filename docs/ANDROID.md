@@ -1202,9 +1202,14 @@ RECORD_AUDIO permission (`MediaCapture.kt`, `src/platform/capture.h` / `capture_
   `BrulionAndroid.onActivityResult` and as `nativeCaptured(kind, json)` — a photo's `{taken}` (above),
   dictation's `{text}`, `{cancelled: true}` or `{error}`.
 
-Still to be checked on a real phone: the camera app's round trip (the activity may be recreated
-while the camera is in front — the photo's path is kept only in memory), and dictation with Google's
-recognizer and with none installed (GrapheneOS).
+Checked on the emulator (`scripts/android-emulator-test.sh --camera`, Android 16, the image's Camera
+app with its emulated back camera; 2026-11-27): the photo with the app alive, and with the app's
+process killed (`am kill`) while the camera app is in front — Android started a new process for the
+answer, which took the photo into the notebook and showed it in the field with the words typed
+before. The same run with the capture code from before (0.32.0's, the FileProvider fixed) left the
+photo in `cache/camera` and an empty field: no picture, the words gone. Still to be checked on a
+real phone: the round trip with a phone's own camera app, and dictation with Google's recognizer and
+with none installed (GrapheneOS).
 
 ## A model on the phone
 
@@ -2473,6 +2478,18 @@ loading QML (so that the tap that started the app reaches the UI); as long as no
   buttons by name (like `--folders` below; before — by fractions of the screen, which on Android
   11, with a lower status bar, hit the second block, and the checks passed anyway). Screenshots
   `sel-*.png` in `dist-android/emulator-test/`; verified 2026-10-23 (Android 16 and 11, Pixel 6).
+* A photo for an AI chat message (the same debuggable APK; "Camera and dictation" above):
+  ```sh
+  scripts/android-emulator-test.sh --camera
+  ```
+  A new conversation, a few words in its field, the paperclip's "Take a photo": the image's Camera
+  app comes to the front with the photo's record already in `cache/camera/photos.json`; Shutter and
+  Done bring the photo into the field and the notebook (the cache emptied). Then again with the
+  app's process killed while the camera is in front: Android starts the app anew for the answer,
+  and the new conversation shows the words and both photos. Screenshots `cam-*.png`; 22 checks,
+  verified 2026-11-27 (Android 16). The capture code from before (0.32.0's, with the FileProvider
+  fixed) fails the four checks after the kill — no photo in the notebook, one left in the cache, no
+  words and no pictures in the field — besides the two about the record it did not keep.
 * Folders, links and tags with a real finger (the same debuggable APK):
   ```sh
   scripts/android-emulator-test.sh --folders
