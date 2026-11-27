@@ -64,6 +64,12 @@ Text &&Text::span(Range range, TextStyleRefinement style) &&
     return std::move(*this);
 }
 
+Text &&Text::inlineObject(Range range, InlineObjectSize size, InlineObjectPainter painter) &&
+{
+    m_spans.push_back(TextSpan { range, {}, InlineObject { size, std::move(painter) } });
+    return std::move(*this);
+}
+
 void Text::buildRuns(Window &window)
 {
     const TextStyle &base = window.textStyle();
@@ -73,22 +79,40 @@ void Text::buildRuns(Window &window)
     auto paintStyle = [](const TextStyle &s) {
         return TextPaintStyle { s.color, s.underline, s.strikethrough, s.background };
     };
-    auto run = [&](int length, const TextStyle &s, std::uint32_t styleIndex) {
+    auto run = [&](int length, const TextStyle &s, std::uint32_t styleIndex, const InlineObject *object) {
         FontRun r;
         r.length = length;
         r.face = resolveFace(*m_app, s);
         r.fontSize = s.fontSize;
         r.styleIndex = styleIndex;
         r.features = s.fontFeatures;
+        if (object) {
+            const InlineObjectSize &size = object->size;
+            const float unit = size.em ? s.fontSize : 1.0f;
+            r.inlineBox = InlineBox { size.width * unit, size.ascent * unit, size.descent * unit };
+        }
         m_runs.push_back(std::move(r));
     };
     const int length = int(m_text.size());
     if (m_spans.empty() && m_links.empty()) {
         m_paint.push_back(paintStyle(base));
         m_pieces.push_back(Range{0, length});
-        run(length, base, 0);
+        m_pieceSizes.push_back(base.fontSize);
+        run(length, base, 0, nullptr);
         return;
     }
+    // The inline objects, in text order, without overlaps (the first given wins).
+    for (const TextSpan &s : m_spans) {
+        const Range r { std::clamp(s.range.start, 0, length), std::clamp(s.range.end, 0, length) };
+        if (!s.object || r.isEmpty())
+            continue;
+        const bool overlaps = std::any_of(m_objects.begin(), m_objects.end(),
+                [&](const Object &o) { return o.range.start < r.end && r.start < o.range.end; });
+        if (!overlaps)
+            m_objects.push_back(Object { &*s.object, r });
+    }
+    std::sort(m_objects.begin(), m_objects.end(),
+            [](const Object &a, const Object &b) { return a.range.start < b.range.start; });
     // Cut the text at every span boundary; each piece gets the base style refined by the spans
     // covering it, in order.
     ArenaVector<int> cuts;
@@ -105,6 +129,16 @@ void Text::buildRuns(Window &window)
     }
     std::sort(cuts.begin(), cuts.end());
     cuts.erase(std::unique(cuts.begin(), cuts.end()), cuts.end());
+    // An object is one piece (one run): nothing cuts inside it.
+    if (!m_objects.empty()) {
+        cuts.erase(std::remove_if(cuts.begin(), cuts.end(),
+                           [this](int c) {
+                               return std::any_of(m_objects.begin(), m_objects.end(),
+                                       [c](const Object &o) { return o.range.start < c && c < o.range.end; });
+                           }),
+                cuts.end());
+    }
+    std::size_t nextObject = 0;
     for (std::size_t i = 0; i + 1 < cuts.size(); ++i) {
         const int a = cuts[i];
         const int b = cuts[i + 1];
@@ -113,10 +147,14 @@ void Text::buildRuns(Window &window)
             if (s.range.start <= a && s.range.end >= b)
                 s.style.applyTo(style);
         }
+        const InlineObject *object = nullptr;
+        if (nextObject < m_objects.size() && m_objects[nextObject].range.start == a)
+            object = m_objects[nextObject++].object;
         const auto index = std::uint32_t(m_paint.size());
         m_paint.push_back(paintStyle(style));
         m_pieces.push_back(Range{a, b});
-        run(b - a, style, index);
+        m_pieceSizes.push_back(style.fontSize);
+        run(b - a, style, index, object);
     }
 }
 
@@ -187,6 +225,37 @@ void Text::prepaint(Rect bounds, Window &window, App &)
     }
 }
 
+void Text::paintObjects(Rect bounds, Window &window)
+{
+    if (m_objects.empty())
+        return;
+    const Rect mask = window.contentMask();
+    const std::vector<TextLine> &lines = m_layout->lines();
+    std::size_t k = 0;
+    for (const PlacedInlineBox &box : m_layout->inlineBoxes()) {
+        while (k < m_objects.size() && m_objects[k].range.start < box.start)
+            ++k;
+        if (k >= m_objects.size())
+            break;
+        const Object &object = m_objects[k];
+        if (object.range.start != box.start || !object.object->paint)
+            continue;
+        const TextLine &line = lines[std::size_t(box.line)];
+        const Point at { bounds.left() + alignedLineX(line, m_align, bounds.width()), bounds.top() };
+        InlineObjectPaint p;
+        p.bounds = box.bounds.translated(at);
+        if (!p.bounds.intersects(mask) && !p.bounds.isEmpty())
+            continue; // off screen
+        p.baseline = at.y + line.baseline;
+        p.range = object.range;
+        if (box.styleIndex < m_paint.size()) {
+            p.color = m_paint[box.styleIndex].color;
+            p.fontSize = m_pieceSizes[box.styleIndex];
+        }
+        object.object->paint(p, window);
+    }
+}
+
 void Text::paint(Rect bounds, Window &window, App &)
 {
     if (window.accessibilityEnabled())
@@ -195,6 +264,7 @@ void Text::paint(Rect bounds, Window &window, App &)
         return;
     window.paintText(*m_layout, bounds.origin, std::span<const TextPaintStyle>(m_paint.data(), m_paint.size()),
             m_align, bounds.width());
+    paintObjects(bounds, window);
     if (m_links.empty() || !m_linkState)
         return;
 

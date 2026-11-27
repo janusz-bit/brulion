@@ -4,11 +4,13 @@
 #include <QStringList>
 
 #include <algorithm>
+#include <cmath>
 
 namespace brulion::editor::atr {
 
 namespace at = brulion::atrament;
 using markdown::RenderedBackground;
+using markdown::RenderedObject;
 using markdown::RenderedRole;
 using markdown::RenderedRun;
 
@@ -83,13 +85,40 @@ std::vector<at::TextSpan> renderedSpans(const markdown::RenderedText &text, cons
             at::Color fallback = palette.codeBackground;
             if (run.role == RenderedRole::Highlight)
                 fallback = palette.highlightBackground;
+            else if (run.role == RenderedRole::Tag)
+                fallback = palette.tagBackground;
             else if (run.background == RenderedBackground::Pill)
                 fallback = palette.chipBackground;
-            s.background = std::optional<at::Color>(cssColor(run.backgroundColor, fallback));
+            at::TextBackground shape;
+            shape.color = cssColor(run.backgroundColor, fallback);
+            shape.pill = run.background == RenderedBackground::Pill;
+            shape.radius = shape.pill ? 0 : palette.boxRadius;
+            shape.extent = at::TextBackgroundExtent::Glyphs;
+            // The runs of one tinted element are one shape (a highlight with a bold word in it);
+            // two elements side by side are two.
+            shape.group = run.tintElement >= 0 ? std::uint32_t(run.tintElement + 1) : 0;
+            s.background = std::optional<at::TextBackground>(shape);
         }
         if (s.isEmpty())
             continue;
         spans.push_back({at::Range{int(run.from), int(run.to)}, std::move(s)});
+    }
+    for (const RenderedObject &object : text.objects) {
+        if (object.kind != RenderedObject::Kind::Icon || object.to <= object.from)
+            continue;
+        const at::Color color = cssColor(object.color, palette.link);
+        at::InlineObject icon;
+        icon.size = kPageIconSize;
+        icon.paint = [color](const at::InlineObjectPaint &p, at::Window &window) {
+            // A placeholder for the icon (none in Atrament yet): a rounded square, outlined and
+            // faintly filled, as large as BIcon's (9/10 of the room).
+            const float side = std::round(std::min(p.bounds.width(), p.bounds.height()) * 0.9f);
+            const at::Rect r = at::Rect::fromXYWH(p.bounds.left() + (p.bounds.width() - side) / 2,
+                                                  p.bounds.top() + (p.bounds.height() - side) / 2, side, side);
+            window.paintQuad(r, at::Background::solid(color.fadedBy(0.2f)), at::Edges::all(std::max(1.0f, side / 10)),
+                             color, at::Corners::all(side / 4));
+        };
+        spans.push_back({at::Range{int(object.from), int(object.to)}, {}, std::move(icon)});
     }
     return spans;
 }

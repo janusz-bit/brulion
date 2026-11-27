@@ -77,6 +77,10 @@ public:
         const InputHandler::Selection sel = m_input->selection();
         const Range range = sel.range();
         const bool empty = m_input->text().empty();
+        const std::span<const TextPaintStyle> paints(m_paint.data(), m_paint.size());
+        // The spans' shapes under the selection, the glyphs over it.
+        if (!empty)
+            window.paintTextBackgrounds(*m_layout, bounds.origin, paints);
         if (focused && !range.isEmpty() && !empty) {
             for (const Rect &r : m_layout->selectionRects(range))
                 window.paintQuad(r.translated(bounds.origin), Background::solid(m_input->options().selectionColor), {},
@@ -88,7 +92,7 @@ public:
             const TextPaintStyle style { m_textColor.fadedBy(0.45f), std::nullopt, false, std::nullopt };
             window.paintText(*placeholder, bounds.origin, std::span<const TextPaintStyle>(&style, 1));
         } else {
-            window.paintText(*m_layout, bounds.origin, std::span<const TextPaintStyle>(m_paint.data(), m_paint.size()));
+            window.paintTextGlyphs(*m_layout, bounds.origin, paints);
             if (const auto marked = m_input->markedRange()) {
                 for (const Rect &r : m_layout->selectionRects(*marked))
                     window.paintQuad(Rect::fromXYWH(r.left(), r.bottom() - 2, r.width(), 1).translated(bounds.origin),

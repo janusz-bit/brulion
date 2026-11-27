@@ -15,8 +15,9 @@
 //   line breaks         UAX #14's opportunities for Latin, Cyrillic, Greek, CJK and emoji text:
 //                       after spaces (the spaces stay on the line they end), after a hyphen or an
 //                       en dash between letters, after a slash, before and after CJK ideographs
-//                       and kana (not before closing punctuation), around emoji; no break before
-//                       closing punctuation (.,;:!?)]}”’») or after opening punctuation ([({“‘«),
+//                       and kana (not before closing punctuation), around emoji and U+FFFC (an
+//                       inline object, UAX #14's CB); no break before closing punctuation
+//                       (.,;:!?)]}”’») or after opening punctuation ([({“‘«),
 //                       none inside a number ("1,5", "10.000"), none at U+00A0 / U+2007 / U+202F
 //                       / U+2060 (no-break); a mandatory break after LF, CR, CR LF, U+2028, U+2029
 //

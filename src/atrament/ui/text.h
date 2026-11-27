@@ -11,6 +11,17 @@
 // range of the text clickable — the pointing hand over it, underlined while hovered, a click (or a
 // finger's tap) runs `onClick` and goes no further, and a screen reader finds a link node named by
 // the range's text, which it can activate. The range keeps the look its spans give it.
+//
+// Background shapes (docs/ATRAMENT.md "Text"): a span's `style.background` (ui/style.h,
+// TextBackground) draws a pill or a rounded box under its glyphs, one per line it shows on; spans
+// side by side with equal backgrounds are one shape.
+//
+// Inline objects: `.inlineObject(range, size, painter)` lays a range of the text out as one box of
+// `size` — an icon over the no-break spaces reserved for it, a checkbox at U+FFFC — instead of its
+// glyphs: the line reserves its width, ascent and descent, it wraps as one unit, carets and hit
+// tests treat it as one cluster, and `painter` draws it in paint with its bounds in window
+// coordinates (after the text: over the background shapes). An object is a span (`TextSpan::object`):
+// it applies its style too, and spans that carry objects can come from anywhere spans do.
 
 #include "base/arena.h"
 #include "base/function.h"
@@ -20,6 +31,7 @@
 #include "ui/style.h"
 #include "ui/window.h"
 
+#include <functional>
 #include <memory>
 #include <optional>
 #include <span>
@@ -30,9 +42,37 @@ namespace brulion::atrament {
 
 using ArenaU16String = std::basic_string<char16_t, std::char_traits<char16_t>, ArenaAllocator<char16_t>>;
 
+// The size of an inline object: logical px, or ems of the font size of the text there (`em`: an
+// icon that grows with a heading's text).
+struct InlineObjectSize {
+    float width = 0;
+    float ascent = 0; // above the baseline
+    float descent = 0; // below it
+    bool em = false;
+};
+
+// What an inline object's painter is told.
+struct InlineObjectPaint {
+    Rect bounds; // the object's box in window coordinates (logical px)
+    float baseline = 0; // the line's baseline, window y
+    Range range; // its text
+    Color color; // the text's colour there
+    float fontSize = 0; // the text's size there (px)
+};
+
+using InlineObjectPainter = std::function<void(const InlineObjectPaint &, Window &)>;
+
+struct InlineObject {
+    InlineObjectSize size;
+    InlineObjectPainter paint; // may be empty: the room is reserved, nothing is drawn
+};
+
 struct TextSpan {
     Range range; // UTF-16 offsets of the element's text
     TextStyleRefinement style;
+    // The range is laid out as this object instead of its glyphs (see above). Objects do not
+    // overlap: of two that do, the first given wins.
+    std::optional<InlineObject> object = {};
 };
 
 struct TextLink {
@@ -84,6 +124,8 @@ public:
         m_layoutHandle = handle.shared();
         return std::move(*this);
     }
+    // An inline object over `range` (a span with only an object).
+    Text &&inlineObject(Range range, InlineObjectSize size, InlineObjectPainter painter = {}) &&;
     Text &&id(ElementId id) &&
     {
         m_id = id;
@@ -104,6 +146,7 @@ public:
 private:
     void buildRuns(Window &window);
     std::shared_ptr<const TextLayout> layoutAt(std::optional<float> wrapWidth);
+    void paintObjects(Rect bounds, Window &window);
 
     ArenaU16String m_text;
     ArenaVector<TextSpan> m_spans;
@@ -111,6 +154,12 @@ private:
     ArenaVector<HitboxId> m_linkHitboxes;    // per link rectangle
     ArenaVector<std::uint32_t> m_hitboxLink; // the link of each
     ArenaVector<Range> m_pieces;             // the text range of each paint style
+    ArenaVector<float> m_pieceSizes;         // the font size of each
+    struct Object {
+        const InlineObject *object = nullptr; // in m_spans
+        Range range;
+    };
+    ArenaVector<Object> m_objects; // the inline objects laid out, in text order
     struct LinkState;
     LinkState *m_linkState = nullptr;
     ArenaVector<FontRun> m_runs;

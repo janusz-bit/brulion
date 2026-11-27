@@ -192,7 +192,10 @@ void PageView::appendFindSpans(QStringView text, std::vector<at::TextSpan> &span
     options.wholeWord = m_find.wholeWord;
     for (const text::TextRange &r : text::findMatches(text, m_find.query, options)) {
         at::TextStyleRefinement tint;
-        tint.background = std::optional<at::Color>(m_find.color);
+        at::TextBackground box;
+        box.color = m_find.color;
+        box.radius = 2;
+        tint.background = std::optional<at::TextBackground>(box);
         spans.push_back({at::Range{int(r.start), int(r.end())}, tint});
     }
 }

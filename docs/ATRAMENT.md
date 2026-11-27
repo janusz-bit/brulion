@@ -167,6 +167,29 @@ public:
 * `TextLayout`: a paragraph wrapped at a width — lines of glyph runs, ascent/descent/line height,
   and the editing queries: caret position for an offset, offset for a point, selection rectangles
   for a range, the next/previous grapheme and word boundary.
+* **Background shapes** (`TextBackground`, `ui/style.h`: a span's `style.background`): a pill
+  (`pill`), a rounded box (`radius`) or a square box behind a span's glyphs, `paddingX` beyond them
+  on each side, `inset` in from their extent — the fonts' ascent above and descent below the
+  baseline (`TextBackgroundExtent::Glyphs`, CSS's content area: the default) or the line box
+  (`Line`). One rounded quad per line the span shows on (`TextLayout::glyphRects`: caret to caret,
+  no hanging spaces at a wrap, the extent of the runs' own fonts — an emoji from the fallback face
+  makes no shape taller), each a whole shape, rounded and padded at both ends (CSS's
+  `box-decoration-break: clone`); adjacent pieces with equal backgrounds are one shape (a
+  highlight with a bold word in it), `group` keeps two of one look apart (two tags side by side).
+  The layout reserves no room for a shape: padding reaches under the neighbours (a chip's room is
+  the no-break spaces inside it, as in the QML editor), so lines and rows keep their sizes.
+  `Window::paintText` draws the paragraph's shapes, then its glyphs and decorations; an element
+  with a selection draws `paintTextBackgrounds`, its selection, `paintTextGlyphs` — a selection is
+  over the shapes and under the glyphs.
+* **Inline boxes**: a run laid out as one box of a width, an ascent and a descent instead of its
+  glyphs (`FontRun::inlineBox`; in `ui`, `Text::inlineObject(range, size, painter)` or a span's
+  `object`, the size in px or in ems of the text there) — an icon over the no-break spaces
+  reserved for it, a checkbox at U+FFFC. The line reserves its width and counts its ascent and
+  descent as a font's; it wraps as one unit (no break inside it; before and after it where its
+  characters allow one — U+FFFC breaks around it as UAX #14's CB); carets and hit tests see one
+  cluster (`nextCaretStop` / `previousCaretStop`, `offsetAt` never inside it); `inlineBoxes()`
+  says where each ended up. `Text` calls the object's painter in paint, after the text, with its
+  box in window coordinates, the baseline, the text's colour and size there.
 * Glyphs are rasterized once per (face, glyph, size, subpixel x offset) into an A8 atlas; the
   renderers read the same atlas.
 * Caches are generational: what was used in the last frame stays, the rest is dropped at the end
@@ -520,7 +543,30 @@ In **Atrament** (`src/atrament/ui`, Qt-free, generic — nothing Brulion-specifi
 * **Inline boxes in text**: a `TextSpan` with a background shape (a pill, a box, rounded, padded)
   drawn under its glyphs across line breaks, and an inline object of a given size (an icon, a
   checkbox) the line layout reserves room for — what `RenderedBackground` and `RenderedObject`
-  ask for.
+  ask for. **Built** ("Text" above; `tests/atrament/text/tst_atrament_text_boxes`,
+  `tests/atrament/ui/tst_atrament_inline`, the gallery's typography page): `TextBackground {
+  color, radius, pill, paddingX, inset, extent, group }` is the type of `TextStyle::background`
+  (the field that held a flat colour, so spans and `TextPaintStyle`s written before keep
+  compiling; a plain `TextBackground{c}` is now a square box around the glyphs, CSS's look, where
+  it was the line's height); `TextLayout::glyphRects(range)`, `runs()`, `inlineBoxes()`,
+  `nextCaretStop` / `previousCaretStop`; `InlineBox` on a `FontRun` (part of the layout cache's
+  key); `InlineObject { InlineObjectSize { width, ascent, descent, em }, painter }` on a
+  `TextSpan`, `Text::inlineObject(range, size, painter)`, the painter told an
+  `InlineObjectPaint { bounds, baseline, range, color, fontSize }`; `Window::paintTextBackgrounds`
+  / `paintTextGlyphs`. Decisions: shapes reserve no room (the QML editor's rows keep their
+  heights), each line's piece is a whole shape, the extent comes from the runs' own fonts, shapes
+  go under the glyphs and under a selection; an object is a span, so a block's objects come with
+  its styles from one function and the view building the text needs no second list (and the
+  styled `TextInput` can take them the same way), and its painter is a `std::function` (spans may
+  be kept across frames); objects do not overlap (the first given wins) and a span's end inside
+  one does not cut it. In the app, `renderedSpans()` gives Pill and Box runs the QML editor's
+  shapes — pills, and boxes of `PagePalette::boxRadius` (Theme.radiusXs, 4 px), around the glyphs,
+  no padding or inset (RichTextPills' geometry), `tintElement` as the group, the run's CSS colour
+  or the palette's (`chipBackground`, `tagBackground`, `codeBackground`, `highlightBackground`) —
+  and a page's app icon (`RenderedObject::Icon`) an inline object of `kPageIconSize` (the room of
+  the three no-break spaces it covers, its middle where the QML editor centres its icon).
+  Atrament has no icon renderer yet: a placeholder — a rounded square outlined in the link's
+  colour — is drawn there until one comes (`BIcon`'s icons as paths or atlas sprites).
 * **Hit regions in text**: the range of a span reported under the pointer (a link's `href`, a
   chip), its hover look, and a link node per span in the accessibility tree (`Role::Link`). **Built**:
   `Text::link(range, onClick)` (`src/atrament/ui/text.h`, `tests/atrament/ui/tst_atrament_links`)

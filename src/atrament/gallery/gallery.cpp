@@ -223,11 +223,50 @@ AnyElement Gallery::typography(Window &, Context<Gallery> &cx)
     TextStyleRefinement misspelt;
     misspelt.underline = UnderlineStyle { t.danger, 1, true };
     TextStyleRefinement mark;
-    mark.background = rgba(0xf2c14e40);
+    mark.background = TextBackground { rgba(0xf2c14e40), 3 };
     TextStyleRefinement struck;
     struck.strikethrough = true;
     struck.color = t.muted;
     const std::u16string_view rich = u"Pogrubienie, link, błont ortograficzny, zakreślenie i skreślenie w jednym akapicie.";
+
+    // Background shapes and an inline object (docs/ATRAMENT.md "Text"): a tag and a chip as pills
+    // (the chip long enough to wrap at a narrow column: one pill per line), inline code as a box, a
+    // highlight with a bold word in it as one shape, a checkbox at U+FFFC drawn by its painter.
+    const std::u16string_view shapes = u"\uFFFC Zadanie na jutro: #projekt, kod fn(ąę) i ważne zdanie z pogrubieniem "
+                                       u"w środku, a na koniec\u00a0spotkanie z całym zespołem w czwartek\u00a0— "
+                                       u"chip, który się zawija.";
+    auto rangeOf = [&](std::u16string_view piece) {
+        const int at = int(shapes.find(piece));
+        return Range { at, at + int(piece.size()) };
+    };
+    TextStyleRefinement tag;
+    tag.color = rgb(0x8fe3a6);
+    tag.background = TextBackground { rgba(0x5fd08a2e), 0, true, 2 };
+    TextStyleRefinement code;
+    code.fontFamily = u"Brulion JetBrains Mono";
+    code.color = rgb(0xc9d1ff);
+    code.background = TextBackground { rgba(0x8b93ff26), 4, false, 2 };
+    TextStyleRefinement highlight;
+    highlight.background = TextBackground { rgba(0xf2c14e40), 3 };
+    TextStyleRefinement chip;
+    chip.color = rgb(0xc9b8ff);
+    chip.background = TextBackground { rgba(0x8b93ff33), 0, true, 3 };
+    const Range done = rangeOf(u"\uFFFC");
+    auto checkbox = [](const InlineObjectPaint &p, Window &w) {
+        const Theme &th = theme();
+        const Rect box = p.bounds;
+        w.paintQuad(box, Background::solid(th.accent), {}, transparent(), Corners::all(3));
+        w.paintPath(th.accentText, [&](Window::PathPainter &path) {
+            const float s = box.width();
+            path.moveTo({ box.left() + s * 0.22f, box.top() + s * 0.52f });
+            path.lineTo({ box.left() + s * 0.42f, box.top() + s * 0.72f });
+            path.lineTo({ box.left() + s * 0.80f, box.top() + s * 0.30f });
+            path.lineTo({ box.left() + s * 0.70f, box.top() + s * 0.20f });
+            path.lineTo({ box.left() + s * 0.42f, box.top() + s * 0.52f });
+            path.lineTo({ box.left() + s * 0.32f, box.top() + s * 0.42f });
+            path.close();
+        });
+    };
     return div()
             .flexCol()
             .gap(20)
@@ -252,8 +291,18 @@ AnyElement Gallery::typography(Window &, Context<Gallery> &cx)
                                             .span({ 0, 11 }, bold)
                                             .span({ 13, 17 }, accent)
                                             .span({ 19, 24 }, misspelt)
-                                            .span({ 41, 51 }, mark)
+                                            .span({ 40, 51 }, mark)
                                             .span({ 54, 64 }, struck)))
+            .child(card()
+                            .child(div().textSize(12).textColor(t.faint).child(u"Kształty pod tekstem i obiekt w wierszu"))
+                            .child(div().w(columnWidth).textSize(15).leading(1.6f).child(
+                                    Text(shapes)
+                                            .inlineObject(done, InlineObjectSize { 0.95f, 0.8f, 0.15f, true }, checkbox)
+                                            .span(rangeOf(u"#projekt"), tag)
+                                            .span(rangeOf(u"fn(ąę)"), code)
+                                            .span(rangeOf(u"ważne zdanie z pogrubieniem w środku"), highlight)
+                                            .span(rangeOf(u"pogrubieniem"), bold)
+                                            .span(rangeOf(u"\u00a0spotkanie z całym zespołem w czwartek\u00a0"), chip))))
             .child(card()
                             .child(div().textSize(12).textColor(t.faint).child(u"Rozmiary"))
                             .child(div().textSize(32).fontBold().child(u"Nagłówek 32"))

@@ -38,6 +38,35 @@ struct UnderlineStyle {
     bool wavy = false;
 };
 
+// How far a text background reaches up and down.
+enum class TextBackgroundExtent : std::uint8_t {
+    Glyphs, // the text's fonts: their ascent above the baseline, their descent below (CSS's content area)
+    Line, // the whole line box
+};
+
+// A shape drawn under a span's glyphs (docs/ATRAMENT.md "Text", background shapes): a chip's
+// pill, inline code's rounded box, a highlight. One rounded rectangle per line the span shows on
+// (TextLayout::glyphRects: from the caret at its start to the caret at its end, no hanging spaces
+// at a wrap), each a whole shape — rounded and padded at both ends, as CSS's
+// `box-decoration-break: clone`. The line layout reserves no room for it: padding reaches under
+// the neighbours (leave room with spaces inside the span — a chip's no-break spaces), so lines
+// and rows keep their sizes whatever the shapes.
+//
+// Adjacent pieces of text with equal backgrounds (every field, `group` too) are one shape,
+// whatever else differs between them — a highlight with a bold word in it, a span cut by a link's
+// ends; `group` tells two adjacent shapes of one look apart (two tags side by side).
+struct TextBackground {
+    Color color;
+    float radius = 0; // the corners (logical px), at most half the shape's height
+    bool pill = false; // round ends: the radius is half the height
+    float paddingX = 0; // how far the shape reaches beyond the glyphs on each side
+    float inset = 0; // in from the extent at the top and the bottom (negative: out)
+    TextBackgroundExtent extent = TextBackgroundExtent::Glyphs;
+    std::uint32_t group = 0;
+
+    bool operator==(const TextBackground &) const = default;
+};
+
 struct TextStyle {
     std::u16string fontFamily = u"Inter";
     float fontSize = 14;
@@ -50,7 +79,7 @@ struct TextStyle {
     WhiteSpace whiteSpace = WhiteSpace::Normal;
     std::optional<UnderlineStyle> underline;
     bool strikethrough = false;
-    std::optional<Color> background; // highlight behind the text
+    std::optional<TextBackground> background; // a shape under the text
     std::u16string fontFeatures;
 
     float resolvedLineHeight() const
@@ -76,7 +105,7 @@ struct TextStyleRefinement {
     std::optional<WhiteSpace> whiteSpace;
     std::optional<std::optional<UnderlineStyle>> underline;
     std::optional<bool> strikethrough;
-    std::optional<std::optional<Color>> background;
+    std::optional<std::optional<TextBackground>> background;
     std::optional<std::u16string> fontFeatures;
 
     bool isEmpty() const

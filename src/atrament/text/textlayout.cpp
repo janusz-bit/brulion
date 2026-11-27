@@ -29,11 +29,19 @@ struct ResolvedRun {
     float fontSize = 0;
     std::uint32_t styleIndex = 0;
     const FontRun *source = nullptr; // features and language; null for text past the runs
+    std::optional<InlineBox> box;    // an inline box (sizes finite and ≥ 0)
 };
 
 float usableSize(float size)
 {
     return std::isfinite(size) && size > 0 ? size : 0.0f;
+}
+
+std::optional<InlineBox> usableBox(const std::optional<InlineBox> &box)
+{
+    if (!box)
+        return std::nullopt;
+    return InlineBox{usableSize(box->width), usableSize(box->ascent), usableSize(box->descent)};
 }
 
 std::vector<ResolvedRun> resolveRuns(const FontCollection &fonts, int length, std::span<const FontRun> runs)
@@ -54,6 +62,7 @@ std::vector<ResolvedRun> resolveRuns(const FontCollection &fonts, int length, st
         r.fontSize = usableSize(run.fontSize);
         r.styleIndex = run.styleIndex;
         r.source = &run;
+        r.box = usableBox(run.inlineBox);
         out.push_back(r);
         pos = r.end;
     }
@@ -160,14 +169,31 @@ hb_script_t scriptOf(char32_t c)
     return unicode::script(c);
 }
 
-// A run of one face and script within one font run: what HarfBuzz shapes at once.
+// A run of one face and script within one font run: what HarfBuzz shapes at once (or an inline
+// box, which is not shaped).
 struct Item {
     int start = 0;
     int end = 0;
     std::size_t run = 0;
     FaceId face = kNoFace;
     hb_script_t script = HB_SCRIPT_COMMON;
+    bool box = false;
 };
+
+// An inline box is one cluster with no break inside: its own ends become grapheme boundaries, the
+// boundaries and break opportunities inside it go.
+void applyInlineBoxes(const std::vector<ResolvedRun> &runs, std::vector<int> &graphemes, std::vector<BreakKind> &breaks)
+{
+    for (const ResolvedRun &run : runs) {
+        if (!run.box || run.end <= run.start)
+            continue;
+        auto from = std::lower_bound(graphemes.begin(), graphemes.end(), run.start);
+        auto to = std::upper_bound(from, graphemes.end(), run.end);
+        from = graphemes.insert(graphemes.erase(from, to), {run.start, run.end});
+        for (int k = run.start + 1; k < run.end; ++k)
+            breaks[std::size_t(k)] = BreakKind::None;
+    }
+}
 
 } // namespace layoutdetail
 
@@ -258,6 +284,11 @@ void TextLayout::Builder::shape(const FontCollection &fonts, std::u16string_view
     std::size_t g = 0;
     for (std::size_t r = 0; r < runs.size(); ++r) {
         const ResolvedRun &run = runs[r];
+        if (run.box) {
+            if (run.end > run.start)
+                items.push_back(Item{run.start, run.end, r, run.face, HB_SCRIPT_COMMON, true});
+            continue;
+        }
         int pos = run.start;
         while (pos < run.end) {
             while (g < graphemes.size() && graphemes[std::size_t(g)] <= pos)
@@ -296,6 +327,13 @@ void TextLayout::Builder::shape(const FontCollection &fonts, std::u16string_view
     std::size_t featuresRun = std::size_t(-1);
     for (const Item &item : items) {
         const ResolvedRun &run = runs[item.run];
+        if (item.box) {
+            // One cluster as wide as the box, every offset inside it at its start.
+            for (; filled < item.end; ++filled)
+                offsetX[std::size_t(filled)] = pen;
+            pen += run.box->width;
+            continue;
+        }
         hb_font_t *font = fonts.hbFont(item.face);
         if (!font) {
             spreadCluster(offsetX, filled, item.start, item.end, pen, 0, graphemes, spreadIndex);
@@ -476,10 +514,16 @@ void TextLayout::Builder::wrap(TextLayout &layout, const FontCollection &fonts, 
         float space = 0;
     };
     std::vector<RunMetrics> metrics(runs.size());
+    layout.m_runs.clear();
+    layout.m_runs.reserve(runs.size());
     for (std::size_t r = 0; r < runs.size(); ++r) {
         const FontMetrics m = fonts.metrics(runs[r].face);
         const float size = runs[r].fontSize;
         metrics[r] = {m.ascent * size, m.descent * size, m.lineGap * size, 0};
+        if (const std::optional<InlineBox> &box = runs[r].box)
+            metrics[r] = {box->ascent, box->descent, 0, 0}; // the box in place of its text's font
+        layout.m_runs.push_back(LaidOutRun{runs[r].start, runs[r].end, runs[r].styleIndex, metrics[r].ascent,
+                                           metrics[r].descent, runs[r].box.has_value()});
         if (hb_font_t *font = fonts.hbFont(runs[r].face)) {
             hb_codepoint_t space = 0;
             if (hb_font_get_nominal_glyph(font, ' ', &space))
@@ -537,18 +581,33 @@ void TextLayout::Builder::wrap(TextLayout &layout, const FontCollection &fonts, 
         line.glyphCount = std::uint32_t(gi) - line.firstGlyph;
     }
     layout.m_size = {width, top};
+
+    // The inline boxes on their lines.
+    layout.m_inlineBoxes.clear();
+    for (const ResolvedRun &run : runs) {
+        if (!run.box || run.end <= run.start)
+            continue;
+        const int li = layout.lineIndex(run.start);
+        const TextLine &line = lines[std::size_t(li)];
+        const float x = X[std::size_t(run.start)] - X[std::size_t(line.start)];
+        layout.m_inlineBoxes.push_back(
+                PlacedInlineBox{run.start, run.end, li,
+                                Rect::fromLTRB(x, line.baseline - run.box->ascent, x + run.box->width,
+                                               line.baseline + run.box->descent),
+                                run.styleIndex});
+    }
 }
 
 int TextLayout::Builder::nearest(const TextLayout &layout, std::size_t li, float px, bool softEnd)
 {
     const TextLine &line = layout.m_lines[li];
     const bool wraps = line.end == line.next && li + 1 < layout.m_lines.size() && line.end > line.start;
-    const int end = wraps && !softEnd ? previousGraphemeBoundary(layout.m_text, line.end) : line.end;
+    const int end = wraps && !softEnd ? layout.previousCaretStop(line.end) : line.end;
     const float origin = x(layout, line.start);
     int best = line.start;
     float bestDistance = std::abs(px);
     for (int o = line.start; o < end;) {
-        o = std::min(nextGraphemeBoundary(layout.m_text, o), end);
+        o = std::min(layout.nextCaretStop(o), end);
         const float ox = x(layout, o) - origin;
         const float distance = std::abs(ox - px);
         if (distance < bestDistance) {
@@ -637,6 +696,75 @@ std::vector<Rect> TextLayout::selectionRects(Range range) const
     return rects;
 }
 
+std::vector<LineRect> TextLayout::glyphRects(Range range) const
+{
+    std::vector<LineRect> rects;
+    const int n = length();
+    const int a = std::clamp(std::min(range.start, range.end), 0, n);
+    const int b = std::clamp(std::max(range.start, range.end), 0, n);
+    if (a >= b)
+        return rects;
+    for (std::size_t li = 0; li < m_lines.size(); ++li) {
+        const TextLine &line = m_lines[li];
+        if (b <= line.start)
+            break;
+        const int from = std::max(a, line.start);
+        const int to = std::min(b, line.end);
+        if (from >= to)
+            continue;
+        const float origin = Builder::x(*this, line.start);
+        const float x0 = Builder::x(*this, from) - origin;
+        // Hanging spaces at a wrap are not shown: the piece ends at the line's visible end.
+        const float x1 = std::min(Builder::x(*this, to) - origin, line.width);
+        if (x1 - x0 < 0.5f)
+            continue;
+        float ascent = 0;
+        float descent = 0;
+        auto it = std::upper_bound(m_runs.begin(), m_runs.end(), from,
+                                   [](int o, const LaidOutRun &run) { return o < run.end; });
+        for (; it != m_runs.end() && it->start < to; ++it) {
+            ascent = std::max(ascent, it->ascent);
+            descent = std::max(descent, it->descent);
+        }
+        rects.push_back(LineRect{int(li), Rect::fromLTRB(x0, line.baseline - ascent, x1, line.baseline + descent)});
+    }
+    return rects;
+}
+
+int TextLayout::nextCaretStop(int offset) const
+{
+    const int n = length();
+    if (offset >= n)
+        return n;
+    offset = std::max(0, offset);
+    // The first box that ends after the offset: the offset is in it (its end is the stop), or the
+    // next grapheme boundary stops at its start.
+    auto box = std::upper_bound(m_inlineBoxes.begin(), m_inlineBoxes.end(), offset,
+                                [](int o, const PlacedInlineBox &b) { return o < b.end; });
+    if (box != m_inlineBoxes.end() && box->start <= offset)
+        return box->end;
+    const int next = nextGraphemeBoundary(m_text, offset);
+    return box != m_inlineBoxes.end() ? std::min(next, box->start) : next;
+}
+
+int TextLayout::previousCaretStop(int offset) const
+{
+    offset = std::min(offset, length());
+    if (offset <= 0)
+        return 0;
+    // The last box that starts before the offset: the offset is in it or at its end (its start is
+    // the stop), or the previous grapheme boundary stops at its end.
+    auto box = std::lower_bound(m_inlineBoxes.begin(), m_inlineBoxes.end(), offset,
+                                [](const PlacedInlineBox &b, int o) { return b.start < o; });
+    if (box != m_inlineBoxes.begin()) {
+        --box;
+        if (box->end >= offset)
+            return box->start;
+        return std::max(previousGraphemeBoundary(m_text, offset), box->end);
+    }
+    return previousGraphemeBoundary(m_text, offset);
+}
+
 int TextLayout::offsetAbove(int offset, float x) const
 {
     const int li = lineIndex(offset);
@@ -665,6 +793,7 @@ TextLayout TextLayout::Builder::build(const FontCollection &fonts, std::u16strin
     detail::graphemeBoundaries(text, graphemes);
     std::vector<BreakKind> breaks;
     detail::lineBreaks(text, graphemes, breaks);
+    applyInlineBoxes(resolved, graphemes, breaks);
     std::vector<PositionedGlyph> glyphs;
     shape(fonts, text, resolved, graphemes, glyphs, layout.m_offsetX);
     wrap(layout, fonts, resolved, std::move(glyphs), graphemes, breaks, style);
@@ -693,7 +822,9 @@ TextLayout TextLayout::Builder::rewrap(const FontCollection &fonts, const TextLa
     detail::graphemeBoundaries(text, graphemes);
     std::vector<BreakKind> breaks;
     detail::lineBreaks(text, graphemes, breaks);
-    wrap(out, fonts, resolveRuns(fonts, int(text.size()), runs), std::move(glyphs), graphemes, breaks, style);
+    const std::vector<ResolvedRun> resolved = resolveRuns(fonts, int(text.size()), runs);
+    applyInlineBoxes(resolved, graphemes, breaks);
+    wrap(out, fonts, resolved, std::move(glyphs), graphemes, breaks, style);
     return out;
 }
 
