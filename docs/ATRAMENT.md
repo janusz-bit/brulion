@@ -627,8 +627,10 @@ The targets in M5 are estimates of what the change can reach, not measurements.
 
 The design of M2: the page and journal block editor drawn by Atrament, inside today's QML shell,
 behind a setting, replacing `BlockEditor.qml` one kind of row at a time. This section is the plan
-its code follows (and changes first); built so far: `list()` (below), step 1 "Reading" and step 2
-"Editing text rows" (their entries under "Steps").
+its code follows (and changes first); built so far (2026-11-27): `list()` (below) and every step —
+reading, editing, selection, structure (the journal stream as one list), and every kind of block
+but audio, video, Obsidian bases and database views, which stay hosted QML delegates (each step's
+entry under "Steps", with what is **not yet** done).
 
 ### What stays
 
