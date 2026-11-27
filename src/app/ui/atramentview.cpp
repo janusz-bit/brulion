@@ -909,6 +909,7 @@ bool AtramentView::editTableCell(int row, int tableRow, int column, int cursor)
     Q_UNUSED(cursor)
 #endif
     return done;
+}
 
 // --- "page": the edited text's extras (spell marks, Vim)
 
