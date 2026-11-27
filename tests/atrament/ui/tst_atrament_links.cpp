@@ -69,6 +69,42 @@ struct Para {
     }
 };
 
+// A link with a menu of its own (a chip's, a tag's) in a row with one too: a right-click or a
+// finger held on the link opens the link's, beside it the row's.
+struct Menus {
+    int linkMenu = 0;
+    int rowMenu = 0;
+    int rowHeld = 0;
+    Point at;
+    AnyElement render(Window &, Context<Menus> &cx)
+    {
+        App *app = &cx.app();
+        const EntityId id = cx.entityId();
+        auto bump = [app, id](int Menus::*field) {
+            app->updateEntity<Menus>(id, [field](Menus &m, Context<Menus> &c) {
+                ++(m.*field);
+                c.notify();
+            });
+        };
+        return div().sizeFull().bg(white()).p(10).child(
+                div().id(u"row")
+                        .w(400)
+                        .textSize(16)
+                        .textColor(black())
+                        .fontFamily(u"Brulion Inter")
+                        .onMouseDown(MouseButton::Right, [bump](const MouseDownEvent &, Window &, App &) { bump(&Menus::rowMenu); })
+                        .onLongPress([bump](Point, Window &, App &) { bump(&Menus::rowHeld); })
+                        .child(text(kText).link({14, 20}, [](const ClickEvent &, Window &, App &) {},
+                                                [app, id](Point p, Window &, App &) {
+                                                    app->updateEntity<Menus>(id, [p](Menus &m, Context<Menus> &c) {
+                                                        ++m.linkMenu;
+                                                        m.at = p;
+                                                        c.notify();
+                                                    });
+                                                })));
+    }
+};
+
 const AccessibilityNode *linkNode(const AccessibilityTree &tree, std::u16string_view name)
 {
     for (const AccessibilityNode *n : tree.nodes())
@@ -89,6 +125,7 @@ class TestAtramentLinks : public QObject {
 private Q_SLOTS:
     void clickHoverAndAccessibility();
     void linkAcrossALineBreak();
+    void linkMenuBeforeTheRows();
 };
 
 void TestAtramentLinks::clickHoverAndAccessibility()
@@ -169,6 +206,38 @@ void TestAtramentLinks::linkAcrossALineBreak()
     // The bottom line's start and the top line's start (left edge + a little).
     h.tw.simulateClick({other->bounds.left() + 4, other->bounds.bottom() - 4});
     QCOMPARE(para.read(h.app).other, 1);
+}
+
+void TestAtramentLinks::linkMenuBeforeTheRows()
+{
+    using namespace std::chrono_literals;
+    Harness h({500, 120});
+    Entity<Menus> menus = h.app.newEntity<Menus>();
+    Window &w = h.app.openWindow(h.tw, menus);
+    w.setAccessibilityEnabled(true);
+    h.tw.settle();
+    const AccessibilityNode *main = linkNode(w.accessibilityTree(), u"Główna");
+    QVERIFY(main);
+    const Point onMain = centre(main->bounds);
+    const Point beside{15, onMain.y};
+    h.tw.simulateClick(onMain, MouseButton::Right);
+    QCOMPARE(menus.read(h.app).linkMenu, 1);
+    QCOMPARE(menus.read(h.app).rowMenu, 0);
+    QCOMPARE(menus.read(h.app).at.x, onMain.x);
+    h.tw.simulateClick(beside, MouseButton::Right);
+    QCOMPARE(menus.read(h.app).rowMenu, 1);
+    QCOMPARE(menus.read(h.app).linkMenu, 1);
+    // A finger held: the link's menu, not the row's long press.
+    h.tw.simulateTouchDown(onMain);
+    h.tw.advance(600ms);
+    h.tw.simulateTouchUp(onMain);
+    QCOMPARE(menus.read(h.app).linkMenu, 2);
+    QCOMPARE(menus.read(h.app).rowHeld, 0);
+    h.tw.simulateTouchDown(beside);
+    h.tw.advance(600ms);
+    h.tw.simulateTouchUp(beside);
+    QCOMPARE(menus.read(h.app).rowHeld, 1);
+    QCOMPARE(menus.read(h.app).linkMenu, 2);
 }
 
 QTEST_GUILESS_MAIN(TestAtramentLinks)

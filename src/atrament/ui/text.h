@@ -77,8 +77,12 @@ struct TextSpan {
 
 struct TextLink {
     using ClickListener = Fn<void(const ClickEvent &, Window &, App &)>;
+    // The link's own menu (a chip's, a tag's): a right-click or a finger held on it, at that point
+    // — the row's right-click and long press around it do not run.
+    using MenuListener = Fn<void(Point, Window &, App &)>;
     Range range;
     ClickListener onClick;
+    MenuListener onMenu = {};
 };
 
 // The paragraph a Text laid out, shared with code outside the frame (`trackLayout`): where a
@@ -117,7 +121,7 @@ public:
     // Spans apply in order over the inherited style.
     Text &&spans(std::span<const TextSpan> spans) &&;
     Text &&span(Range range, TextStyleRefinement style) &&;
-    Text &&link(Range range, TextLink::ClickListener onClick) &&;
+    Text &&link(Range range, TextLink::ClickListener onClick, TextLink::MenuListener onMenu = {}) &&;
     // Shares the layout of every frame with a handle (above).
     Text &&trackLayout(const TextLayoutHandle &handle) &&
     {

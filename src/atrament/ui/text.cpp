@@ -47,9 +47,9 @@ struct Text::LinkState {
     MouseDownEvent down;
 };
 
-Text &&Text::link(Range range, TextLink::ClickListener onClick) &&
+Text &&Text::link(Range range, TextLink::ClickListener onClick, TextLink::MenuListener onMenu) &&
 {
-    m_links.push_back(TextLink{range, onClick});
+    m_links.push_back(TextLink{range, onClick, onMenu});
     return std::move(*this);
 }
 
@@ -214,6 +214,7 @@ void Text::prepaint(Rect bounds, Window &window, App &)
             window.setCursorStyle(hitbox, CursorStyle::PointingHand);
             m_linkHitboxes.push_back(hitbox);
             m_hitboxLink.push_back(std::uint32_t(k));
+
         }
     }
     // The hovered link underlined (its pieces' paint styles; the layout stays).
@@ -299,6 +300,13 @@ void Text::paint(Rect bounds, Window &window, App &)
         }
     }
 
+    // A finger held on a link with a menu: its menu, before the long press of the elements around
+    // it (registered in paint, as theirs are: the later, the more on top).
+    for (std::size_t i = 0; i < m_linkHitboxes.size(); ++i) {
+        const std::size_t k = m_hitboxLink[i];
+        if (m_links[k].onMenu)
+            window.onLongPress(m_linkHitboxes[i], [self, k](Point p, Window &w, App &app) { self->m_links[k].onMenu(p, w, app); });
+    }
     window.onMouseEvent([self](const PlatformInput &input, DispatchPhase phase, Window &w, App &app) {
         LinkState &st = *self->m_linkState;
         int under = -1;
@@ -318,6 +326,11 @@ void Text::paint(Rect bounds, Window &window, App &)
             st.pressed = down->button == MouseButton::Left ? under : -1;
             if (under >= 0)
                 st.down = *down;
+            // A right-click on a link with a menu: its menu, not the row's.
+            if (down->button == MouseButton::Right && under >= 0 && self->m_links[std::size_t(under)].onMenu) {
+                self->m_links[std::size_t(under)].onMenu(down->position, w, app);
+                w.stopPropagation();
+            }
             return;
         }
         if (const auto *up = std::get_if<MouseUpEvent>(&input)) {
