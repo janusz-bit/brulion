@@ -135,6 +135,15 @@ public:
         m_state->scrollTo = row;
         m_state->scrollToPosition = position;
     }
+    // The next frame shows the list's very top, its header too (a page opened anew).
+    void scrollToTop()
+    {
+        m_state->scrollTo.reset();
+        m_state->atEnd = false;
+        m_state->atTop = true;
+        m_state->anchorRow = 0;
+        m_state->anchorInto = 0;
+    }
     std::size_t anchorRow() const { return m_state->anchorRow; }
     float anchorInto() const { return m_state->anchorInto; }
     const ScrollState &scroll() const { return m_state->scroll; }

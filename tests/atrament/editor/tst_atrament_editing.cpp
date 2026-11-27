@@ -131,6 +131,7 @@ private Q_SLOTS:
     void calculationsDrawnAndEdited();
     void rulesDrawnAndEdited();
     void zoomOutKeepsEditedInView();
+    void anotherPageOpensAtItsTop();
 };
 
 void TestAtramentEditing::clickEditsAtTheCharacter()
@@ -916,6 +917,27 @@ void TestAtramentEditing::zoomOutKeepsEditedInView()
     QVERIFY2(inView(row), qPrintable(QString::number(h.view().rowBounds(row) ? h.view().rowBounds(row)->top() : -1)));
     h.tw.simulateTyping(u"ż");
     QCOMPARE(h.editText(row), u"Wiersz 140 źdźbłoż"_s);
+}
+
+// Another page opened in the view starts at its top, wherever the last one was scrolled.
+void TestAtramentEditing::anotherPageOpensAtItsTop()
+{
+    QString md;
+    for (int k = 0; k < 150; ++k)
+        md += u"- Wiersz %1 źdźbło\n"_s.arg(k);
+    Harness h(md);
+    h.tw.simulateScroll({300, 200}, {0, 1e7f});
+    QVERIFY(h.view().handle().scroll().offset.y > 1000);
+    QString second;
+    for (int k = 0; k < 60; ++k)
+        second += u"- Druga strona, żółw %1\n"_s.arg(k);
+    h.host.setFile(u"Druga.md"_s, second);
+    h.controller.setPath(u"Druga.md"_s);
+    h.tw.settle();
+    QCOMPARE(h.model()->rowCount(), 60);
+    QCOMPARE(h.view().handle().scroll().offset.y, 0.0f);
+    const std::optional<at::Rect> first = h.view().rowBounds(0);
+    QVERIFY(first && first->top() >= 0 && first->top() < 20);
 }
 
 QTEST_MAIN(TestAtramentEditing)

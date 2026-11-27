@@ -111,6 +111,13 @@ void PageView::setController(PageController *controller, at::Context<PageView> &
                     v.controllerTextReset(row, text, cursor, c);
                 });
             }));
+    // Another page opens at its top, wherever the last one was scrolled.
+    m_controllerConnections.push_back(QObject::connect(controller, &PageController::pathChanged, controller, [app, self] {
+        app->updateEntity<PageView>(self, [](PageView &v, at::Context<PageView> &c) {
+            v.m_handle.scrollToTop();
+            c.notify();
+        });
+    }));
     // A zoom's change brings back (or hides) the rows around the edited one: it stays in view.
     m_controllerConnections.push_back(QObject::connect(controller, &PageController::zoomChanged, controller, [app, self] {
         app->updateEntity<PageView>(self, [](PageView &v, at::Context<PageView> &c) {

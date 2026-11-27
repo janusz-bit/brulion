@@ -533,6 +533,14 @@ void TestAtramentList::headerAndFooter()
     });
     h.tw.settle();
     QVERIFY(near(h.tw.pixel(50, 1), rgb(0x000080)));
+    // scrollToTop() shows the very top: the header again (a page opened anew).
+    edged.update(h.app, [](Edged &e, Context<Edged> &cx) {
+        e.handle.scrollToTop();
+        cx.notify();
+    });
+    h.tw.settle();
+    QVERIFY(near(h.tw.pixel(50, 1), kRed));
+    QCOMPARE(edged.read(h.app).handle.scroll().offset.y, 0.0f);
     // The end: the footer at the bottom, below the last row.
     h.tw.simulateScroll({50, 100}, {0, 1e7f});
     QVERIFY(near(h.tw.pixel(50, 199), kGreen));
