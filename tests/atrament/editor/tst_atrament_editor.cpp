@@ -103,6 +103,12 @@ private Q_SLOTS:
     void spansCarryShapes();
     void chipsAndCodeDrawnAsShapes();
     void pageIconAsInlineObject();
+    void foreignRowsReportTheirFrames();
+    void foreignHeightsAreTheDelegates();
+    void foreignHeightAboveKeepsTheScreen();
+    void headerAndFooterAreTheListsEdges();
+    void foreignRowsNearTheView();
+    void foreignRowsLeftToQtAccessibility();
 };
 
 void TestAtramentEditor::spansOfRenderedText()
@@ -465,6 +471,226 @@ void TestAtramentEditor::pageIconAsInlineObject()
         QVERIFY(q->bounds.top() >= 10 && q->bounds.bottom() <= 34);
     }
     QCOMPARE(placeholders, 1);
+}
+
+// --- Foreign rows, the header and the footer (foreignrows.h: QML items placed over the frame)
+
+namespace {
+
+// Paragraphs with a code block every `every` blocks (rows k·every + every − 1 are code).
+QString pageWithCode(int blocks, int every)
+{
+    QStringList parts;
+    for (int k = 0; k < blocks; ++k) {
+        if (k % every == every - 1)
+            parts << u"```cpp\nint gęś = %1;\n```"_s.arg(k);
+        else
+            parts << u"Akapit %1 o źdźble trawy."_s.arg(k);
+    }
+    return parts.join(u"\n\n"_s) + u'\n';
+}
+
+const ForeignFrame *frameOf(const PageView &v, ForeignFrame::Kind kind, int row = -1)
+{
+    for (const ForeignFrame &f : v.foreignFrames())
+        if (f.kind == kind && (kind != ForeignFrame::Kind::Row || f.row == row))
+            return &f;
+    return nullptr;
+}
+
+} // namespace
+
+void TestAtramentEditor::foreignRowsReportTheirFrames()
+{
+    Harness h(pageWithCode(40, 4));
+    const PageView &v = h.view();
+    QVERIFY(!v.drawsRow(3));
+    // The code block at row 3: its box where the list put the row (no header: rows from 0), its
+    // block's uid, the list's view as its mask.
+    const ForeignFrame *code = frameOf(v, ForeignFrame::Kind::Row, 3);
+    QVERIFY(code);
+    QCOMPARE(code->uid, h.model.uidAt(3));
+    const RowHeightTree &tree = v.rows().heights();
+    const float top = float(tree.offsetOf(PageRows::treeRow(3)) - tree.offsetOf(PageRows::treeRow(0)));
+    QCOMPARE(code->bounds.top(), top);
+    QCOMPARE(code->bounds.left(), 0.0f);
+    QCOMPARE(code->bounds.width(), 600.0f);
+    QCOMPARE(code->bounds.height(), float(tree.height(PageRows::treeRow(3))));
+    QCOMPARE(code->mask, (at::Rect{{0, 0}, {600, 400}}));
+    // The header and the footer are there too (0 px tall: no QML items told their heights).
+    const ForeignFrame *header = frameOf(v, ForeignFrame::Kind::Header);
+    QVERIFY(header && frameOf(v, ForeignFrame::Kind::Footer));
+    QCOMPARE(header->bounds.top(), 0.0f);
+    QCOMPARE(header->bounds.height(), 0.0f);
+    // Nothing drawn in its place: the delegate goes over it.
+    QCOMPARE(h.inkRows(int(top) + 2, int(code->bounds.bottom()) - 2), 0);
+    // Scrolled by 50 px: the box moved with the rows, in the same frame.
+    h.tw.simulateScroll({300, 200}, {0, 50});
+    const ForeignFrame *moved = frameOf(v, ForeignFrame::Kind::Row, 3);
+    QVERIFY(moved);
+    QCOMPARE(moved->bounds.top(), top - 50);
+    QCOMPARE(frameOf(v, ForeignFrame::Kind::Header)->bounds.top(), -50.0f);
+    // Far down: rows out of the frame report nothing; the ones in it do.
+    h.tw.simulateScroll({300, 200}, {0, 2000});
+    QVERIFY(!frameOf(v, ForeignFrame::Kind::Row, 3));
+    int rows = 0;
+    for (const ForeignFrame &f : v.foreignFrames()) {
+        if (f.kind != ForeignFrame::Kind::Row)
+            continue;
+        ++rows;
+        QVERIFY(!v.drawsRow(f.row));
+        QVERIFY(f.bounds.intersects(f.mask));
+        QCOMPARE(f.uid, h.model.uidAt(f.row));
+        QCOMPARE(v.rowBounds(f.row)->top(), f.bounds.top());
+    }
+    QVERIFY(rows >= 1);
+}
+
+void TestAtramentEditor::foreignHeightsAreTheDelegates()
+{
+    Harness h(pageWithCode(12, 4));
+    const RowHeightTree &tree = h.view().rows().heights();
+    // Atrament's own layout of a foreign row is no measurement: its delegate's height is.
+    QVERIFY(!tree.isMeasured(PageRows::treeRow(3)));
+    const qreal paragraphTop = tree.offsetOf(PageRows::treeRow(4));
+    const qreal estimate = tree.height(PageRows::treeRow(3));
+    bool changed = false;
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &cx) {
+        changed = v.setForeignHeight(3, 173);
+        cx.notify();
+    });
+    QVERIFY(changed);
+    h.tw.settle();
+    QVERIFY(tree.isMeasured(PageRows::treeRow(3)));
+    QCOMPARE(tree.height(PageRows::treeRow(3)), 173.0);
+    QCOMPARE(tree.offsetOf(PageRows::treeRow(4)), paragraphTop - estimate + 173);
+    const ForeignFrame *code = frameOf(h.view(), ForeignFrame::Kind::Row, 3);
+    QVERIFY(code);
+    QCOMPARE(code->bounds.height(), 173.0f);
+    // The same height again changes nothing; a drawn row takes none.
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &) {
+        QVERIFY(!v.setForeignHeight(3, 173));
+        QVERIFY(v.setForeignHeight(-1, 10) == false);
+    });
+    // Laid out again (the next frames, a narrower window), it keeps the delegate's height until the
+    // delegate says otherwise.
+    h.tw.resize({300, 400});
+    QCOMPARE(tree.height(PageRows::treeRow(3)), 173.0);
+    QVERIFY(!tree.isMeasured(PageRows::treeRow(3))); // an estimate until its delegate measures again
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &cx) {
+        QVERIFY(v.setForeignHeight(3, 173));
+        cx.notify();
+    });
+    h.tw.settle();
+    QVERIFY(tree.isMeasured(PageRows::treeRow(3)));
+}
+
+void TestAtramentEditor::foreignHeightAboveKeepsTheScreen()
+{
+    // A delegate above the view measured later (a picture loaded, a query answered): rows in view
+    // stay where they are.
+    Harness h(pageWithCode(300, 10));
+    h.page.update(h.app, [](PageView &v, at::Context<PageView> &cx) {
+        v.handle().scrollToRow(150);
+        cx.notify();
+    });
+    h.tw.settle();
+    QCOMPARE(h.view().handle().anchorRow(), std::size_t(150));
+    const at::RasterTarget before = h.tw.image();
+    QVERIFY(!h.view().drawsRow(139));
+    h.page.update(h.app, [](PageView &v, at::Context<PageView> &cx) {
+        QVERIFY(v.setForeignHeight(139, 333));
+        QVERIFY(v.setForeignHeight(9, 12));
+        cx.notify();
+    });
+    h.tw.settle();
+    QCOMPARE(h.view().handle().anchorRow(), std::size_t(150));
+    const at::RasterTarget &after = h.tw.image();
+    int differ = 0;
+    for (int y = 0; y < after.height; ++y)
+        for (int x = 0; x < after.width - 12; ++x) // the scroll bar moves: the page got taller
+            differ += after.at(x, y).r != before.at(x, y).r ? 1 : 0;
+    QVERIFY2(differ == 0, qPrintable(QString::number(differ)));
+}
+
+void TestAtramentEditor::headerAndFooterAreTheListsEdges()
+{
+    Harness h(pageWithCode(30, 5));
+    // The header's items are 120 px tall: the rows start below them, the page at its top.
+    h.page.update(h.app, [](PageView &v, at::Context<PageView> &cx) {
+        QVERIFY(v.setHeaderHeight(120));
+        QVERIFY(v.setFooterHeight(90));
+        cx.notify();
+    });
+    h.tw.settle();
+    const PageView &v = h.view();
+    const ForeignFrame *header = frameOf(v, ForeignFrame::Kind::Header);
+    QVERIFY(header);
+    QCOMPARE(header->bounds, (at::Rect{{0, 0}, {600, 120}}));
+    QCOMPARE(v.rowBounds(0)->top(), 120.0f);
+    QCOMPARE(v.rowAtY(119), -1);
+    QCOMPARE(v.rowAtY(121), 0);
+    QCOMPARE(h.inkRows(2, 118), 0);   // the header's place: the QML items draw it
+    QVERIFY(h.inkRows(120, 150) > 5); // row 0's text
+    // A taller header (the title wrapped): still at the top, the rows lower.
+    h.page.update(h.app, [](PageView &v, at::Context<PageView> &cx) {
+        v.setHeaderHeight(160);
+        cx.notify();
+    });
+    h.tw.settle();
+    QCOMPARE(frameOf(v, ForeignFrame::Kind::Header)->bounds.top(), 0.0f);
+    QCOMPARE(v.rowBounds(0)->top(), 160.0f);
+    // Scrolled to the end: the footer under the last row, at the view's bottom.
+    h.tw.simulateScroll({300, 200}, {0, 1e8f});
+    const ForeignFrame *footer = frameOf(v, ForeignFrame::Kind::Footer);
+    QVERIFY(footer);
+    QCOMPARE(footer->bounds.bottom(), 400.0f);
+    QCOMPARE(footer->bounds.height(), 90.0f);
+    QCOMPARE(footer->bounds.top(), v.rowBounds(29)->bottom());
+    QCOMPARE(v.rowAtY(footer->bounds.top() + 5), -1);
+}
+
+void TestAtramentEditor::foreignRowsNearTheView()
+{
+    Harness h(pageWithCode(60, 3));
+    const PageView &v = h.view();
+    std::vector<int> painted;
+    for (const ForeignFrame &f : v.foreignFrames())
+        if (f.kind == ForeignFrame::Kind::Row)
+            painted.push_back(f.row);
+    QVERIFY(!painted.empty());
+    // Near the view: those in it and the next ones below (not laid out yet), all foreign.
+    const std::vector<int> near = v.foreignRowsNear(0, 200);
+    QVERIFY(near.size() > painted.size());
+    for (int row : painted)
+        QVERIFY(std::find(near.begin(), near.end(), row) != near.end());
+    for (int row : near) {
+        QVERIFY(!v.drawsRow(row));
+        QCOMPARE(row % 3, 2);
+        const std::optional<at::Rect> b = v.rowBounds(row);
+        QVERIFY(b && b->top() < 400 + 200);
+    }
+    // Nothing above the top of the page.
+    QCOMPARE(v.foreignRowsNear(1000, -400).size(), std::size_t(0));
+}
+
+void TestAtramentEditor::foreignRowsLeftToQtAccessibility()
+{
+    Harness h(pageWithCode(8, 4));
+    h.window->setAccessibilityEnabled(true);
+    h.tw.settle();
+    std::vector<std::int64_t> items;
+    for (const at::AccessibilityNode *n : h.window->accessibilityTree().nodes())
+        if (n->role == at::Role::ListItem)
+            items.push_back(n->rowIndex);
+    // Paragraphs are list items; the code blocks (rows 3 and 7) are not: their delegates' own
+    // nodes are Qt Quick's. The header and the footer are none either.
+    QVERIFY(std::find(items.begin(), items.end(), 0) != items.end());
+    QVERIFY(std::find(items.begin(), items.end(), 4) != items.end());
+    QVERIFY(std::find(items.begin(), items.end(), 3) == items.end());
+    QVERIFY(std::find(items.begin(), items.end(), 7) == items.end());
+    for (std::int64_t i : items)
+        QVERIFY(i >= 0 && i < 8);
 }
 
 QTEST_MAIN(TestAtramentEditor)

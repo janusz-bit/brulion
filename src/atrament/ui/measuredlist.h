@@ -24,6 +24,11 @@
 // anchor so it follows its row. A list scrolled to its end stays there (its last row at the
 // bottom) while rows are measured or added. Touch scrolling and the fling, the focused row kept in the frame,
 // the accessibility list, the wheel and the scroll bar are uniformList's (list.h).
+//
+// A header and a footer (`header(render)`, `footer(render)`: a page's title above its blocks, the
+// room under the last one) scroll with the rows: laid out at the list's width in every frame, they
+// are no rows — no index, no list item for screen readers — and the rows' offsets do not count
+// them (the extents know only rows). A list at its very top stays there while the header grows.
 
 #include "base/function.h"
 #include "ui/div.h"
@@ -115,6 +120,9 @@ public:
         float lastY = 0;      // the y the last frame drew
         float width = -1;     // the width the rows were measured at
         bool atEnd = false;   // scrolled to the end: the last row stays at the bottom
+        bool atTop = true;    // scrolled to the very top (the header's): it stays there
+        float leading = 0;    // the header's height (above row 0) and the footer's, last laid out
+        float trailing = 0;
         std::optional<std::size_t> focusedRow;
         std::optional<std::size_t> scrollTo;
         ListPosition scrollToPosition = ListPosition::Start;
@@ -142,6 +150,7 @@ private:
 class MeasuredList final : public Element, public Styled<MeasuredList> {
 public:
     using RenderItem = Fn<AnyElement(std::size_t index, Window &, App &)>;
+    using RenderEdge = Fn<AnyElement(Window &, App &)>;
 
     MeasuredList(ElementId id, RowExtents &extents, RenderItem render);
 
@@ -152,6 +161,17 @@ public:
         return std::move(*this);
     }
     MeasuredList &&ariaLabel(std::u16string_view name) &&;
+    // Above the first row / below the last, scrolling with the rows (see above).
+    MeasuredList &&header(RenderEdge render) &&
+    {
+        m_renderHeader = render;
+        return std::move(*this);
+    }
+    MeasuredList &&footer(RenderEdge render) &&
+    {
+        m_renderFooter = render;
+        return std::move(*this);
+    }
 
     NodeId requestLayout(Window &window, App &app) override;
     void prepaint(Rect bounds, Window &window, App &app) override;
@@ -184,6 +204,10 @@ private:
     ArenaVector<float> m_tops; // each row's top in the rows' coordinates
     AnyElement m_kept;
     std::size_t m_keptIndex = 0;
+    RenderEdge m_renderHeader;
+    RenderEdge m_renderFooter;
+    AnyElement m_header;
+    AnyElement m_footer;
 };
 
 inline MeasuredList list(ElementId id, RowExtents &extents, MeasuredList::RenderItem render)

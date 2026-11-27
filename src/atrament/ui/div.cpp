@@ -259,6 +259,11 @@ Role Div::accessibilityRole() const
     return Role::None;
 }
 
+bool Div::accessibilityHidden() const
+{
+    return m_access && m_access->hidden;
+}
+
 AccessibilityNode *Div::describeAccessibility(Rect bounds, Window &window, bool &ownNode)
 {
     // A list's row: the row's root element describes the list item instead of making a node in it.

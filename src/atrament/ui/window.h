@@ -432,6 +432,7 @@ private:
         MouseDownEvent down; // the press, kept for the elements while Waiting
         Point last;
         bool decided = false; // the drag passed the slop: it scrolls, or never will
+        bool scrollOnly = false; // MouseDownEvent::scrollOnly: no element ever gets this touch
         ScrollState *target = nullptr;
         bool x = false;
         bool y = false;

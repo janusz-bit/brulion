@@ -10,6 +10,7 @@
 
 #include <QColor>
 #include <QPointer>
+#include <QQmlComponent>
 #include <QQmlEngine>
 #include <QString>
 
@@ -83,6 +84,15 @@ class AtramentView : public brulion::atrament::AtramentItem {
     Q_PROPERTY(int editCursor READ editCursor NOTIFY editStateChanged FINAL)
     Q_PROPERTY(QRectF editCaretRect READ editCaretRect NOTIFY editStateChanged FINAL)
 
+    // "page": the rows Atrament does not draw yet (foreign rows: code, tables, math, pictures,
+    // queries, the properties…) are `delegate` (the editor's BlockDelegate) placed over them, and
+    // `header` / `footer` are the items above the blocks and below them (the title, the
+    // properties, the zoom's breadcrumb; the room to tap under the last block) — the list's rows
+    // too, scrolling with it (editor/atrament/foreignhost.h; qthost.h "Hosted children").
+    Q_PROPERTY(QQmlComponent *delegate READ delegate WRITE setDelegate NOTIFY delegateChanged FINAL)
+    Q_PROPERTY(QQuickItem *header READ header WRITE setHeader NOTIFY headerChanged FINAL)
+    Q_PROPERTY(QQuickItem *footer READ footer WRITE setFooter NOTIFY footerChanged FINAL)
+
 public:
     explicit AtramentView(QQuickItem *parent = nullptr);
     ~AtramentView() override;
@@ -108,6 +118,15 @@ public:
 
     // The process's Atrament App, made on first use.
     static brulion::atrament::App &atramentApp();
+
+    QQmlComponent *delegate() const { return m_delegate.data(); }
+    void setDelegate(QQmlComponent *delegate);
+    QQuickItem *header() const { return m_header.data(); }
+    void setHeader(QQuickItem *item);
+    QQuickItem *footer() const { return m_footer.data(); }
+    void setFooter(QQuickItem *item);
+    // "page": the delegate over model row `row` (null: the row is Atrament's, or not near the view).
+    Q_INVOKABLE QQuickItem *rowItem(int row) const;
 
 Q_SIGNALS:
     void viewChanged();
@@ -150,9 +169,13 @@ Q_SIGNALS:
     void rowLongPressed(int row);
     // A mouse's press on one block dragged into another: select blocks `anchor` to `focus`.
     void dragSelectRequested(int anchor, int focus);
+    void delegateChanged();
+    void headerChanged();
+    void footerChanged();
 
 protected:
     void componentComplete() override;
+    void placeHostedChildren() override;
 
 private:
     void attachView();
@@ -205,4 +228,7 @@ private:
     QColor m_calloutQuote{0x8c, 0x95, 0x9f};
     qreal m_calloutFill = 0.10;
     qreal m_calloutRadius = 10;
+    QPointer<QQmlComponent> m_delegate;
+    QPointer<QQuickItem> m_header;
+    QPointer<QQuickItem> m_footer;
 };

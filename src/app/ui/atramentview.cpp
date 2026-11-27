@@ -15,6 +15,7 @@
 #include "blocklistmodel.h"
 #include "editorhost.h"
 #include "pagecontroller.h"
+#include "foreignhost.h"
 #include "pageview.h"
 #endif
 
@@ -41,6 +42,8 @@ Runtime &runtime()
 struct AtramentView::Page {
 #ifdef BRULION_HAS_ATRAMENT_EDITOR
     at::Entity<brulion::editor::atr::PageView> entity;
+    // The QML items over the foreign rows, the header and the footer.
+    std::unique_ptr<brulion::editor::atr::ForeignRowHost> host;
 #endif
 };
 
@@ -53,6 +56,11 @@ AtramentView::AtramentView(QQuickItem *parent)
 
 AtramentView::~AtramentView()
 {
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    // The delegates go with the item (they name the editor around it).
+    if (m_page)
+        m_page->host.reset();
+#endif
     // The window (closed by ~AtramentItem, after this) still names the page's entity: it goes
     // once the window has.
     if (m_page)
@@ -411,6 +419,10 @@ void AtramentView::attachView()
                     };
                 });
         applyStyle();
+        m_page->host = std::make_unique<brulion::editor::atr::ForeignRowHost>(this, r.app, m_page->entity, model);
+        m_page->host->setDelegate(m_delegate);
+        m_page->host->setHeader(m_header);
+        m_page->host->setFooter(m_footer);
         applyFind();
         connectController();
         attach(r.app, at::AnyView{m_page->entity.id(), &at::renderView<brulion::editor::atr::PageView>});
@@ -419,4 +431,64 @@ void AtramentView::attachView()
     }
 #endif
     qWarning() << "AtramentView: no view named" << m_view;
+}
+
+// --- "page": the QML items over the rows Atrament does not draw (editor/atrament/foreignhost.h)
+
+void AtramentView::setDelegate(QQmlComponent *delegate)
+{
+    if (delegate == m_delegate)
+        return;
+    m_delegate = delegate;
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_page && m_page->host)
+        m_page->host->setDelegate(delegate);
+#endif
+    Q_EMIT delegateChanged();
+}
+
+void AtramentView::setHeader(QQuickItem *item)
+{
+    if (item == m_header)
+        return;
+    m_header = item;
+    if (item)
+        item->setParentItem(this);
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_page && m_page->host)
+        m_page->host->setHeader(item);
+#endif
+    Q_EMIT headerChanged();
+}
+
+void AtramentView::setFooter(QQuickItem *item)
+{
+    if (item == m_footer)
+        return;
+    m_footer = item;
+    if (item)
+        item->setParentItem(this);
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_page && m_page->host)
+        m_page->host->setFooter(item);
+#endif
+    Q_EMIT footerChanged();
+}
+
+QQuickItem *AtramentView::rowItem(int row) const
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_page && m_page->host)
+        return m_page->host->rowItem(row);
+#endif
+    Q_UNUSED(row);
+    return nullptr;
+}
+
+void AtramentView::placeHostedChildren()
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_page && m_page->host)
+        m_page->host->place();
+#endif
 }

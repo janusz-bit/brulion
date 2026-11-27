@@ -78,6 +78,9 @@ public:
     virtual void paint(Rect bounds, Window &window, App &app) = 0;
     // An explicit identity across frames (lists of rows give their rows ids).
     virtual ElementId id() const { return {}; }
+    // Left out of the accessibility tree with all it holds (`div().ariaHidden()`): a list makes no
+    // item of a row whose root it is.
+    virtual bool accessibilityHidden() const { return false; }
 };
 
 class AnyElement {

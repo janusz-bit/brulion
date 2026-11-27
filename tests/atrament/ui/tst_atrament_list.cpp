@@ -115,6 +115,8 @@ private Q_SLOTS:
     void fingerDrag();
     void accessibility();
     void textStyleReachesMeasuredRows();
+    void headerAndFooter();
+    void hiddenRowRootHasNoItem();
 };
 
 void TestAtramentList::rowHeights()
@@ -468,6 +470,119 @@ void TestAtramentList::textStyleReachesMeasuredRows()
     big.open(b);
     QVERIFY2(b.read(big.app).heights.heightOf(0) > a.read(small.app).heights.heightOf(0) * 2,
              qPrintable(QStringLiteral("%1 vs %2") .arg(a.read(small.app).heights.heightOf(0)).arg(b.read(big.app).heights.heightOf(0))));
+}
+
+// A list with a header (a red bar) and a footer (a green one), rows blue: 20 px each.
+struct Edged {
+    RowHeights heights{100, 20};
+    ListHandle handle;
+    float header = 50;
+    float footer = 70;
+    AnyElement render(Window &, Context<Edged> &)
+    {
+        Edged *self = this;
+        return div().sizeFull().flexCol().child(
+                list(u"edged", heights,
+                     [](std::size_t i, Window &, App &) -> AnyElement {
+                         return div().h(20).bg(i % 2 ? kBlue : rgb(0x000080));
+                     })
+                        .header([self](Window &, App &) -> AnyElement { return div().h(self->header).bg(kRed); })
+                        .footer([self](Window &, App &) -> AnyElement { return div().h(self->footer).bg(kGreen); })
+                        .trackScroll(handle)
+                        .flex1());
+    }
+};
+
+void TestAtramentList::headerAndFooter()
+{
+    Harness h({100, 200});
+    Entity<Edged> edged = h.app.newEntity<Edged>();
+    Window &w = h.open(edged);
+    // The header above row 0, the rows' offsets without it.
+    QVERIFY(near(h.tw.pixel(50, 1), kRed));
+    QVERIFY(near(h.tw.pixel(50, 49), kRed));
+    QVERIFY(near(h.tw.pixel(50, 51), rgb(0x000080))); // row 0
+    QCOMPARE(edged.read(h.app).heights.offsetOf(1), 20.0f);
+    QCOMPARE(edged.read(h.app).handle.scroll().content.height, 50.0f + 100 * 20 + 70);
+    // At the very top, a taller header keeps the top in view (the rows move down).
+    edged.update(h.app, [](Edged &e, Context<Edged> &cx) {
+        e.header = 90;
+        cx.notify();
+    });
+    h.tw.settle();
+    QVERIFY(near(h.tw.pixel(50, 1), kRed));
+    QVERIFY(near(h.tw.pixel(50, 89), kRed));
+    QVERIFY(near(h.tw.pixel(50, 91), rgb(0x000080)));
+    // Scrolled into the rows: the header growing above moves nothing on screen.
+    h.tw.simulateScroll({50, 100}, {0, 400});
+    const RasterTarget before = h.tw.image();
+    edged.update(h.app, [](Edged &e, Context<Edged> &cx) {
+        e.header = 140;
+        cx.notify();
+    });
+    h.tw.settle();
+    int differ = 0;
+    for (int y = 0; y < 200; ++y)
+        for (int x = 0; x < 80; ++x) // (the scroll bar moves)
+            differ += h.tw.pixel(x, y).b != before.at(x, y).b ? 1 : 0;
+    QCOMPARE(differ, 0);
+    // scrollToRow(0) puts row 0 at the top, the header above the view.
+    edged.update(h.app, [](Edged &e, Context<Edged> &cx) {
+        e.handle.scrollToRow(0);
+        cx.notify();
+    });
+    h.tw.settle();
+    QVERIFY(near(h.tw.pixel(50, 1), rgb(0x000080)));
+    // The end: the footer at the bottom, below the last row.
+    h.tw.simulateScroll({50, 100}, {0, 1e7f});
+    QVERIFY(near(h.tw.pixel(50, 199), kGreen));
+    QVERIFY(near(h.tw.pixel(50, 131), kGreen));
+    QVERIFY(near(h.tw.pixel(50, 129), kBlue)); // row 99
+    // No list item for the header or the footer.
+    w.setAccessibilityEnabled(true);
+    h.tw.settle();
+    const AccessibilityTree &tree = w.accessibilityTree();
+    for (const AccessibilityNode *n : tree.nodes())
+        if (n->role == Role::ListItem)
+            QVERIFY(n->rowIndex >= 0 && n->rowIndex < 100);
+    // An empty list shows both.
+    Harness empty({100, 200});
+    Entity<Edged> none = empty.app.newEntity<Edged>();
+    none.update(empty.app, [](Edged &e, Context<Edged> &) { e.heights.reset(0, 20); });
+    empty.open(none);
+    QVERIFY(near(empty.tw.pixel(50, 10), kRed));
+    QVERIFY(near(empty.tw.pixel(50, 60), kGreen));
+}
+
+void TestAtramentList::hiddenRowRootHasNoItem()
+{
+    // A row whose root is aria-hidden (a Qt Quick item has it: qthost.h "Hosted children") is no
+    // list item; the others keep theirs with their indices.
+    struct Hosting {
+        RowHeights heights{10, 30};
+        AnyElement render(Window &, Context<Hosting> &)
+        {
+            return div().sizeFull().child(list(u"hosting", heights, [](std::size_t i, Window &, App &) -> AnyElement {
+                                              Div row = div().h(30).child(u"Wiersz z tekstem");
+                                              if (i == 2)
+                                                  return std::move(row).ariaHidden();
+                                              return std::move(row);
+                                          }).hFull());
+        }
+    };
+    Harness h({100, 200});
+    Entity<Hosting> hosting = h.app.newEntity<Hosting>();
+    Window &w = h.open(hosting);
+    w.setAccessibilityEnabled(true);
+    h.tw.settle();
+    std::vector<std::int64_t> items;
+    for (const AccessibilityNode *n : w.accessibilityTree().nodes())
+        if (n->role == Role::ListItem)
+            items.push_back(n->rowIndex);
+    QVERIFY(items.size() >= 5);
+    QCOMPARE(items[0], std::int64_t(0));
+    QCOMPARE(items[1], std::int64_t(1));
+    QCOMPARE(items[2], std::int64_t(3));
 }
 
 QTEST_GUILESS_MAIN(TestAtramentList)

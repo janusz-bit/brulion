@@ -60,6 +60,7 @@ qt_add_library(brulion_editor STATIC
     rowheighttree.h rowheighttree.cpp
     scrollanchor.h scrollanchor.cpp
     pagerows.h pagerows.cpp
+    hostedrow.h hostedrow.cpp
     pageitem.h pageitem.cpp
     journaldayitem.h journaldayitem.cpp
     linkpreview.h linkpreview.cpp
@@ -92,7 +93,8 @@ target_link_libraries(brulion_editor PRIVATE brulion_platform)
 qt_extract_metatypes(brulion_editor)
 brulion_set_warnings(brulion_editor)
 
-# The editor drawn by Atrament (PageView; docs/ATRAMENT.md M2), where Atrament is built.
-if(TARGET brulion_atrament_ui)
+# The editor drawn by Atrament (PageView; docs/ATRAMENT.md M2), where Atrament and its Qt Quick host
+# are built.
+if(TARGET brulion_atrament_ui AND TARGET brulion_atrament_qt)
     add_subdirectory(atrament)
 endif()

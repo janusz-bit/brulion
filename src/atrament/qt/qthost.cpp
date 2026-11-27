@@ -24,7 +24,10 @@
 #include <QTimer>
 #include <QTouchEvent>
 #include <QWheelEvent>
+#include <QtGui/private/qpointingdevice_p.h>
 #include <rhi/qrhi.h>
+
+#include <algorithm>
 
 #ifdef Q_OS_ANDROID
 #include <QJniObject>
@@ -465,11 +468,19 @@ AtramentItem::AtramentItem(QQuickItem *parent)
     setAcceptedMouseButtons(Qt::AllButtons);
     setAcceptTouchEvents(true);
     setActiveFocusOnTab(true);
+    // Hosted children (qthost.h): their fingers' drags may become the window's scrolls.
+    setFiltersChildMouseEvents(true);
     m_accessibility = std::make_unique<AtramentAccessibility>(this);
+    // Made with a parent in a window: its scene change came before this class was there.
+    if (window())
+        followWindow(window());
 }
 
 AtramentItem::~AtramentItem()
 {
+    // (~QQuickItem still changes the window's focus: this class is gone by then.)
+    QObject::disconnect(m_activeFocusChanged);
+    QObject::disconnect(m_frameSwapped);
     m_accessibility.reset(); // its interfaces ask the window
     if (m_app && m_window)
         m_app->closeWindow(*m_window);
@@ -526,18 +537,23 @@ Modifiers AtramentItem::modifiers() const
 
 bool AtramentItem::isActive() const
 {
-    return window() && window()->isActive();
+    // A hosted child with the keyboard: the window's own fields are not typed into meanwhile.
+    return window() && window()->isActive() && !m_hostedFocus;
 }
 
 void AtramentItem::requestFrame()
 {
-    // The frame is built in updatePolish, on this (the GUI) thread, before the scene graph syncs.
-    polish();
+    // The frame is built in updatePolish, on this (the GUI) thread, before the scene graph syncs;
+    // asked for while one is built (a hosted child's height told to the view), right after it.
+    m_frameWanted = true;
+    if (!m_building)
+        polish();
 }
 
 void AtramentItem::requestAnimationFrame()
 {
     if (!m_building) {
+        m_frameWanted = true;
         polish();
         return;
     }
@@ -550,6 +566,7 @@ void AtramentItem::requestAnimationFrame()
             this,
             [this] {
                 m_animationFramePosted = false;
+                m_frameWanted = true;
                 polish();
             },
             Qt::QueuedConnection);
@@ -557,10 +574,20 @@ void AtramentItem::requestAnimationFrame()
 
 void AtramentItem::updatePolish()
 {
+    // A frame, then the hosted children placed over it; a frame asked for meanwhile (what a child
+    // measured moved the content, a caret to reveal) is built at once, a few at most — the rest in
+    // the next polish.
+    constexpr int kFramesPerPolish = 4;
     m_building = true;
-    if (m_callbacks.frame)
-        m_callbacks.frame();
+    for (int pass = 0; pass < kFramesPerPolish && m_frameWanted; ++pass) {
+        m_frameWanted = false;
+        if (m_callbacks.frame)
+            m_callbacks.frame();
+        placeHostedChildren();
+    }
     m_building = false;
+    if (m_frameWanted)
+        polish();
 }
 
 bool AtramentItem::gpuAvailable() const
@@ -674,14 +701,226 @@ void AtramentItem::geometryChange(const QRectF &newGeometry, const QRectF &oldGe
 void AtramentItem::itemChange(ItemChange change, const ItemChangeData &value)
 {
     QQuickItem::itemChange(change, value);
-    if (change == ItemSceneChange) {
-        QObject::disconnect(m_frameSwapped);
-        if (value.window)
-            m_frameSwapped = connect(value.window, &QQuickWindow::frameSwapped, this, &AtramentItem::checkGpuRenderer,
-                                     Qt::QueuedConnection);
-    }
+    // Hosted children are cut to the item (a row half out of the view is half shown).
+    if (change == ItemChildAddedChange && !clip())
+        setClip(true);
+    if (change == ItemSceneChange)
+        followWindow(value.window);
     if ((change == ItemDevicePixelRatioHasChanged || change == ItemSceneChange) && m_callbacks.resized)
         m_callbacks.resized();
+}
+
+void AtramentItem::followWindow(QQuickWindow *window)
+{
+    QObject::disconnect(m_frameSwapped);
+    QObject::disconnect(m_activeFocusChanged);
+    if (window) {
+        m_frameSwapped = connect(window, &QQuickWindow::frameSwapped, this, &AtramentItem::checkGpuRenderer,
+                                 Qt::QueuedConnection);
+        m_activeFocusChanged =
+                connect(window, &QQuickWindow::activeFocusItemChanged, this, &AtramentItem::activeFocusItemChanged);
+    }
+    activeFocusItemChanged();
+}
+
+bool AtramentItem::ownsQtFocus() const
+{
+    return window() && window()->activeFocusItem() == this;
+}
+
+void AtramentItem::activeFocusItemChanged()
+{
+    QQuickItem *focus = window() ? window()->activeFocusItem() : nullptr;
+    const bool hosted = focus && focus != this && isAncestorOf(focus);
+    if (hosted == m_hostedFocus)
+        return;
+    m_hostedFocus = hosted;
+    // The window is active again when the keyboard comes back (and inactive while a child has it).
+    if (m_callbacks.activeChanged)
+        m_callbacks.activeChanged(isActive());
+    if (!hosted && ownsQtFocus()) {
+        // The input method meets the window's field afresh.
+        m_imeFocus = 0;
+        m_imeState = {};
+        m_imeComposing = false;
+        inputStateChanged();
+    }
+}
+
+bool AtramentItem::overHostedChild(Point p) const
+{
+    const QList<QQuickItem *> children = childItems();
+    for (QQuickItem *c : children) {
+        if (c->isVisible() && c->isEnabled() && c->contains(c->mapFromItem(this, QPointF(p.x, p.y))))
+            return true;
+    }
+    return false;
+}
+
+// --- hosted children's touch (qthost.h "Hosted children")
+
+bool AtramentItem::childMouseEventFilter(QQuickItem *child, QEvent *event)
+{
+    if (!m_window || !event->isPointerEvent())
+        return false;
+    auto *pe = static_cast<QPointerEvent *>(event);
+    switch (event->type()) {
+    case QEvent::TouchBegin:
+    case QEvent::TouchUpdate:
+    case QEvent::TouchEnd: {
+        // A finger followed on a child that is not down any more (its release went elsewhere).
+        if (m_hostedTouch.id >= 0
+            && std::none_of(pe->points().cbegin(), pe->points().cend(),
+                            [this](const QEventPoint &p) { return p.id() == m_hostedTouch.id; }))
+            endHostedTouch(m_mouse);
+        // The first finger only: the one the item or the gesture follows, else a new one.
+        const int followed = m_touchId >= 0 ? m_touchId : m_hostedTouch.id;
+        for (const QEventPoint &point : pe->points()) {
+            if (followed >= 0 ? point.id() == followed : point.state() == QEventPoint::State::Pressed)
+                return filterHostedPoint(child, pe, point, PointerKind::Touch);
+        }
+        return false;
+    }
+    case QEvent::TouchCancel:
+        if (m_hostedTouch.id >= 0)
+            endHostedTouch(m_mouse);
+        return false;
+    case QEvent::MouseButtonPress:
+    case QEvent::MouseButtonDblClick:
+    case QEvent::MouseMove:
+    case QEvent::MouseButtonRelease: {
+        // A pen (the mouse Qt makes of it); a mouse's drag never scrolls, and the mouse Qt Quick
+        // makes of a finger comes after its touch, which the item filtered already.
+        const auto *me = static_cast<QMouseEvent *>(event);
+        const PointerKind pointer = pointerFromQt(me);
+        if (pointer != PointerKind::Pen || me->points().isEmpty())
+            return false;
+        if (event->type() != QEvent::MouseMove && me->button() != Qt::LeftButton)
+            return false;
+        return filterHostedPoint(child, pe, me->points().constFirst(), pointer);
+    }
+    default: return false;
+    }
+}
+
+bool AtramentItem::filterHostedPoint(QQuickItem *child, QPointerEvent *event, const QEventPoint &point,
+                                     PointerKind pointer)
+{
+    const QPointF local = mapFromScene(point.scenePosition());
+    const Point p{float(local.x()), float(local.y())};
+    const EventTime time(point.timestamp() ? point.timestamp() : event->timestamp());
+    if (m_touchId >= 0) {
+        // The item has this finger (the press reached it, or a drag became a scroll): while it
+        // scrolls, no child sees its moves or its release — a scroll taps nothing.
+        if (point.id() != m_touchId || !m_window->touchScrolling())
+            return false;
+        event->setAccepted(true);
+        return true;
+    }
+    // The same point again (the event goes to several children, each filtered): decided already.
+    if (point.id() == m_hostedTouch.id && point.state() == m_hostedTouch.state
+        && point.timestamp() == m_hostedTouch.timestamp && point.scenePosition() == m_hostedTouch.scenePosition)
+        return false;
+    // A child that keeps its grab (a slider, a Flickable dragging its own way) keeps the finger.
+    const auto *grabber = qobject_cast<const QQuickItem *>(event->exclusiveGrabber(point));
+    const bool keeps = child->keepMouseGrab() || child->keepTouchGrab()
+                       || (grabber && grabber != this && (grabber->keepMouseGrab() || grabber->keepTouchGrab()));
+    switch (point.state()) {
+    case QEventPoint::State::Pressed: {
+        if (m_hostedTouch.id >= 0)
+            endHostedTouch(p);
+        if (keeps)
+            return false;
+        m_hostedTouch = {point.id(), pointer, point.state(), point.timestamp(), point.scenePosition()};
+        MouseDownEvent down;
+        down.position = p;
+        down.modifiers = modifiersFromQt(event->modifiers());
+        down.pointer = pointer;
+        down.time = time;
+        down.scrollOnly = true;
+        m_mouse = p;
+        if (!send(down) || !m_window->touchActive()) {
+            m_hostedTouch = {}; // nothing to scroll under it: the child's alone
+            return false;
+        }
+        if (!m_window->touchScrolling())
+            return false; // the child has the press; the gesture watches its drag
+        // A finger on a flinging list stops it and drags it on: a press no child sees.
+        break;
+    }
+    case QEventPoint::State::Updated: {
+        if (point.id() != m_hostedTouch.id)
+            return false;
+        m_hostedTouch.state = point.state();
+        m_hostedTouch.timestamp = point.timestamp();
+        m_hostedTouch.scenePosition = point.scenePosition();
+        if (keeps) {
+            endHostedTouch(p);
+            return false;
+        }
+        MouseMoveEvent move;
+        move.position = p;
+        move.modifiers = modifiersFromQt(event->modifiers());
+        move.pressedButton = MouseButton::Left;
+        move.pointer = pointer;
+        move.time = time;
+        m_mouse = p;
+        send(move);
+        if (!m_window->touchActive()) {
+            m_hostedTouch = {}; // a drag nothing scrolls that way: the child's
+            return false;
+        }
+        if (!m_window->touchScrolling())
+            return false;
+        break; // it scrolls: the item takes the finger
+    }
+    case QEventPoint::State::Released:
+        if (point.id() == m_hostedTouch.id)
+            endHostedTouch(p);
+        return false;
+    default: return false;
+    }
+    // The item takes the finger: Qt Quick makes it the point's grabber (the child's press is
+    // cancelled by its ungrab), and the rest of the drag comes to touchEvent().
+    m_hostedTouch = {};
+    m_touchId = point.id();
+    m_pressedButton = MouseButton::Left;
+    m_pressedPointer = pointer;
+    event->setExclusiveGrabber(point, this);
+    cancelHostedGrabbers(event, point);
+    event->setAccepted(true);
+    return true;
+}
+
+void AtramentItem::cancelHostedGrabbers(QPointerEvent *event, const QEventPoint &point)
+{
+    // Handlers inside the children that watch the finger passively (a TapHandler) are cancelled:
+    // Qt Quick tells them nothing when another item takes the grab, and they would go on waiting
+    // for the release — a long press firing in the middle of a scroll.
+    auto *device = QPointingDevicePrivate::get(const_cast<QPointingDevice *>(event->pointingDevice()));
+    const QList<QPointer<QObject>> grabbers = event->passiveGrabbers(point);
+    for (const QPointer<QObject> &g : grabbers) {
+        if (!g)
+            continue;
+        auto *owner = qobject_cast<QQuickItem *>(g.data());
+        if (!owner)
+            owner = qobject_cast<QQuickItem *>(g->parent()); // a handler's item
+        if (owner && owner != this && isAncestorOf(owner))
+            device->removeGrabber(g.data(), true);
+    }
+}
+
+void AtramentItem::endHostedTouch(Point p)
+{
+    const PointerKind pointer = m_hostedTouch.pointer;
+    m_hostedTouch = {};
+    if (!m_window || !m_window->touchActive())
+        return;
+    MouseUpEvent up;
+    up.position = p;
+    up.pointer = pointer;
+    up.cancelled = true;
+    send(up);
 }
 
 void AtramentItem::setCursor(CursorStyle cursor)
@@ -703,7 +942,7 @@ void AtramentItem::inputStateChanged()
     InputHandler *h = inputHandler();
     setFlag(ItemAcceptsInputMethod, h != nullptr);
     const std::uint64_t field = h && m_window ? m_window->focusedId() : 0;
-    if (!hasActiveFocus()) {
+    if (!ownsQtFocus()) {
         // Qt's focus is elsewhere: the input method follows that item; this one starts afresh.
         m_imeFocus = field;
         m_imeState = {};
@@ -775,7 +1014,7 @@ Qt::InputMethodHints AtramentItem::inputMethodHints() const
 
 void AtramentItem::showInputPanel()
 {
-    if (inputHandler() && hasActiveFocus())
+    if (inputHandler() && ownsQtFocus())
         QGuiApplication::inputMethod()->show();
 }
 
@@ -783,7 +1022,7 @@ void AtramentItem::showInputPanelAt(Point p)
 {
     // A tap in the focused field brings the keyboard back (after the user put it away).
     InputHandler *h = inputHandler();
-    if (!h || !hasActiveFocus())
+    if (!h || !ownsQtFocus())
         return;
     const std::optional<Rect> bounds = h->inputBounds();
     if (!bounds || bounds->contains(p))
@@ -816,7 +1055,11 @@ int AtramentItem::clickCountFor(Point p, MouseButton button, PointerKind pointer
 
 void AtramentItem::pointerPressed(MouseButton button, Point p, Modifiers modifiers, PointerKind pointer, EventTime time)
 {
-    if (!hasActiveFocus())
+    // A press on the window's own content takes the keyboard back from a hosted child (one on a
+    // child's part that takes no press leaves it there).
+    if (QQuickItem *sub = scopedFocusItem(); sub && sub != this && !overHostedChild(p))
+        sub->setFocus(false);
+    if (!hasActiveFocus() || (!ownsQtFocus() && !overHostedChild(p)))
         forceActiveFocus(Qt::MouseFocusReason);
     // A press ends a composition: the input method commits it first, as Qt's own fields have it
     // (Android does on its own at a touch elsewhere).
@@ -910,12 +1153,20 @@ void AtramentItem::touchEvent(QTouchEvent *event)
         return;
     }
     const Modifiers modifiers = modifiersFromQt(event->modifiers());
+    if (m_touchId >= 0 && std::none_of(event->points().cbegin(), event->points().cend(), [this](const QEventPoint &p) {
+            return p.id() == m_touchId;
+        }))
+        cancelPointer(); // the finger the item followed is gone without its release (a lost grab)
     for (const QEventPoint &point : event->points()) {
         const Point p{float(point.position().x()), float(point.position().y())};
         const EventTime time(point.timestamp() ? point.timestamp() : event->timestamp());
         if (m_touchId < 0) {
             // The first finger down is the pointer (until it lifts); more fingers are ignored.
             if (point.state() == QEventPoint::State::Pressed) {
+                // Pressed on a hosted child that took nothing: the item's own press from here on
+                // (the window starts afresh).
+                if (point.id() == m_hostedTouch.id)
+                    m_hostedTouch = {};
                 m_touchId = point.id();
                 pointerPressed(MouseButton::Left, p, modifiers, PointerKind::Touch, time);
             }
@@ -931,7 +1182,10 @@ void AtramentItem::touchEvent(QTouchEvent *event)
             e.pointer = PointerKind::Touch;
             e.time = time;
             m_mouse = p;
+            const bool wasScrolling = m_window && m_window->touchScrolling();
             send(e);
+            if (!wasScrolling && m_window && m_window->touchScrolling())
+                cancelHostedGrabbers(event, point); // a scroll taps no hosted child either
         } else if (point.state() == QEventPoint::State::Released) {
             m_touchId = -1;
             pointerReleased(MouseButton::Left, p, modifiers, PointerKind::Touch, time);

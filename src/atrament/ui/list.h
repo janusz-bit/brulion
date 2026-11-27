@@ -46,6 +46,10 @@ struct ListRowsPaint {
     AnyElement *kept;           // the focused row outside the view, or null / empty
     std::size_t keptIndex;
     std::optional<std::size_t> *focusedRow; // set to the row painted with the focus
+    // Painted with the rows, before and after them, as no rows (no list item): a list's header and
+    // footer (measuredlist.h), or null / empty.
+    AnyElement *header;
+    AnyElement *footer;
 };
 void paintListRows(const ListRowsPaint &list, Window &window, App &app);
 } // namespace detail

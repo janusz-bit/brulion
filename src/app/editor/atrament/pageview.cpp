@@ -64,6 +64,8 @@ std::size_t PageExtents::rowAt(float y) const
 
 void PageExtents::setMeasured(std::size_t row, float height)
 {
+    if (foreign && std::find(foreign->begin(), foreign->end(), row) != foreign->end())
+        return;
     if (row < count())
         m_rows.setRowHeight(PageRows::treeRow(int(row)), height, true);
 }
@@ -184,14 +186,10 @@ void PageView::dragOver(at::Point p, at::Context<PageView> &)
     const int start = m_model->rowOfUid(m_dragUid);
     if (start < 0)
         return;
-    // The row under the pointer: the view's top in the content (the anchor row's offset and how
-    // far the view is into it), then the row at the pointer's y there.
-    const at::ListHandle::State &st = *m_handle.shared();
-    const float viewTop = m_extents.offsetOf(st.anchorRow) + st.anchorInto;
-    const std::size_t at = m_extents.rowAt(viewTop + (p.y - m_listTop));
-    if (at >= m_extents.count())
+    // The row under the pointer (by the last frame's scroll; none over the header or the footer).
+    const int row = rowAtY(p.y);
+    if (row < 0)
         return;
-    const int row = int(at);
     if (row == start && !m_dragSelected)
         return; // (inside the pressed block: its text's own selection)
     if (m_dragSelected && row == m_dragFocus)
@@ -292,6 +290,8 @@ at::AnyElement PageView::render(at::Window &window, at::Context<PageView> &cx)
 {
     m_drawn.clear();
     m_foreign.clear();
+    m_foreignFrames.clear();
+    m_extents.foreign = &m_foreign;
     // Editing: the field takes the focus when a row of Atrament's starts being edited, and the
     // edited row is scrolled into view (a split made a row under the view's end, ↑/↓ went off it).
     if (const int edited = editedRow(); edited >= 0 && m_input) {
@@ -341,6 +341,12 @@ at::AnyElement PageView::render(at::Window &window, at::Context<PageView> &cx)
                                 return self->renderRow(row);
                             })
                            .trackScroll(m_handle)
+                           .header([self](at::Window &, at::App &) {
+                               return self->edgeElement(ForeignFrame::Kind::Header);
+                           })
+                           .footer([self](at::Window &, at::App &) {
+                               return self->edgeElement(ForeignFrame::Kind::Footer);
+                           })
                            .ariaLabel(u"Page")
                            .flex1()
                            .textSize(m_metrics.fontSize)
@@ -348,8 +354,7 @@ at::AnyElement PageView::render(at::Window &window, at::Context<PageView> &cx)
                            .textColor(m_palette.text)
                            .fontFamily(m_palette.bodyFamily))
             // After the list's prepaint (its rows measured): the page's height, when it changed.
-            .child(at::canvas([self](at::Rect bounds, at::Window &, at::App &) {
-                       self->m_listTop = bounds.top();
+            .child(at::canvas([self](at::Rect, at::Window &, at::App &) {
                        const float h = self->contentHeight();
                        if (std::abs(h - self->m_reportedHeight) < 0.5f)
                            return;
@@ -363,7 +368,8 @@ at::AnyElement PageView::render(at::Window &window, at::Context<PageView> &cx)
 
 float PageView::contentHeight() const
 {
-    return m_extents.offsetOf(m_extents.count());
+    // The header above the rows and the footer below them are the list's too.
+    return m_headerHeight + m_extents.offsetOf(m_extents.count()) + m_footerHeight;
 }
 
 at::AnyElement PageView::renderRow(std::size_t row)
@@ -434,14 +440,9 @@ at::AnyElement PageView::renderRow(std::size_t row)
     };
 
     if (!rendered.drawable() || !drawable(view)) {
-        // A foreign row: what the QML delegate will show over it, its height reserved.
+        // A foreign row: its QML delegate's place (foreignrows.cpp).
         m_foreign.push_back(row);
-        const float h = float(m_rows->heights().height(PageRows::treeRow(int(row))));
-        return line().child(at::div()
-                                    .ml(textX)
-                                    .h(std::max(h - 2 * m.rowPad, m.lineHeight))
-                                    .rounded(6)
-                                    .bg(m_palette.codeBackground));
+        return foreignRow(row);
     }
     m_drawn.push_back(row);
 

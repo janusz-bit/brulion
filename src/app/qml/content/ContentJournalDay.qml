@@ -457,8 +457,7 @@ FocusScope {
         for (let i = 0; i < 4; ++i) {
             day._refit = false
             dayEditor.height = day.empty && page.editingRow < 0 ? 0
-                               : dayEditor.usesAtrament ? dayEditor.atramentContentHeight + dayEditor.bottomSpace
-                                                          + dayEditor.listView.y
+                               : dayEditor.usesAtrament ? dayEditor.atramentContentHeight + dayEditor.listView.y
                                : day.drawn ? day.drawnHeight + dayEditor.bottomSpace + dayEditor.listView.y
                                : dayEditor.listView.contentHeight + dayEditor.listView.y
             if (!day._refit)

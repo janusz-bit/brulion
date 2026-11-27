@@ -159,6 +159,7 @@ public:
     void prepaint(Rect bounds, Window &window, App &app) override;
     void paint(Rect bounds, Window &window, App &app) override;
     ElementId id() const override { return m_id; }
+    bool accessibilityHidden() const override;
 
 private:
     struct MouseDownEntry {
