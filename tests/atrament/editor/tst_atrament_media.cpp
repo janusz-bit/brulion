@@ -536,7 +536,7 @@ void TestAtramentMedia::queryResultEndsWithAnEllipsis()
     QVERIFY(item && item->handle.layout());
     const at::TextLayout *shown = item->handle.layout();
     QCOMPARE(shown->lines().size(), std::size_t(4));
-    QCOMPARE(shown->text().back(), u'…');
+    QVERIFY(shown->truncated()); // the fourth line ends with "…"
     QVERIFY(str(shown->text()).startsWith(u"Kupić mąkę, jajka"_s));
 }
 

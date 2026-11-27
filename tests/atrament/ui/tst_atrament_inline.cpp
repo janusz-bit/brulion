@@ -545,27 +545,29 @@ void TestAtramentInline::maxLinesEndsWithAnEllipsis()
     h.change([](Para &p) { p.maxLines = 3; });
     const TextLayout *shown = h.para.read(h.app).handle.layout();
     QVERIFY(shown);
+    // (The layout keeps the whole text — screen readers read it —; its lines show the start, the
+    // last one ending with the ellipsis glyph: TextLayout's truncation, ParagraphStyle::maxLines.)
     QCOMPARE(shown->lines().size(), std::size_t(3));
-    const std::u16string &text = shown->text();
-    QVERIFY(text.size() < t.size());
-    QCOMPARE(text.back(), u'…');
-    // What is shown is the text's start, no space before the ellipsis, within the width.
-    QCOMPARE(text.substr(0, text.size() - 1), t.substr(0, text.size() - 1));
-    QVERIFY(text[text.size() - 2] != u' ');
-    QVERIFY2(shown->lines().back().width <= 160.01f, qPrintable(QString::number(shown->lines().back().width)));
+    QVERIFY(shown->truncated());
+    QCOMPARE(shown->text(), t);
+    // Within the width, three lines tall; the last line holds at most what the third line of the
+    // whole text does (shortened for the ellipsis), no space before the ellipsis.
+    const TextLine &last = shown->lines().back();
+    QVERIFY2(last.width <= 160.01f, qPrintable(QString::number(last.width)));
     QVERIFY(near(shown->size().height, 3 * kLine, 0.01f));
-    // Its last line takes as much of the text as fits with the ellipsis: one more grapheme does not.
     const std::shared_ptr<const TextLayout> full = h.layout(t, {}, 160);
     const TextLine &third = full->lines()[2];
-    QVERIFY(int(text.size()) - 1 <= third.end);
+    QVERIFY(last.end <= third.end);
+    QVERIFY(t[std::size_t(last.end - 1)] != u' ');
     // A text of fewer lines than the limit is left as it is.
     h.change([](Para &p) { p.maxLines = 30; });
-    QCOMPARE(h.para.read(h.app).handle.layout()->text(), t);
+    QVERIFY(!h.para.read(h.app).handle.layout()->truncated());
+    QCOMPARE(h.para.read(h.app).handle.layout()->lines().size(), full->lines().size());
     h.change([](Para &p) {
         p.text = u"Krótki tekst";
         p.maxLines = 1;
     });
-    QCOMPARE(h.para.read(h.app).handle.layout()->text(), std::u16string(u"Krótki tekst"));
+    QVERIFY(!h.para.read(h.app).handle.layout()->truncated());
 }
 
 QTEST_GUILESS_MAIN(TestAtramentInline)
