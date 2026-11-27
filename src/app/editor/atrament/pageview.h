@@ -763,6 +763,24 @@ public:
     // at window point `at` (BlockEditor's spelling items). Unset: the block menu as elsewhere.
     std::function<void(const Misspelling &, atrament::Point at)> onSpellingMenu;
 
+    // The edited text's own menu (pagetextmenu.cpp; InlineEditor's right-click, BlockEditor.
+    // openTextMenu: Cut, Copy, Paste, Highlight…, the AI's, Select all): a right-click inside the
+    // edited block's field — the input method's word committed, the caret moved to the pointer
+    // unless it is inside the selection (the menu acts on it) — at window point `at`, with the
+    // misspelled word there if any (its corrections first). Beside the field (the bullet, the
+    // margin) a right-click is the block's menu. Unset: the edited text's right-click is the
+    // spelling's menu on a misspelled word, else the block's, as on a drawn row.
+    std::function<void(int row, const std::optional<Misspelling> &spelling, atrament::Point at)> onTextMenu;
+    // The menu's commands on the edited text, as its keys do them (editorKey's Ctrl+X / C / V / A):
+    // the controller's exact copy and cut (no-break spaces kept; the field's own when it cannot),
+    // its paste (Markdown into blocks, HTML as Markdown, a copied picture as an attachment; a
+    // source — code, a diagram's, a formula's — takes the text as it is: the field's paste), the
+    // field's whole text selected. False when nothing was done (no block edited, nothing selected
+    // to copy, reading mode, nothing to paste); `result` gets the controller's paste answer (its
+    // row, pictures from the internet it brought: BlockEditor.offerPastedPictures).
+    enum class TextCommand : std::uint8_t { Cut, Copy, Paste, SelectAll };
+    bool textCommand(TextCommand command, atrament::Context<PageView> &cx, QVariantMap *result = nullptr);
+
     // Reminder chips while editing (InlineEditor's, markdownstyles.h's LineChip): each ⏰ / ⏰!
     // token of the edited text is laid out as the pill of its words ("⏰ jutro 18:00"), one unit for
     // the caret (←/→ step over it, Backspace / Delete remove it whole, a caret put inside goes to
@@ -800,6 +818,12 @@ private:
     void appendRowSpelling(int row, const markdown::RenderedText &text, std::vector<atrament::TextSpan> &spans) const;
     void editCaretMoved(int caret, atrament::Context<PageView> &cx);
     bool spellingMenuAt(int row, atrament::Point p);
+    // The edited text's menu (pagetextmenu.cpp): a right-click at `p` inside the field of `row`;
+    // the controller's copy (cut) of the field's selection and its paste there — false when it
+    // did not (nothing selected, the clipboard without text).
+    bool textMenuAt(int row, atrament::Point p, atrament::Context<PageView> &cx);
+    bool copyEdited(bool cut, atrament::Context<PageView> &cx);
+    bool pasteEdited(atrament::Context<PageView> &cx, QVariantMap *result);
     void editedRowTapped(int row, const atrament::MouseUpEvent &e);
     void restyleInput(atrament::Context<PageView> &cx);
     // The edited text's spans: the highlighter's, the find bar's, the spelling's, the chips'.

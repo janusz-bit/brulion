@@ -546,12 +546,14 @@ at::AnyElement PageView::renderRow(std::size_t row)
                                      });
                                  });
         }
-        if (onBlockMenu || onSpellingMenu)
-            // A right-click on a block: its menu (BlockEditor.openBlockMenuAt) — on a misspelled
-            // word the spelling's (pagespell.cpp).
+        if (onBlockMenu || onSpellingMenu || onTextMenu)
+            // A right-click on a block: its menu (BlockEditor.openBlockMenuAt) — in the edited text
+            // the text's (pagetextmenu.cpp), on a misspelled word the spelling's (pagespell.cpp).
             std::move(d).onMouseDown(at::MouseButton::Right,
                                      [menuSelf, row](const at::MouseDownEvent &e, at::Window &w, at::App &a) {
-                                         a.updateEntity<PageView>(menuSelf, [&](PageView &v, at::Context<PageView> &) {
+                                         a.updateEntity<PageView>(menuSelf, [&](PageView &v, at::Context<PageView> &c) {
+                                             if (v.textMenuAt(int(row), e.position, c))
+                                                 return;
                                              if (!v.spellingMenuAt(int(row), e.position) && v.onBlockMenu)
                                                  v.onBlockMenu(int(row), e.position);
                                          });
