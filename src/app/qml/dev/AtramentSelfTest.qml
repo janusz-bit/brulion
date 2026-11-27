@@ -20,7 +20,7 @@ import Brulion
 // it is committed (Backspace and Enter while composing, completions after a composed word), typing
 // into a block scrolled far away, a zoom's end keeping the edited block in view; document mode's
 // keys (Enter leaving a list, Backspace removing a marker, Tab only for list items) and its toggle;
-// reading mode's taps (the toast and its "Edit").
+// reading mode's taps (the toast and its "Edit"); "/" commands setting a task's status.
 // Steps run on the playground's step runner (EditorPlayground.runSteps).
 QtObject {
     id: test
@@ -142,6 +142,7 @@ QtObject {
         test.farAway()
         test.document()
         test.readingMode()
+        test.slashCommands()
     }
     function reading(): void {
         if (window.at()) {
@@ -546,6 +547,102 @@ QtObject {
             test.check(host.file("Do czytania.md") === test.readingContent, "the file is still as written")
             page.readOnly = false
         }
+    }
+
+    // "/" commands typed with real keys (the taskstatus test's): the status set, the command's
+    // text gone, the caret kept, one undo step; a paragraph becoming a task; a Logseq keyword.
+    property int taskRow: -1
+    function slashCommands(): void {
+        if (window.at()) {
+            page.stopEditing()
+            page.save()
+            host.setFile("Zadania.md", "- Ekipa może zacząć\n")
+            page.path = "Zadania.md"
+        }
+        if (window.at()) window.waitStep(page.loaded && test.rowOf("Ekipa może") === 0, "the page of tasks opens")
+        if (window.at()) test.taskRow = page.insertBlockAfter(test.rowOf("Ekipa może"), "")
+        if (window.at()) window.waitStep(test.editing(test.taskRow), "a new block is edited")
+        if (window.at()) test.typeKeys("Zadzwonić do Żanety /czeka")
+        if (window.at()) window.waitStep(test.suggestionsShown() && window.suggestionAt(0, "command") === "taskWaiting",
+                                         "“/czeka” offers “Zadanie: oczekujące” first")
+        if (window.at()) test.key(Qt.Key_Return, Qt.NoModifier)
+        if (window.at()) {
+            const status = test.info(test.taskRow).taskStatus
+            const text = test.editText()
+            const caret = test.editCursor()
+            const ok = status === "deferred" && text === "Zadzwonić do Żanety " && caret === 20 && test.suggestionsClosed()
+            window.waitStep(ok, "the command sets the status, its text goes, the caret stays: \"" + text + "\" at " + caret)
+        }
+        if (window.at()) page.undo()
+        if (window.at()) {
+            const text = test.editText()
+            const ok = text === "Zadzwonić do Żanety /czeka" && test.info(test.taskRow).taskStatus === ""
+            window.waitStep(ok, "one undo step brings the command text back: " + text)
+        }
+        if (window.at()) {
+            test.key(Qt.Key_End, Qt.NoModifier)
+            for (let i = 0; i < 5; ++i)
+                test.key(Qt.Key_Backspace, Qt.NoModifier)
+            test.typeKeys("zrob")
+        }
+        if (window.at()) window.waitStep(test.suggestionsShown() && window.suggestionAt(0, "command") === "task",
+                                         "“/zrob” offers the statuses (to do first)")
+        if (window.at()) {
+            let done = -1
+            const count = test.suggestionCount()
+            for (let i = 0; i < count; ++i) {
+                if (window.suggestionAt(i, "command") === "taskDone")
+                    done = i
+            }
+            test.check(done > 0, "“Zadanie: zrobione” is listed")
+            for (let i = 0; i < done; ++i)
+                test.key(Qt.Key_Down, Qt.NoModifier)
+            test.key(Qt.Key_Return, Qt.NoModifier)
+        }
+        if (window.at()) {
+            const ok = test.info(test.taskRow).taskStatus === "done"
+                       && Js.indexOf(host.file("Zadania.md"), "- [x] Zadzwonić do Żanety ✅ 2026-10-15") >= 0
+            window.waitStep(ok, "“Zadanie: zrobione” completes the task: " + host.file("Zadania.md"))
+        }
+        if (window.at()) test.typeKeys(" /bez")
+        if (window.at()) window.waitStep(test.suggestionsShown() && window.suggestionAt(0, "command") === "taskNone",
+                                         "“/bez” offers “Zadanie: bez statusu”")
+        if (window.at()) test.key(Qt.Key_Return, Qt.NoModifier)
+        if (window.at()) {
+            const ok = test.info(test.taskRow).taskStatus === "" && Js.indexOf(host.file("Zadania.md"), "- Zadzwonić do Żanety") >= 0
+                       && Js.indexOf(host.file("Zadania.md"), "✅") < 0
+            window.waitStep(ok, "“Zadanie: bez statusu” removes the checkbox and its date: " + host.file("Zadania.md"))
+        }
+        if (window.at()) {
+            page.stopEditing()
+            test.taskRow = page.insertMarkdown(page.lastVisibleRow(), "Akapit o płytkach")
+        }
+        if (window.at()) editor.startEditing(test.rowOf("Akapit o płytkach"), -1)
+        if (window.at()) window.waitStep(test.editing(test.rowOf("Akapit o płytkach")), "a paragraph is edited")
+        if (window.at()) test.typeKeys(" /zadanie")
+        if (window.at()) window.waitStep(test.suggestionsShown() && window.suggestionAt(0, "command") === "task",
+                                         "“/zadanie” offers “Zadanie: do zrobienia”")
+        if (window.at()) test.key(Qt.Key_Return, Qt.NoModifier)
+        if (window.at()) {
+            const r = test.rowOf("Akapit o płytkach")
+            const ok = r >= 0 && test.info(r).taskStatus === "todo" && test.info(r).kind === "listItem"
+                       && Js.indexOf(host.file("Zadania.md"), "- [ ] Akapit o płytkach") >= 0
+            window.waitStep(ok, "a paragraph becomes a task: " + host.file("Zadania.md"))
+        }
+        if (window.at()) {
+            page.stopEditing()
+            test.taskRow = page.insertBlockAfter(test.rowOf("Ekipa może"), "TODO Odebrać kafelki")
+        }
+        if (window.at()) window.waitStep(test.editing(test.taskRow) && test.info(test.taskRow).taskStatus === "todo", "a Logseq TODO is a task")
+        if (window.at()) { test.key(Qt.Key_End, Qt.NoModifier); test.typeKeys(" /toku") }
+        if (window.at()) window.waitStep(test.suggestionsShown() && window.suggestionAt(0, "command") === "taskDoing",
+                                         "“/toku” offers “Zadanie: w toku”")
+        if (window.at()) test.key(Qt.Key_Return, Qt.NoModifier)
+        if (window.at()) {
+            const ok = test.info(test.taskRow).taskStatus === "doing" && Js.indexOf(host.file("Zadania.md"), "- DOING Odebrać kafelki") >= 0
+            window.waitStep(ok, "the Logseq keyword follows: " + host.file("Zadania.md"))
+        }
+        if (window.at()) page.stopEditing()
     }
 
     Component.onCompleted: window.runSteps("atramenttest")
