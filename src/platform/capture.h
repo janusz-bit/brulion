@@ -29,6 +29,7 @@
 #pragma once
 
 #include <QJsonArray>
+#include <QJsonObject>
 #include <QList>
 #include <QObject>
 #include <QString>
@@ -105,6 +106,11 @@ public:
     /// while an earlier process of the app was gone; oldest first, each handed out once. The others
     /// wait for their notebook.
     virtual QList<CapturedPhoto> takePhotos(const QString &notebook) = 0;
+
+protected:
+    /// The camera app's answer as the Android camera says it ({taken: true}, or {purpose,
+    /// cancelled} / {purpose, error}): photosWaiting(), else failed(purpose, the error or "").
+    void answered(const QJsonObject &answer);
 
 Q_SIGNALS:
     /// A photo was taken: takePhotos() hands it out.

@@ -1,6 +1,7 @@
 // The camera of capture.h: the photos the Android camera hands out (capturedPhotos(): the JSON of
 // MediaCapture.kt's takePhotos, a photo's file, notebook and purpose — Polish names, entries
-// without a file, broken entries left out) and the camera registered by the app (setPhotoCamera:
+// without a file, broken entries left out), its answers (PhotoCamera::answered: a photo waiting,
+// none taken, an error, malformed ones) and the camera registered by the app (setPhotoCamera:
 // used instead of the system's, the one it replaces deleted, nullptr the system's again — none on
 // the desktop). Pure or desktop-only, so tested on every platform.
 #include "capture.h"
@@ -9,6 +10,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QPointer>
+#include <QSignalSpy>
 #include <QTest>
 
 using namespace Qt::StringLiterals;
@@ -21,6 +23,7 @@ namespace {
 
 class Camera : public PhotoCamera {
 public:
+    using PhotoCamera::answered;
     bool take(const QString &, const QString &) override { return true; }
     QList<CapturedPhoto> takePhotos(const QString &) override { return {}; }
 };
@@ -61,6 +64,39 @@ private Q_SLOTS:
         QFETCH(QJsonArray, json);
         QFETCH(QList<CapturedPhoto>, photos);
         QCOMPARE(brulion::platform::capturedPhotos(json), photos);
+    }
+
+    void answers_data()
+    {
+        QTest::addColumn<QJsonObject>("answer");
+        QTest::addColumn<bool>("waiting");
+        QTest::addColumn<QString>("purpose");
+        QTest::addColumn<QString>("why");
+        QTest::newRow("a photo taken") << QJsonObject{{u"taken"_s, true}} << true << QString() << QString();
+        QTest::newRow("none taken") << QJsonObject{{u"cancelled"_s, true}, {u"purpose"_s, u"AI/Żółw.md"_s}} << false
+                                    << u"AI/Żółw.md"_s << QString();
+        QTest::newRow("the camera could not start")
+                << QJsonObject{{u"error"_s, u"no camera app"_s}, {u"purpose"_s, u"AI/Łąka.md"_s}} << false
+                << u"AI/Łąka.md"_s << u"no camera app"_s;
+        QTest::newRow("taken, not a bool") << QJsonObject{{u"taken"_s, u"tak"_s}} << false << QString() << QString();
+        QTest::newRow("nothing") << QJsonObject() << false << QString() << QString();
+    }
+    void answers()
+    {
+        QFETCH(QJsonObject, answer);
+        QFETCH(bool, waiting);
+        QFETCH(QString, purpose);
+        QFETCH(QString, why);
+        Camera camera;
+        QSignalSpy waits(&camera, &PhotoCamera::photosWaiting);
+        QSignalSpy fails(&camera, &PhotoCamera::failed);
+        camera.answered(answer);
+        QCOMPARE(waits.size(), waiting ? 1 : 0);
+        QCOMPARE(fails.size(), waiting ? 0 : 1);
+        if (!waiting) {
+            QCOMPARE(fails.first().at(0).toString(), purpose);
+            QCOMPARE(fails.first().at(1).toString(), why);
+        }
     }
 
     void aCameraOfTheAppsOwn()

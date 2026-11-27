@@ -64,6 +64,14 @@ void setPhotoCamera(PhotoCamera *camera)
     registerObject(camera);
 }
 
+void PhotoCamera::answered(const QJsonObject &answer)
+{
+    if (answer.value(u"taken"_s).toBool())
+        Q_EMIT photosWaiting();
+    else
+        Q_EMIT failed(answer.value(u"purpose"_s).toString(), answer.value(u"error"_s).toString());
+}
+
 QList<CapturedPhoto> capturedPhotos(const QJsonArray &array)
 {
     QList<CapturedPhoto> photos;

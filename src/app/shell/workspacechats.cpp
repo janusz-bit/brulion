@@ -262,14 +262,7 @@ WorkspaceChats::WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extens
     });
     // (The waiting messages and the draft follow their conversation, whether a turn ran or not.)
     connect(m_workspace, &Workspace::pathRenamed, this, &WorkspaceChats::moveQueue);
-    connect(m_workspace, &Workspace::pathRenamed, this, [this](const QString &from, const QString &to) {
-        const QString text = draft(from);
-        const QStringList pictures = draftPictures(from);
-        if (!text.isEmpty() || !pictures.isEmpty()) {
-            setDraft(from, QString());
-            setDraft(to, text, pictures);
-        }
-    });
+    connect(m_workspace, &Workspace::pathRenamed, this, &WorkspaceChats::moveDraft);
     // An unread answer follows its conversation (a rename, a move) and goes with it.
     connect(m_workspace, &Workspace::pathRenamed, this, [this](const QString &from, const QString &to) {
         if (!isUnread(from))
@@ -2531,6 +2524,16 @@ void WorkspaceChats::setDraft(const QString &path, const QString &text, const QS
     local->set(DraftsKey, all);
     ++m_draftSerial;
     Q_EMIT draftsChanged();
+}
+
+void WorkspaceChats::moveDraft(const QString &from, const QString &to)
+{
+    const QString text = draft(from);
+    const QStringList pictures = draftPictures(from);
+    if (text.isEmpty() && pictures.isEmpty())
+        return;
+    setDraft(from, QString());
+    setDraft(to, text, pictures);
 }
 
 QSet<QString> WorkspaceChats::draftedPictures() const

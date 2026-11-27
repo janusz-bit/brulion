@@ -912,6 +912,8 @@ private:
     void placePhoto(const platform::CapturedPhoto &photo);
     /// Every picture some draft keeps (lower case).
     QSet<QString> draftedPictures() const;
+    /// The draft of `from` (its text and pictures) becomes `to`'s: a rename (none: nothing changes).
+    void moveDraft(const QString &from, const QString &to);
 
     QStringList m_removed; // the trash's paths of the last remove()
     /// The side chat `path` (beside a conversation of the notebook): no unread, no notification.

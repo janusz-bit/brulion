@@ -64,12 +64,8 @@ public:
     explicit AndroidPhotoCamera(QObject *parent) : PhotoCamera(parent)
     {
         connect(AndroidBridge::instance(), &AndroidBridge::captured, this, [this](int kind, const QJsonObject &result) {
-            if (kind != kPhoto)
-                return;
-            if (result.value(u"taken"_s).toBool())
-                Q_EMIT photosWaiting();
-            else
-                Q_EMIT failed(result.value(u"purpose"_s).toString(), result.value(u"error"_s).toString());
+            if (kind == kPhoto)
+                answered(result);
         });
     }
     bool take(const QString &notebook, const QString &purpose) override
@@ -82,13 +78,20 @@ public:
     }
 };
 
+/// The system's app of `kind` when the device has one, else nullptr.
+template<typename App>
+App *madeIfAvailable(int kind)
+{
+    return AndroidBridge::instance()->canCapture(kind) ? new App(AndroidBridge::instance()) : nullptr;
+}
+
 /// The system's app of `kind` (made once, while the device has one).
 template<typename App>
 App *systemApp(int kind)
 {
     static QPointer<App> app;
-    if (!app && AndroidBridge::instance()->canCapture(kind))
-        app = new App(AndroidBridge::instance());
+    if (!app)
+        app = madeIfAvailable<App>(kind);
     return app;
 }
 

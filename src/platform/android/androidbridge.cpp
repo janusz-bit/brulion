@@ -78,6 +78,12 @@ jint jniArgument(jint number)
     return number;
 }
 
+/// `result` of BrulionAndroid.<method> as a bool: false when the call threw.
+bool trueAnswer(const char *method, jboolean result)
+{
+    return !failed(method) && result != JNI_FALSE;
+}
+
 /// BrulionAndroid.<method>(Context, …): boolean (`signature`) with `arguments` (QString, int);
 /// false when there is no context or the call failed.
 template<typename... Arguments>
@@ -86,9 +92,8 @@ bool callBoolWith(const char *method, const char *signature, const Arguments &..
     const QJniObject context = appContext();
     if (!context.isValid())
         return false;
-    const jboolean result = QJniObject::callStaticMethod<jboolean>(kClass, method, signature, context.object(),
-                                                                   jniArgument(javaValue(arguments))...);
-    return !failed(method) && result != JNI_FALSE;
+    return trueAnswer(method, QJniObject::callStaticMethod<jboolean>(kClass, method, signature, context.object(),
+                                                                     jniArgument(javaValue(arguments))...));
 }
 
 bool callBool(const char *method)
