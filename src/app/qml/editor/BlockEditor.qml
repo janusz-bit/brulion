@@ -3833,6 +3833,17 @@ FocusScope {
         dateMenuEdit = edit
         popupOwnTokenMenu(edit.row, item, x, y)
     }
+    /// The same for a chip of the block the page drawn by Atrament edits (its composition is
+    /// committed already: AtramentView.reminderChipActivated).
+    function openReminderMenuAt(row: int, from: int, to: int, item: Item, x: real, y: real): void {
+        if (!controller || row < 0 || row >= controller.blocks.count)
+            return
+        chipFound.map = controller.editTextChip(row, from, to)
+        if (!chipFound.map.kind)
+            return
+        dateMenuEdit = null
+        popupOwnTokenMenu(row, item, x, y)
+    }
     /// The edited text a token menu was opened from (openReminderMenuInText()), else null.
     property InlineEditor dateMenuEdit: null
     function popupOwnTokenMenu(row: int, item: Item, x: real, y: real): void {
@@ -4790,6 +4801,12 @@ FocusScope {
     function openRenderedSpellingMenu(row: int, item: Item, spelling: var, x: real, y: real): bool {
         return showSpellingMenu("rendered", item, null, row, spelling, x, y)
     }
+    /// The same for the page drawn by Atrament (AtramentView.spellingMenuRequested): a word of the
+    /// edited text (`edited`: positions in its editText, PageController.replaceRange) or of a drawn
+    /// block (positions in its body).
+    function openAtramentSpellingMenu(row: int, edited: bool, spelling: var, item: Item, x: real, y: real): bool {
+        return showSpellingMenu(edited ? "atramentEdit" : "rendered", item, null, row, spelling, x, y)
+    }
     function showSpellingMenu(target: string, item: Item, source: TextEdit, row: int, spelling: var, x: real,
                               y: real): bool {
         if (!controller || !item)
@@ -4829,6 +4846,9 @@ FocusScope {
             source.cursorPosition = from + text.length
         } else if (textMenuTarget === "rendered" && controller && !readOnlyRefuses()) {
             controller.replaceInBody(textMenuRow, from, to, textMenuSpelling.text(), text)
+        } else if (textMenuTarget === "atramentEdit" && controller && !readOnlyRefuses()) {
+            // The block Atrament edits: one undo step, the caret after it (editTextReset).
+            controller.replaceRange(textMenuRow, from, to, text)
         }
     }
     /// SpellCheck's corrections of `word` (none until asked).
@@ -5141,6 +5161,9 @@ FocusScope {
     /// step; the highlighted text stays selected. Made when first opened.
     property BMenu highlightMenu: null
     property InlineEditor highlightMenuEdit: null
+    /// The colours act on the block the page drawn by Atrament edits (no InlineEditor:
+    /// EditorAtramentPage.applyHighlight).
+    property bool highlightMenuAtrament: false
     /// The text menu's "Highlight…" and "Block…" open their menus once it is closed: at the caret of
     /// `edit` (`highlight`: the colours, else the block menu).
     function openAfterTextMenu(edit: InlineEditor, highlight: bool): void {
@@ -5187,21 +5210,30 @@ FocusScope {
     }
     /// Highlight the selection of the edited text `edit` in `color` (a palette name; "" removes).
     function applyHighlight(edit: InlineEditor, color: string): void {
+        if (!edit && highlightMenuAtrament && atramentPage) {
+            QmlCall.call1(atramentPage, "applyHighlight", color)
+            return
+        }
         if (!edit || !controller || !edit.active)
             return
         EditorInput.commitPreedit(edit)
         highlighted.map = controller.setHighlight(edit.row, edit.selectionStart, edit.selectionEnd, color)
         if (!highlighted.map.changed) {
-            if (color === "")
-                notice(qsTr("No highlight here"), "info", null)
-            else if (highlighted.map.refused)
-                notice(qsTr("Select text within one line, not across a highlight's edge"), "info", null)
+            highlightNotice(color, highlighted.map.refused === true)
             return
         }
         highlightLater.edit = edit
         highlightLater.from = highlighted.map.from
         highlightLater.to = highlighted.map.to
         highlightLater.restart()
+    }
+    /// Why setHighlight changed nothing (`color` "": no highlight to remove; `refused`: the selection
+    /// crosses a line or a highlight's edge).
+    function highlightNotice(color: string, refused: bool): void {
+        if (color === "")
+            notice(qsTr("No highlight here"), "info", null)
+        else if (refused)
+            notice(qsTr("Select text within one line, not across a highlight's edge"), "info", null)
     }
     /// PageController.setHighlight's result.
     MapHolder { id: highlighted }
@@ -5220,17 +5252,19 @@ FocusScope {
         }
     }
     function openHighlightMenu(edit: InlineEditor, item: Item, x: real, y: real): void {
-        if (!edit || !controller)
+        if ((!edit && !atramentPage) || !controller)
             return
         if (!highlightMenu)
             highlightMenu = highlightMenuComponent.createObject(editor) as BMenu
         highlightMenuEdit = edit
+        highlightMenuAtrament = edit === null
         highlightMenu.bottomMargin = menuBottomMargin()
         highlightMenu.popup(item, x, y)
     }
     /// The touch toolbar's "Highlight": the colours above the bar.
     function openHighlightMenuAbove(edit: InlineEditor, item: Item): void {
-        if (!edit || !controller)
+        // (No InlineEditor: the block the page drawn by Atrament edits.)
+        if ((!edit && !atramentPage) || !controller)
             return
         if (!highlightMenu)
             highlightMenu = highlightMenuComponent.createObject(editor) as BMenu
@@ -5264,7 +5298,12 @@ FocusScope {
                 onTriggered: editor.applyHighlight(editor.highlightMenuEdit, "")
             }
             // The keyboard goes back to the edited text (its selection stayed: persistentSelection).
-            onClosed: if (editor.highlightMenuEdit && editor.highlightMenuEdit.active) editor.highlightMenuEdit.ensureFocus()
+            onClosed: {
+                if (editor.highlightMenuEdit && editor.highlightMenuEdit.active)
+                    editor.highlightMenuEdit.ensureFocus()
+                else if (editor.highlightMenuAtrament && editor.atramentPage)
+                    editor.atramentPage.forceActiveFocus()
+            }
         }
     }
 

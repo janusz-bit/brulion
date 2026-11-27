@@ -178,6 +178,11 @@ PageView::~PageView()
         QObject::disconnect(c);
     for (const QMetaObject::Connection &c : m_controllerConnections)
         QObject::disconnect(c);
+    // (The spell checker's and Vim's: pagespell.cpp, pagevim.cpp.)
+    for (const QMetaObject::Connection &c : m_spellConnections)
+        QObject::disconnect(c);
+    for (const QMetaObject::Connection &c : m_vimConnections)
+        QObject::disconnect(c);
 }
 
 void PageView::dragOver(at::Point p, at::Context<PageView> &)
@@ -285,9 +290,16 @@ at::AnyElement PageView::renderCodeRow(std::size_t row, const QModelIndex &index
                                .textColor(c.label)
                                .ariaHidden()
                                .child(at::text(u16View(lang))));
-    if (edited)
-        return std::move(panel).child(*m_input);
     const QString code = m_model->editTextAt(int(row));
+    if (c.lineNumbers) {
+        // CodeBlockView's gutter (pagecode.cpp): Theme.space3 in, the numbers, Theme.space3 to the code.
+        std::move(panel).pl(12).flexRow().itemsStart().child(codeLineNumbers(row, code, edited));
+    }
+    auto content = [&c](at::AnyElement e) {
+        return at::div().flex1().minW(0).when(c.lineNumbers, [](at::Div &&d) { return std::move(d).ml(12); }).child(std::move(e));
+    };
+    if (edited)
+        return std::move(panel).child(content(*m_input));
     const std::u16string_view text = u16View(code);
     at::Text body = at::text(text).id(u"code");
     if (m_styles) {
@@ -297,7 +309,7 @@ at::AnyElement PageView::renderCodeRow(std::size_t row, const QModelIndex &index
     }
     std::move(body).trackLayout(m_rowText[uid]);
     m_rowTextFrame[uid] = m_frame;
-    return std::move(panel).child(std::move(body));
+    return std::move(panel).child(content(std::move(body)));
 }
 
 void PageView::setCalloutLook(const CalloutLook &look)
@@ -500,12 +512,13 @@ at::AnyElement PageView::renderRow(std::size_t row)
                                      });
                                  });
         }
-        if (onBlockMenu)
-            // A right-click on a block: its menu (BlockEditor.openBlockMenuAt).
+        if (onBlockMenu || onSpellingMenu)
+            // A right-click on a block: its menu (BlockEditor.openBlockMenuAt) — on a misspelled
+            // word the spelling's (pagespell.cpp).
             std::move(d).onMouseDown(at::MouseButton::Right,
                                      [menuSelf, row](const at::MouseDownEvent &e, at::Window &w, at::App &a) {
                                          a.updateEntity<PageView>(menuSelf, [&](PageView &v, at::Context<PageView> &) {
-                                             if (v.onBlockMenu)
+                                             if (!v.spellingMenuAt(int(row), e.position) && v.onBlockMenu)
                                                  v.onBlockMenu(int(row), e.position);
                                          });
                                          w.stopPropagation();
@@ -559,6 +572,7 @@ at::AnyElement PageView::renderRow(std::size_t row)
     const markdown::RenderedText &text = *rendered.d;
     std::vector<at::TextSpan> spans = renderedSpans(text, m_palette);
     appendFindSpans(text.text, spans);
+    appendRowSpelling(int(row), text, spans); // (pagespell.cpp)
     const bool closed = task == u"done" || task == u"cancelled";
     const quint64 uid = index.data(BlockListModel::UidRole).toString().toULongLong();
     const bool edited = m_input && uid == m_editUid && editableView(view, true);
@@ -734,6 +748,13 @@ at::AnyElement PageView::renderRow(std::size_t row)
                     if (handled)
                         w.stopPropagation();
                 })
+                // (A tap on a misspelled word on touch UIs: its corrections; pagespell.cpp.)
+                .onMouseUp(at::MouseButton::Left,
+                           [selfId, row](const at::MouseUpEvent &e, at::Window &, at::App &a) {
+                               a.updateEntity<PageView>(selfId, [&](PageView &v, at::Context<PageView> &) {
+                                   v.editedRowTapped(int(row), e);
+                               });
+                           })
                 .child(std::move(content));
     }
     std::move(column).child(std::move(body));

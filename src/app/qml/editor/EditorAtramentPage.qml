@@ -25,10 +25,11 @@ AtramentView {
     placeholderText: qsTr("Type / for commands")
     editLabel: qsTr("Block text")
     highlighterPalette: editor ? editor.highlighterPalette : ({})
-    // Code blocks drawn and edited by Atrament (CodeBlockView's look); line numbers stay the QML
-    // view's: with them on, code blocks are its rows.
-    drawsCode: !(editor && editor.controller && editor.controller.codeLineNumbers >= 0
-                 ? editor.controller.codeLineNumbers > 0 : AppSettings.codeLineNumbers)
+    // Code blocks drawn and edited by Atrament (CodeBlockView's look), with its line numbers when
+    // the device's setting or the note's `line-numbers` asks for them.
+    drawsCode: true
+    readonly property bool codeLineNumbers: editor && editor.controller && editor.controller.codeLineNumbers >= 0
+                                            ? editor.controller.codeLineNumbers > 0 : AppSettings.codeLineNumbers
     codeLook: ({
         background: Theme.bgSunken,
         border: Theme.borderSubtle,
@@ -36,8 +37,55 @@ AtramentView {
         radius: Theme.radius,
         fontSize: Theme.textSm,
         lineHeight: Theme.lineHeightPx(Theme.textSm, 1.5),
-        labelSize: Theme.textXs
+        labelSize: Theme.textXs,
+        lineNumbers: root.codeLineNumbers
     })
+    // The edited text's spell marks (and the drawn rows' with SpellCheck.wholePage), its Vim keys.
+    spellCheck: SpellCheck
+    spellColor: Theme.danger
+    vimSession: editor ? editor.vimSession : null
+    onSpellingMenuRequested: (row, edited, spelling, x, y) => {
+        if (root.editor)
+            root.editor.openAtramentSpellingMenu(row, edited, spelling, root, x, y)
+    }
+    // A reminder chip of the edited text: its dialog, or (a right-click, a finger held on it) its menu.
+    onReminderChipActivated: (row, from, to, menu, x, y) => {
+        if (!root.editor)
+            return
+        if (menu)
+            root.editor.openReminderMenuAt(row, from, to, root, x, y)
+        else
+            root.editor.editReminderInText(row, from, to)
+    }
+    onVimKeyHandled: {
+        if (root.editor)
+            root.editor.afterVimKey()
+    }
+    /// The touch toolbar's highlight (BlockEditor.applyHighlight for the block edited here): the
+    /// selection highlighted in `color` (a palette name; "" removes), one undo step, the
+    /// highlighted text selected again.
+    function applyHighlight(color: string): void {
+        if (!root.editor || !root.editor.controller || root.editRow < 0)
+            return
+        root.commitComposition()
+        const row = root.editRow
+        highlighted.map = root.editor.controller.setHighlight(row, root.editSelectionStart, root.editSelectionEnd, color)
+        if (!highlighted.changed()) {
+            root.editor.highlightNotice(color, highlighted.refused())
+            return
+        }
+        const from = highlighted.from()
+        const to = highlighted.to()
+        root.selectInEdited(row, from, to)
+    }
+    /// PageController.setHighlight's result.
+    MapHolder {
+        id: highlighted
+        function changed(): bool { return highlighted.map.changed === true }
+        function refused(): bool { return highlighted.map.refused === true }
+        function from(): int { return highlighted.map.from }
+        function to(): int { return highlighted.map.to }
+    }
     bandColor: Theme.bgSelected
     ringColor: Theme.focusRing
     bandRadius: Theme.radiusSm

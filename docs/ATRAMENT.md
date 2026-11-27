@@ -190,6 +190,20 @@ public:
   cluster (`nextCaretStop` / `previousCaretStop`, `offsetAt` never inside it); `inlineBoxes()`
   says where each ended up. `Text` calls the object's painter in paint, after the text, with its
   box in window coordinates, the baseline, the text's colour and size there.
+* **A text field's caret, objects and read-only state** (`TextInput`, `ui/textinput.h`): the caret
+  is a bar before the character (the default, blinking), a block over the character after it (as
+  wide as that character on its line — its caret stop: an inline object whole —, half an em at a
+  line's end; painted over the text in the caret's colour at 45 %) or a 2 px line under it
+  (`CaretShape`, `setCaret(shape, blinks)`, `caretBox()`); a block or a line is not drawn while
+  something is selected. The styler's spans may carry inline objects as a `Text`'s do (laid out the
+  same way, painted after the glyphs): one unit for the caret — ←/→ step over one (the layout's
+  caret stops), Backspace / Delete remove it whole, a click never lands inside — and an object
+  with `onClick` (any button; `up.button`) or `onLongPress` takes its presses before the field (a
+  hitbox over its box, the pointing hand; the caret and the selection stay). `setReadOnly(true)`:
+  keys still move the caret and select, nothing but the owner's own calls changes the text (no
+  typing, Backspace, Enter, paste, cut, undo, an assistive technology's SetValue), and the field
+  gives the window no input handler (below). `restyle()` asks the styler again when what it reads
+  besides the text changed (a spell checker's verdicts, the caret).
 * Glyphs are rasterized once per (face, glyph, size, subpixel x offset) into an A8 atlas; the
   renderers read the same atlas.
 * Caches are generational: what was used in the last frame stays, the rest is dropped at the end
@@ -213,7 +227,10 @@ class InputHandler {
 
 A focused element that edits text installs one for the frame; the host maps it onto Qt's
 `inputMethodQuery` / `QInputMethodEvent`, later onto `text-input-v3`, `InputConnection`, TSF and
-a hidden `<textarea>` in the browser.
+a hidden `<textarea>` in the browser. A read-only `TextInput` installs none: no input method
+composes into it, the platform's keyboard is not shown for it, and keys reach it as key events with
+their text (Qt sends them so when `ImEnabled` is false) — what Vim's command modes need, as Qt
+Quick's read-only TextEdit gives the QML editor.
 
 **Through Qt** (`qt/qthost.h`): Qt's input methods — its Android input context over
 `InputConnection`, IBus and Fcitx, the browser's hidden input, Windows' — expect a field as Qt's own
@@ -299,7 +316,10 @@ dragging; the wheel does as before.
   Held anywhere else, the finger still scrolls when it moves, as native lists do — unless an
   element under it takes long presses (`div().onLongPress(f)`, `Window::onLongPress`): the topmost
   such listener runs at the finger's place, the elements' press is cancelled (the release clicks
-  nothing) and the finger scrolls nothing until it lifts (a block's touch selection mode).
+  nothing) and the finger scrolls nothing until it lifts (a block's touch selection mode). Inside
+  the focused field only a listener whose hitbox lies within the field's bounds — something drawn
+  in its text: an inline object's `onLongPress`, a reminder chip's menu — runs instead of the
+  platform's selection.
 * **Through Qt** (`qt/qthost.h`) the item takes `QTouchEvent`s itself (`setAcceptTouchEvents`):
   the first finger down is the pointer until it lifts, with the events' times; `TouchCancel`, or
   the grab taken away (a Drawer's edge, a Flickable around: `touchUngrabEvent`, and
@@ -599,9 +619,11 @@ In **Atrament** (`src/atrament/ui`, Qt-free, generic — nothing Brulion-specifi
   `EditStyler` over markdownstyles.h's `styleMarkdownLine` / `flattenStyles` with BlockEditor's
   `highlighterPalette` — the same colours, weights, faces and boxes InlineEditor shows):
   `TextInput::setStyler(f)` — `f(text)`
-  gives the spans, asked once per text (a revision counter), applied over the inherited style as a
-  `Text`'s spans are; `setColors(caret, selection)`, `setPlaceholder`, `clearUndo()` (an owner
-  with an undo stack of its own), `layout()`, and the event `SelectionChanged` next to `Changed`.
+  gives the spans, asked once per text (a revision counter; `restyle()` asks again), applied over
+  the inherited style as a `Text`'s spans are, inline objects included ("Text" above: one unit for
+  the caret, their own clicks and long presses); `setColors(caret, selection)`, `setPlaceholder`,
+  `clearUndo()` (an owner with an undo stack of its own), `layout()`, the event `SelectionChanged`
+  next to `Changed`, the caret's shape (`setCaret`) and `setReadOnly` (Vim's command modes).
 * **Keys before the field**: `div().captureKeyDown(f)` — a key down on its way to the focused
   element, in the capture phase (GPUI's `capture_key_down`): an editor around a text field sees
   Enter, Backspace, Tab, ↑/↓ first and stops the ones it takes. **Built** (`ui/div.h`).
@@ -770,10 +792,59 @@ scrolling, `tst_atrament_editor`) before the next:
    edited block (`selectInEdited`); while the bar keeps the keyboard, a block it edits does not
    take it (`AtramentView.editingStarted`: the QML around decides). The edited field is a text
    input named "Block text" for screen readers, as InlineEditor.
-   Tested by `tests/atrament/editor/tst_atrament_editing`. **Not yet**: spell marks in the edited
-   text, Vim, the touch toolbar's highlight menu (it acts on an InlineEditor; the toolbar's other
-   buttons work: `MobileEditToolbar.atramentPage` commits the composition and inserts at the
-   caret, `AtramentView.insertAtCaret`), the reminder chips while editing.
+   Tested by `tests/atrament/editor/tst_atrament_editing`. Also built (2026-11-27), what
+   InlineEditor, MarkdownHighlighter and spellmarks.h do for the QML editor:
+   * **Spell marks** (`pagespell.cpp`; `PageView::setSpellCheck`, `AtramentView.spellCheck` /
+     `spellColor`: the `SpellCheck` singleton, Theme.danger): the misspelled words of the edited
+     text's prose — each line's `SpellRange` from the highlighter's rules (`EditStyler::Extras`),
+     `spell::findWords` over it, `SpellCheck::verdict` — underlined with a wavy line (Qt Quick drew
+     the QML editor's straight), the word ending at the caret left alone while it is typed
+     (MarkdownHighlighter's rule: styled again when the caret leaves it, `TextInput::restyle`),
+     never in code; with `SpellCheck.wholePage` the drawn rows' words too —
+     `SpellCheck::wrongWords` over the block's body, each put on the display text through the
+     rendered text's source map only where every piece over it maps character by character
+     (spellmarks.h's verbatim rule: a Markdown link's text or a chip is shown as a whole, left
+     alone even when its text is the word). New verdicts (`revisionChanged`), the checker switched
+     on or off and `wholePage` style the field and draw the rows again. A right-click on a marked
+     word — on touch UIs a tap on one in the edited text, after the caret went there — asks for
+     the spelling's menu (`onSpellingMenu`, `AtramentView.spellingMenuRequested(row, edited,
+     {from, to, word, text}, x, y)` → `BlockEditor.openAtramentSpellingMenu`: the text menu's
+     spelling items; a correction through `PageController.replaceRange` in the edited text,
+     `replaceInBody` in a drawn block); a right-click elsewhere is the block menu as before.
+   * **Reminder chips while editing** (`pagechips.cpp`): every ⏰ / ⏰! token of the edited text
+     (`LineChip`s of the same rules, labelled in the controller's locale relative to its day, both
+     followed) is an inline object of the field's spans — the room of its words ("⏰ jutro 18:00")
+     in ems of the field's font, the pill of the palette's `reminderBackground` /
+     `alarmBackground` 2 px beyond it, the words in `reminderChip` / `alarmChip` on the line's
+     baseline — while the text keeps the token byte for byte; one unit for the caret (a caret put
+     inside by the controller or Vim goes to its end, a selection's moving end over it: chipSnap);
+     a click is its dialog, a right-click or a finger held on it its menu, neither moving the caret
+     (`onReminderChip`, `AtramentView.reminderChipActivated` →
+     `BlockEditor.editReminderInText` / `openReminderMenuAt`).
+   * **Vim** (`pagevim.cpp`; `PageView::setVim`, `AtramentView.vimSession`: `BlockEditor.vimSession`;
+     the decision under "Open questions"): the edited block's keys go to the `VimSession` first by
+     `BlockEditor.handleEditorKey`'s rules (an idle Esc goes on to the editor, a mouse's selection
+     in normal mode becomes the visual one, in the command modes every key but the editor's
+     shortcuts — `vimPasses` — is Vim's or dropped; after a key Vim took `vimKeyHandled` →
+     `BlockEditor.afterVimKey`); the field follows the mode — a steady block caret in normal and
+     visual mode, an underline in replace mode, read-only there (no typing, no input method), the
+     bar in insert mode —, Vim's visual selection in the block is the field's
+     (`textSelectionRequested`), over several blocks their band; zt / zz / zb scroll the list
+     (`scrollRequested`), H M L are told the rows in view (`viewRequested` → `setView`); Vim's Ctrl
+     keys win over the window's shortcuts in its command modes (`AtramentView`'s ShortcutOverride,
+     `BlockEditor.vimOwnsShortcut`); VimStatus shows the session as before. Keys reach the session
+     as Qt's key events would (`Qt::Key`, modifiers, the typed text; Ctrl+letter its control
+     character).
+   * **The touch toolbar's highlight menu**: with the page drawn by Atrament the toolbar's Highlight
+     opens the same colours (`BlockEditor.openHighlightMenuAbove` without an InlineEditor); a colour
+     goes to `EditorAtramentPage.applyHighlight` — the composition committed, the field's selection
+     (`AtramentView.editSelectionStart` / `editSelectionEnd`) through `PageController.setHighlight`,
+     the highlighted text selected again (`selectInEdited`).
+   Tested by `tst_atrament_spell`, `tst_atrament_chips` and `tst_atrament_vim` (tst_editor_vim's
+   key rows typed into the Atrament window), TextInput's carets, read-only state and objects by
+   `tests/atrament/ui/tst_atrament_textinput`. **Not yet**: the edited text's own context menu (Cut /
+   Copy / Paste / Highlight… / the AI; a right-click there is the block menu, a misspelled word's
+   the spelling's), the highlight menu from that text menu.
 3. **Selection.** Block selection (Shift+click, Shift+arrows, a mouse's drag across rows), its band,
    copy / cut / paste through `PageController`'s selection; on a phone the long press and the
    handles. **Built so far** (2026-11-27): the band (`selectionEdge`), Shift+click and Ctrl+click
@@ -802,7 +873,14 @@ scrolling, `tst_atrament_editor`) before the next:
    coloured by the highlighter's Code mode (`EditStyler`, Luau for ```luau / ```lua), a click
    editing it at the character (the code is shown as it is edited), Enter a line break and Tab a
    tab in the field, ↑/↓ across blocks. With line numbers on (the device's setting or the note's
-   `line-numbers`) code blocks stay the QML view's (no numbers in Atrament yet).
+   `line-numbers`: `CodeLook::lineNumbers`, `codeLook.lineNumbers` in EditorAtramentPage) the panel
+   has CodeBlockView's gutter (`pagecode.cpp`): Theme.space3 in, a column as wide as the longest
+   number, Theme.space3 to the code; each line of the code numbered on its first visual line (a
+   wrapped line once), right-aligned, in the code face and size and the label's faint colour, on
+   that line's baseline — painted in the frame from the code's own layout of that frame (the drawn
+   `Text`'s or the edited `TextInput`'s, laid out in prepaint), so a new wrapping or a typed line
+   moves the numbers at once; no node for screen readers. Code blocks are Atrament's with or without
+   them (`drawsCode` no longer depends on the setting; tested by `tst_atrament_codelines`).
 
 ### Tests
 
@@ -817,12 +895,16 @@ scrolling, `tst_atrament_editor`) before the next:
 
 ### Open questions
 
-* Vim mode's block cursor and visual selection: the input's caret shape and a selection drawn by
-  the view, or Vim stays on the QML editor until M3.
+* ~~Vim mode's block cursor and visual selection~~: decided (2026-11-27) — Vim stays with the
+  editor drawn by Atrament, not on the QML editor until M3: the session is the same object and its
+  logic is all C++ (the engine, VimPageBuffer over PageController), so what the view adds is small —
+  `TextInput`'s caret shapes (a generic option: bar, block, underline) and read-only state, the
+  field's own selection for the visual one, the keys routed by BlockEditor's rules (step 2's entry,
+  `pagevim.cpp`). Built.
 * ~~The find highlight~~: spans with a background over `text::findMatches` of the display text
   (and of the edited text), built.
-* Spell marks (`renderTraced` anchors) as wavy underlines (the scene has them) mapped through the
-  display ↔ source map.
+* ~~Spell marks~~ as wavy underlines mapped through the display ↔ source map: built (step 2's
+  entry, `pagespell.cpp`).
 
 ## Risks
 

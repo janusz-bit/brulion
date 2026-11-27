@@ -102,6 +102,18 @@ class AtramentView : public brulion::atrament::AtramentItem {
     Q_PROPERTY(QQuickItem *header READ header WRITE setHeader NOTIFY headerChanged FINAL)
     Q_PROPERTY(QQuickItem *footer READ footer WRITE setFooter NOTIFY footerChanged FINAL)
 
+    // "page", the edited text's extras (docs/ATRAMENT.md M2 step 2: spell marks, reminder chips,
+    // Vim): the app's SpellCheck (the QML singleton; null: no marks) and the marks' colour
+    // (Theme.danger) — the edited text's prose, and the drawn rows while SpellCheck.wholePage; the
+    // editor's VimSession (BlockEditor.vimSession; its keys before the field's, the caret's shape).
+    Q_PROPERTY(QObject *spellCheck READ spellCheck WRITE setSpellCheck NOTIFY spellCheckChanged FINAL)
+    Q_PROPERTY(QColor spellColor MEMBER m_spellColor NOTIFY spellCheckChanged FINAL)
+    Q_PROPERTY(QObject *vimSession READ vimSession WRITE setVimSession NOTIFY vimSessionChanged FINAL)
+    // The edited block's selection [editSelectionStart, editSelectionEnd) (the touch toolbar's
+    // highlight).
+    Q_PROPERTY(int editSelectionStart READ editSelectionStart NOTIFY editStateChanged FINAL)
+    Q_PROPERTY(int editSelectionEnd READ editSelectionEnd NOTIFY editStateChanged FINAL)
+
 public:
     explicit AtramentView(QQuickItem *parent = nullptr);
     ~AtramentView() override;
@@ -139,6 +151,13 @@ public:
     void setFooter(QQuickItem *item);
     // "page": the delegate over model row `row` (null: the row is Atrament's, or not near the view).
     Q_INVOKABLE QQuickItem *rowItem(int row) const;
+
+    QObject *spellCheck() const { return m_spellCheck.data(); }
+    void setSpellCheck(QObject *spell);
+    QObject *vimSession() const { return m_vimSession.data(); }
+    void setVimSession(QObject *vim);
+    int editSelectionStart() const;
+    int editSelectionEnd() const;
 
 Q_SIGNALS:
     void viewChanged();
@@ -184,10 +203,25 @@ Q_SIGNALS:
     void delegateChanged();
     void headerChanged();
     void footerChanged();
+    void spellCheckChanged();
+    void vimSessionChanged();
+    // A right-click on a misspelled word (a tap on one in the edited text on touch UIs) at (x, y)
+    // of this item: `spelling` {from, to, word (as checked), text (as written)} — of the edited
+    // text when `edited` (PageController.replaceRange), else of the block's body
+    // (PageController.replaceInBody; BlockEditor.openRenderedSpellingMenu).
+    void spellingMenuRequested(int row, bool edited, const QVariantMap &spelling, qreal x, qreal y);
+    // A reminder chip of the edited text clicked (`menu` false: BlockEditor.editReminderInText) or
+    // right-clicked / held (`menu` true: its menu) at (x, y): the token's editText range.
+    void reminderChipActivated(int row, int from, int to, bool menu, qreal x, qreal y);
+    // Vim took a key of the edited block (BlockEditor.afterVimKey).
+    void vimKeyHandled();
 
 protected:
     void componentComplete() override;
     void placeHostedChildren() override;
+    // Vim's own Ctrl keys win over the window's shortcuts in its command modes (InlineEditor's
+    // Keys.onShortcutOverride, BlockEditor.vimOwnsShortcut).
+    bool event(QEvent *event) override;
 
 private:
     void attachView();
@@ -246,4 +280,9 @@ private:
     QPointer<QQmlComponent> m_delegate;
     QPointer<QQuickItem> m_header;
     QPointer<QQuickItem> m_footer;
+    // The edited text's extras.
+    void applyExtras();
+    QPointer<QObject> m_spellCheck;
+    QColor m_spellColor{0xc0, 0x39, 0x2b};
+    QPointer<QObject> m_vimSession;
 };

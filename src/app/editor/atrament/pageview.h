@@ -31,9 +31,11 @@
 //   AtramentItem::attach(app, page)               // or a TestWindow in tests
 #pragma once
 
+#include "editstyles.h"
 #include "foreignrows.h"
 #include "pagerows.h"
 #include "renderedspans.h"
+#include "spell/spellwords.h"
 
 #include "ui/atrament.h"
 
@@ -50,6 +52,8 @@ namespace brulion::editor {
 
 class BlockListModel;
 class PageController;
+class SpellCheck;
+class VimSession;
 namespace atr {
 class EditStyler;
 }
@@ -142,6 +146,9 @@ public:
         float fontSize = 12;                                  // Theme.textSm
         float lineHeight = 18;                                // Theme.lineHeightPx(textSm, 1.5)
         float labelSize = 10;                                 // Theme.textXs
+        // Each line numbered in a gutter on the left (the device's setting or the note's
+        // `line-numbers`: CodeBlockView's; pagecode.cpp).
+        bool lineNumbers = false;
     };
     void setDrawsCode(bool on, const CodeLook &look, atrament::Context<PageView> &cx);
     bool drawsCode() const { return m_drawsCode; }
@@ -362,6 +369,95 @@ private:
     std::vector<ForeignFrame> m_foreignFrames;
     float m_headerHeight = 0;
     float m_footerHeight = 0;
+
+    // --- The edited text's spell marks, reminder chips and Vim keys; code blocks' line numbers
+    // (pagespell.cpp, pagechips.cpp, pagevim.cpp, pagecode.cpp; docs/ATRAMENT.md M2 step 2's and
+    // step 5's entries — what InlineEditor, MarkdownHighlighter, spellmarks.h and CodeBlockView do).
+public:
+    // Spell checking (docs/UI.md "Spell checking"): misspelled words underlined with a wavy line in
+    // `color` in the edited text's prose (not in code) and, while the checker's `wholePage` is on,
+    // in the drawn rows (each word shown as it is written: spellmarks.h's rule). Null: none.
+    void setSpellCheck(SpellCheck *spell, atrament::Color color, atrament::Context<PageView> &cx);
+    struct Misspelling {
+        int row = -1;
+        bool edited = false; // in the edited text: from / to of its editText; else of the block's body
+        int from = 0;
+        int to = 0;
+        QString word; // as checked ("np." with its dot)
+        QString text; // as written
+    };
+    // The misspelled word at window point `p` of row `row` (the edited one, or a drawn one).
+    std::optional<Misspelling> misspelledAt(int row, atrament::Point p) const;
+    // The display ranges of a drawn row's text marked as misspelled now (tests).
+    std::vector<atrament::Range> spellMarks(int row) const;
+    // A right-click on a misspelled word (on touch UIs a tap on one in the edited text): its menu
+    // at window point `at` (BlockEditor's spelling items). Unset: the block menu as elsewhere.
+    std::function<void(const Misspelling &, atrament::Point at)> onSpellingMenu;
+
+    // Reminder chips while editing (InlineEditor's, markdownstyles.h's LineChip): each ⏰ / ⏰!
+    // token of the edited text is laid out as the pill of its words ("⏰ jutro 18:00"), one unit for
+    // the caret (←/→ step over it, Backspace / Delete remove it whole, a caret put inside goes to
+    // its end) while the text keeps the token as written. A click on one (`menu` false: the
+    // reminder's dialog), a right-click or a finger held on it (`menu` true: its menu) — the
+    // token's editText range, the window point. On by default.
+    void setReminderChips(bool on, atrament::Context<PageView> &cx);
+    std::function<void(int row, int from, int to, bool menu, atrament::Point at)> onReminderChip;
+    // The edited text's chips as last styled (editText ranges; tests).
+    const std::vector<LineChip> &editChips() const { return m_editChips; }
+
+    // Vim (docs/UI.md "Vim mode"): the editor's VimSession takes the edited block's keys first, by
+    // BlockEditor.handleEditorKey's rules; in its normal, visual and replace modes the field takes
+    // no typing (no input method either) and its caret is a steady block (an underline in replace
+    // mode), Vim's visual selection in the block is the field's selection, zt / zz / zb scroll the
+    // list, H M L are told the rows in view. `onVimKey` after each key Vim took
+    // (BlockEditor.afterVimKey: the keyboard to the list when Vim selected blocks).
+    void setVim(VimSession *vim, atrament::Context<PageView> &cx);
+    VimSession *vim() const;
+    std::function<void()> onVimKey;
+
+private:
+    // Spell checking (pagespell.cpp).
+    QPointer<SpellCheck> m_spell;
+    atrament::Color m_spellColor = atrament::rgb(0xc0392b);
+    std::vector<QMetaObject::Connection> m_spellConnections;
+    struct EditSpell {
+        std::vector<spell::WordSpan> wrong; // the edited text's misspelled words when last styled
+        int suppressed = -1;                // the end of the one left unmarked (the caret after it)
+        int caret = -1;                     // the caret styling sees
+    } m_editSpell;
+    bool editSpellActive() const;
+    void appendEditSpelling(std::u16string_view text, const std::vector<EditStyler::Extras::Prose> &prose,
+                            std::vector<atrament::TextSpan> &spans);
+    void appendRowSpelling(int row, const markdown::RenderedText &text, std::vector<atrament::TextSpan> &spans) const;
+    void editCaretMoved(int caret, atrament::Context<PageView> &cx);
+    bool spellingMenuAt(int row, atrament::Point p);
+    void editedRowTapped(int row, const atrament::MouseUpEvent &e);
+    void restyleInput(atrament::Context<PageView> &cx);
+    // The edited text's spans: the highlighter's, the find bar's, the spelling's, the chips'.
+    std::vector<atrament::TextSpan> editSpans(std::u16string_view text, bool code, bool luau);
+    // Reminder chips (pagechips.cpp).
+    bool m_reminderChips = true;
+    std::vector<LineChip> m_editChips;
+    std::u16string m_editChipsText; // the text they were found in
+    void appendEditChips(const std::vector<LineChip> &chips, std::vector<atrament::TextSpan> &spans);
+    void chipActivated(int from, int to, bool menu, atrament::Point at, atrament::Context<PageView> &cx);
+    // A caret strictly inside a chip goes to its end, a selection's moving end over the whole chip.
+    bool snapCaretOutOfChips(atrament::Context<PageView> &cx);
+    // Vim (pagevim.cpp).
+    QPointer<VimSession> m_vim;
+    std::vector<QMetaObject::Connection> m_vimConnections;
+    struct VimSelection {
+        int row = -1;
+        int anchor = 0;
+        int cursor = 0;
+    } m_vimSelection;
+    bool vimKey(const atrament::Keystroke &key, atrament::Context<PageView> &cx);
+    void applyVimLook(atrament::Context<PageView> &cx);
+    void vimSelectionRequested(int row, int anchor, int cursor, atrament::Context<PageView> &cx);
+    void answerVimView();
+    // Code blocks' line numbers (pagecode.cpp): CodeBlockView's gutter, each line of the code
+    // numbered on its first visual line.
+    atrament::AnyElement codeLineNumbers(std::size_t row, const QString &code, bool edited);
 };
 
 } // namespace atr

@@ -18,7 +18,13 @@
 #include "pagecontroller.h"
 #include "foreignhost.h"
 #include "pageview.h"
+#include "spellcheck.h"
+#include "vimsession.h"
 #endif
+
+#include <QKeyEvent>
+
+#include <algorithm>
 
 using namespace Qt::StringLiterals;
 namespace at = brulion::atrament;
@@ -53,6 +59,8 @@ AtramentView::AtramentView(QQuickItem *parent)
 {
     connect(this, &AtramentView::styleChanged, this, &AtramentView::applyStyle);
     connect(this, &AtramentView::findChanged, this, &AtramentView::applyFind);
+    connect(this, &AtramentView::spellCheckChanged, this, &AtramentView::applyExtras);
+    connect(this, &AtramentView::vimSessionChanged, this, &AtramentView::applyExtras);
 }
 
 AtramentView::~AtramentView()
@@ -357,6 +365,7 @@ void AtramentView::applyStyle()
         code.fontSize = number("fontSize", code.fontSize);
         code.lineHeight = number("lineHeight", code.lineHeight);
         code.labelSize = number("labelSize", code.labelSize);
+        code.lineNumbers = m_codeLook.value(QStringLiteral("lineNumbers")).toBool();
         page.setDrawsCode(m_drawsCode, code, cx);
         page.setEditLook(atColor(m_caretColor), atColor(m_selectionColor),
                          std::u16string(u16View(m_placeholderText)), std::u16string(u16View(m_editLabel)), cx);
@@ -459,8 +468,24 @@ void AtramentView::attachView()
                         const QPointF scene = guard->mapToScene(QPointF(p.x, p.y));
                         Q_EMIT guard->blockMenuRequested(row, scene.x(), scene.y());
                     };
+                    page.onSpellingMenu = [guard](const brulion::editor::atr::PageView::Misspelling &m, at::Point p) {
+                        if (!guard)
+                            return;
+                        const QVariantMap spelling{{u"from"_s, m.from}, {u"to"_s, m.to}, {u"word"_s, m.word},
+                                                   {u"text"_s, m.text}};
+                        Q_EMIT guard->spellingMenuRequested(m.row, m.edited, spelling, p.x, p.y);
+                    };
+                    page.onReminderChip = [guard](int row, int from, int to, bool menu, at::Point p) {
+                        if (guard)
+                            Q_EMIT guard->reminderChipActivated(row, from, to, menu, p.x, p.y);
+                    };
+                    page.onVimKey = [guard] {
+                        if (guard)
+                            Q_EMIT guard->vimKeyHandled();
+                    };
                 });
         applyStyle();
+        applyExtras();
         m_page->host = std::make_unique<brulion::editor::atr::ForeignRowHost>(this, r.app, m_page->entity, model);
         m_page->host->setDelegate(m_delegate);
         m_page->host->setHeader(m_header);
@@ -533,4 +558,84 @@ void AtramentView::placeHostedChildren()
     if (m_page && m_page->host)
         m_page->host->place();
 #endif
+}
+
+// --- "page": the edited text's extras (spell marks, Vim)
+
+void AtramentView::setSpellCheck(QObject *spell)
+{
+    if (spell == m_spellCheck)
+        return;
+    m_spellCheck = spell;
+    Q_EMIT spellCheckChanged();
+}
+
+void AtramentView::setVimSession(QObject *vim)
+{
+    if (vim == m_vimSession)
+        return;
+    m_vimSession = vim;
+    Q_EMIT vimSessionChanged();
+}
+
+void AtramentView::applyExtras()
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (!m_page)
+        return;
+    using namespace brulion::editor;
+    auto *spell = qobject_cast<SpellCheck *>(m_spellCheck.data());
+    auto *vim = qobject_cast<VimSession *>(m_vimSession.data());
+    m_page->entity.update(runtime().app, [&](atr::PageView &page, at::Context<atr::PageView> &cx) {
+        page.setSpellCheck(spell, atColor(m_spellColor), cx);
+        page.setVim(vim, cx);
+    });
+#endif
+}
+
+int AtramentView::editSelectionStart() const
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_page) {
+        const auto st = m_page->entity.read(runtime().app).editState();
+        return std::min(st.anchor, st.cursor);
+    }
+#endif
+    return 0;
+}
+
+int AtramentView::editSelectionEnd() const
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_page) {
+        const auto st = m_page->entity.read(runtime().app).editState();
+        return std::max(st.anchor, st.cursor);
+    }
+#endif
+    return 0;
+}
+
+bool AtramentView::event(QEvent *e)
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (e->type() == QEvent::ShortcutOverride && m_page) {
+        auto *vim = qobject_cast<brulion::editor::VimSession *>(m_vimSession.data());
+        auto *key = static_cast<QKeyEvent *>(e);
+        const Qt::KeyboardModifiers mods = key->modifiers();
+        // BlockEditor.vimOwnsShortcut: Ctrl+R, Ctrl+D, Ctrl+U, Ctrl+A, Ctrl+X, Ctrl+[ in Vim's
+        // command modes, Ctrl+W and Ctrl+H in its command line.
+        if (vim && vim->enabled() && vim->commands() && editRow() >= 0 && (mods & Qt::ControlModifier)
+            && !(mods & (Qt::AltModifier | Qt::MetaModifier | Qt::ShiftModifier))) {
+            const int k = key->key();
+            const bool owned = (!vim->commandLine().isEmpty() && (k == Qt::Key_W || k == Qt::Key_H))
+                               || ((k == Qt::Key_A || k == Qt::Key_X) && vim->mode() != u"replace")
+                               || k == Qt::Key_R || k == Qt::Key_D || k == Qt::Key_U || k == Qt::Key_BracketLeft;
+            if (owned) {
+                e->accept();
+                return true;
+            }
+        }
+    }
+#endif
+    return AtramentItem::event(e);
 }
