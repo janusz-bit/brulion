@@ -7,8 +7,10 @@ import Brulion
 // ChatListModel: its state by priority as T3 Code shows it — a plan to approve, an approval asked
 // for, working, failed, an unread answer — its title (semibold while unread or shown), a pin, the
 // branch of a worktree of its own, when it last changed. A click opens it; a right click, a long
-// press or "⋯" its menu: rename, pin, mark unread, copy its path, branch or link, a new thread in
-// this worktree (or in the project's folder), open in the editor, archive, move to the trash.
+// press or "⋯" its menu: rename, regenerate its title (T3 Code's: the AI names it anew from its
+// messages, when the AI is set up — WorkspaceChats.regenerateTitle), pin, mark unread, copy its path,
+// branch or link, a new thread in this worktree (or in the project's folder), open in the editor,
+// archive, move to the trash.
 Item {
     id: thread
 
@@ -167,6 +169,15 @@ Item {
             iconName: "pencil"
             shortcut: thread.current ? ShortcutMap.sequence("code.renameThread") : ""
             onTriggered: thread.renameRequested(thread.path, thread.title)
+        }
+        BMenuItem {
+            objectName: "codeThreadRegenerateTitle"
+            readonly property bool regenerating: Workspace.chats.regeneratingTitle(thread.path, Workspace.chats.titleSerial)
+            visible: Workspace.chats.canRegenerateTitles
+            enabled: !regenerating
+            text: regenerating ? qsTr("Regenerating…") : qsTr("Regenerate title")
+            iconName: "sparkles"
+            onTriggered: Workspace.chats.regenerateTitle(thread.path)
         }
         BMenuItem {
             objectName: "codeThreadPin"

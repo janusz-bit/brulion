@@ -35,6 +35,17 @@
 # stays down, the band, the grips, the selection tools docked at the bottom), a tap extending it,
 # "Copy" ("Copied 2 blocks"), Back.
 # Screenshots of each step (sel-*.png); the same debuggable APK.
+# With --camera instead: a photo for an AI chat message from the system's camera app (docs/ANDROID.md
+# "Camera and dictation") — a new conversation of the AI chat, a few words in its field, the
+# paperclip's "Take a photo" ("Zrób zdjęcie"): the camera app (the image's Camera, its emulated back
+# camera) comes to the front and the photo's record is in the app's cache before it (photos.json,
+# pending). Once with the app's process alive: Shutter, Done — the photo is a picture of the field
+# ("Take the picture off" ("Usuń obrazek z wiadomości")) and a JPEG of the notebook, the cache's
+# copy and record gone. Then the case Android makes when a camera needs the memory: the app's
+# process killed (`am kill`) while the camera app is in front, Shutter, Done — Android starts the
+# app anew for the answer; the new process takes the photo once the notebook is open, and the new
+# conversation shows the words written before and both photos. Screenshots cam-*.png; the same
+# debuggable APK.
 # With --folders instead: folders, links and tags with a real finger — a tap on a #tag in the
 # journal opens its page (not created by looking at it; the drawer opened on it shows the page's
 # row in the tree, within the list's view) and Back returns; the path parts of a link
@@ -221,6 +232,7 @@
 # Usage: scripts/android-emulator-test.sh [APP_APK SELFTEST_APK]
 #        scripts/android-emulator-test.sh --keyboard [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --selection [DEBUG_APP_APK]
+#        scripts/android-emulator-test.sh --camera [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --folders [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --share [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --automation [DEBUG_APP_APK]
@@ -292,6 +304,7 @@ fi
 VERSION=$(sed -nE 's/^[[:space:]]*VERSION[[:space:]]+([0-9]+\.[0-9]+\.[0-9]+).*/\1/p' CMakeLists.txt | head -n 1)
 KEYBOARD=0
 SELECTION=0
+CAMERA=0
 FOLDERS=0
 SHARE=0
 AUTOMATION=0
@@ -313,6 +326,9 @@ if [[ ${1:-} == --keyboard ]]; then
   shift
 elif [[ ${1:-} == --selection ]]; then
   SELECTION=1
+  shift
+elif [[ ${1:-} == --camera ]]; then
+  CAMERA=1
   shift
 elif [[ ${1:-} == --folders ]]; then
   FOLDERS=1
@@ -372,7 +388,7 @@ else
   ((DEVICEFOLDER)) && APP_APK=${1:-dist-android/brulion-$VERSION-x86_64-play.apk}
   SELFTEST_APK=${2:-dist-android/brulion-selftest-$VERSION-x86_64.apk}
   [[ -f $APP_APK ]] || die "$APP_APK not found (build it: BRULION_ANDROID_ABIS=x86_64 BRULION_ANDROID_SELFTEST=1 scripts/android-build.sh)"
-  ((KEYBOARD || SELECTION || FOLDERS || SHARE || AUTOMATION || WIDGETS || WEBPICTURES || DONE || BACKGROUND || DRAWING || STYLUS || PICKERS || DEVICEFOLDER || PDF || RELAUNCH || LOCALAI || LOCK)) ||
+  ((KEYBOARD || SELECTION || CAMERA || FOLDERS || SHARE || AUTOMATION || WIDGETS || WEBPICTURES || DONE || BACKGROUND || DRAWING || STYLUS || PICKERS || DEVICEFOLDER || PDF || RELAUNCH || LOCALAI || LOCK)) ||
     [[ -f $SELFTEST_APK ]] ||
     die "$SELFTEST_APK not found"
 fi
@@ -1173,6 +1189,89 @@ if ((SELECTION)); then
   grep -E 'qml|Skopiowano|brulion' "$OUT/selection-logcat.txt" | tail -n 40 >"$OUT/selection-summary.txt" || true
   info "Result"
   cat "$OUT/selection-summary.txt"
+  echo "logs and screenshots: $(cd "$OUT" && pwd)"
+  ((failures == 0)) || die "$failures check(s) failed"
+  echo "all checks passed"
+  exit 0
+fi
+
+# --- a photo for an AI chat message (--camera) ------------------------------------------------------
+
+cam_front() { adb shell dumpsys activity activities | grep -E 'topResumedActivity=.*com\.android\.camera2/' >/dev/null; }
+app_front() { adb shell dumpsys activity activities | grep -E "topResumedActivity=.*$PKG/" >/dev/null; }
+cam_record() { adb shell run-as "$PKG" cat cache/camera/photos.json 2>/dev/null | tr -d '\r'; }
+# (Whole outputs compared: `grep -q` leaving early fails adb's pipe — pipefail.)
+cam_pending() { [[ $(cam_record) == *'"pending"'* ]]; }
+cam_cleared() { # no record of a photo and no photo left in the app's cache
+  [[ $(cam_record) != *'"file"'* && $(adb shell run-as "$PKG" ls cache/camera 2>/dev/null | tr -d '\r') != *.jpg* ]]
+}
+vault_photos() { adb shell run-as "$PKG" find "\"$VAULT\"" -name 'photo-*.jpg' 2>/dev/null | tr -d '\r' | grep -c . || true; }
+vault_has_photos() { [[ $(vault_photos) -ge $1 ]]; } # <count>: so many photos in the notebook at least
+app_pid() { adb shell pidof "$PKG" | tr -d '\r'; }
+cam_new_process() { local pid; pid=$(app_pid); [[ -n $pid && $pid != "$1" ]]; } # <the earlier pid>
+# `am kill` ends only a process Android counts as in the background: right after the camera came to
+# the front it may not be yet (a busy machine) — asked again until it is gone.
+cam_kill() { adb shell am kill "$PKG" && sleep 2 && not_running; }
+cam_pictures() { ui_find_all 'Usuń obrazek z wiadomości|Take the picture off' | grep -c . || true; } # the field's pictures
+cam_has_pictures() { [[ $(cam_pictures) -ge $1 ]]; }
+cam_shoot() { # the camera app in front: Shutter, then Done
+  wait_for 20 cam_front && ui_tap 'Shutter' first 4 && wait_for 20 ui_has 'Done' && ui_tap 'Done' first 4
+}
+cam_take() { # the paperclip's "Take a photo" in the field shown: the camera app comes up
+  ui_tap 'Dodaj obrazek|Add a picture' last && ui_tap 'Zrób zdjęcie|Take a photo' first 4 && wait_for 20 cam_front
+}
+if ((CAMERA)); then
+  info "Camera: $APP_APK on ${SCREEN_W}x$SCREEN_H, density $DENSITY, API $android_api"
+  adb install -r -g "$APP_APK" >/dev/null
+  adb shell run-as "$PKG" true 2>/dev/null || die "$APP_APK is not debuggable (BRULION_ANDROID_BUILD_TYPE=Debug)"
+  [[ $(adb shell pm list packages) == *package:com.android.camera2* ]] || die "no camera app in the image ($IMAGE)"
+  # (Android's one-time "Viewing full screen" hint over the app, after the camera's full screen.)
+  adb shell settings put secure immersive_mode_confirmations confirmed
+  start_app '--demo --locale pl --route chat'
+  check "the app is running" running
+  check "the chat's list is on screen" wait_for 30 ui_has 'Nowa rozmowa'
+  ui_tap 'Nowa rozmowa' last
+  ui_tap 'Wiadomość do AI'
+  adb shell input text 'Co%sto%sza%sroslina'
+  sleep 2
+  app_shot cam-1-field
+  # The app alive all the time: the photo comes into the field at once.
+  check "Take a photo brings the camera app to the front" cam_take
+  check "the photo's record is kept before the camera starts" cam_pending
+  app_shot cam-2-camera
+  check "Shutter and Done in the camera app" cam_shoot
+  check "Brulion is back in front" wait_for 20 app_front
+  check "the photo is a picture of the field" wait_for 20 cam_has_pictures 1
+  check "the photo is in the notebook" wait_for 10 vault_has_photos 1
+  check "the cache keeps neither the photo nor its record" cam_cleared
+  app_shot cam-3-photo
+  first_pid=$(app_pid)
+  # Android ends the app while the camera app is in front (as for a camera's memory).
+  check "Take a photo again" cam_take
+  check "the app's process is gone while the camera is in front" wait_for 30 cam_kill
+  app_shot cam-4-killed
+  check "Shutter and Done in the camera app" cam_shoot
+  check "Android starts the app anew for the camera's answer" wait_for 60 running
+  check "a new process" cam_new_process "$first_pid"
+  check "Brulion is in front" wait_for 60 app_front
+  sleep 20
+  app_shot cam-5-restarted
+  check "the new process took the photo into the notebook" wait_for 30 vault_has_photos 2
+  check "the cache keeps neither the photo nor its record" wait_for 20 cam_cleared
+  # The new conversation's field: the words written before and both photos.
+  ui_has 'Nowa rozmowa|New conversation' || ui_tap 'Czat z AI|AI chat' first 4 || true
+  ui_tap 'Nowa rozmowa|New conversation' last 4 || true
+  app_shot cam-6-field
+  check "the words written before the camera are in the field" wait_for 20 ui_has 'Co to za roslina'
+  check "both photos are pictures of the field" wait_for 20 cam_has_pictures 2
+  check "the app is still running" running
+  adb logcat -d >"$OUT/camera-logcat.txt"
+  check "no crash" bash -c "! grep -E 'FATAL EXCEPTION|Fatal signal' '$OUT/camera-logcat.txt'"
+  check "no QML errors" bash -c "! grep -E 'TypeError|ReferenceError|Binding loop detected' '$OUT/camera-logcat.txt'"
+  cam_record >"$OUT/camera-photos.json" || true
+  grep -E 'BrulionCapture|brulion\.|qml' "$OUT/camera-logcat.txt" | tail -n 40 >"$OUT/camera-summary.txt" || true
+  info "Result"
+  cat "$OUT/camera-summary.txt"
   echo "logs and screenshots: $(cd "$OUT" && pwd)"
   ((failures == 0)) || die "$failures check(s) failed"
   echo "all checks passed"

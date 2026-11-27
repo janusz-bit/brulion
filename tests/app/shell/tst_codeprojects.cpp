@@ -796,6 +796,118 @@ private Q_SLOTS:
         QCOMPARE(restored.size(), 1);
     }
 
+    // A new worktree's name from the AI's answer (T3 Code's AI-made branch name), checked: made a
+    // slug, valid after the prefix — else today's name, the thread's first message's slug.
+    void worktreeName_data()
+    {
+        QTest::addColumn<QString>("answer");
+        QTest::addColumn<QString>("prefix");
+        QTest::addColumn<QString>("name");
+        QTest::newRow("the AI's name") << u"fix-cart-total"_s << u"brulion/"_s << u"fix-cart-total"_s;
+        QTest::newRow("in words, quoted") << u"`Fix Cart Total`"_s << u"brulion/"_s << u"fix-cart-total"_s;
+        QTest::newRow("with a label and a prefix") << u"Branch: feature/fix-cart"_s << u""_s << u"fix-cart"_s;
+        QTest::newRow("Polish letters") << u"popraw-zaokrąglanie-rabatu"_s << u"ala/"_s << u"popraw-zaokraglanie-rabatu"_s;
+        QTest::newRow("long: cut as slugs are") << u"fix-the-total-of-the-cart-for-returning-customers-now"_s
+                                               << u"brulion/"_s << u"fix-the-total-of-the-cart-for-returning-c"_s;
+        QTest::newRow("no answer") << QString() << u"brulion/"_s << u"popraw-liczenie-sumy-w-koszyku"_s;
+        QTest::newRow("the word project") << u"project"_s << u"brulion/"_s << u"project"_s;
+        QTest::newRow("a sentence") << u"I would call it the cart fix, because it fixes the total of the cart for all"_s
+                                    << u"brulion/"_s << u"popraw-liczenie-sumy-w-koszyku"_s;
+        QTest::newRow("no letters a branch takes") << u"修复购物车"_s << u"brulion/"_s << u"popraw-liczenie-sumy-w-koszyku"_s;
+        QTest::newRow("refused after the prefix") << u"fix-cart"_s << u"zły..prefiks/"_s
+                                                  << u"popraw-liczenie-sumy-w-koszyku"_s;
+    }
+    void worktreeName()
+    {
+        QFETCH(QString, answer);
+        QFETCH(QString, prefix);
+        QFETCH(QString, name);
+        QCOMPARE(CodeProjects::worktreeName(answer, u"Popraw liczenie sumy w koszyku"_s, prefix), name);
+    }
+
+    // createWorktree() asks the AI for the name first (the thread's first message), waits a bounded
+    // time and falls back to today's name — an answer that comes too late is ignored, the question
+    // stopped; an answer at once (no AI set up) goes on as well.
+    void worktreeNamedByTheAi()
+    {
+        if (!m_git)
+            QSKIP("no git");
+        const QString repo = fresh(u"Koszyk"_s);
+        QVERIFY(QDir().mkpath(repo));
+        QCOMPARE(git(repo, {u"init"_s, u"-q"_s}), 0);
+        QVERIFY(writeFile(repo + u"/koszyk.py"_s, "RABAT = 0\n"));
+        QCOMPARE(git(repo, {u"add"_s, u"-A"_s}), 0);
+        QCOMPARE(git(repo, {u"commit"_s, u"-qm"_s, u"start"_s}), 0);
+        CodeProjects projects;
+        projects.setPrograms(QStandardPaths::findExecutable(u"git"_s), QString());
+        projects.setWorktreesRoot(fresh(u"drzewa"_s));
+        const QString id = projects.add(repo);
+        const QString message = u"Popraw liczenie sumy w koszyku: rabat źle się zaokrągla"_s;
+
+        // The AI's name, answered later (as a model does).
+        QStringList asked;
+        std::function<void(const QString &)> answer;
+        int stopped = 0;
+        projects.setBranchNamer([&](const QString &text, std::function<void(const QString &)> done) {
+            asked << text;
+            answer = std::move(done);
+            return std::function<void()>([&stopped] { ++stopped; });
+        });
+        QSignalSpy created(&projects, &CodeProjects::worktreeCreated);
+        QVERIFY(projects.createWorktree(id, message));
+        QCOMPARE(asked, QStringList{message});
+        QTest::qWait(50);
+        QCOMPARE(created.size(), 0); // (it waits for the name)
+        answer(u"fix-cart-total"_s);
+        QTRY_COMPARE_WITH_TIMEOUT(created.size(), 1, 20000);
+        QCOMPARE(created.at(0).at(3).toString(), QString());
+        QCOMPARE(created.at(0).at(2).toString(), u"brulion/fix-cart-total"_s);
+        QCOMPARE(QFileInfo(created.at(0).at(1).toString()).fileName(), u"fix-cart-total"_s);
+        QCOMPARE(gitOut(created.at(0).at(1).toString(), {u"branch"_s, u"--show-current"_s}), u"brulion/fix-cart-total"_s);
+        answer(u"inna-nazwa"_s); // (once)
+        QTest::qWait(50);
+        QCOMPARE(created.size(), 1);
+        QCOMPARE(stopped, 0);
+
+        // The same name again: the next free one.
+        QVERIFY(projects.createWorktree(id, message));
+        answer(u"fix-cart-total"_s);
+        QTRY_COMPARE_WITH_TIMEOUT(created.size(), 2, 20000);
+        QCOMPARE(created.at(1).at(2).toString(), u"brulion/fix-cart-total-2"_s);
+
+        // No name in time: the question stopped, today's name; the late answer changes nothing.
+        projects.setBranchNameTimeout(100);
+        QVERIFY(projects.createWorktree(id, message));
+        QTRY_COMPARE_WITH_TIMEOUT(created.size(), 3, 20000);
+        QCOMPARE(stopped, 1);
+        QCOMPARE(created.at(2).at(2).toString(), u"brulion/popraw-liczenie-sumy-w-koszyku-rabat-zle"_s);
+        answer(u"za-pozno"_s);
+        QTest::qWait(100);
+        QCOMPARE(created.size(), 3);
+        QCOMPARE(gitOut(repo, {u"branch"_s, u"--list"_s, u"brulion/za-pozno"_s}), QString());
+
+        // An answer at once (no AI set up: ""): today's name; the wait's end after it does nothing.
+        stopped = 0;
+        projects.setBranchNamer([&stopped](const QString &, std::function<void(const QString &)> done) {
+            done(QString());
+            return std::function<void()>([&stopped] { ++stopped; });
+        });
+        QVERIFY(projects.createWorktree(id, u"Dodaj rabat"_s));
+        QTRY_COMPARE_WITH_TIMEOUT(created.size(), 4, 20000);
+        QCOMPARE(created.at(3).at(2).toString(), u"brulion/dodaj-rabat"_s);
+        QTest::qWait(300);
+        QCOMPARE(created.size(), 4);
+        QCOMPARE(stopped, 0);
+        projects.setBranchNameTimeout(CodeProjects::BranchNameTimeoutMs);
+        projects.setBranchNamer([](const QString &, std::function<void(const QString &)> done) {
+            done(u"Oto moja propozycja nazwy gałęzi dla tej pracy, która opisuje dokładnie, co trzeba zrobić"_s);
+            return std::function<void()>();
+        });
+        QVERIFY(projects.createWorktree(id, u"Usuń rabat"_s));
+        QTRY_COMPARE_WITH_TIMEOUT(created.size(), 5, 20000);
+        QCOMPARE(created.at(4).at(2).toString(), u"brulion/usun-rabat"_s);
+    }
+
     // With gh: `gh pr checkout` in a new detached worktree, its title from `gh pr view`.
     void pullRequestWithGh()
     {

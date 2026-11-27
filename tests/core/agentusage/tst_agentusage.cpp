@@ -4,11 +4,13 @@
 // the test), in the shapes the agents write.
 
 #include "agentusage/history.h"
+#include "agentusage/logstream_p.h"
 #include "agentusage/reader.h"
 #include "agentusage/usage.h"
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -17,6 +19,7 @@
 #include <QTest>
 
 #include <cmath>
+#include <utility>
 
 using namespace brulion;
 using namespace brulion::agentusage;
@@ -139,6 +142,31 @@ void touch(const QString &path, int seconds)
     QVERIFY(f.setFileTime(QDateTime::currentDateTimeUtc().addSecs(seconds), QFileDevice::FileModificationTime));
 }
 
+/// A fixture's bytes (tests/core/agentusage/fixtures: make-fixtures.sh).
+QByteArray fixture(const QString &name)
+{
+    QFile f(QStringLiteral(BRULION_AGENTUSAGE_FIXTURES) + u'/' + name);
+    if (!f.open(QIODevice::ReadOnly))
+        qWarning() << "no fixture" << name;
+    return f.readAll();
+}
+
+/// A file's time set to `time` (Codex keeps a rollout's time when it compresses or moves it).
+void setTime(const QString &path, const QDateTime &time)
+{
+    QFile f(path);
+    QVERIFY(f.open(QIODevice::ReadWrite));
+    QVERIFY(f.setFileTime(time, QFileDevice::FileModificationTime));
+}
+
+/// What tests/core/agentusage/fixtures/rollout.jsonl holds: three API responses of gpt-6-astra.
+constexpr qint64 RolloutRequests = 3;
+constexpr qint64 RolloutInput = 4000 + 3000 + 1000; // (not cached)
+constexpr qint64 RolloutCached = 8000 + 12000 + 15000;
+constexpr qint64 RolloutOutput = 900 + 400 + 700;
+
+const QString RolloutName = u"rollout-2026-11-24T08-00-00-019ad3c1-7f2e-7a40-b1c5-5e0d2f8a9b31.jsonl"_s;
+
 Source claudeSource(const QString &root)
 {
     return Source{Provider::Claude, {QDir(root).filePath(u"projects"_s)}};
@@ -175,6 +203,8 @@ class TestAgentUsage : public QObject {
 private Q_SLOTS:
     void modelNames_data();
     void modelNames();
+    void pricedAs_data();
+    void pricedAs();
     void prices();
     void claudeLines();
     void claudeLinesMalformed_data();
@@ -189,10 +219,31 @@ private Q_SLOTS:
     void claudeResumedSessionCountsOnce();
     void truncatedLastLine();
     void hugeLine();
+    void lineAtTheLimit();
     void codexHistory();
     void codexForkCountsOnce();
     void codexResponseRecords();
     void codexRecordsHistory();
+    void codexAutoReview_data();
+    void codexAutoReview();
+    void compressedRollouts_data();
+    void compressedRollouts();
+    void compressedLater();
+    void archivedRolloutCountsOnce();
+    void bothRepresentations();
+    void compressedRewrittenShorter();
+    void malformedCacheEntry_data();
+    void malformedCacheEntry();
+    void unreadableFile();
+    void goneLongAgo();
+    void noSource();
+    void logStream();
+    void cacheRoundTrip();
+    void folderDepth();
+    void claudeLineWithoutCwd();
+    void crlfLines();
+    void cacheNotWritten();
+    void unpackedLimit();
     void incrementalCache();
     void rewrittenFile();
     void goneFileKeepsItsUse();
@@ -216,6 +267,8 @@ void TestAgentUsage::modelNames_data()
     QTest::newRow("sonnet 4") << u"claude-sonnet-4-20250514"_s << u"claude-sonnet-4"_s << true;
     QTest::newRow("1m") << u"claude-sonnet-4-5[1m]"_s << u"claude-sonnet-4-5"_s << true;
     QTest::newRow("bedrock") << u"us.anthropic.claude-opus-4-1-20250805-v1:0"_s << u"claude-opus-4-1"_s << true;
+    QTest::newRow("bedrock, no region") << u"anthropic.claude-haiku-4-5-20251001-v1:0"_s << u"claude-haiku-4-5"_s
+                                        << true;
     QTest::newRow("vertex") << u"claude-opus-4-5@20251101"_s << u"claude-opus-4-5"_s << true;
     QTest::newRow("upper case") << u" Claude-Haiku-4-5 "_s << u"claude-haiku-4-5"_s << true;
     QTest::newRow("3.5 latest") << u"claude-3-5-sonnet-latest"_s << u"claude-3-5-sonnet"_s << true;
@@ -236,6 +289,38 @@ void TestAgentUsage::modelNames()
     QFETCH(bool, priced);
     QCOMPARE(normalizedModel(model), normalized);
     QCOMPARE(priceOf(model).has_value(), priced);
+}
+
+/// Models the log names by an alias of the provider's: priced as the model the provider's own
+/// program sends for an API key (the same work on the API).
+void TestAgentUsage::pricedAs_data()
+{
+    QTest::addColumn<QString>("model");
+    QTest::addColumn<QString>("pricedAs");
+    // Codex's automatic approval review (its "guardian"): "codex-auto-review" with a ChatGPT
+    // sign-in, gpt-5.6-luna with an API key (codex-rs/model-provider/src/provider.rs, 0.150 on).
+    QTest::newRow("auto review") << u"codex-auto-review"_s << u"gpt-5.6-luna"_s;
+    QTest::newRow("auto review, upper case") << u" Codex-Auto-Review "_s << u"gpt-5.6-luna"_s;
+    QTest::newRow("auto review, provider prefix") << u"openai/codex-auto-review"_s << u"gpt-5.6-luna"_s;
+    QTest::newRow("a model itself") << u"gpt-5.6-luna"_s << u"gpt-5.6-luna"_s;
+}
+
+void TestAgentUsage::pricedAs()
+{
+    QFETCH(QString, model);
+    QFETCH(QString, pricedAs);
+    const std::optional<Price> price = priceOf(model);
+    const std::optional<Price> as = priceOf(pricedAs);
+    QVERIFY(price && as);
+    Tokens t;
+    t.input = 400'000;
+    t.cacheRead = 300'000;
+    t.output = 20'000;
+    for (const quint8 flags : {quint8(0), quint8(Fast), quint8(LongContext), quint8(Fast | LongContext)})
+        QVERIFY2(near(costOf(t, *price, flags), costOf(t, *as, flags)), qPrintable(QString::number(flags)));
+    QCOMPARE(price->longAbove, as->longAbove);
+    // (What the history shows keeps the log's name: only the price is the other model's.)
+    QCOMPARE(normalizedModel(model), model.trimmed().toLower().section(u'/', -1));
 }
 
 void TestAgentUsage::prices()
@@ -629,11 +714,33 @@ void TestAgentUsage::hugeLine()
     ClaudeUse d = a;
     d.id = u"msg_04"_s;
     d.request = u"req_04"_s;
-    writeFile(file, jsonLine(huge).right(100) + claudeLine(d), true);
+    const QByteArray rest = jsonLine(huge).right(100) + claudeLine(d);
+    writeFile(file, rest, true);
     touch(file, 10);
-    h = readHistory(claudeSource(dir.path()), options(cache));
+    ReadStats stats;
+    h = readHistory(claudeSource(dir.path()), options(cache), &stats);
     QCOMPARE(totalOf(h).tokens.requests, 3);
     QCOMPARE(h.skippedLines, 2);
+    QCOMPARE(stats.bytesRead, rest.size()); // (on from where the long line's reading stopped)
+}
+
+void TestAgentUsage::lineAtTheLimit()
+{
+    // A line of MaxLineBytes is read; one byte more, and it is left out.
+    for (const qint64 extra : {qint64(0), qint64(1)}) {
+        QTemporaryDir dir;
+        ClaudeUse a;
+        QJsonObject padded = claudeObject(a);
+        padded.insert(u"padding"_s, QString());
+        const qsizetype bare = jsonLine(padded).size() - 1; // (without its newline)
+        padded.insert(u"padding"_s, QString(qsizetype(MaxLineBytes + extra) - bare, u'x'));
+        const QByteArray line = jsonLine(padded);
+        QCOMPARE(line.size() - 1, MaxLineBytes + extra);
+        writeFile(dir.filePath(u"projects/p/s.jsonl"_s), line);
+        const History h = readHistory(claudeSource(dir.path()), options(QString()));
+        QCOMPARE(totalOf(h).tokens.requests, 1 - extra);
+        QCOMPARE(h.skippedLines, extra);
+    }
 }
 
 void TestAgentUsage::codexHistory()
@@ -765,6 +872,554 @@ void TestAgentUsage::codexRecordsHistory()
     QCOMPARE(t.tokens.requests, 4);
     QCOMPARE(t.tokens.input + t.tokens.cacheRead, 5200);
     QCOMPARE(t.tokens.output, 610);
+}
+
+void TestAgentUsage::codexAutoReview_data()
+{
+    // Rollouts of Codex's automatic approval review (ChatGPT sign-in), their lines as Codex wrote them
+    // — ids, paths and instructions shortened and anonymised: the model is "codex-auto-review",
+    // priced as gpt-5.6-luna.
+    QTest::addColumn<QByteArray>("log");
+    QTest::addColumn<QString>("project");
+    QTest::addColumn<qint64>("input");
+    QTest::addColumn<qint64>("cached");
+    QTest::addColumn<qint64>("output");
+    QTest::addColumn<qint64>("reasoning");
+    QTest::newRow("Codex Desktop 0.155")
+            << QByteArray(
+                       R"({"timestamp":"2026-09-26T00:26:09.942Z","ordinal":0,"type":"session_meta","payload":{"session_id":"01a0dafd-e579-7b62-be3b-ff3ee7389b31","id":"01a0db1a-ec78-7e21-9e90-6087d37414d8","parent_thread_id":"01a0dafd-e579-7b62-be3b-ff3ee7389b31","timestamp":"2026-09-26T00:26:09.914Z","cwd":"/home/ola/Konfiguracja","originator":"Codex Desktop","cli_version":"0.155.0-alpha.16.3","source":{"subagent":{"other":"guardian"}},"thread_source":"guardian_review","model_provider":"openai","base_instructions":{"text":"You are judging one planned coding-agent action."}}})"
+                       "\n"
+                       R"({"timestamp":"2026-09-26T00:26:09.942Z","ordinal":2,"type":"event_msg","payload":{"type":"thread_settings_applied","thread_id":"01a0db1a-ec78-7e21-9e90-6087d37414d8","thread_settings":{"model":"codex-auto-review","model_provider_id":"openai","service_tier":"default","approval_policy":"never","approvals_reviewer":"auto_review"}}})"
+                       "\n"
+                       R"({"timestamp":"2026-09-26T00:26:10.608Z","ordinal":8,"type":"turn_context","payload":{"turn_id":"01a0db1a-ec99-7092-9400-9ccfc1aefad6","root_turn_id":"01a0db19-6f30-7a91-9b03-d154c4a34c95","cwd":"/home/ola/Konfiguracja","current_date":"2026-09-26","timezone":"Europe/Warsaw","approval_policy":"never","approvals_reviewer":"auto_review","sandbox_policy":{"type":"read-only"},"model":"codex-auto-review","effort":"medium","summary":"none"}})"
+                       "\n"
+                       R"({"timestamp":"2026-09-26T00:26:13.092Z","ordinal":14,"type":"token_usage_record","payload":{"thread_id":"01a0db1a-ec78-7e21-9e90-6087d37414d8","turn_id":"01a0db1a-ec99-7092-9400-9ccfc1aefad6","session_id":"01a0dafd-e579-7b62-be3b-ff3ee7389b31","root_turn_id":"01a0db19-6f30-7a91-9b03-d154c4a34c95","response_id":"resp_06087cee14316747016ab71122e54c87d2a436c87686ee9968","usage":{"input_tokens":29440,"cached_input_tokens":4864,"cache_write_input_tokens":0,"output_tokens":96,"reasoning_output_tokens":38,"total_tokens":29536},"turn_token_usage":{"input_tokens":29440,"cached_input_tokens":4864,"cache_write_input_tokens":0,"output_tokens":96,"reasoning_output_tokens":38,"total_tokens":29536},"thread_token_usage":{"input_tokens":29440,"cached_input_tokens":4864,"cache_write_input_tokens":0,"output_tokens":96,"reasoning_output_tokens":38,"total_tokens":29536}}})"
+                       "\n"
+                       R"({"timestamp":"2026-09-26T00:26:13.092Z","ordinal":15,"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":29440,"cached_input_tokens":4864,"cache_write_input_tokens":0,"output_tokens":96,"reasoning_output_tokens":38,"total_tokens":29536},"last_token_usage":{"input_tokens":29440,"cached_input_tokens":4864,"cache_write_input_tokens":0,"output_tokens":96,"reasoning_output_tokens":38,"total_tokens":29536},"model_context_window":258400},"rate_limits":{"limit_id":"codex","primary":{"used_percent":35.0,"window_minutes":10080,"resets_at":1790769075},"plan_type":"prolite"}}})"
+                       "\n")
+            << u"/home/ola/Konfiguracja"_s << qint64(29440 - 4864) << qint64(4864) << qint64(96) << qint64(38);
+    // Codex 0.154 in Zed: the settings only after the first response, a paginated history.
+    QTest::newRow("Zed's Codex 0.154")
+            << QByteArray(
+                       R"({"timestamp":"2026-09-23T16:38:27.256Z","ordinal":0,"type":"session_meta","payload":{"session_id":"01a0caab-f3be-7360-8643-8ec2291ed743","id":"01a0cf22-0089-7f22-9ee3-2f11876d00bc","parent_thread_id":"01a0caab-f3be-7360-8643-8ec2291ed743","timestamp":"2026-09-23T16:38:27.213Z","cwd":"/home/ola/Prognoza","originator":"zed","cli_version":"0.154.0","source":{"subagent":{"other":"guardian"}},"thread_source":"guardian_review","model_provider":"openai","history_mode":"paginated","subagent_history_start_ordinal":114,"multi_agent_version":"disabled"}})"
+                       "\n"
+                       R"({"timestamp":"2026-09-23T16:38:28.334Z","ordinal":5,"type":"turn_context","payload":{"turn_id":"01a0cf22-00a4-7bf0-9b5a-398d4934f114","root_turn_id":"01a0cf20-b120-7391-82ef-95bc17c7d6b0","cwd":"/home/ola/Prognoza","current_date":"2026-09-23","timezone":"Europe/Warsaw","approval_policy":"never","approvals_reviewer":"auto_review","sandbox_policy":{"type":"read-only"},"model":"codex-auto-review","effort":"low","summary":"auto"}})"
+                       "\n"
+                       R"({"timestamp":"2026-09-23T16:38:33.972Z","ordinal":11,"type":"token_usage_record","payload":{"thread_id":"01a0cf22-0089-7f22-9ee3-2f11876d00bc","turn_id":"01a0cf22-00a4-7bf0-9b5a-398d4934f114","session_id":"01a0caab-f3be-7360-8643-8ec2291ed743","root_turn_id":"01a0cf20-b120-7391-82ef-95bc17c7d6b0","response_id":"resp_0771f8410a8a1d11016ab40084b7c487d2826282833480fb86","usage":{"input_tokens":26215,"cached_input_tokens":4864,"cache_write_input_tokens":0,"output_tokens":208,"reasoning_output_tokens":125,"total_tokens":26423},"turn_token_usage":{"input_tokens":26215,"cached_input_tokens":4864,"cache_write_input_tokens":0,"output_tokens":208,"reasoning_output_tokens":125,"total_tokens":26423},"thread_token_usage":{"input_tokens":26215,"cached_input_tokens":4864,"cache_write_input_tokens":0,"output_tokens":208,"reasoning_output_tokens":125,"total_tokens":26423}}})"
+                       "\n"
+                       R"({"timestamp":"2026-09-23T16:38:33.972Z","ordinal":12,"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":26215,"cached_input_tokens":4864,"cache_write_input_tokens":0,"output_tokens":208,"reasoning_output_tokens":125,"total_tokens":26423},"last_token_usage":{"input_tokens":26215,"cached_input_tokens":4864,"cache_write_input_tokens":0,"output_tokens":208,"reasoning_output_tokens":125,"total_tokens":26423},"model_context_window":258400},"rate_limits":{"limit_id":"codex","limit_name":null,"primary":{"used_percent":17.0,"window_minutes":10080,"resets_at":1790769075},"secondary":null,"plan_type":"prolite","rate_limit_reached_type":null}}})"
+                       "\n"
+                       R"({"timestamp":"2026-09-23T16:43:08.013Z","ordinal":15,"type":"event_msg","payload":{"type":"thread_settings_applied","thread_id":"01a0cf22-0089-7f22-9ee3-2f11876d00bc","thread_settings":{"model":"codex-auto-review","model_provider_id":"openai","service_tier":"default","approval_policy":"never","approvals_reviewer":"auto_review"}}})"
+                       "\n")
+            << u"/home/ola/Prognoza"_s << qint64(26215 - 4864) << qint64(4864) << qint64(208) << qint64(125);
+}
+
+void TestAgentUsage::codexAutoReview()
+{
+    QFETCH(QByteArray, log);
+    QFETCH(QString, project);
+    QFETCH(qint64, input);
+    QFETCH(qint64, cached);
+    QFETCH(qint64, output);
+    QFETCH(qint64, reasoning);
+    QTemporaryDir dir;
+    writeFile(dir.filePath(u"sessions/2026/09/26/rollout-2026-09-26T02-26-09-01a0db1a.jsonl"_s), log);
+    ReadOptions o = options(dir.filePath(u"cache.json"_s));
+    o.now = QDateTime(QDate(2026, 9, 27), QTime(12, 0), QTimeZone::UTC);
+    const History h = readHistory(codexSource(dir.path()), o);
+    QCOMPARE(h.skippedLines, 0);
+    const Report r = report(h, Query{QDate(2026, 9, 1), QDate(2026, 9, 30), {}});
+    QCOMPARE(r.total.tokens.requests, 1);
+    QCOMPARE(r.total.tokens.input, input);
+    QCOMPARE(r.total.tokens.cacheRead, cached);
+    QCOMPARE(r.total.tokens.output, output);
+    QCOMPARE(r.total.tokens.reasoning, reasoning);
+    QVERIFY(r.total.costKnown());
+    QCOMPARE(r.models.size(), 1);
+    QCOMPARE(r.models.first().name, u"codex-auto-review"_s);
+    QCOMPARE(r.projects.first().name, project);
+    QVERIFY2(near(r.total.cost, (input * 0.20 + cached * 0.02 + output * 1.20) / 1e6),
+             qPrintable(QString::number(r.total.cost, 'g', 12)));
+}
+
+void TestAgentUsage::compressedRollouts_data()
+{
+    QTest::addColumn<QByteArray>("bytes");
+    QTest::addColumn<qint64>("requests");
+    QTest::addColumn<qint64>("input");
+    QTest::addColumn<qint64>("cached");
+    QTest::addColumn<qint64>("skipped");
+    QTest::newRow("as Codex compresses it") << fixture(u"rollout.jsonl.zst"_s) << RolloutRequests << RolloutInput
+                                            << RolloutCached << qint64(0);
+    QTest::newRow("with a checksum") << fixture(u"rollout-checksum.jsonl.zst"_s) << RolloutRequests << RolloutInput
+                                     << RolloutCached << qint64(0);
+    QTest::newRow("two frames") << fixture(u"rollout-frames.jsonl.zst"_s) << RolloutRequests << RolloutInput
+                                << RolloutCached << qint64(0);
+    // A line of 5 MiB in the middle: left out, the lines after it read.
+    QTest::newRow("a line too long") << fixture(u"rollout-huge-line.jsonl.zst"_s) << RolloutRequests << RolloutInput
+                                     << RolloutCached << qint64(1);
+    // Broken: what came before the break counts, the rest is one line left out.
+    QTest::newRow("no frame after the first") << fixture(u"rollout-garbage.jsonl.zst"_s) << qint64(1) << qint64(4000)
+                                              << qint64(8000) << qint64(1);
+    QTest::newRow("cut short") << fixture(u"rollout-cut.jsonl.zst"_s) << qint64(0) << qint64(0) << qint64(0)
+                               << qint64(1);
+    QTest::newRow("a window too large") << fixture(u"rollout-window.jsonl.zst"_s) << qint64(0) << qint64(0)
+                                        << qint64(0) << qint64(1);
+    QTest::newRow("no zstd at all") << QByteArray("zażółć gęślą jaźń\n") << qint64(0) << qint64(0) << qint64(0)
+                                    << qint64(1);
+    QTest::newRow("empty") << QByteArray() << qint64(0) << qint64(0) << qint64(0) << qint64(1);
+}
+
+void TestAgentUsage::compressedRollouts()
+{
+    // A rollout Codex compressed (local_thread_store_compression, rollout/compress: one untouched for
+    // a week becomes "….jsonl.zst"), read through its frames.
+    QFETCH(QByteArray, bytes);
+    QFETCH(qint64, requests);
+    QFETCH(qint64, input);
+    QFETCH(qint64, cached);
+    QFETCH(qint64, skipped);
+    QTemporaryDir dir;
+    writeFile(dir.filePath(u"sessions/2026/11/24/"_s + RolloutName + u".zst"_s), bytes);
+    const QString cache = dir.filePath(u"cache.json"_s);
+    ReadStats stats;
+    History h = readHistory(codexSource(dir.path()), options(cache), &stats);
+    QCOMPARE(h.files, 1);
+    QCOMPARE(h.skippedLines, skipped);
+    const Report r = report(h, Query{QDate(2026, 11, 1), QDate(2026, 11, 30), {}});
+    QCOMPARE(r.total.tokens.requests, requests);
+    QCOMPARE(r.total.tokens.input, input);
+    QCOMPARE(r.total.tokens.cacheRead, cached);
+    if (requests > 0) {
+        QCOMPARE(r.models.first().name, u"gpt-6-astra"_s);
+        QCOMPARE(r.projects.first().name, u"/home/ola/Projekty/Żółw"_s);
+        QVERIFY(r.total.costKnown());
+    }
+    if (requests == RolloutRequests) {
+        QCOMPARE(r.total.tokens.output, RolloutOutput);
+        QVERIFY(near(r.total.cost, (RolloutInput * 10.0 + RolloutCached * 1.0 + RolloutOutput * 50.0) / 1e6));
+    }
+    // Unchanged: not opened again, the same use.
+    h = readHistory(codexSource(dir.path()), options(cache), &stats);
+    QCOMPARE(stats.filesRead, 0);
+    QCOMPARE(totalOf(h).tokens.requests, requests);
+    QCOMPARE(h.skippedLines, skipped);
+}
+
+void TestAgentUsage::compressedLater()
+{
+    // A rollout read while Codex wrote it, compressed a week later (the same text, the same time):
+    // nothing counts again; materialized back to plain and appended to: only what is new is read.
+    QTemporaryDir dir;
+    const QString plain = dir.filePath(u"sessions/2026/11/24/"_s + RolloutName);
+    writeFile(plain, fixture(u"rollout.jsonl"_s));
+    const QDateTime written = QFileInfo(plain).lastModified();
+    const QString cache = dir.filePath(u"cache.json"_s);
+    ReadStats stats;
+    History h = readHistory(codexSource(dir.path()), options(cache), &stats);
+    QCOMPARE(totalOf(h).tokens.requests, RolloutRequests);
+
+    writeFile(plain + u".zst"_s, fixture(u"rollout.jsonl.zst"_s));
+    setTime(plain + u".zst"_s, written);
+    QVERIFY(QFile::remove(plain));
+    h = readHistory(codexSource(dir.path()), options(cache), &stats);
+    QCOMPARE(h.files, 1);
+    QCOMPARE(stats.filesRead, 1);
+    QCOMPARE(stats.bytesRead, 0); // (its text up to where it was read: decoded, not parsed)
+    QCOMPARE(stats.events, 0);
+    QCOMPARE(stats.duplicates, 0);
+    Totals t = totalOf(h);
+    QCOMPARE(t.tokens.requests, RolloutRequests);
+    QCOMPARE(t.tokens.input, RolloutInput);
+    QCOMPARE(h.skippedLines, 0);
+
+    // Resumed in Codex: plain again, one more response appended.
+    const QByteArray more = codexRecord(u"2026-11-24T09:00:00Z"_s, u"resp_9"_s, codexUsageObject(2000, 1000, 100, 0));
+    writeFile(plain, fixture(u"rollout.jsonl"_s) + more);
+    QVERIFY(QFile::remove(plain + u".zst"_s));
+    h = readHistory(codexSource(dir.path()), options(cache), &stats);
+    QCOMPARE(stats.filesRead, 1);
+    QCOMPARE(stats.bytesRead, more.size());
+    QCOMPARE(stats.events, 1);
+    t = totalOf(h);
+    QCOMPARE(t.tokens.requests, RolloutRequests + 1);
+    QCOMPARE(t.tokens.input, RolloutInput + 1000);
+}
+
+void TestAgentUsage::archivedRolloutCountsOnce()
+{
+    // The user archives a thread: Codex moves its rollout from sessions/ to archived_sessions/ (its
+    // time kept), later perhaps compressed there. Its use counts once — also of lines no key tells
+    // apart (a response without its id).
+    QTemporaryDir dir;
+    const QString name = u"rollout-2026-11-24T08-00-00-0199.jsonl"_s;
+    const QString live = dir.filePath(u"sessions/2026/11/24/"_s + name);
+    QByteArray log = codexMeta(u"/home/ola/Notatki"_s) + codexTurn(u"gpt-6-astra"_s);
+    log += codexRecord(u"2026-11-24T08:01:00Z"_s, QString(), codexUsageObject(1000, 0, 100, 0));
+    log += codexRecord(u"2026-11-24T08:02:00Z"_s, QString(), codexUsageObject(500, 0, 50, 0));
+    writeFile(live, log);
+    const QString cache = dir.filePath(u"cache.json"_s);
+    ReadStats stats;
+    History h = readHistory(codexSource(dir.path()), options(cache), &stats);
+    QCOMPARE(totalOf(h).tokens.requests, 2);
+    const QString archived = dir.filePath(u"archived_sessions/"_s + name);
+    QVERIFY(QDir().mkpath(QFileInfo(archived).path()));
+    QVERIFY(QFile::rename(live, archived));
+    h = readHistory(codexSource(dir.path()), options(cache), &stats);
+    QCOMPARE(totalOf(h).tokens.requests, 2);
+    QCOMPARE(totalOf(h).tokens.input, 1500);
+    QCOMPARE(h.files, 1);
+    QCOMPARE(stats.filesRead, 0); // (the same rollout, the same size and time: not even opened)
+}
+
+void TestAgentUsage::bothRepresentations()
+{
+    // While Codex compresses or materializes a rollout both files are there for a moment: read once.
+    QTemporaryDir dir;
+    const QString plain = dir.filePath(u"archived_sessions/"_s + RolloutName);
+    writeFile(plain, fixture(u"rollout.jsonl"_s));
+    writeFile(plain + u".zst"_s, fixture(u"rollout.jsonl.zst"_s));
+    ReadStats stats;
+    const History h = readHistory(codexSource(dir.path()), options(dir.filePath(u"cache.json"_s)), &stats);
+    QCOMPARE(h.files, 1);
+    QCOMPARE(stats.filesRead, 1);
+    QCOMPARE(stats.duplicates, 0);
+    QCOMPARE(totalOf(h).tokens.requests, RolloutRequests);
+}
+
+void TestAgentUsage::compressedRewrittenShorter()
+{
+    // A compressed rollout replaced by a shorter text with the same start: read again from its
+    // start — its first response alone.
+    QTemporaryDir dir;
+    const QString file = dir.filePath(u"archived_sessions/"_s + RolloutName + u".zst"_s);
+    writeFile(file, fixture(u"rollout.jsonl.zst"_s));
+    const QString cache = dir.filePath(u"cache.json"_s);
+    QCOMPARE(totalOf(readHistory(codexSource(dir.path()), options(cache))).tokens.requests, RolloutRequests);
+    writeFile(file, fixture(u"rollout-seven.jsonl.zst"_s));
+    touch(file, 5);
+    ReadStats stats;
+    const History h = readHistory(codexSource(dir.path()), options(cache), &stats);
+    QCOMPARE(stats.filesRead, 1);
+    QCOMPARE(totalOf(h).tokens.requests, 1);
+    QCOMPARE(totalOf(h).tokens.input, 4000);
+    QCOMPARE(h.skippedLines, 0);
+}
+
+void TestAgentUsage::malformedCacheEntry_data()
+{
+    // One field of a compressed rollout's entry in the cache changed: an entry that cannot be trusted
+    // rebuilds the cache (the logs read again: the same use).
+    QTest::addColumn<QString>("field");
+    QTest::addColumn<QJsonValue>("value");
+    QTest::addColumn<bool>("rebuilt");
+    QTest::newRow("as written") << QString() << QJsonValue() << false;
+    QTest::newRow("negative size") << u"size"_s << QJsonValue(-1) << true;
+    QTest::newRow("size in words") << u"size"_s << QJsonValue(u"duży"_s) << true;
+    QTest::newRow("no time") << u"mtime"_s << QJsonValue(QJsonValue::Undefined) << true;
+    QTest::newRow("negative offset") << u"offset"_s << QJsonValue(-5) << true;
+    QTest::newRow("head too long") << u"headLength"_s << QJsonValue(5000) << true;
+    QTest::newRow("a plain file's offset past its size") << u"compressed"_s << QJsonValue(false) << true;
+    QTest::newRow("keys cut") << u"keys"_s << QJsonValue(QString::fromLatin1(QByteArray(7, 'k').toBase64()))
+                              << true;
+    QTest::newRow("a bucket too short") << u"buckets"_s << QJsonValue(QJsonArray{QJsonArray{1, 0, 0, 0, 1, 2, 3}})
+                                        << true;
+    QTest::newRow("a bucket's name not there")
+            << u"buckets"_s << QJsonValue(QJsonArray{QJsonArray{1, 0, 99, 0, 1, 2, 3, 4, 5, 6, 7, 0}}) << true;
+    QTest::newRow("a bucket's negative count")
+            << u"buckets"_s << QJsonValue(QJsonArray{QJsonArray{1, 0, 0, 0, 1, -2, 3, 4, 5, 6, 7, 0}}) << true;
+    QTest::newRow("codex totals cut") << u"codex"_s
+                                      << QJsonValue(QJsonObject{{u"has"_s, true}, {u"totals"_s, QJsonArray{1, 2}}})
+                                      << true;
+    QTest::newRow("no key") << u"key"_s << QJsonValue(QString()) << true;
+}
+
+void TestAgentUsage::malformedCacheEntry()
+{
+    QFETCH(QString, field);
+    QFETCH(QJsonValue, value);
+    QFETCH(bool, rebuilt);
+    QTemporaryDir dir;
+    writeFile(dir.filePath(u"sessions/2026/11/24/"_s + RolloutName + u".zst"_s), fixture(u"rollout.jsonl.zst"_s));
+    const QString cache = dir.filePath(u"cache.json"_s);
+    QCOMPARE(totalOf(readHistory(codexSource(dir.path()), options(cache))).tokens.requests, RolloutRequests);
+    QFile f(cache);
+    QVERIFY(f.open(QIODevice::ReadOnly));
+    QJsonObject root = QJsonDocument::fromJson(f.readAll()).object();
+    f.close();
+    QJsonArray files = root.value(u"files"_s).toArray();
+    QCOMPARE(files.size(), 1);
+    QJsonObject entry = files.first().toObject();
+    QCOMPARE(entry.value(u"key"_s).toString(), RolloutName);
+    QVERIFY(entry.value(u"compressed"_s).toBool());
+    QVERIFY(entry.value(u"offset"_s).toInteger() > entry.value(u"size"_s).toInteger());
+    if (!field.isEmpty()) {
+        if (value.isUndefined())
+            entry.remove(field);
+        else
+            entry.insert(field, value);
+    }
+    files.replace(0, entry);
+    root.insert(u"files"_s, files);
+    writeFile(cache, QJsonDocument(root).toJson());
+    ReadStats stats;
+    const History h = readHistory(codexSource(dir.path()), options(cache), &stats);
+    QCOMPARE(stats.cacheRebuilt, rebuilt);
+    QCOMPARE(stats.filesRead, rebuilt ? 1 : 0);
+    QCOMPARE(totalOf(h).tokens.requests, RolloutRequests);
+    QCOMPARE(totalOf(h).tokens.input, RolloutInput);
+}
+
+void TestAgentUsage::unreadableFile()
+{
+#ifdef Q_OS_WIN
+    QSKIP("Windows: no unreadable file of one's own by permissions");
+#else
+    // A log that cannot be opened now: read the next time it can.
+    QTemporaryDir dir;
+    const QString file = dir.filePath(u"sessions/2026/11/24/"_s + RolloutName + u".zst"_s);
+    writeFile(file, fixture(u"rollout.jsonl.zst"_s));
+    QVERIFY(QFile::setPermissions(file, QFileDevice::WriteOwner));
+    if (QFile(file).open(QIODevice::ReadOnly))
+        QSKIP("the file can be read anyway (root)");
+    const QString cache = dir.filePath(u"cache.json"_s);
+    ReadStats stats;
+    History h = readHistory(codexSource(dir.path()), options(cache), &stats);
+    QCOMPARE(stats.filesRead, 0);
+    QCOMPARE(totalOf(h).tokens.requests, 0);
+    QVERIFY(QFile::setPermissions(file, QFileDevice::ReadOwner | QFileDevice::WriteOwner));
+    h = readHistory(codexSource(dir.path()), options(cache), &stats);
+    QCOMPARE(stats.filesRead, 1);
+    QCOMPARE(totalOf(h).tokens.requests, RolloutRequests);
+#endif
+}
+
+void TestAgentUsage::goneLongAgo()
+{
+    // A log gone from the disk keeps its use — until that use is older than the history: then the
+    // cache forgets it, and its messages count again should it come back.
+    QTemporaryDir dir;
+    const QString file = dir.filePath(u"projects/p/stary.jsonl"_s);
+    ClaudeUse a;
+    writeFile(file, claudeLine(a));
+    const QString cache = dir.filePath(u"cache.json"_s);
+    QCOMPARE(totalOf(readHistory(claudeSource(dir.path()), options(cache))).tokens.requests, 1);
+    QVERIFY(QFile::remove(file));
+    ReadOptions later = options(cache);
+    later.now = later.now.addDays(RetentionDays + 1);
+    History h = readHistory(claudeSource(dir.path()), later);
+    QCOMPARE(totalOf(h).tokens.requests, 0);
+    // (Back with a time of its own within the history: read anew, counted once.)
+    writeFile(file, claudeLine(a));
+    ReadStats stats;
+    h = readHistory(claudeSource(dir.path()), options(cache), &stats);
+    QCOMPARE(stats.duplicates, 0);
+    QCOMPARE(totalOf(h).tokens.requests, 1);
+    // A log untouched for longer than the history: not even opened.
+    touch(file, -int(RetentionDays + 2) * 24 * 3600);
+    QVERIFY(QFile::remove(cache));
+    later.cacheFile = cache;
+    later.now = QDateTime::currentDateTimeUtc();
+    h = readHistory(claudeSource(dir.path()), later, &stats);
+    QCOMPARE(stats.filesRead, 0);
+    QCOMPARE(h.files, 0);
+}
+
+void TestAgentUsage::noSource()
+{
+    ReadStats stats;
+    const History h = readHistory(Source{}, options(QString()), &stats);
+    QCOMPARE(h.error, u"no_source"_s);
+    QVERIFY(!h.found);
+    QCOMPARE(stats.filesRead, 0);
+}
+
+void TestAgentUsage::logStream()
+{
+    // A log's text in pieces, plain or through its frames, bounded.
+    const QByteArray text = fixture(u"rollout.jsonl"_s);
+    QTemporaryDir dir;
+    const QString plain = dir.filePath(u"tekst.jsonl"_s);
+    const QString packed = dir.filePath(u"tekst.jsonl.zst"_s);
+    writeFile(plain, text);
+    writeFile(packed, fixture(u"rollout.jsonl.zst"_s));
+    for (const bool compressed : {false, true}) {
+        LogStream s(compressed ? packed : plain, compressed, MaxUnpackedBytes);
+        QVERIFY(s.read(10).isEmpty()); // (not open yet)
+        QVERIFY(!s.skipTo(5));
+        QVERIFY(s.open());
+        QCOMPARE(s.read(100), text.first(100));
+        QCOMPARE(s.position(), 100);
+        QVERIFY(!s.skipTo(50)); // (never back)
+        QVERIFY(s.skipTo(s.position())); // (where it stands: nothing to do)
+        QCOMPARE(s.position(), 100);
+        QVERIFY(s.read(0).isEmpty());
+        QVERIFY(s.skipTo(12000));
+        QCOMPARE(s.read(1000), text.mid(12000));
+        QVERIFY(s.read(1000).isEmpty());
+        QVERIFY(!s.skipTo(text.size() + 1));
+        QVERIFY(!s.failed());
+    }
+    LogStream beyond(plain, false, MaxUnpackedBytes);
+    QVERIFY(beyond.open());
+    QVERIFY(!beyond.skipTo(text.size() + 1));
+    QVERIFY(beyond.skipTo(text.size()));
+    QVERIFY(beyond.read(10).isEmpty());
+    // At most so much of a compressed text: the rest is no text, and says so — once more is asked.
+    LogStream bounded(packed, true, 50);
+    QVERIFY(bounded.open());
+    QCOMPARE(bounded.read(100), text.first(50));
+    QVERIFY(bounded.failed());
+    QVERIFY(bounded.read(100).isEmpty());
+    LogStream upTo(packed, true, 50);
+    QVERIFY(upTo.open());
+    QCOMPARE(upTo.read(1), text.first(1));
+    QCOMPARE(upTo.read(49), text.mid(1, 49));
+    QVERIFY(!upTo.failed());
+    QVERIFY(upTo.read(100).isEmpty());
+    QVERIFY(upTo.failed());
+    // As much as the limit, exactly: whole, not failed.
+    LogStream exact(packed, true, text.size());
+    QVERIFY(exact.open());
+    QCOMPARE(exact.read(text.size() + 10), text);
+    QVERIFY(exact.read(10).isEmpty());
+    QVERIFY(!exact.failed());
+    QVERIFY(!LogStream(dir.filePath(u"brak.zst"_s), true, 1).open());
+}
+
+void TestAgentUsage::cacheRoundTrip()
+{
+    // What the cache keeps comes back as it was: a cost the log gave, fast mode's flag, the keys of
+    // the messages counted (a fork read later repeats one of them: counted once).
+    QTemporaryDir dir;
+    ClaudeUse a;
+    QJsonObject withCost = claudeObject(a);
+    withCost.insert(u"costUSD"_s, 0.25);
+    writeFile(dir.filePath(u"projects/p/s.jsonl"_s), jsonLine(withCost));
+    const QString cache = dir.filePath(u"claude.json"_s);
+    const Totals claude = totalOf(readHistory(claudeSource(dir.path()), options(cache)));
+    QVERIFY(near(claude.cost, 0.25));
+    ReadStats stats;
+    QCOMPARE(totalOf(readHistory(claudeSource(dir.path()), options(cache), &stats)).cost, claude.cost);
+    QCOMPARE(stats.filesRead, 0);
+
+    const QString live = dir.filePath(u"sessions/2026/11/24/rollout-2026-11-24T08-00-00-a.jsonl"_s);
+    QByteArray log = codexMeta(u"/home/ola/Notatki"_s) + codexTurn(u"gpt-5.4"_s);
+    log += jsonLine(QJsonObject{
+            {u"type"_s, u"event_msg"_s},
+            {u"timestamp"_s, u"2026-11-24T08:00:00Z"_s},
+            {u"payload"_s, QJsonObject{{u"type"_s, u"thread_settings_applied"_s},
+                                       {u"thread_settings"_s, QJsonObject{{u"service_tier"_s, u"priority"_s}}}}}});
+    // (Three quarters of an hour: three buckets of one model and one project.)
+    log += codexRecord(u"2026-11-24T08:01:00Z"_s, u"resp_1"_s, codexUsageObject(1000, 0, 100, 0));
+    log += codexRecord(u"2026-11-24T08:20:00Z"_s, u"resp_2"_s, codexUsageObject(2000, 0, 200, 0));
+    log += codexRecord(u"2026-11-24T08:40:00Z"_s, u"resp_3"_s, codexUsageObject(3000, 0, 300, 0));
+    writeFile(live, log);
+    const QString codexCache = dir.filePath(u"codex.json"_s);
+    const History once = readHistory(codexSource(dir.path()), options(codexCache));
+    const Totals first = totalOf(once);
+    QVERIFY(near(first.cost, 2 * (6000 * 2.50 + 600 * 15.0) / 1e6)); // (fast: twice the price)
+    const History again = readHistory(codexSource(dir.path()), options(codexCache), &stats);
+    QVERIFY(!stats.cacheRebuilt);
+    QCOMPARE(stats.filesRead, 0);
+    QCOMPARE(totalOf(again).cost, first.cost);
+    QCOMPARE(again.days.size(), 1);
+    QCOMPARE(again.days.first().model, u"gpt-5.4"_s);
+    QCOMPARE(again.days.first().project, u"/home/ola/Notatki"_s);
+    QCOMPARE(again.days.first().flags, quint8(Fast));
+    // A fork made later: the parent's last response copied, then one of its own.
+    QByteArray fork = codexMeta(u"/home/ola/Notatki"_s, u"2026-11-24T09:00:00Z"_s) + codexTurn(u"gpt-5.4"_s);
+    fork += codexRecord(u"2026-11-24T08:40:00Z"_s, u"resp_3"_s, codexUsageObject(3000, 0, 300, 0));
+    fork += codexRecord(u"2026-11-24T09:01:00Z"_s, u"resp_9"_s, codexUsageObject(500, 0, 50, 0));
+    writeFile(dir.filePath(u"sessions/2026/11/24/rollout-2026-11-24T09-00-00-b.jsonl"_s), fork);
+    const Totals both = totalOf(readHistory(codexSource(dir.path()), options(codexCache), &stats));
+    QCOMPARE(stats.duplicates, 1);
+    QCOMPARE(both.tokens.requests, 4);
+    QCOMPARE(both.tokens.input, 6500);
+}
+
+void TestAgentUsage::folderDepth()
+{
+    // At most MaxDepth folders below a log folder; a plain rollout before its compressed copy (the
+    // one read is the one the next reading knows unchanged).
+    QTemporaryDir dir;
+    QString deep = dir.filePath(u"sessions"_s);
+    for (int i = 0; i < MaxDepth - 1; ++i)
+        deep += u"/d%1"_s.arg(i);
+    writeFile(deep + u'/' + RolloutName, fixture(u"rollout.jsonl"_s));
+    writeFile(deep + u"/x/rollout-2026-11-24T09-00-00-za-gleboko.jsonl"_s, fixture(u"rollout.jsonl"_s));
+    writeFile(deep + u'/' + RolloutName + u".zst"_s, fixture(u"rollout.jsonl.zst"_s));
+    const QString cache = dir.filePath(u"cache.json"_s);
+    History h = readHistory(codexSource(dir.path()), options(cache));
+    QCOMPARE(h.files, 1);
+    QCOMPARE(totalOf(h).tokens.requests, RolloutRequests);
+    QVERIFY(QFile::remove(deep + u'/' + RolloutName + u".zst"_s));
+    ReadStats stats;
+    h = readHistory(codexSource(dir.path()), options(cache), &stats);
+    QCOMPARE(stats.filesRead, 0);
+    QCOMPARE(h.files, 1);
+}
+
+void TestAgentUsage::claudeLineWithoutCwd()
+{
+    // A Claude Code line without its cwd belongs to the folder of the file's last line that had one.
+    QTemporaryDir dir;
+    ClaudeUse a;
+    a.cwd = u"/home/ola/Zażółć"_s;
+    ClaudeUse b = a;
+    b.id = u"msg_02"_s;
+    b.request = u"req_02"_s;
+    QJsonObject withoutCwd = claudeObject(b);
+    withoutCwd.remove(u"cwd"_s);
+    writeFile(dir.filePath(u"projects/p/s.jsonl"_s), claudeLine(a) + jsonLine(withoutCwd));
+    const Report r = report(readHistory(claudeSource(dir.path()), options(QString())),
+                            Query{QDate(2026, 11, 1), QDate(2026, 11, 30), {}});
+    QCOMPARE(r.total.tokens.requests, 2);
+    QCOMPARE(r.projects.size(), 1);
+    QCOMPARE(r.projects.first().name, u"/home/ola/Zażółć"_s);
+}
+
+void TestAgentUsage::crlfLines()
+{
+    // A log written with Windows' line ends reads the same.
+    QTemporaryDir dir;
+    ClaudeUse a;
+    ClaudeUse b = a;
+    b.id = u"msg_02"_s;
+    b.request = u"req_02"_s;
+    QByteArray log = claudeLine(a) + claudeLine(b);
+    log.replace("\n", "\r\n");
+    writeFile(dir.filePath(u"projects/p/s.jsonl"_s), log);
+    const History h = readHistory(claudeSource(dir.path()), options(QString()));
+    QCOMPARE(h.skippedLines, 0);
+    QCOMPARE(totalOf(h).tokens.requests, 2);
+}
+
+void TestAgentUsage::cacheNotWritten()
+{
+    // A cache that cannot be written: the history read all the same, and said so.
+    QTemporaryDir dir;
+    ClaudeUse a;
+    writeFile(dir.filePath(u"projects/p/s.jsonl"_s), claudeLine(a));
+    writeFile(dir.filePath(u"plik"_s), "nie folder");
+    const History h = readHistory(claudeSource(dir.path()), options(dir.filePath(u"plik/cache.json"_s)));
+    QCOMPARE(h.error, u"cache_not_written"_s);
+    QCOMPARE(totalOf(h).tokens.requests, 1);
+}
+
+void TestAgentUsage::unpackedLimit()
+{
+    // A compressed file whose text goes on beyond the limit (a "zip bomb"): the lines within it
+    // count, the rest is one line left out. The first response's lines end at 7 385 bytes.
+    QTemporaryDir dir;
+    writeFile(dir.filePath(u"sessions/2026/11/24/"_s + RolloutName + u".zst"_s), fixture(u"rollout.jsonl.zst"_s));
+    for (const auto &[limit, requests] : {std::pair{qint64(4096), qint64(0)}, std::pair{qint64(7500), qint64(1)}}) {
+        ReadOptions o = options(QString());
+        o.maxUnpackedBytes = limit;
+        const History h = readHistory(codexSource(dir.path()), o);
+        QCOMPARE(totalOf(h).tokens.requests, requests);
+        QCOMPARE(h.skippedLines, 1);
+    }
 }
 
 void TestAgentUsage::incrementalCache()
@@ -980,6 +1635,14 @@ void TestAgentUsage::retention()
     const History h = readHistory(claudeSource(dir.path()), options(dir.filePath(u"cache.json"_s)));
     QCOMPARE(totalOf(h).tokens.requests, 1);
     QCOMPARE(h.days.first().date, QDate(2026, 11, 24));
+    // Exactly RetentionDays before "now": still in the history.
+    ClaudeUse edge = recent;
+    edge.id = u"msg_03"_s;
+    edge.request = u"req_03"_s;
+    edge.time = options(QString()).now.addDays(-RetentionDays).toString(Qt::ISODateWithMs);
+    writeFile(dir.filePath(u"projects/p/t.jsonl"_s), claudeLine(edge));
+    const History withEdge = readHistory(claudeSource(dir.path()), options(dir.filePath(u"cache.json"_s)));
+    QCOMPARE(totalOf(withEdge).tokens.requests, 2);
 }
 
 void TestAgentUsage::symlinkOutOfFolder()

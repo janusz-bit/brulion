@@ -39,6 +39,11 @@ public:
     /// app: its tools reach the app on the device through that server, docs/CLI.md "Live changes"),
     /// instead of the running app's own; and the device's name, for the words.
     static constexpr auto SocketVariable = "BRULION_APP_SOCKET";
+    /// The app of this desktop that started this program (an AI agent's tools) names itself: its
+    /// single-instance key (SingleInstance::keyFor(); the control socket is controlKeyFor() of it).
+    /// The agent may not pass on the environment the key is otherwise found from: Codex gives its MCP
+    /// servers HOME, PATH, LANG … only — no XDG_RUNTIME_DIR, XDG_DATA_HOME or BRULION_PROFILE.
+    static constexpr auto InstanceVariable = "BRULION_APP_INSTANCE";
     static constexpr auto DeviceVariable = "BRULION_APP_DEVICE";
     /// The tunnel's socket from the environment ("" none: the app of this desktop).
     static QString tunnelSocket();

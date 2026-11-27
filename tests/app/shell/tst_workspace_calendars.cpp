@@ -2,12 +2,14 @@
 // and a feed: a subscription (webcal://) fetched, its events in eventsBetween() with its colour,
 // hidden and removed; an account found by discovery and added with its password in an owner-only
 // file, its tasks on the calendar's page, its events shown; an event created, one occurrence of a
-// series left out, the journal's line about an event; errors said in words.
+// series left out or changed alone, the journal's line about an event; errors said in words; the
+// changes brulion-cli leaves in the inbox taken at once (shown, sent; a refused one in the log).
 #include "workspace.h"
 
 #include "caldav/caldav.h"
-#include "reminders/notifications.h"
+#include "dates/format.h"
 #include "fakecaldav.h"
+#include "reminders/notifications.h"
 
 #include <QDir>
 #include <QFile>
@@ -68,9 +70,15 @@ private Q_SLOTS:
     void cleanup();
     void subscription();
     void accountTasksAndEvents();
+    void changesFromTheCommandLine();
+    void inboxOfTheOpenNotebook();
+    void noNotebook();
 
 private:
     void waitIdle();
+    /// An account with the server's "praca" holding `member` as stand.ics (its events shown): the
+    /// calendar's id.
+    QString addPraca(const QByteArray &member);
     std::unique_ptr<QTemporaryDir> m_dir;
     std::unique_ptr<Workspace> m_ws;
     FakeCalDav m_server;
@@ -133,7 +141,16 @@ void TestWorkspaceCalendars::subscription()
     const QVariantMap details = cal->eventDetails(list.first().key);
     QCOMPARE(details.value(u"title"_s).toString(), u"Święto Niepodległości"_s);
     QVERIFY(!details.value(u"canEdit"_s).toBool());
+    QVERIFY(details.value(u"readOnly"_s).toBool());
     QCOMPARE(details.value(u"rule"_s).toString(), u"every year"_s);
+    // Not to be edited or deleted: refused without a word (the dialog offers neither).
+    QSignalSpy refused(cal, &WorkspaceCalendars::errorOccurred);
+    QVariantMap edit = details;
+    edit.insert(u"title"_s, u"Inne święto"_s);
+    QVERIFY(!cal->saveEvent(edit));
+    QVERIFY(!cal->deleteEvent(list.first().key, false));
+    QVERIFY(!cal->deleteEvent(u"nie-klucz"_s, false));
+    QVERIFY(refused.isEmpty());
     QCOMPARE(cal->journalLine(list.first().key), u"- Święto Niepodległości (Święta)"_s);
     QCOMPARE(cal->calendars().size(), 1);
     QVERIFY(!cal->calendars().first().toMap().value(u"statusText"_s).toString().isEmpty());
@@ -293,6 +310,185 @@ void TestWorkspaceCalendars::accountTasksAndEvents()
     QVERIFY(cal->eventsBetween(QDate(2026, 11, 16), QDate(2026, 11, 22)).isEmpty());
     // The notes stay.
     QVERIFY(m_ws->read(u"Kalendarze/Zakupy.md"_s).contains(u"Mleko"_s));
+}
+
+QString TestWorkspaceCalendars::addPraca(const QByteArray &member)
+{
+    WorkspaceCalendars *cal = m_ws->calendars();
+    FakeCalDav::Calendar praca;
+    praca.name = u"Praca"_s;
+    m_server.addCalendar(u"praca"_s, praca);
+    m_server.putMember(u"praca"_s, u"stand.ics"_s, member);
+    QSignalSpy found(cal, &WorkspaceCalendars::discovered);
+    cal->discover(m_server.url(u"/"_s), u"jan"_s, m_server.options().password);
+    [&found] { QTRY_COMPARE(found.size(), 1); }();
+    const QString url = found.last().at(2).toList().value(0).toMap().value(u"url"_s).toString();
+    const QString account = cal->addAccount(m_server.url(u"/"_s), u"jan"_s, m_server.options().password, {url}, {});
+    waitIdle();
+    return cal->writableCalendars().value(0).toMap().value(u"id"_s).toString();
+}
+
+void TestWorkspaceCalendars::changesFromTheCommandLine()
+{
+    WorkspaceCalendars *cal = m_ws->calendars();
+    const QString calendarId = addPraca(vevent(u"stand"_s, u"DTSTART;TZID=Europe/Warsaw:20261116T093000\r\n"
+                                                           u"DTEND;TZID=Europe/Warsaw:20261116T094500\r\n"
+                                                           u"RRULE:FREQ=DAILY;COUNT=10\r\nSUMMARY:Stand-up\r\n"_s));
+    QVERIFY(!calendarId.isEmpty());
+    // The dialog: one occurrence changed alone — an exception of its own, the others as they were.
+    QList<planning::ExternalEvent> week = cal->eventsBetween(QDate(2026, 11, 16), QDate(2026, 11, 22));
+    QCOMPARE(week.size(), 7);
+    QVariantMap edit = cal->eventDetails(week.at(1).key);
+    QCOMPARE(edit.value(u"startTime"_s).toString(), u"09:30"_s);
+    edit.insert(u"startTime"_s, u"11:00"_s);
+    edit.insert(u"endTime"_s, u"11:30"_s);
+    edit.insert(u"title"_s, u"Stand-up — później"_s);
+    edit.insert(u"scope"_s, u"this"_s);
+    QVERIFY(cal->saveEvent(edit));
+    week = cal->eventsBetween(QDate(2026, 11, 16), QDate(2026, 11, 18));
+    QCOMPARE(week.size(), 3);
+    QCOMPARE(week.at(1).title, u"Stand-up — później"_s);
+    QCOMPARE(week.at(1).start, QTime(11, 0));
+    QCOMPARE(week.at(2).start, QTime(9, 30));
+    waitIdle();
+    QVERIFY(m_server.member(u"praca"_s, u"stand.ics"_s)
+                    ->data.contains("RECURRENCE-ID;TZID=Europe/Warsaw:20261117T093000"));
+    // All of them renamed from the fourth: the series still starts on the 16th; a repeat chosen
+    // for one occurrence alone is no change of it.
+    week = cal->eventsBetween(QDate(2026, 11, 16), QDate(2026, 11, 22));
+    QVariantMap all = cal->eventDetails(week.at(3).key);
+    all.insert(u"title"_s, u"Poranny stand-up"_s);
+    all.insert(u"scope"_s, u"all"_s);
+    QVERIFY(cal->saveEvent(all));
+    week = cal->eventsBetween(QDate(2026, 11, 16), QDate(2026, 11, 22));
+    QCOMPARE(week.first().date, QDate(2026, 11, 16));
+    QCOMPARE(week.first().title, u"Poranny stand-up"_s);
+    QVariantMap one = cal->eventDetails(week.at(4).key);
+    one.insert(u"rule"_s, u"every day"_s);
+    one.insert(u"location"_s, u"Sala Żółta"_s);
+    one.insert(u"scope"_s, u"this"_s);
+    QVERIFY(cal->saveEvent(one));
+    QCOMPARE(cal->eventDetails(cal->eventsBetween(QDate(2026, 11, 20), QDate(2026, 11, 20)).first().key)
+                     .value(u"location"_s)
+                     .toString(),
+             u"Sala Żółta"_s);
+    // A new weekly event without a reminder; an edit to no title is said in words.
+    QVERIFY(cal->saveEvent({{u"calendarId"_s, calendarId},
+                            {u"title"_s, u"Basen"_s},
+                            {u"startDate"_s, u"2026-11-22"_s},
+                            {u"startTime"_s, u"07:00"_s},
+                            {u"endDate"_s, u"2026-11-22"_s},
+                            {u"endTime"_s, u"08:00"_s},
+                            {u"rule"_s, u"every week"_s}}));
+    QString basen;
+    for (const planning::ExternalEvent &e : cal->eventsBetween(QDate(2026, 11, 22), QDate(2026, 11, 22))) {
+        if (e.title == u"Basen")
+            basen = e.key;
+    }
+    QVariantMap swim = cal->eventDetails(basen);
+    QCOMPARE(swim.value(u"rule"_s).toString(), u"every week"_s);
+    QCOMPARE(swim.value(u"reminderMinutes"_s).toInt(), -1);
+    QSignalSpy said(cal, &WorkspaceCalendars::errorOccurred);
+    swim.insert(u"title"_s, u"  "_s);
+    QVERIFY(!cal->saveEvent(swim));
+    QCOMPARE(said.size(), 1);
+    // Several days: when it is says both ends.
+    m_server.putMember(
+            u"praca"_s, u"urlop.ics"_s,
+            vevent(u"urlop"_s, u"DTSTART;VALUE=DATE:20261123\r\nDTEND;VALUE=DATE:20261126\r\nSUMMARY:Urlop\r\n"_s));
+    m_server.putMember(u"praca"_s, u"noc.ics"_s,
+                       vevent(u"noc"_s, u"DTSTART;TZID=Europe/Warsaw:20261127T220000\r\n"
+                                        u"DTEND;TZID=Europe/Warsaw:20261128T020000\r\nSUMMARY:Nocny dyżur\r\n"_s));
+    cal->refresh(calendarId);
+    waitIdle();
+    QString urlop;
+    QString noc;
+    for (const planning::ExternalEvent &e : cal->eventsBetween(QDate(2026, 11, 23), QDate(2026, 11, 27))) {
+        if (e.title == u"Urlop")
+            urlop = e.key;
+        if (e.title == u"Nocny dyżur")
+            noc = e.key;
+    }
+    const auto day = [](int d) { return dates::formatDateShort(QDate(2026, 11, d), dates::UiLocale::Polish, 2026); };
+    QCOMPARE(cal->eventDetails(urlop).value(u"whenText"_s).toString(), day(23) + u" – "_s + day(25));
+    QCOMPARE(cal->eventDetails(noc).value(u"whenText"_s).toString(), day(27) + u", 22:00–"_s + day(28) + u" 02:00"_s);
+    // brulion-cli left a meeting and a change that cannot be made: the app takes them at once,
+    // shows the meeting, sends it, and says in the log what was refused.
+    caldav::EventIntent create;
+    create.kind = caldav::EventIntent::Kind::Create;
+    create.calendarId = calendarId;
+    create.uid = caldav::newEventUid();
+    create.at = QDateTime(QDate(2026, 11, 20), QTime(9, 0), QTimeZone::UTC);
+    create.id = caldav::newIntentId(create.at);
+    create.patch.title = u"Obiad z Zosią"_s;
+    create.patch.times.start = caldav::EventMoment(DateSpec{QDate(2026, 11, 21), QTime(13, 0)});
+    caldav::EventIntent missing = create;
+    missing.kind = caldav::EventIntent::Kind::Change;
+    missing.uid = u"brak"_s;
+    missing.id = caldav::newIntentId(create.at.addSecs(1));
+    const QString folder = m_dir->filePath(u"state/calendars"_s);
+    QSignalSpy logged(cal, &WorkspaceCalendars::logChanged);
+    QVERIFY(caldav::postIntent(folder, create));
+    QVERIFY(caldav::postIntent(folder, missing));
+    QTRY_COMPARE(cal->eventsBetween(QDate(2026, 11, 21), QDate(2026, 11, 21)).size(), 2);
+    QTRY_VERIFY(caldav::pendingIntents(folder).isEmpty());
+    QTRY_VERIFY(!logged.isEmpty());
+    QVariantMap refused;
+    for (const QVariant &row : cal->log()) {
+        if (row.toMap().value(u"kind"_s) == u"error"_s)
+            refused = row.toMap();
+    }
+    QVERIFY(!refused.isEmpty());
+    QCOMPARE(refused.value(u"name"_s).toString(), u"Praca"_s);
+    QVERIFY(!refused.value(u"text"_s).toString().contains(u"cli-change"_s)); // said in words
+    QVERIFY(refused.value(u"detail"_s).toString().contains(u"brak"_s));
+    waitIdle();
+    QVERIFY(m_server.member(u"praca"_s, create.uid + u".ics"_s));
+    QVERIFY(m_server.member(u"praca"_s, create.uid + u".ics"_s)->data.contains("SUMMARY:Obiad z Zosią"));
+}
+
+void TestWorkspaceCalendars::inboxOfTheOpenNotebook()
+{
+    // Two notebooks with calendars, one after the other: the inbox watched is the open one's.
+    WorkspaceCalendars *cal = m_ws->calendars();
+    addPraca(vevent(u"stand"_s, u"DTSTART;TZID=Europe/Warsaw:20261116T093000\r\nSUMMARY:Stand-up\r\n"_s));
+    const QString first = cal->writableCalendars().value(0).toMap().value(u"id"_s).toString();
+    QDir().mkpath(m_dir->filePath(u"drugi"_s));
+    QVERIFY(m_ws->open(m_dir->filePath(u"drugi"_s), m_dir->filePath(u"state-drugi"_s)));
+    QSignalSpy found(cal, &WorkspaceCalendars::discovered);
+    cal->discover(m_server.url(u"/"_s), u"jan"_s, m_server.options().password);
+    QTRY_COMPARE(found.size(), 1);
+    const QString url = found.last().at(2).toList().value(0).toMap().value(u"url"_s).toString();
+    QVERIFY(!cal->addAccount(m_server.url(u"/"_s), u"jan"_s, m_server.options().password, {url}, {}).isEmpty());
+    waitIdle();
+    QVERIFY(m_ws->open(m_dir->filePath(u"notes"_s), m_dir->filePath(u"state"_s)));
+    waitIdle();
+    caldav::EventIntent create;
+    create.kind = caldav::EventIntent::Kind::Create;
+    create.calendarId = first;
+    create.uid = caldav::newEventUid();
+    create.at = QDateTime(QDate(2026, 11, 20), QTime(9, 0), QTimeZone::UTC);
+    create.id = caldav::newIntentId(create.at);
+    create.patch.title = u"Znowu w pierwszym"_s;
+    create.patch.times.start = caldav::EventMoment(DateSpec{QDate(2026, 11, 24), QTime(8, 0)});
+    const QString folder = m_dir->filePath(u"state/calendars"_s);
+    QVERIFY(caldav::postIntent(folder, create));
+    QTRY_VERIFY(caldav::pendingIntents(folder).isEmpty());
+    const QList<planning::ExternalEvent> day = cal->eventsBetween(QDate(2026, 11, 24), QDate(2026, 11, 24));
+    QCOMPARE(day.size(), 1);
+    QCOMPARE(day.first().title, u"Znowu w pierwszym"_s);
+}
+
+void TestWorkspaceCalendars::noNotebook()
+{
+    WorkspaceCalendars alone;
+    QVERIFY(!alone.saveEvent({{u"title"_s, u"Nigdzie"_s}, {u"startDate"_s, u"2026-11-21"_s}}));
+    QVERIFY(!alone.deleteEvent(u"a\x1f"
+                               u"b\x1f"_s,
+                               false));
+    QVERIFY(alone.eventDetails(u"a\x1f"
+                               u"b\x1f"_s)
+                    .isEmpty());
 }
 
 QTEST_MAIN(TestWorkspaceCalendars)

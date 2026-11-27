@@ -262,7 +262,10 @@ Never compute a hash yourself.
 | `habit tick <name>` | `[--date D]` | `habit set <name> done` | yes |
 | `habit skip <name>` | `[--date D]` | `habit set <name> skipped`: an excused day (the streak goes on) | yes |
 | `calendar list` | | the calendars of other programs the app shows (docs/UI.md "Calendars"), as its last sync left them on this device: `{id, kind (subscription, caldav), name, color, visible, readOnly, events, syncedAt, error?}`, CalDAV ones also `account`, `tasks` (synced with task lines), `alarms` (their events' reminders ring); no addresses; nothing is fetched here | |
-| `calendar events` | `[--from D] [--to D] [--calendar C] [--limit N]` | every occurrence of the events of those calendars from `--from` (today) to `--to` (6 days later), in the device's time zone, series expanded: `{calendar, calendarId, uid, title, start, end, allDay, recurring, location?, description?, status?}` (an all-day event's `start` / `end` are its first and last day), `truncated`; calendars whose events the app does not show are left out | |
+| `calendar events` | `[--from D] [--to D] [--calendar C] [--limit N]` | every occurrence of the events of those calendars from `--from` (today) to `--to` (6 days later), in the device's time zone, series expanded: `{calendar, calendarId, uid, title, start, end, allDay, recurring, instance?, pending?, location?, description?, status?}` (an all-day event's `start` / `end` are its first and last day; `instance`: an occurrence of a series, as `--occurrence` takes it; `pending`: a change left for the app that it has not taken yet — shown already), `truncated`; calendars whose events the app does not show are left out | |
+| `calendar add <title>` | `--start D [--end D] [--all-day] [--calendar C] [--location L] [--description T \| --stdin] [--every R] [--reminder M]` | a new event in a CalDAV calendar, left for the app ("Calendar events" below): `{queued, id, kind, calendar, calendarId, uid, event {title, start, end, allDay, location?, description?, rule?, reminderMinutes?}, app {running, sameNotebook}}`; `--start` a day (all-day) or a day and time, `--end` a time (`14:30`), a day and time or (all-day) the last day — by default an hour, or its one day; `--reminder 15`, `1h`, `1d`; `--calendar` may be left out when one calendar takes events | yes |
+| `calendar edit <uid>` | `[--occurrence O] [--title T] [--start D] [--end D] [--all-day \| --timed] [--calendar C] [--location L] [--description T \| --stdin] [--every R\|none] [--reminder M\|none]` | change an event: only what is given (`--start` a day keeps its time and length, a time alone `10:00` its day; `""` removes a place or a description); the whole series, or one occurrence with `--occurrence` (its `instance` from `calendar events`, or the day — and time — it starts); the same answer as `calendar add` | yes |
+| `calendar delete <uid>` | `[--occurrence O] [--calendar C]` | delete an event (a whole series), or one occurrence left out of its series (`EXDATE`): `{queued, id, kind, calendar, calendarId, uid, instance?, app}` | destructive |
 | `card list` | `[--deck D] [--limit N] [--tags T] [--new-per-day N] [--retention P]` | the flashcards (docs/SYNTAX.md §15): `{cards: [{id, kind, sibling, siblings, page, path, line, decks, folder, question, answer, context, ref, memory: {state, due?, interval?, stability?, difficulty?, lastReview?, retrievability?, reps, lapses}}], counts: {due, review, learningDue, new, newTotal, learning, total}, now}`; `--deck tag:flashcards/hiszpański`, `page:Name`, `folder:Path` | |
 | `card due` | `card list`'s options | what a session asks now, in its order: learning cards whose step is over, reviews due today, new cards up to the day's limit | |
 | `card show <id>` | `card list`'s options | one card, and `next`: what each grade would schedule `{Again: {due, interval}, …}` | |
@@ -582,8 +585,9 @@ The command line is meant to run next to the app, Syncthing and Nextcloud:
 * **Additive by default.** Destructive commands (page write, rename, move, delete; folder move,
   rename, delete; history restore) need `--allow-destructive`; deleting moves to `.trash/`
   (the app's trash). `--read-only` refuses every write; `--dry-run` shows the unified diff.
-* **Never** the app's settings (`Brulion.ini` is only read), and never reminder state: the
-  command line creates no reminder scheduler, so it never marks a reminder as shown.
+* **Never** the app's settings (`Brulion.ini` is only read), never reminder state (the command
+  line creates no reminder scheduler, so it never marks a reminder as shown), and never the
+  calendars' state: a change of an event is left for the app ("Calendar events").
 
 A running app on the same computer sees the change within a moment (its folder watcher) and
 updates its views, open pages, the index and its reminders.
@@ -595,6 +599,69 @@ starts it hidden) and Android once the app has seen the change (it re-arms its a
 starts or a note changes). An agent that adds `⏰ jutro 9:00` on a headless machine therefore
 relies on the synced folder reaching a device with the app. `remind list` is stateless: an agent
 that relays reminders (e.g. to a chat) keeps its own "already sent" state.
+
+## Calendar events
+
+`calendar list` and `calendar events` read the calendars the app set up on this device (docs/UI.md
+"Calendars": ICS subscriptions and CalDAV accounts, `<device state>/calendars/`) as its last sync
+left them; nothing is fetched. `calendar add`, `calendar edit` and `calendar delete` change an
+event of a CalDAV calendar — the whole event (a series), or with `--occurrence` one occurrence of
+it (an exception with its `RECURRENCE-ID`, or an `EXDATE` when deleted), as the app's event dialog
+does. The tools of the MCP server: `brulion_calendar_add`, `brulion_calendar_edit` and (with
+`--allow-destructive`) `brulion_calendar_delete`, each with `dryRun`.
+
+```
+brulion-cli calendar add "Obiad z Zosią" --start "w piątek 13:00" --end 14:30 --location Kraków --reminder 15
+brulion-cli calendar edit brulion-event-k3j9… --start 2026-12-04      # moved: its time and length kept
+brulion-cli calendar edit stand --occurrence 2026-12-02 --start 10:00  # that one only
+brulion-cli --allow-destructive calendar delete stand --occurrence 20261209T093000@Europe/Warsaw
+```
+
+* **The writer.** The app is the one writer of the calendars' state: its `CalendarStore` keeps every
+  calendar's `<id>.state.json` (members, ETags, the outbox of changes not sent yet) in memory and
+  rewrites it whole on every change and sync, and its runs hold `<device state>/calendars/sync.lock`
+  (against Android's background check). A second process writing those files would have its change
+  overwritten by the app's next save; so the command line never writes them. A change goes into an
+  inbox instead — `<device state>/calendars/inbox/<id>.json`, one file per change, written once and
+  atomically by the command (owner-only), never written again; only the app's calendar sync reads
+  and deletes them, under that lock: at once when the app's watcher sees a new file, and as every
+  run starts (a change left while the app was closed waits for it). Each file has one writer and
+  one reader, so no two processes ever write the same file.
+* **Intents, not copies.** A file holds what was asked — `{version, id, kind (create, change,
+  delete), calendar, uid, instance?, at, title?, location?, description?, start?, end?, allDay?,
+  rule?, reminderMinutes?}`, only the fields given, times as the device's wall clock
+  (`2026-12-04T13:00`, `14:30`, `2026-12-24`; never converted through UTC) — and the app applies it
+  to the event as it has it then, with the same function its own event dialog uses
+  (`caldav::plannedChange`, caldav/eventchange.h): a server change since is kept in the fields not
+  given, and one in the same fields is decided by the account's policy as for the dialog's edits
+  (`at`, when the change was asked, is its time). Taken twice — the app stopped between applying
+  one and deleting its file — a creation changes the event it made instead of making a second one.
+* **Checked here first.** Before writing, the command parses its arguments into that intent once
+  (date phrases, `--reminder`, `--every`, `--occurrence`) and makes the change against the
+  calendar as it will be once the app took what is waiting in the inbox (so an event just added can
+  be edited at once, and `calendar events` shows it, `pending`), and fails with the problem instead:
+  `calendar_read_only` (exit 7; `details.reason`: `subscription`, `read_only` — the server does not
+  let the account write it —, `no_events` — it holds tasks only —, `events_hidden` — the app does
+  not show its events), `calendar_not_found`, `event_not_found`, `occurrence_not_found` (3),
+  `calendar_required` (4: several could take it, `--calendar` names one), `ambiguous_occurrence` (4),
+  `no_title`, `no_start`, `end_before_start`, `all_day_with_time`, `occurrence_rule` (2: one
+  occurrence has no rule of its own), `date_not_understood`, `reminder_not_understood`,
+  `recurrence_not_understood` (6), `no_calendars` (5: nothing set up on this device). `--dry-run`
+  checks and answers without leaving the file.
+* **An ICS subscription refuses**, always: it is a copy of a feed another program publishes,
+  fetched from its address and read only — Brulion has no way to change the original, and a
+  change of the copy would be gone with the next fetch. The event is changed where the calendar is
+  published, or added to a CalDAV calendar.
+* **When it reaches the server.** The answer's `app` says whether the app runs in this session
+  (`running`) and has this notebook open (`sameNotebook`): then it shows the change and sends it
+  within moments; otherwise when it next opens the notebook. A change the app cannot make when it
+  takes it (the event deleted on the server meanwhile) is dropped and said in the sync center's
+  "What happened" (docs/UI.md "Calendars").
+* **Why not otherwise.** Asking the running app over its remote control would need that control
+  on (it is off by default, and `brulion-cli mcp` and the claude.ai server run without it) and the
+  app running; talking CalDAV here would need the account's password and the network (no
+  offline-first), would leave the device's copy stale until the app's next run, and would race the
+  app's outbox for the same event.
 
 ## MCP server
 
@@ -1279,7 +1346,9 @@ brulion-cli --vault ~/Notatki acp usage --notebook --format text
 
 * **Where**: Claude Code's `${CLAUDE_CONFIG_DIR:-~/.claude}/projects/*/…/*.jsonl` (also
   `~/.config/claude/projects` without the variable), Codex's `${CODEX_HOME:-~/.codex}/sessions` and
-  `archived_sessions` (`rollout-*.jsonl`) — the variables as this command's environment has them.
+  `archived_sessions` (`rollout-*.jsonl`, and `rollout-*.jsonl.zst` where Codex compressed one —
+  a rollout counts once by its name, archived or compressed) — the variables as this command's
+  environment has them.
   `found: false` when an agent has no such folder.
 * **What counts**: a Claude Code message once (it is logged again while it streams and in a resumed
   session: `message.id` + `requestId`), Codex's turns where its cumulative totals moved (a fork's
@@ -1289,7 +1358,9 @@ brulion-cli --vault ~/Notatki acp usage --notebook --format text
 * **The cost** is the API's price of the same tokens (`pricesAsOf`: the date of the price table,
   `src/core/agentusage/prices.cpp`), or the log's own `costUSD`; a subscription pays nothing more for
   them. A model the table does not know: its tokens count, `costKnown: false` with
-  `unpricedRequests` / `unpricedTokens`, and `priced: false` on its row.
+  `unpricedRequests` / `unpricedTokens`, and `priced: false` on its row. Codex's automatic approval
+  review (`codex-auto-review`) is priced as `gpt-5.6-luna`, the model Codex asks for it with an API
+  key.
 * **The cache** is the app's (`<cache>/agent-usage/`, for the owner only): a run reads only what was
   appended to the logs since the last one, the app's or the command line's, and keeps the use of
   logs the agent has since deleted (for 400 days).
@@ -1582,7 +1653,11 @@ brulion-cli app changes && brulion-cli app revert          # what changed, and a
   `unauthorized` (`brulion-cli` without a token reports `remote_control_off`, as before), and a
   token that is no grant is refused also while the remote control is on (exit 5 `unauthorized`).
   The grant's connections close when it ends; once no grant is left and the setting is off, the
-  socket closes.
+  socket closes. The app also names itself there (`BRULION_APP_INSTANCE`: its single-instance key,
+  the control socket's name is that with `-control`), and `brulion-cli` takes it before what it would
+  find itself: an agent may not pass its environment on — Codex starts its MCP servers with `HOME`,
+  `PATH`, `LANG`, `TMPDIR` … only (codex-rs/rmcp-client: `DEFAULT_ENV_VARS`), without
+  `XDG_RUNTIME_DIR`, `XDG_DATA_HOME` or `BRULION_PROFILE`, so its tools would look for another socket.
 * **Security**: a grant is only made for an agent the user marked, only while its program runs,
   and only in the desktop app; the socket keeps its owner-only file and other users' connections
   are refused as before. A granted agent can do what the remote control can — drive the UI, read
@@ -1695,10 +1770,10 @@ brulion-cli app chat notify "Zbudowane, testy przechodzą" --title "Budowanie"  
 
 **Agents delegate.** Every AI agent the app starts with Brulion's tools (docs/UI.md "AI agents
 (ACP)") gets `--app-chat` and a **chat grant** for each of its conversations: a token in its tools'
-environment (`BRULION_APP_CHAT_TOKEN`, next to `BRULION_APP_CLIENT`), which `brulion-cli app chat …`
-shows in its `hello` before a full grant's `BRULION_APP_TOKEN`; the socket serves it also with the
-remote control off, and only the chat's methods (anything else: `unauthorized`). The app knows by it
-whose conversation asks, so:
+environment (`BRULION_APP_CHAT_TOKEN`, next to `BRULION_APP_CLIENT` and `BRULION_APP_INSTANCE`),
+which `brulion-cli app chat …` shows in its `hello` before a full grant's `BRULION_APP_TOKEN`; the
+socket serves it also with the remote control off, and only the chat's methods (anything else:
+`unauthorized`). The app knows by it whose conversation asks, so:
 
 * a conversation it **starts** is a sub-conversation of its own (`parent:` in its page; another
   `--parent` is refused), shown under it in the chat; with `--wake` its answer comes back into the agent's

@@ -7,6 +7,7 @@
 #include "markdown/macros.h"
 #include "text/text.h"
 #include "util/paths.h"
+#include "util/strings.h"
 #include "util/unicode.h"
 
 #include "lua.h"
@@ -273,10 +274,7 @@ QString cutText(const QString &s, qsizetype max)
 {
     if (s.size() <= max)
         return s;
-    qsizetype end = std::max<qsizetype>(0, max - 1);
-    if (end > 0 && s[end - 1].isHighSurrogate())
-        --end;
-    return s.left(end) + u'…';
+    return s.left(strings::cutLength(s, max - 1)) + u'…';
 }
 
 // A question's prompt as a dialog may show it: its first line (the title) and at most so many

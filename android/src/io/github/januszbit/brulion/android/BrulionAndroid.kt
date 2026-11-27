@@ -127,8 +127,9 @@ object BrulionAndroid {
    */
   @JvmStatic external fun nativeSoundPicked(kind: Int, json: String)
 
-  /** A photo or dictation asked for with [capture] ended: `kind` 0 photo, 1 speech; `json`
-   * {file} / {text}, {cancelled: true} or {error}. */
+  /** A photo ([takePhoto]) or dictation ([capture]) ended: `kind` 0 photo, 1 speech; `json` a
+   * photo's {taken: true} (C++ takes it with [takePhotos]) or {purpose, cancelled / error},
+   * dictation's {text}, {cancelled: true} or {error}. */
   @JvmStatic external fun nativeCaptured(kind: Int, json: String)
 
   /**
@@ -1010,22 +1011,48 @@ object BrulionAndroid {
   fun canCapture(context: Context, kind: Int): Boolean = MediaCapture.available(context, kind)
 
   /**
-   * Takes a photo with the camera app (`kind` 0) or listens with the system's speech recognizer
-   * in `language` (BCP 47, "pl-PL"; kind 1). The result comes as nativeCaptured(kind, …).
+   * Listens with the system's speech recognizer in `language` (BCP 47, "pl-PL"; `kind` 1, the
+   * only one: a photo is [takePhoto]'s). The result comes as nativeCaptured(1, …).
    */
   @JvmStatic
   fun capture(context: Context, kind: Int, language: String): Boolean {
+    if (kind != MediaCapture.SPEECH) return false
     onMain {
       val activity = currentActivity()
-      if (activity == null) {
-        captured(kind, JSONObject().put("error", "no activity"))
-        return@onMain
-      }
-      val requestCode = if (kind == MediaCapture.PHOTO) REQUEST_PHOTO else REQUEST_SPEECH
-      MediaCapture.start(activity, kind, language, requestCode)?.let { captured(kind, JSONObject().put("error", it)) }
+      val error =
+        if (activity == null) "no activity" else MediaCapture.startSpeech(activity, language, REQUEST_SPEECH)
+      error?.let { captured(kind, JSONObject().put("error", it)) }
     }
     return true
   }
+
+  /**
+   * Takes a photo with the camera app for `purpose` in `notebook` (C++'s words, kept with the
+   * photo in the app's cache before the camera starts: [MediaCapture]). The photo waits there for
+   * [takePhotos], also when this process ends while the camera is in front; nativeCaptured(0, …)
+   * says so while it lives.
+   */
+  @JvmStatic
+  fun takePhoto(context: Context, notebook: String?, purpose: String?): Boolean {
+    onMain {
+      val activity = currentActivity()
+      val error =
+        if (activity == null) "no activity"
+        else MediaCapture.startPhoto(activity, notebook ?: "", purpose ?: "", REQUEST_PHOTO)
+      error?.let { captured(MediaCapture.PHOTO, JSONObject().put("error", it).put("purpose", purpose ?: "")) }
+    }
+    return true
+  }
+
+  /** The photos taken for `notebook` (and for none) not handed out yet: a JSON array, each handed out once. */
+  @JvmStatic
+  fun takePhotos(context: Context, notebook: String?): String =
+    try {
+      MediaCapture.takePhotos(context, notebook ?: "")
+    } catch (e: Exception) {
+      Log.e(TAG, "takePhotos failed", e)
+      "[]"
+    }
 
   private fun captured(kind: Int, json: JSONObject) {
     synchronized(lock) {
@@ -1042,7 +1069,15 @@ object BrulionAndroid {
   internal fun onActivityResult(activity: Activity, requestCode: Int, resultCode: Int, data: Intent?) {
     when (requestCode) {
       REQUEST_PHOTO -> {
-        captured(MediaCapture.PHOTO, MediaCapture.photoResult(resultCode))
+        // (Kept in the cache first: C++ may not run yet — a new process for the answer.)
+        val answer =
+          try {
+            MediaCapture.photoResult(activity, resultCode)
+          } catch (e: Exception) {
+            Log.e(TAG, "the camera's answer could not be kept", e)
+            JSONObject().put("error", e.message ?: e.javaClass.simpleName)
+          }
+        captured(MediaCapture.PHOTO, answer)
         return
       }
       REQUEST_SPEECH -> {

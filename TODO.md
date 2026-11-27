@@ -13,15 +13,18 @@ done in the repository simply disappears from the list.
   macOS at all; t3.json read again when it changes, on Windows (CI's runner saw no change of it:
   tst_shell_codeprojects configInProject skips it there); a terminal on Windows before 10 1809; the terminal's resizable splits;
   hunks of the Changes panel's other sources than Uncommitted and single lines staged or thrown away,
-  a pull request's text written by AI (the commit message is: "Write with AI", AiAsk), a turn's
-  changes without what the user changed between turns, `--skip` while rebasing, `git fetch` of its
-  own (docs/CODE-GIT.md "Not done (yet)"); for a thread of another computer's project (continued from
+  the pull request of "Commit, push and create PR" written by AI too (the pull request dialog's and the
+  commit message are: "Write with AI", an empty message written by itself), a turn's changes without
+  what the user changed between turns, `--skip` while rebasing, `git fetch` of its own
+  (docs/CODE-GIT.md "Not done (yet)"); for a thread of another computer's project (continued from
   the phone through `acp serve --projects`): committing, pushing, pull requests, reverting a turn and
   the terminal from the phone, a worktree from another base, projects of two computers with the same
   id; t3.json's `stopOnSettle`, `runOnSettle`, `previewUrl`, `worktreeSubmodules`, sparse checkouts,
-  multi-repository projects and custom worktree layouts; an AI-made branch name for a new worktree;
-  automatic worktree cleanup (by age, merged pull requests); settling and snoozing threads,
-  "Regenerate title", files dropped on a thread's row, scratch threads without a project; in the file
+  multi-repository projects and custom worktree layouts; T3 Code's branch naming modes (the AI names
+  a new worktree's branch: a semantic prefix it picks, the user's own instructions); automatic worktree
+  cleanup (by age, merged pull requests); settling and snoozing threads, a new thread's title written
+  by the AI by itself ("Regenerate title" is there), files dropped on a thread's row, scratch threads
+  without a project; in the file
   viewer (docs/CODE-FILES.md): editing files, rendered Markdown / HTML / CSV / PDF / ZIP files, find
   within the file shown, the index following the disk through a file watcher; in a thread's composer:
   mentions of threads, models and pull requests (`#`), review comments as chips instead of text.
@@ -41,10 +44,9 @@ done in the repository simply disappears from the list.
   tool calls in words, the list's pins, archive, search, badges and notifications, side chats
   (`/btw`), sub-conversations that wake their parent, conversations archived by themselves, a turn's
   work log ("Worked for …") and find in a thread are there (docs/UI.md "AI chat", "AI agents
-  (ACP)", "Agents delegate"). Not yet: the usage history read from Codex's compressed rollouts
-  (`rollout-*.jsonl.zst`: skipped) and of `codex-auto-review`'s turns (the log names no model: tokens
-  without a cost); all of it tried with a real Claude Code and Codex (a thread's turns are:
-  tst_shell_agents realAgentThread).
+  (ACP)", "Agents delegate"). Not yet: all of it tried with a real Claude Code and Codex (a thread's
+  turns are: tst_shell_agents realAgentThread; a sub-conversation that wakes its parent, either way
+  between the two: realAgentWakesParent).
 * **AI agents (ACP): what is still missing** — an agent the user runs answers in the AI chat over
   the Agent Client Protocol (docs/UI.md "AI agents (ACP)"; tried with Claude Code, Codex and
   OpenCode), on the computer or, through `brulion-cli acp serve` on a computer of the user's — the
@@ -59,24 +61,27 @@ done in the repository simply disappears from the list.
   Gemini CLI (it needs a Google sign-in) and on Windows (a preset's `npx.cmd` through `cmd.exe
   /c`) and macOS; and a try of the other direction, Brulion's assistant as an ACP agent
   (`brulion-cli acp agent`, docs/CLI.md "The assistant in Zed and JetBrains"), in a real Zed and a
-  JetBrains IDE.
+  JetBrains IDE. Codex starts its MCP servers with `HOME`, `PATH`, `LANG` … alone: the app names its
+  socket to Brulion's tools (`BRULION_APP_INSTANCE`), but with `--profile` or XDG folders of its own
+  the notebook tools of a Codex conversation still keep their device state — the pages' history of
+  their changes, the write lock — in the default profile's folder, not the app's (`mcp --vault`
+  without `--state-dir`).
 * **AI agents on another computer changing the app live: on a real phone** — the tunnel is there
   (`acp serve` hands the session's `brulion_app_*` calls to the device's stream, the app answers
   them in process: docs/CLI.md "The app's live tools"), tested between two processes of a desktop;
   untried with Android's app (the phone asleep or in the background while a call waits, a
   screenshot of its window over a mobile network) and with `services.brulion-acp`.
 * **The AI chat and the writing assistant: what is still to check** — on a real phone: a photo
-  from the camera app for a message (the activity recreated while the camera is in front loses the
-  photo's path, kept only in memory) and dictation with Google's recognizer and with none
-  (GrapheneOS: docs/ANDROID.md "Camera and dictation"); Claude's summarised thinking with a real
-  key (`thoughts = true`, `ai::showsThinking`); the desktop's dictation (`media::Dictation`) with a
-  real microphone on Windows; the browser's picture picker for a message in a real browser (CI's
-  headless Chrome cannot open a file picker); the chat's notifications (an answer, a failure, a
-  question while the app is behind another, an AI agent's own — `brulion_app_chat_notify`: docs/UI.md
-  "AI chat") on a real phone — Android shows
-  them as a timer's end (`AndroidNotifier::showMessage`), untried — and in a real browser; a side
-  chat's pane (`/btw`) on a real phone (in place of the conversation, Back closing it) and a
-  sub-conversation's wake with a real Claude Code and Codex.
+  from the phone's camera app for a message (the emulator's camera and the app's process ended
+  while it is in front are checked: `scripts/android-emulator-test.sh --camera`) and dictation with
+  Google's recognizer and with none (GrapheneOS: docs/ANDROID.md "Camera and dictation"); Claude's
+  summarised thinking with a real key (`thoughts = true`, `ai::showsThinking`); the desktop's
+  dictation (`media::Dictation`) with a real microphone on Windows; the browser's picture picker
+  for a message in a real browser (CI's headless Chrome cannot open a file picker); the chat's
+  notifications (an answer, a failure, a question while the app is behind another, an AI agent's
+  own — `brulion_app_chat_notify`: docs/UI.md "AI chat") on a real phone — Android shows them as a
+  timer's end (`AndroidNotifier::showMessage`), untried — and in a real browser; and a side chat's
+  pane (`/btw`) on a real phone (in place of the conversation, Back closing it).
 * **The model on the device: what is still missing** — LFM3-VL 2B, LFM3 1.7B and Brulion
   Assistant 1.7B (LFM3 1.7B with the adapter trained for the assistant: docs/FINETUNE.md) run in
   the app through llama.cpp on Linux (the Nix package, the AppImage), Windows and Android
@@ -293,8 +298,7 @@ done in the repository simply disappears from the list.
   invitations (attendees, iTIP) and free/busy; the alarms of an ICS subscription's events (they
   ring nothing); a task the server moved under another one (the notes keep the line's place), an
   `RRULE` inside a `RANGE=THISANDFUTURE` exception (ignored; clients normally split the series
-  instead); creating and editing events from `brulion-cli` and the MCP server (`calendar list` and
-  `calendar events` only read); Google's own CalDAV (it needs an OAuth sign-in — its secret iCal
+  instead); Google's own CalDAV (it needs an OAuth sign-in — its secret iCal
   address works as a subscription).
 * **Reminder chips in Markdown source mode and table cells** — in an edited block a ⏰ is a chip
   with its words, its menu and the caret over it as one unit (docs/UI.md); the source mode's

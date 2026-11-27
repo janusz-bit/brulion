@@ -1424,7 +1424,10 @@ docs/CODE-TERMINAL.md "Drawn by Atrament"); shown where agents run).
   while a program runs in its terminal (`codeThreadTerminalBusy`: TerminalRegistry.isBusy, T3 Code's
   "Terminal process running"), `git-branch` for a worktree of its own (its branch in a tooltip), when; the current one selected; "⋯"
   `codeThreadMore` on hover, a right click / long press: Rename… (`codeThreadRename`: a dialog
-  `codeRenameThreadDialog` / `codeRenameThreadField`), Pin / Unpin, Mark unread, New thread in this
+  `codeRenameThreadDialog` / `codeRenameThreadField`), Regenerate title (`codeThreadRegenerateTitle`,
+  while the AI of Settings → Extensions → AI is set up: T3 Code's — WorkspaceChats.regenerateTitle, the
+  AI names the thread anew from its messages; "Regenerating…" meanwhile; the thread shown follows its
+  new name, "Title kept" and a failure are toasts), Pin / Unpin, Mark unread, New thread in this
   worktree (or in the project's folder) `codeThreadNewHere`, Open in editor, Copy path / Copy branch /
   Copy link, Archive / Unarchive, Move to trash (`codeThreadDelete`). A thread with a worktree of its own
   that no other thread uses (`WorkspaceChats.threadsIn`) asks first (`codeDeleteThreadDialog`, unless
@@ -1883,10 +1886,15 @@ conversation (docs/EXTENSIONS.md "Chat partners"), or an AI agent of the user's 
   5, not the conversation nor the page it is about — with the message: their text where it takes
   embedded context, else links (an encrypted page: a link); the built-in assistant reads them with
   its own tools.
-* **Drafts**: what is written in the field and not sent stays with its conversation while another
-  is shown, and over a restart (`WorkspaceChats.draft()` / `setDraft()`, the notebook's device
-  state `chat/drafts`, following a rename; a new conversation's draft under ""); its pictures stay
-  with the field.
+* **Drafts**: what is written in the field and not sent — its text and its pictures — stays with
+  its conversation while another is shown, and over a restart (`WorkspaceChats.draft()` /
+  `draftPictures()` / `setDraft()`, the notebook's device state `chat/drafts`: an entry is the text,
+  or `{text, pictures}` with pictures — an older version's text-only entry is read as it is —,
+  following a rename; a new conversation's draft under "", a new thread of Code mode's under
+  `code:<project>`). The view keeps it when another conversation is shown, when it closes, before the
+  camera app opens and when the app leaves the front (`Workspace.saveOpenEditorsRequested`: Android
+  may end the app in the background without a word). Pictures a draft keeps stay in the notebook
+  when it closes (those added and neither sent nor kept go then).
 * **Questions asked before**: Up in an empty field brings back the user's questions of the
   conversation, newest first (Down goes forward again, to an empty field; editing one makes it a
   new message — `WorkspaceChats.prompts()`, core `chat::prompts`: without their pictures and the
@@ -1956,13 +1964,18 @@ conversation (docs/EXTENSIONS.md "Chat partners"), or an AI agent of the user's 
   picture at most 50 MB, a pick 200 MB, read into memory and stored as a file's are, the pick's
   pictures handed to the view that asked, `picturesPicked(pick, paths)`) or, on Android, opens a
   menu (`chatAttachMenu`) with
-  **Take a photo** (`chatTakePhoto`: the system's camera app, `platform/capture.h`) and **Picture
-  from a file…**; Ctrl+V with a picture on the clipboard (not with text) adds it, and pictures dropped
+  **Take a photo** (`chatTakePhoto`: the system's camera app, `platform/capture.h`'s `PhotoCamera`)
+  and **Picture from a file…**; the photo goes into the draft of the conversation it was taken for —
+  `WorkspaceChats.takePhoto(draft)`, then `placePhoto()`, the one place that decides: copied into
+  the notebook as a picked file is, added to that draft's pictures, `photoTaken(draft, path)` for a
+  field that shows it —, also when Android ended the app while the camera app was in front: the
+  camera keeps the photo with its notebook and draft (docs/ANDROID.md "Camera and dictation"), and
+  the next start puts it into that draft once the notebook is open; Ctrl+V with a picture on the clipboard (not with text) adds it, and pictures dropped
   on the conversation do too (`DropArea`, `chatDropHint` while they hover). Each is stored at once as
   an attachment of the notebook (`WorkspaceChats.addPicture` → `Workspace::importAttachment`, the
   attachments folder) and shown as a thumbnail above the field (`chatAttached`,
-  `chatAttachedPicture`) with × (`chatDetachPicture`: deleted again — `dropPicture`; pictures never
-  sent go when the view closes); sent, they are embeds in the user's message (`![[…]]`,
+  `chatAttachedPicture`) with × (`chatDetachPicture`: deleted again — `dropPicture`; pictures not
+  sent stay with the conversation's draft, above); sent, they are embeds in the user's message (`![[…]]`,
   docs/SYNTAX.md §14), and the model gets them as pictures (b.ai's `images`; the newest eight of the
   conversation). A model on the device that reads text only gets their names, and the field says so
   (`WorkspaceChats.seesPictures`).
@@ -2019,7 +2032,7 @@ archived by themselves (`setAutoArchiveDays()`, `archiveUntouched()`, `autoArchi
 (`secrets`: ChatSecrets, "A secret the agent asks for" above), the webhooks' server (`hooks`:
 HookServer, "Scheduled conversations" below), the
 pictures (`addPicture`, `addPictures(To)`, `addClipboardPicture`, `dropPicture`, `pictureUrl`,
-`picturePath`), the camera and dictation (`takePhoto` → `photoTaken`, `startDictation` /
+`picturePath`), the camera and dictation (`takePhoto(draft)` → `photoTaken(draft, path)` / `captureFailed(draft, why)`, `startDictation` /
 `stopDictation` / `cancelDictation` → `dictated`; `dictationReady`, `recognizing`, `dictationElapsed`,
 `dictationLimit`, `useSpeechRecognizer()`), the agents' subscription limits (`limits`: AgentLimits,
 "AI agents (ACP)" → "Its limits"), `historyBudget`, `seesPictures`, `onDevice`,
@@ -2187,7 +2200,16 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   assistant line's `message.usage`, `message.model`, `cwd`, `costUSD` when the log has one, `speed`
   "fast"), each message once by `message.id` + `requestId` (it is logged again while it streams and
   when a session is resumed into a file of its own); Codex's `${CODEX_HOME:-~/.codex}/sessions/YYYY/MM/DD/rollout-*.jsonl`
-  and `archived_sessions` (a rollout once by its name: `session_meta`'s `cwd`, `turn_context`'s
+  and `archived_sessions`, also compressed — `rollout-*.jsonl.zst`: Codex compresses a rollout
+  untouched for a week (zstd level 3, `codex-rs/rollout/src/compression.rs`) when its experimental
+  feature `local_thread_store_compression` is on (off by default from 0.140 to 0.170) or an
+  app-server client asks with the experimental `rollout/compress`, and makes it plain again before
+  it appends to it; read through its frames (the vendored zstd 1.5.7 decoder, `3rdparty/zstd`;
+  `agentusage/logstream_p.h`: a frame's window at most 16 MiB, at most 1 GiB of text, a broken or
+  cut frame ending the file as one skipped line) (a rollout once by its name, wherever it is and
+  however it is kept: archived or compressed later it stays one file of the cache — nothing counted
+  again, only what was appended read —, both files of the moment Codex changes it once;
+  `session_meta`'s `cwd`, `turn_context`'s
   `model`; since Codex 0.154 a `token_usage_record` per API response, counted once by its
   `response_id` — a fork's copies too —, and then the rollout's `token_count` events not: they
   leave out the responses of a turn's own agents; before, `token_count`'s `last_token_usage` — or
@@ -2198,7 +2220,11 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   one place (`src/core/agentusage/prices.cpp`, dated `PricesAsOf`: Anthropic's and OpenAI's prices
   per million tokens, the long-context tiers above 200 K / 272 K prompt tokens, fast mode's factor;
   a `costUSD` in the log wins; a model the table does not know counts its tokens and its cost "not
-  known"; Claude Code's `<synthetic>` messages cost nothing). Per day in local time, per model, per
+  known"; Claude Code's `<synthetic>` messages cost nothing; a name the provider's backend resolves
+  itself is priced as the model the provider's own program sends for an API key — Codex's automatic
+  approval review, whose rollouts name `codex-auto-review` with a ChatGPT sign-in, as `gpt-5.6-luna`,
+  what Codex asks for with an API key: `codex-rs/model-provider/src/provider.rs`; the history keeps
+  the log's name). Per day in local time, per model, per
   project folder (the session's `cwd`). Shown on the agent's row in Settings → Extensions → AI
   agents — its line under the command, "Today 1.2 M tokens · ≈ 4.10 USD · 30 days ≈ 61 USD" ("Today
   nothing · 30 days ≈ 61 USD", "No usage yet" without logs), and **Usage…** (`acpAgentUsage`,
@@ -2233,7 +2259,13 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   "What the agents used"). Tests: `tst_agentusage` (synthetic logs of both agents: a streamed
   message, a resumed session, cumulative Codex totals, Codex's response records, a fork, a truncated last line, malformed and
   huge lines, an unknown model, the cache reading only what was appended, a file that shrank or
-  was rewritten, a gone file, days across DST and in a +05:45 zone, the reader's rhythm),
+  was rewritten, a gone file, days across DST and in a +05:45 zone, the reader's rhythm; an
+  automatic review's real lines, anonymised; compressed rollouts made by `zstd` 1.5.7 —
+  `tests/core/agentusage/fixtures/make-fixtures.sh`: as Codex writes them, with a checksum, two
+  frames, cut, broken, a window too large, a line too long —, one compressed, archived or made plain
+  again later, both files at once, the text's limit; each way a cache entry cannot be trusted, an
+  unreadable log, one gone for longer than the history, a line exactly at the limit, what the cache
+  keeps coming back as it was),
   `tst_shell_agentusage`, `tst_cli_acp_usage`, the shell self-test's `checkAgentUsage` (Claude
   Code's preset with synthetic logs: the row's line, Usage…, 30 and 7 bars, this notebook only).
 * **Slash commands**: while the field holds "/" and a name being typed, the agent's commands that
@@ -2418,7 +2450,11 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
 * Tests: `tst_acp` (the protocol, the agent played), `tst_shell_agents` (a real Workspace and a real
   program that speaks ACP: `tests/app/shell/fakeacpagent.cpp`; `realAgent` and `realAgentThread` —
   a thread in a real git project, tried with Claude Code and Codex — with a real one,
-  `BRULION_REAL_ACP_AGENT`, `BRULION_REAL_ACP_OPTION`), `tst_shell_chattools` (the calls in words,
+  `BRULION_REAL_ACP_AGENT`, `BRULION_REAL_ACP_OPTION`; `realAgentWakesParent` with two —
+  `BRULION_REAL_ACP_CHILD`, `BRULION_REAL_ACP_CHILD_OPTION` —: the parent's agent starts a
+  sub-conversation with wake through the real brulion-cli and a control socket of the test's own, the
+  child answers, the parent is woken and answers with it; tried Claude Code → Codex and Codex →
+  Claude Code on 2026-11-27), `tst_shell_chattools` (the calls in words,
   English and Polish plural forms), the shell self-test's `checkChatDrawings` (the drawings of an
   answer, ChatActivity under each "Tool calls in chat") and `checkCodeMode` (Code mode: a project and
   its thread, the header, the sidebar, the Changes panel, the file picker, find in the thread).
@@ -2433,8 +2469,11 @@ conversation page whose frontmatter names the one it came from (`parent: "[[AI/�
 its conversations, a grant of the app's chat alone (`WorkspaceAgents::setChatGrants()` →
 `RemoteControl::chatGrant()`, the token in its tools' environment as `BRULION_APP_CHAT_TOKEN`), so its
 `brulion_app_chat_*` tools (docs/CLI.md "Conversations") reach the running app — also while the remote
-control's setting is off; the context tells it in a sentence (`WorkspaceAgents::context()`). The
-built-in assistant's tools do not change (docs/FINETUNE.md).
+control's setting is off; the context tells it in a sentence (`WorkspaceAgents::context()`). The app
+names itself to those tools (`WorkspaceAgents::setAppInstance()`: its single-instance key as
+`BRULION_APP_INSTANCE`), as an agent may not pass its environment on — Codex starts its MCP servers
+with `HOME`, `PATH`, `LANG` … alone, so its tools found no `XDG_RUNTIME_DIR` and looked for another
+socket than the app's. The built-in assistant's tools do not change (docs/FINETUNE.md).
 
 * **In the parent conversation** (`chatLineage`, `ChatLineageRow.qml` under the header): "Sub-conversations:"
   and a chip per sub-conversation (`chatSubConversation`: its name · who answers, an icon of its
@@ -7697,7 +7736,21 @@ Nextcloud app password (`<app data>/secrets/caldav-<account>`). A second device 
   `RECURRENCE-ID`) and "Delete" (a series asks "This event" — an `EXDATE` — or "All events"). "New
   event" picks the calendar among the writable ones. Changes show at once (the calendar's cache) and
   are sent by a run that starts then; when the server changed the event meanwhile, the account's
-  policy decides (keep the newer by `LAST-MODIFIED`, or keep both — the edit as a new event).
+  policy decides (keep the newer by `LAST-MODIFIED`, or keep both — the edit as a new event). What
+  the dialog changed is all that changes (caldav/eventchange.h, the same decision `brulion-cli`
+  takes): a series edited from one of its occurrences keeps its own start unless its times were
+  changed, and a series moved keeps its left-out occurrences (`EXDATE`) and exceptions
+  (`RECURRENCE-ID`) on the occurrences they named.
+* **Changes from the command line** — `brulion-cli calendar add | edit | delete` and the MCP tools of
+  an AI agent (docs/CLI.md "Calendar events") leave each change as a file in
+  `<device state>/calendars/inbox/`; the app watches that folder while the notebook has CalDAV
+  calendars (not in the browser) and takes a new file about 0.1 s later under the calendars' lock
+  — the change is applied to the event as the app has it then, shown at once and sent by a run
+  that starts then, like the dialog's —, and every run takes what is waiting as it starts (a change
+  left while the app was closed, or while Android's background check held the lock). A change that
+  cannot be made (its event deleted on the server meanwhile, its calendar removed, a file that is
+  no change) is dropped with an error in "What happened": "A change of an event asked for from the
+  command line or by an AI agent could not be made." and the reason as its detail.
 * **The sync center's Calendars tab** (`qml/io/CalendarsPanel.qml`): the state ("Calendars updated
   today 10:32", offline, what failed), "Refresh all", deletions of synced tasks held back by the
   guard with their titles and "Delete them", a word on CORS in the browser; the subscriptions — the

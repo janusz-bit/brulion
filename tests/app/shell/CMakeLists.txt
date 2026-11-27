@@ -93,7 +93,8 @@ brulion_add_test(tst_shell_workspace_pictures SOURCES tst_workspace_pictures.cpp
     LIBS brulion_shell brulion_editor brulion_core_drawing Qt6::Network)
 # The editor's AI assistant on the real Workspace (WritingSession), an OpenAI-compatible server
 # played (../fakeaiserver.h): a rewrite streamed and put into the block as one undo step, a preset
-# waited for, a summary and a continuation of blocks, source mode's paragraph, Stop, failures.
+# waited for, a summary and a continuation of blocks, source mode's paragraph, Stop, failures; Code
+# mode's texts by the same AI: AiAsk, a new worktree's branch name, "Regenerate title".
 brulion_add_test(tst_shell_writingsession SOURCES tst_writingsession.cpp ../fakeaiserver.h
     LIBS brulion_shell brulion_editor Qt6::Network)
 # PDFs on the real Workspace (workspacepdf.cpp): "Open in another app" through a recording hook
@@ -316,6 +317,11 @@ brulion_set_warnings(fake_acp_agent)
 brulion_add_test(tst_shell_agents SOURCES tst_agents.cpp LIBS brulion_shell)
 target_compile_definitions(tst_shell_agents PRIVATE FAKE_ACP_AGENT="$<TARGET_FILE:fake_acp_agent>")
 add_dependencies(tst_shell_agents fake_acp_agent)
+# The real agents' wake (realAgentWakesParent): a control socket of the test's own (src/ipc, desktop).
+if(TARGET brulion_ipc)
+    target_link_libraries(tst_shell_agents PRIVATE brulion_ipc)
+    target_compile_definitions(tst_shell_agents PRIVATE BRULION_TEST_IPC)
+endif()
 # An agent on another computer: the real `brulion-cli acp serve` (desktop builds have it).
 if(TARGET brulion-cli)
     target_compile_definitions(tst_shell_agents PRIVATE BRULION_CLI="$<TARGET_FILE:brulion-cli>")

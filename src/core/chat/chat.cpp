@@ -1,6 +1,7 @@
 #include "chat/chat.h"
 
 #include "util/paths.h"
+#include "util/strings.h"
 
 #include <QHash>
 #include <QRegularExpression>
@@ -247,12 +248,7 @@ bool opensBlock(QStringView line)
 /// Cuts `text` to at most `max` characters, never inside a surrogate pair.
 QString cutAt(const QString &text, qsizetype max)
 {
-    if (text.size() <= max)
-        return text;
-    qsizetype n = max;
-    if (n > 0 && text.at(n - 1).isHighSurrogate())
-        --n;
-    return text.left(n);
+    return text.left(strings::cutLength(text, max));
 }
 
 /// Inline Markdown as readable text: links by their shown text, emphasis and code marks out.

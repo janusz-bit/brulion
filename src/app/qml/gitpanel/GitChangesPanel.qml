@@ -135,13 +135,15 @@ Item {
     signal copyText(string text)
     /// Open a web address (the pull request).
     signal openUrl(string url)
-    /// The AI can write a commit message (the owner's AiAsk is set up): the commit dialog offers
-    /// "Write with AI"; its question goes out by writeWithAi(system, prompt), the answer comes back
-    /// by aiWritten(ok, text).
+    /// The AI can write a commit message and a pull request's text (the owner's AiAsk is set up):
+    /// the commit and pull request dialogs offer "Write with AI" (and the commit one writes an empty
+    /// message itself); their question goes out by writeWithAi(system, prompt), the answer comes
+    /// back by aiWritten(ok, text) to the dialog that asked (only one is open, the other ignores it).
     property bool aiAvailable: false
     signal writeWithAi(string system, string prompt)
     function aiWritten(ok: bool, text: string): void {
         commitDialog.aiWritten(ok, text)
+        prDialog.aiWritten(ok, text)
     }
 
     function turnCheckpoints(): list<var> {
@@ -1593,6 +1595,8 @@ Item {
     GitPullRequestDialog {
         id: prDialog
         git: repo
+        aiAvailable: panel.aiAvailable
+        onWriteRequested: (system, prompt) => panel.writeWithAi(system, prompt)
     }
     GitPublishDialog {
         id: publishDialog

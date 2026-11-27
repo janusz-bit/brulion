@@ -1,9 +1,9 @@
 #include "canvas/edit.h"
 
 #include "util/paths.h"
+#include "util/strings.h"
 
 #include <QHash>
-#include <QRandomGenerator>
 #include <QSizeF>
 
 #include <algorithm>
@@ -52,12 +52,7 @@ bool isPictureFile(QStringView file)
 
 QString newId()
 {
-    static constexpr char hex[] = "0123456789abcdef";
-    QString id;
-    id.reserve(16);
-    for (int i = 0; i < 16; ++i)
-        id += QLatin1Char(hex[QRandomGenerator::global()->bounded(16)]);
-    return id;
+    return strings::randomText(u"0123456789abcdef", 16);
 }
 
 QSizeF defaultSize(QStringView type, QStringView file)

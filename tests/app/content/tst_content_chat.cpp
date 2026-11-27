@@ -8,7 +8,10 @@
 // (ChatMessageModel: roles, rendered text — links, lists, numbers, tasks, headings, code —, the page it is about) and
 // the list of conversations (ChatListModel: only conversations of AI/, newest first, their names without the date,
 // previews); the time of each message written and shown, a day's line above it, pictures sent with a message
-// (attachments of the notebook, the model's images, a model that does not see them; the browser picker's files),
+// (attachments of the notebook, the model's images, a model that does not see them; the browser picker's files), a
+// draft's pictures (kept over the notebook's close, an older version's draft, a rename) and the camera's photo going
+// into the draft it was taken for — while the app waits for it, and after the app's process ended while the camera
+// was in front (a camera played that keeps the photo as MediaCapture.kt does; another notebook's photo waits),
 // several conversations answering at once (an OpenAI-compatible server played by FakeAiServer) and the model on the
 // device taking them one at a time in line, a conversation too long for the model sent from a later turn (the model
 // told, the view's line), a partner of the user's own (an extension's chat command), renaming and deleting a
@@ -25,6 +28,7 @@
 #include "chatmodels.h"
 
 #include "aireportdraft.h"
+#include "capture.h"
 #include "pickedfiles.h"
 
 #include "workspace.h"
@@ -129,6 +133,49 @@ struct Model : ai::LocalBackend {
     }
 };
 
+/// The phone's camera app, played: it keeps what take() was asked with each photo, as
+/// MediaCapture.kt does in the app's cache, so a photo outlives the Workspace (a process of the
+/// app) that asked for it.
+class Camera : public platform::PhotoCamera {
+public:
+    QList<std::pair<QString, QString>> asked; ///< (notebook, purpose) of each take() not answered
+    QList<platform::CapturedPhoto> waiting;
+    bool take(const QString &notebook, const QString &purpose) override
+    {
+        asked.append({notebook, purpose});
+        return true;
+    }
+    QList<platform::CapturedPhoto> takePhotos(const QString &notebook) override
+    {
+        QList<platform::CapturedPhoto> out;
+        QList<platform::CapturedPhoto> kept;
+        for (const platform::CapturedPhoto &photo : std::as_const(waiting))
+            (photo.notebook.isEmpty() || photo.notebook == notebook ? out : kept).append(photo);
+        waiting = kept;
+        return out;
+    }
+    /// The camera app answers the oldest take(): the photo `file` ("" the user took none).
+    void answer(const QString &file)
+    {
+        const auto [notebook, purpose] = asked.takeFirst();
+        if (file.isEmpty()) {
+            Q_EMIT failed(purpose, QString());
+            return;
+        }
+        waiting.append({file, notebook, purpose});
+        Q_EMIT photosWaiting();
+    }
+};
+
+/// A JPEG as the camera app writes one into the app's cache.
+QString cameraPhoto(const QString &file)
+{
+    QImage image(40, 30, QImage::Format_RGB32);
+    image.fill(QColor(200, 120, 40));
+    QDir().mkpath(QFileInfo(file).absolutePath());
+    return image.save(file, "JPEG") ? file : QString();
+}
+
 } // namespace
 
 class TestContentChat : public QObject {
@@ -151,6 +198,12 @@ class TestContentChat : public QObject {
             if (!f.open(QIODevice::ReadWrite) || !f.setFileTime(it.value(), QFileDevice::FileModificationTime))
                 qWarning() << "no time set for" << it.key();
         }
+        return openFolder(root, assistant);
+    }
+
+    /// The notebook `root` opened (again: the app started anew).
+    std::unique_ptr<Workspace> openFolder(const QString &root, bool assistant = true)
+    {
         auto ws = std::make_unique<Workspace>();
         ws->setClock([this] { return m_now; });
         ws->setUiLanguage(u"pl"_s);
@@ -747,6 +800,157 @@ private Q_SLOTS:
         QCOMPARE(chats->addPickedPictures({second}).size(), 1);
         QCOMPARE(refused.size(), 0);
         QVERIFY(chats->addPickedPictures({}).isEmpty());
+    }
+
+    // A draft keeps the pictures of its field with its text: over the notebook's close (pictures
+    // added and not sent go then, those of a draft stay), an older version's draft (text alone),
+    // a picture gone from the notebook left out, a rename, a draft of pictures alone, forgotten.
+    void draftsKeepTheirPictures()
+    {
+        const QString conversation = u"AI/2026-11-15 Ogród.md"_s;
+        auto ws = open({{conversation, u"- 🧑 Co posadzić?\n  czas:: 2026-11-15 09:00\n"_s}});
+        const QString root = ws->vault()->rootPath();
+        shell::WorkspaceChats *chats = ws->chats();
+        QImage image(32, 24, QImage::Format_RGB32);
+        image.fill(QColor(90, 60, 200));
+        const QString kept = m_tmp.filePath(u"róża %1.png"_s.arg(m_n));
+        const QString left = m_tmp.filePath(u"żonkil %1.png"_s.arg(m_n));
+        QVERIFY(image.save(kept) && image.save(left));
+        const QString drafted = chats->addPicture(QUrl::fromLocalFile(kept));
+        const QString abandoned = chats->addPicture(QUrl::fromLocalFile(left));
+        QVERIFY(!drafted.isEmpty() && !abandoned.isEmpty());
+        chats->setDraft(conversation, u"Róże czy żonkile?"_s, {drafted});
+        QCOMPARE(chats->draft(conversation), u"Róże czy żonkile?"_s);
+        QCOMPARE(chats->draftPictures(conversation), QStringList{drafted});
+        ws.reset(); // (the notebook closes)
+
+        ws = openFolder(root);
+        chats = ws->chats();
+        QVERIFY(ws->exists(drafted));
+        QVERIFY(!ws->exists(abandoned)); // (added, never sent nor kept: gone as before)
+        QCOMPARE(chats->draft(conversation), u"Róże czy żonkile?"_s);
+        QCOMPARE(chats->draftPictures(conversation), QStringList{drafted});
+        // A rename takes them along.
+        const QString renamed = chats->rename(conversation, u"Ogród zimą"_s);
+        QVERIFY(!renamed.isEmpty());
+        QCOMPARE(chats->draftPictures(renamed), QStringList{drafted});
+        QCOMPARE(chats->draft(renamed), u"Róże czy żonkile?"_s);
+        QVERIFY(chats->draftPictures(conversation).isEmpty());
+        // A draft of text alone follows too; a conversation without one takes nothing along.
+        chats->setDraft(renamed, u"Sam tekst: ąę"_s);
+        const QString again = chats->rename(renamed, u"Ogród latem"_s);
+        QCOMPARE(chats->draft(again), u"Sam tekst: ąę"_s);
+        QVERIFY(chats->draftPictures(again).isEmpty());
+        chats->setDraft(again, QString(), {drafted});
+        const QString third = chats->rename(again, u"Ogród jesienią"_s);
+        QCOMPARE(chats->draftPictures(third), QStringList{drafted});
+        QCOMPARE(chats->draft(third), QString());
+        // A text longer than a draft keeps: its start.
+        chats->setDraft(third, QString(120001, u'ż'));
+        QCOMPARE(chats->draft(third).size(), 120000);
+        // Pictures alone are a draft; both empty: none.
+        chats->setDraft(third, QString(), {drafted});
+        QCOMPARE(chats->draftPictures(third), QStringList{drafted});
+        chats->setDraft(third, QString(), {});
+        QVERIFY(chats->draftPictures(third).isEmpty());
+        QVERIFY(!ws->vault()->store()->get(u"chat/drafts"_s).toObject().contains(third.toLower()));
+        // An older version's draft is its text; a broken entry nothing; a picture gone, left out.
+        ws->vault()->store()->set(
+                u"chat/drafts"_s,
+                QJsonObject{{u"ai/stara.md"_s, u"Szkic sprzed wersji ze zdjęciami"_s},
+                            {u"ai/zepsuta.md"_s, 42},
+                            {u"ai/zdjęcia.md"_s,
+                             QJsonObject{{u"text"_s, u"Ą"_s},
+                                         {u"pictures"_s, QJsonArray{drafted, u"assets/nie-ma.jpg"_s, 7, drafted}}}}});
+        QCOMPARE(chats->draft(u"AI/Stara.md"_s), u"Szkic sprzed wersji ze zdjęciami"_s);
+        QVERIFY(chats->draftPictures(u"AI/Stara.md"_s).isEmpty());
+        QCOMPARE(chats->draft(u"AI/Zepsuta.md"_s), QString());
+        QCOMPARE(chats->draft(u"AI/Zdjęcia.md"_s), u"Ą"_s);
+        QCOMPARE(chats->draftPictures(u"AI/Zdjęcia.md"_s), QStringList{drafted});
+    }
+
+    // The camera's photo for a message goes into the draft of the conversation it was taken for:
+    // while the app waits for it (photoTaken: the field takes it), and when the app's process ended
+    // while the camera app was in front — the camera keeps the photo, the next start of the app
+    // takes it once that notebook is open and puts it into the draft, the draft's text kept.
+    void aPhotoGoesIntoTheDraftItWasTakenFor()
+    {
+        const QString conversation = u"AI/2026-11-15 Roślina.md"_s;
+        auto ws = open({{conversation, u"- 🧑 Jaka to roślina?\n  czas:: 2026-11-15 09:00\n"_s}});
+        const QString root = ws->vault()->rootPath();
+        const QString notebook = ws->vault()->id();
+        shell::WorkspaceChats *chats = ws->chats();
+        // No camera here (the desktop): none asked for.
+        QVERIFY(!chats->cameraAvailable());
+        QVERIFY(!chats->takePhoto(conversation));
+        // A camera there once the notebook is open (the phone's): used from the next photo on.
+        auto *camera = new Camera;
+        platform::setPhotoCamera(camera);
+        const auto unregister = qScopeGuard([] { platform::setPhotoCamera(nullptr); });
+        QVERIFY(chats->cameraAvailable());
+
+        // The app waits for it: into the draft at once, the field told; the cache's file goes.
+        QSignalSpy taken(chats, &shell::WorkspaceChats::photoTaken);
+        QSignalSpy failed(chats, &shell::WorkspaceChats::captureFailed);
+        chats->setDraft(conversation, u"Co to za liść? ąę"_s);
+        QVERIFY(chats->takePhoto(conversation));
+        QCOMPARE(camera->asked, (QList<std::pair<QString, QString>>{{notebook, conversation}}));
+        const QString first = cameraPhoto(m_tmp.filePath(u"cache/camera/photo-1.jpg"_s));
+        camera->answer(first);
+        QCOMPARE(taken.size(), 1);
+        QCOMPARE(taken.first().at(0).toString(), conversation);
+        const QString firstPath = taken.first().at(1).toString();
+        QVERIFY(ws->exists(firstPath));
+        QCOMPARE(chats->draftPictures(conversation), QStringList{firstPath});
+        QCOMPARE(chats->draft(conversation), u"Co to za liść? ąę"_s);
+        QVERIFY(!QFile::exists(first));
+        QVERIFY(camera->waiting.isEmpty());
+        // None taken: nothing said, nothing added.
+        QVERIFY(chats->takePhoto(conversation));
+        camera->answer(QString());
+        QCOMPARE(taken.size(), 1);
+        QCOMPARE(failed.size(), 0);
+        // The camera could not be used: said for that draft.
+        Q_EMIT camera->failed(conversation, u"no camera app"_s);
+        QCOMPARE(failed.size(), 1);
+        QCOMPARE(failed.first().at(0).toString(), conversation);
+        QCOMPARE(failed.first().at(1).toString(), u"no camera app"_s);
+        // Asked again (each photo connects the camera of now): still one answer per signal.
+        QVERIFY(chats->takePhoto(conversation));
+        camera->answer(QString());
+        Q_EMIT camera->failed(conversation, u"no camera app"_s);
+        QCOMPARE(failed.size(), 2);
+
+        // The process ends while the camera is in front; the photo comes when no app runs.
+        QVERIFY(chats->takePhoto(conversation));
+        ws.reset();
+        const QString second = cameraPhoto(m_tmp.filePath(u"cache/camera/photo-2.jpg"_s));
+        camera->answer(second);
+        QCOMPARE(camera->waiting.size(), 1);
+        // Another notebook opens first: the photo waits for its own.
+        auto other = open(notes());
+        QCOMPARE(camera->waiting.size(), 1);
+        QVERIFY(other->chats()->draftPictures(conversation).isEmpty());
+        other.reset();
+        // Its notebook again: the photo in the draft beside the first, the text kept.
+        ws = openFolder(root);
+        chats = ws->chats();
+        QTRY_VERIFY(camera->waiting.isEmpty());
+        const QStringList pictures = chats->draftPictures(conversation);
+        QCOMPARE(pictures.size(), 2);
+        QCOMPARE(pictures.first(), firstPath);
+        QVERIFY(ws->exists(pictures.last()));
+        QVERIFY(pictures.last() != firstPath);
+        QCOMPARE(chats->draft(conversation), u"Co to za liść? ąę"_s);
+        QVERIFY(!QFile::exists(second));
+        // A photo whose file is gone meanwhile: said, the draft as it was.
+        QSignalSpy lost(chats, &shell::WorkspaceChats::captureFailed);
+        QVERIFY(chats->takePhoto(conversation));
+        camera->answer(m_tmp.filePath(u"cache/camera/photo-gone.jpg"_s));
+        QCOMPARE(lost.size(), 1);
+        QCOMPARE(lost.first().at(0).toString(), conversation);
+        QCOMPARE(chats->draftPictures(conversation), pictures);
+        QVERIFY(camera->waiting.isEmpty()); // (handed out once: not again at the next start)
     }
 
     void timesAsShown()

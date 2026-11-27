@@ -18,8 +18,9 @@ qt_add_library(brulion_gitpanel STATIC
     ${_brulion_gitpanel_dir}/gitdiffrows.h ${_brulion_gitpanel_dir}/gitdiffrows.cpp
 )
 target_include_directories(brulion_gitpanel PUBLIC ${_brulion_gitpanel_dir})
-# (brulion_ui_helpers: the line diff, ui::diffSequences — GUI-free like this library.)
-target_link_libraries(brulion_gitpanel PUBLIC Qt6::Core brulion_core_gitcli PRIVATE brulion_ui_helpers)
+# (brulion_ui_helpers: the line diff, ui::diffSequences — GUI-free like this library; brulion_core_codeai:
+# the questions for the AI-written commit message and pull request.)
+target_link_libraries(brulion_gitpanel PUBLIC Qt6::Core brulion_core_gitcli PRIVATE brulion_ui_helpers brulion_core_codeai)
 qt_extract_metatypes(brulion_gitpanel)
 brulion_set_warnings(brulion_gitpanel)
 

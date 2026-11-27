@@ -12,6 +12,11 @@
 //   output) and Fast mode (formerly priority processing: its factor over Standard); above 272 K
 //   prompt tokens the long-context rates. Codex models no longer on the page keep the prices they
 //   had there (gpt-5-codex, gpt-5.1-codex*, gpt-5.2-codex, codex-mini-latest).
+// * Aliases: a name the provider's backend resolves itself, priced as the model its own program
+//   sends for an API key — the same work on the API. Codex's automatic approval review ("guardian"):
+//   "codex-auto-review" with a ChatGPT sign-in, gpt-5.6-luna with an API key
+//   (codex-rs/model-provider/src/provider.rs: DEFAULT_ / API_KEY_APPROVAL_REVIEW_PREFERRED_MODEL, the
+//   same from Codex 0.150 to main on 2026-11-27).
 
 #include "agentusage/usage.h"
 
@@ -114,12 +119,26 @@ const Entry Table[] = {
         {u"codex-mini-latest", plain(openai(1.50, 0.375, 6))},
 };
 
+struct Alias {
+    const char16_t *id;
+    const char16_t *pricedAs; ///< a model of Table
+};
+
+const Alias Aliases[] = {
+        {u"codex-auto-review", u"gpt-5.6-luna"},
+};
+
 const QHash<QString, Price> &table()
 {
     static const QHash<QString, Price> prices = [] {
         QHash<QString, Price> out;
         for (const Entry &e : Table)
             out.insert(QString::fromUtf16(e.id), e.price);
+        // (An alias of a model the table does not have stays without a price, never at zero.)
+        for (const Alias &a : Aliases) {
+            if (const auto as = out.constFind(QString::fromUtf16(a.pricedAs)); as != out.cend())
+                out.insert(QString::fromUtf16(a.id), *as);
+        }
         return out;
     }();
     return prices;

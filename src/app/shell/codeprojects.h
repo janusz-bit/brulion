@@ -268,12 +268,29 @@ public:
     /// The folder and branch of a new worktree for a thread `title` of project `id`:
     /// {folder: <worktreesRoot>/<id>/<slug>, branch: <branchPrefix><slug>} — a free folder name.
     Q_INVOKABLE QVariantMap worktreeFor(const QString &id, const QString &title) const;
-    /// Makes a git worktree of project `id` for a new thread `title`: a new branch (worktreeFor(),
-    /// one no branch has yet) from `base` ("" the project's HEAD; a remote-tracking branch such as
+    /// Makes a git worktree of project `id` for a new thread `title` (its first message): a new
+    /// branch (worktreeFor(), one no branch has yet; named by the AI first when the branch namer is
+    /// set — worktreeName()) from `base` ("" the project's HEAD; a remote-tracking branch such as
     /// "origin/main" is fetched first) — without waiting: worktreeCreated() says how it went. False
     /// when it could not start (no such project, no git). Another computer's project: made there
-    /// (from its HEAD).
+    /// (from its HEAD, named as that computer names it).
     Q_INVOKABLE bool createWorktree(const QString &id, const QString &title, const QString &base = QString());
+    /// What asks the AI for a new worktree's branch name (T3 Code's AI-made name; Workspace: the AI
+    /// of Settings → Extensions → AI, codeai::branchName): `namer(message, done)` calls `done` once
+    /// with the AI's answer ("" none: no AI set up, a failure) — at once or later — and gives back
+    /// what stops the question (or nothing). Unset: the message's slug at once.
+    using BranchNamer = std::function<std::function<void()>(const QString &message,
+                                                             std::function<void(const QString &answer)> done)>;
+    void setBranchNamer(BranchNamer namer) { m_namer = std::move(namer); }
+    /// How long createWorktree() waits for the AI's name before it stops the question and takes the
+    /// message's slug (T3 Code's 20 seconds).
+    static constexpr int BranchNameTimeoutMs = 20000;
+    void setBranchNameTimeout(int ms) { m_namerTimeoutMs = ms; }
+    /// A new worktree's name — its folder's, and its branch's after `prefix` — from the AI's
+    /// `answer` (codeai::readBranchName, then slug()) when it gives one that `prefix` + it is a valid
+    /// branch name with (gitcli::isValidBranchName); else the slug of the thread's `title`, the name
+    /// without the AI.
+    static QString worktreeName(const QString &answer, const QString &title, const QString &prefix);
     /// The project's worktrees but its own folder: worktreesListed(id, [{folder, branch, detached}]).
     Q_INVOKABLE bool listWorktrees(const QString &id);
     /// The branches of the repository of `folder`: branchesListed(folder, [{name, remote, current,
@@ -410,7 +427,8 @@ public:
     static bool startEditor(const QString &program, const QStringList &arguments, const QString &workDir);
 
     /// "Mój Projekt (2)!" → "moj-projekt-2": lower-case ASCII letters, digits and dashes, at most
-    /// 40 characters ("project" when nothing is left).
+    /// 40 characters ("project" when nothing is left) — acp::projectSlug(), the same rule as the
+    /// computer that shares its projects with the phone names them by.
     static QString slug(const QString &text);
 
 Q_SIGNALS:
@@ -450,6 +468,8 @@ private:
     std::function<QByteArray()> m_load;
     std::function<void(const QByteArray &)> m_save;
     std::function<void(const QStringList &)> m_restore;
+    BranchNamer m_namer;
+    int m_namerTimeoutMs = BranchNameTimeoutMs;
     QFileSystemWatcher *m_watcher = nullptr;
     QTimer m_configTimer;
     QStringList m_configDue;
@@ -508,6 +528,15 @@ private:
     /// folder name no file has in `dir`: done(branch, folderName).
     void freeName(const QString &folder, const QString &dir, const QString &base,
                   std::function<void(const QString &branch, const QString &name)> done);
+    /// The new worktree's name for the thread `title`: the AI's (m_namer, at most m_namerTimeoutMs)
+    /// or the title's slug — done(name) once, maybe at once.
+    void nameWorktree(const QString &title, std::function<void(const QString &name)> done);
+    /// createWorktree()'s part once named: the base fetched when it is a remote one, the worktree
+    /// of a free branch and folder of `name` made; worktreeCreated() — `fail(error)` on failure.
+    void makeWorktree(const QString &id, const QString &repo, const QString &from, const QString &name,
+                      const std::function<void(const QString &error)> &fail);
+    /// slug() without its fallback: "" when nothing is left.
+    static QString slugOrEmpty(const QString &text);
 };
 
 } // namespace brulion::shell

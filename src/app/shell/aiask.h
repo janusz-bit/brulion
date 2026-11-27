@@ -1,8 +1,9 @@
 #pragma once
 // AiAsk — one question to the AI of the user's settings (b.ai's model: Settings → Extensions → AI),
 // answered as text: what the app asks the AI for by itself outside a conversation — Code mode's
-// commit message written from the changes (CodeView hands the question of GitChangesPanel's commit
-// dialog to it; docs/CODE-GIT.md "The panel"). QML: `AiAsk { workspace: Workspace }`.
+// commit message written from the changes and a pull request's title and description written from
+// the branch (CodeView hands the questions of GitChangesPanel's commit and pull request dialogs to it,
+// made by codeai; docs/CODE-GIT.md "The panel"). QML: `AiAsk { workspace: Workspace }`.
 //
 //   ask(system, prompt) → true when it was sent; answered(ok, text) once (the text trimmed, a
 //   fenced block around all of it taken off); a new ask() stops the one on its way; stop().

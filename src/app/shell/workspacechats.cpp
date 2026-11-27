@@ -30,6 +30,7 @@
 #include <QClipboard>
 #include <QDateTime>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QGuiApplication>
 #include <QImage>
@@ -244,6 +245,7 @@ WorkspaceChats::WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extens
     connect(m_workspace, &Workspace::readyChanged, this, &WorkspaceChats::recoverAgentTurns);
     connect(m_extensions, &WorkspaceExtensions::aiSettingsChanged, this, [this] {
         Q_EMIT settingsChanged();
+        Q_EMIT titlesChanged(); // (canRegenerateTitles)
         startWaiting(); // (a provider on the network answers every conversation at once)
     });
     // The page of a turn renamed or moved: the turn follows it (its answer goes where it is now);
@@ -261,12 +263,7 @@ WorkspaceChats::WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extens
     });
     // (The waiting messages and the draft follow their conversation, whether a turn ran or not.)
     connect(m_workspace, &Workspace::pathRenamed, this, &WorkspaceChats::moveQueue);
-    connect(m_workspace, &Workspace::pathRenamed, this, [this](const QString &from, const QString &to) {
-        if (const QString text = draft(from); !text.isEmpty()) {
-            setDraft(from, QString());
-            setDraft(to, text);
-        }
-    });
+    connect(m_workspace, &Workspace::pathRenamed, this, &WorkspaceChats::moveDraft);
     // An unread answer follows its conversation (a rename, a move) and goes with it.
     connect(m_workspace, &Workspace::pathRenamed, this, [this](const QString &from, const QString &to) {
         if (!isUnread(from))
@@ -316,6 +313,8 @@ WorkspaceChats::WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extens
         if (m_workspace->ready() && m_autoArchiveDays > 0)
             archiveUntouched();
     });
+    // Photos the camera took for this notebook, also while the app's process was gone (Android).
+    connect(m_workspace, &Workspace::readyChanged, this, &WorkspaceChats::connectCamera);
 }
 
 void WorkspaceChats::setStatus(const QString &key, const QString &text)
@@ -1481,6 +1480,7 @@ void WorkspaceChats::dismissFailure(const QString &path)
 
 void WorkspaceChats::reset()
 {
+    stopTitles();
     m_secrets->reset();
     m_agents->reset();
     m_waiting.clear();
@@ -1499,8 +1499,12 @@ void WorkspaceChats::reset()
         t->clearPartial();
         Q_EMIT t->stateChanged();
     }
-    for (const QString &picture : std::exchange(m_added, {}))
-        m_workspace->discardImport(picture);
+    // (Pictures a draft keeps stay with it, for when the notebook opens again.)
+    const QSet<QString> drafted = draftedPictures();
+    for (const QString &picture : std::exchange(m_added, {})) {
+        if (!drafted.contains(picture.toLower()))
+            m_workspace->discardImport(picture);
+    }
     // (The notebook's waiting messages stay in its device state, for when it opens again.)
     m_queued.clear();
     m_held.clear();
@@ -1937,7 +1941,7 @@ QString WorkspaceChats::picturePath(const QString &name, const QString &conversa
 
 bool WorkspaceChats::cameraAvailable() const
 {
-    return platform::cameraAvailable();
+    return platform::photoCamera() != nullptr;
 }
 
 bool WorkspaceChats::dictationAvailable() const
@@ -1981,23 +1985,54 @@ void WorkspaceChats::useSpeechRecognizer()
     Q_EMIT dictationChanged();
 }
 
-bool WorkspaceChats::takePhoto()
+bool WorkspaceChats::takePhoto(const QString &draft)
 {
-    const QPointer<WorkspaceChats> self(this);
-    return platform::takePhoto([self](const QString &file, const QString &error) {
-        if (!self)
-            return;
-        if (file.isEmpty()) {
-            if (!error.isEmpty())
-                Q_EMIT self->captureFailed(error);
-            return;
-        }
-        const QString path = self->addPicture(QUrl::fromLocalFile(file));
-        if (path.isEmpty())
-            Q_EMIT self->captureFailed(tr("The photo could not be stored in the notebook."));
-        else
-            Q_EMIT self->photoTaken(path);
-    });
+    connectCamera();
+    platform::PhotoCamera *camera = platform::photoCamera();
+    if (!camera || !m_workspace->ready())
+        return false;
+    return camera->take(m_workspace->vault()->id(), draft);
+}
+
+void WorkspaceChats::connectCamera()
+{
+    // (Once per camera: one replaced is deleted, its connections with it.)
+    if (platform::PhotoCamera *camera = platform::photoCamera()) {
+        connect(camera, &platform::PhotoCamera::photosWaiting, this, &WorkspaceChats::takeCapturedPhotos,
+                Qt::UniqueConnection);
+        connect(camera, &platform::PhotoCamera::failed, this, &WorkspaceChats::cameraFailed, Qt::UniqueConnection);
+    }
+    takeCapturedPhotos();
+}
+
+void WorkspaceChats::cameraFailed(const QString &draft, const QString &why)
+{
+    if (!why.isEmpty()) // (none taken: nothing to say)
+        Q_EMIT captureFailed(draft, why);
+}
+
+void WorkspaceChats::takeCapturedPhotos()
+{
+    platform::PhotoCamera *camera = platform::photoCamera();
+    if (!camera || !m_workspace->ready())
+        return; // (they wait with the camera for this notebook)
+    for (const platform::CapturedPhoto &photo : camera->takePhotos(m_workspace->vault()->id()))
+        placePhoto(photo);
+}
+
+void WorkspaceChats::placePhoto(const platform::CapturedPhoto &photo)
+{
+    const QString path = addPicture(QUrl::fromLocalFile(photo.file));
+    if (path.isEmpty()) {
+        Q_EMIT captureFailed(photo.purpose, tr("The photo could not be stored in the notebook."));
+        return;
+    }
+    QFile::remove(photo.file); // (the notebook's copy is the photo now)
+    QStringList pictures = draftPictures(photo.purpose);
+    if (!pictures.contains(path))
+        pictures.append(path);
+    setDraft(photo.purpose, draft(photo.purpose), pictures);
+    Q_EMIT photoTaken(photo.purpose, path);
 }
 
 void WorkspaceChats::connectSpeech()
@@ -2423,35 +2458,97 @@ namespace {
 
 const QString DraftsKey = u"chat/drafts"_s;
 
+/// A draft as the device state keeps it: its text — an older version's whole entry — or {text,
+/// pictures}.
+struct Draft {
+    QString text;
+    QStringList pictures;
+    bool isEmpty() const { return text.trimmed().isEmpty() && pictures.isEmpty(); }
+
+    static Draft from(const QJsonValue &value)
+    {
+        if (!value.isObject())
+            return {value.toString(), {}};
+        const QJsonObject o = value.toObject();
+        Draft draft{o.value(u"text"_s).toString(), {}};
+        for (const QJsonValue &picture : o.value(u"pictures"_s).toArray()) {
+            if (const QString path = picture.toString(); !path.isEmpty() && !draft.pictures.contains(path))
+                draft.pictures.append(path);
+        }
+        return draft;
+    }
+    /// The text alone when there are no pictures (what an older version reads).
+    QJsonValue toJson() const
+    {
+        if (pictures.isEmpty())
+            return text;
+        return QJsonObject{{u"text"_s, text}, {u"pictures"_s, QJsonArray::fromStringList(pictures)}};
+    }
+};
+
+Draft storedDraft(const LocalStore *local, const QString &path)
+{
+    return local ? Draft::from(local->get(DraftsKey).toObject().value(path.toLower())) : Draft();
+}
+
 } // namespace
 
 QString WorkspaceChats::draft(const QString &path) const
 {
-    LocalStore *local = m_workspace->vault() ? m_workspace->vault()->store() : nullptr;
-    return local ? local->get(DraftsKey).toObject().value(path.toLower()).toString() : QString();
+    return storedDraft(m_workspace->vault() ? m_workspace->vault()->store() : nullptr, path).text;
 }
 
-void WorkspaceChats::setDraft(const QString &path, const QString &text)
+QStringList WorkspaceChats::draftPictures(const QString &path) const
+{
+    QStringList pictures = storedDraft(m_workspace->vault() ? m_workspace->vault()->store() : nullptr, path).pictures;
+    pictures.removeIf([this](const QString &picture) { return !m_workspace->exists(picture); });
+    return pictures;
+}
+
+void WorkspaceChats::setDraft(const QString &path, const QString &text, const QStringList &pictures)
 {
     LocalStore *local = m_workspace->vault() ? m_workspace->vault()->store() : nullptr;
     if (!local)
         return;
     QJsonObject all = local->get(DraftsKey).toObject();
     const QString key = path.toLower();
-    if (text.trimmed().isEmpty()) {
+    const Draft kept{text.left(120000), pictures};
+    if (kept.isEmpty()) {
         if (!all.contains(key))
             return;
         all.remove(key);
     } else {
-        if (all.value(key).toString() == text)
+        if (all.value(key) == kept.toJson())
             return;
-        all.insert(key, text.left(120000));
+        all.insert(key, kept.toJson());
     }
     while (all.size() > 200)
         all.remove(all.keys().first());
     local->set(DraftsKey, all);
     ++m_draftSerial;
     Q_EMIT draftsChanged();
+}
+
+void WorkspaceChats::moveDraft(const QString &from, const QString &to)
+{
+    const QString text = draft(from);
+    const QStringList pictures = draftPictures(from);
+    if (text.isEmpty() && pictures.isEmpty())
+        return;
+    setDraft(from, QString());
+    setDraft(to, text, pictures);
+}
+
+QSet<QString> WorkspaceChats::draftedPictures() const
+{
+    QSet<QString> pictures;
+    const LocalStore *local = m_workspace->vault() ? m_workspace->vault()->store() : nullptr;
+    const QJsonObject all = local ? local->get(DraftsKey).toObject() : QJsonObject();
+    for (const QJsonValue &value : all) {
+        for (const QString &picture : Draft::from(value).pictures)
+            pictures.insert(picture.toLower());
+    }
+    return pictures;
 }
 
 std::pair<int, QString> WorkspaceChats::mentionAt(const QString &text, int caret)
@@ -2738,8 +2835,8 @@ QStringList WorkspaceChats::archiveUntouched()
             continue;
         const QString key = f.path.toLower();
         if (isRunning(f.path) || asking(f.path) || !failureOf(f.path).isEmpty() || isUnread(f.path) || isShown(f.path)
-            || !m_queued.value(key).isEmpty() || awaited.contains(key) || !draft(f.path).trimmed().isEmpty()
-            || isSideChat(f.path))
+            || !m_queued.value(key).isEmpty() || awaited.contains(key)
+            || !storedDraft(m_workspace->vault()->store(), f.path).isEmpty() || isSideChat(f.path))
             continue;
         bool ok = false;
         const QString content = m_workspace->read(f.path, &ok);
