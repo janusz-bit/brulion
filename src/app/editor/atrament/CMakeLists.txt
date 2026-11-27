@@ -26,6 +26,7 @@ qt_add_library(brulion_editor_atrament STATIC
     tablelayout.h tablelayout.cpp
     tablerows_p.h tablerows.cpp
     tableselection.cpp
+    tablefilters.cpp
     picturecache.h picturecache.cpp
     mediarows_p.h mediarows.cpp queryrows.cpp
 )

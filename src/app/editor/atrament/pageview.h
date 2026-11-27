@@ -517,6 +517,8 @@ public:
         atrament::Color input = atrament::rgb(0xffffff);                // Theme.bgElevated2: the edited cell
         atrament::Color hover = atrament::rgba(0x0000000e);             // Theme.bgHover: a button under the mouse
         atrament::Color picked = atrament::rgba(0x3b5bdb29);            // Theme.accent at 16 %: a selected cell
+        atrament::Color accent = atrament::rgb(0x3b5bdb);               // Theme.accent: a filtered column's funnel
+        atrament::Color muted = atrament::rgb(0x6b6f76);                // Theme.fgMuted: the rows shown
         std::u16string fontFamily = u"Brulion Inter";                   // Theme.fontUi
         std::u16string monoFamily = u"Brulion JetBrains Mono";          // Theme.fontMono: a formula edited
         float fontSize = 14;                                            // Theme.textBase
@@ -524,8 +526,11 @@ public:
         float rowHeight = 32;                                           // 40 on touch UIs
         float cellPadding = 12;                                         // Theme.space3
         float radius = 10;                                              // Theme.radius
-        float buttonHeight = 28;                                        // Theme.controlHeightSm
+        float buttonHeight = 28;                                        // Theme.controlHeightSm (a filter field too)
         float buttonTextSize = 12;                                      // Theme.textSm
+        float filterHeight = 36;                                        // the filter row (48 on touch UIs)
+        float fieldTextSize = 13;                                       // Theme.textControl: a filter field
+        float statusTextSize = 11;                                      // Theme.textXs: the rows shown
     };
     void setDrawsTables(bool on, const TableLook &look, atrament::Context<PageView> &cx);
     bool drawsTables() const { return m_drawsTables; }
@@ -594,6 +599,21 @@ public:
     void copyCells(bool cut, atrament::Context<PageView> &cx);
     void clearCells(atrament::Context<PageView> &cx);
     void pasteCells(atrament::Context<PageView> &cx);
+    // --- The filter row (tablefilters.cpp): while a table filters (PageController::
+    // setTableFilterOpen) a field per column under its header — typing filters its rows
+    // (setTableFilter: nothing written), Esc empties a field and in an empty one hides the row and
+    // selects the table, Enter leaves it —, the funnel of a filtered column in the header, and
+    // under the grid how many rows show with "Clear filters". focusFilter() gives column
+    // `column`'s field the keys (false: no such table, or it does not filter).
+    bool focusFilter(int row, int column, atrament::Context<PageView> &cx);
+    // cellBounds(row, kFilterRow, c): where the last frame drew column c's filter field;
+    // cellBounds(row, kClearFiltersRow, 0): its "Clear filters".
+    static constexpr int kFilterRow = -3;
+    static constexpr int kClearFiltersRow = -4;
+    // Column `column`'s filter field has the focus.
+    bool filterFocused(int row, int column) const;
+    // "2 of 3 rows shown" (TableBlockView's filterStatus).
+    static QString filterStatus(const struct TableGrid &grid);
     // A toast for the host (BlockEditor.notice): the text and "success", "info" or "error".
     std::function<void(const QString &text, const QString &level)> onNotice;
     // The cell selection was made or moved (`selected`), or it ended.
@@ -628,6 +648,16 @@ private:
     static std::pair<int, int> neighbourCell(const struct TableGrid &grid, int r, int c, std::u16string_view key);
     void pasteCellsAt(int row, int tableRow, int column, int rowCount, int columnCount, atrament::Context<PageView> &cx);
     bool editCellWith(int row, int tableRow, int column, const QString &typed, atrament::Context<PageView> &cx);
+    // The filter row's fields (tablefilters.cpp).
+    struct FilterField {
+        atrament::Entity<atrament::TextInput> input;
+        atrament::Subscription changed;
+    };
+    atrament::AnyElement renderFilterRow(std::size_t row, quint64 uid, const TableEntry &entry);
+    std::shared_ptr<FilterField> filterField(quint64 uid, int column, const struct TableGrid &grid);
+    void filterChanged(quint64 uid, int column);
+    bool filterKey(quint64 uid, int column, const atrament::Keystroke &k, atrament::Window &w,
+                   atrament::Context<PageView> &cx);
     // Keeps the controller's signals while the view lives (setController's).
     void connectTables(atrament::Context<PageView> &cx);
     struct Connections {
@@ -669,6 +699,7 @@ private:
     } m_cellSel;
     bool m_keepCellSelection = false;    // (an undo of the selection's own: blocks it selects end nothing)
     std::optional<CellKey> m_revealCell; // the cursor cell to bring into view in the next frame
+    std::unordered_map<CellKey, std::shared_ptr<FilterField>, CellKeyHash> m_filterFields; // (uid, kFilterRow, c)
     // --- Pictures, files, embedded blocks and query results drawn by Atrament (docs/ATRAMENT.md
     // M2 step 5; mediarows.cpp, queryrows.cpp, picturecache.h). A block's pictures and files below
     // its text (EmbedView, PdfEmbedTile), its embedded pages, sections and blocks (TransclusionView)

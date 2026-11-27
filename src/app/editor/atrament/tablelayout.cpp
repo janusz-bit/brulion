@@ -93,6 +93,11 @@ QList<int> TableGrid::rowsFrom(int r) const
     return out;
 }
 
+bool TableGrid::filtered(int c) const
+{
+    return c >= 0 && std::size_t(c) < filters.size() && !filters[std::size_t(c)].trimmed().isEmpty();
+}
+
 QList<int> TableGrid::rowsBetween(int from, int to) const
 {
     QList<int> out;
@@ -149,6 +154,11 @@ TableGrid readTableGrid(const QVariantMap &data)
         g.shown.push_back(!(s.typeId() == QMetaType::Bool && !s.toBool()));
     g.headerLines = std::clamp(data.value(u"headerLines"_s, 1).toInt(), 1, 3);
     g.filtering = data.value(u"filtering"_s).toBool();
+    const QStringList filters = data.value(u"filters"_s).toStringList();
+    g.filters.reserve(std::size_t(header.size()));
+    for (qsizetype c = 0; c < header.size(); ++c)
+        g.filters.push_back(c < filters.size() ? filters.at(c) : QString());
+    g.shownCount = data.contains(u"shownCount"_s) ? data.value(u"shownCount"_s).toInt() : g.rowCount();
     return g;
 }
 

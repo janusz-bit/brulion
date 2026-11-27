@@ -218,6 +218,7 @@ private Q_SLOTS:
     void copyCutDeleteAndPasteCells();
     void typingOverASelectedCell();
     void cellSelectionDrawnAndRead();
+    void filterRow();
 };
 
 void TestAtramentTables::tableDrawnByAtrament()
@@ -797,12 +798,12 @@ void TestAtramentTables::foreignWhenNotDrawn()
     for (const ForeignFrame &f : off.view().foreignFrames())
         foreign = foreign || (f.kind == ForeignFrame::Kind::Row && f.row == TableRow);
     QVERIFY(foreign);
-    // A table showing its filter row (TableBlockView's fields) stays the QML view's too.
+    // A table showing its filter row is Atrament's too (filterRow).
     Harness h;
     QVERIFY(h.view().drawsRow(TableRow));
     h.model()->setTableFilterOpen(TableRow, true);
     h.tw.settle();
-    QVERIFY(!h.view().drawsRow(TableRow));
+    QVERIFY(h.view().drawsRow(TableRow));
     h.model()->setTableFilterOpen(TableRow, false);
     h.tw.settle();
     QVERIFY(h.view().drawsRow(TableRow));
@@ -1047,6 +1048,97 @@ void TestAtramentTables::cellSelectionDrawnAndRead()
     for (const at::AccessibilityNode *n : h.window().accessibilityTree().nodes())
         selectedCells += n->role == at::Role::Cell && n->states.selected;
     QCOMPARE(selectedCells, 4);
+}
+
+void TestAtramentTables::filterRow()
+{
+    // (TableSelfTest's filters: the filter row under the header with the keys in the column's
+    // field, typing "> 40" hides a row, nothing is written, the rows shown counted, "Clear filters".)
+    Harness h;
+    const QString before = h.controller.text();
+    h.window().setAccessibilityEnabled(true);
+    h.controller.setTableFilterOpen(TableRow, true);
+    h.tw.settle();
+    // Drawn by Atrament, no QML delegate over it.
+    QVERIFY(h.view().drawsRow(TableRow));
+    for (const ForeignFrame &f : h.view().foreignFrames())
+        QVERIFY(f.kind != ForeignFrame::Kind::Row || f.row != TableRow);
+    // A field per column between the header and the first row, in its column.
+    const PageView::TableLook look = testLook();
+    QCOMPARE(h.cell(0, 0).top(), h.cell(-1, 0).bottom() + look.filterHeight);
+    for (int c = 0; c < 4; ++c) {
+        const at::Rect f = h.cell(PageView::kFilterRow, c);
+        QVERIFY2(std::abs(f.left() - h.cell(-1, c).left()) < 0.5f && std::abs(f.width() - h.cell(-1, c).width()) < 0.5f,
+                 qPrintable(QString::number(f.left())));
+        QVERIFY(f.top() >= h.cell(-1, c).bottom() - 0.5f && f.bottom() <= h.cell(0, c).top() + 0.5f);
+    }
+    auto node = [&](at::Role role, std::u16string_view name) -> const at::AccessibilityNode * {
+        for (const at::AccessibilityNode *n : h.window().accessibilityTree().nodes())
+            if (n->role == role && n->name == name)
+                return n;
+        return nullptr;
+    };
+    QVERIFY(node(at::Role::TextInput, u"Filter of column Cena"));
+    // The column's field takes the keys (the block menu's "Filter by this column…"); typing filters.
+    bool started = false;
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &cx) {
+        v.onEditingStarted = [&] { started = true; };
+        QVERIFY(v.focusFilter(TableRow, 2, cx));
+    });
+    h.tw.settle();
+    QVERIFY(started);
+    h.tw.simulateTyping(u"> 40");
+    h.tw.settle();
+    const TableGrid g = readTableGrid(h.model()->index(TableRow).data(BlockListModel::TableDataRole).toMap());
+    QCOMPARE(g.filters[2], u"> 40"_s);
+    QCOMPARE(g.shownRows(-2), (std::vector<int>{0, 1})); // Fuga (38) hidden
+    QCOMPARE(h.controller.text(), before);                // filtering writes nothing
+    QVERIFY(!h.view().cellBounds(TableRow, 2, 0));         // its row is not drawn
+    QVERIFY(h.view().cellBounds(TableRow, 1, 0));
+    // The funnel in the column's header; the rows shown counted under the grid.
+    auto accentNear = [&](at::Rect r) {
+        for (int y = int(r.top()); y < int(r.bottom()); ++y)
+            for (int x = int(r.right()) - 18; x < int(r.right()) - 2; ++x)
+                if (h.near(look.accent, h.tw.pixel(x, y), 60))
+                    return true;
+        return false;
+    };
+    QVERIFY(accentNear(h.cell(-1, 2)));
+    QVERIFY(!accentNear(h.cell(-1, 1)));
+    const QString status = h.view().filterStatus(readTableGrid(h.model()->index(TableRow).data(BlockListModel::TableDataRole).toMap()));
+    QVERIFY2(status.startsWith(u"2 of 3"_s), qPrintable(status));
+    bool said = false; // (read with the row: its list item is named by it)
+    for (const at::AccessibilityNode *n : h.window().accessibilityTree().nodes())
+        said = said || n->name == u16View(status);
+    QVERIFY(said);
+    // Esc empties the field, the rows come back; Esc in the empty field hides the filter row and
+    // selects the table.
+    h.keys(u"escape");
+    const TableGrid cleared = readTableGrid(h.model()->index(TableRow).data(BlockListModel::TableDataRole).toMap());
+    QVERIFY(cleared.filtering && cleared.filters[2].isEmpty() && cleared.shownRows(-2).size() == 3);
+    h.keys(u"escape");
+    QVERIFY(!readTableGrid(h.model()->index(TableRow).data(BlockListModel::TableDataRole).toMap()).filtering);
+    QCOMPARE(h.controller.selectedRow(), TableRow);
+    QVERIFY(!h.view().cellBounds(TableRow, PageView::kFilterRow, 0));
+    // "Clear filters" under the grid.
+    h.controller.setTableFilterOpen(TableRow, true);
+    h.tw.settle();
+    h.tw.simulateClick(h.cell(PageView::kFilterRow, 1).center());
+    h.tw.settle();
+    h.tw.simulateTyping(u"4");
+    h.tw.settle();
+    QCOMPARE(readTableGrid(h.model()->index(TableRow).data(BlockListModel::TableDataRole).toMap()).filters[1], u"4"_s);
+    const at::AccessibilityNode *clear = node(at::Role::Button, u"Clear filters");
+    QVERIFY(clear);
+    h.tw.simulateClick(clear->bounds.center());
+    h.tw.settle();
+    QVERIFY(!readTableGrid(h.model()->index(TableRow).data(BlockListModel::TableDataRole).toMap()).filtering);
+    QCOMPARE(h.controller.text(), before);
+    // A cell clicked while the filters show is edited as before.
+    h.controller.setTableFilterOpen(TableRow, true);
+    h.tw.settle();
+    h.clickCell(1, 0, 0);
+    QVERIFY(h.editing(1, 0));
 }
 
 QTEST_MAIN(TestAtramentTables)

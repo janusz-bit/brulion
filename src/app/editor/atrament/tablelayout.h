@@ -34,7 +34,11 @@ struct TableGrid {
     std::vector<std::vector<TableGridCell>> rows; // each as wide as the header
     std::vector<bool> shown;                     // per row: passes the filters
     int headerLines = 1;                         // a header's `<br>` lines (1…3)
-    bool filtering = false;                      // the filter row is shown (the QML view's)
+    bool filtering = false;                      // the filter row is shown
+    std::vector<QString> filters;                // per column: its filter's text ("": none)
+    int shownCount = 0;                          // how many rows pass the filters
+    // Column `c` has a filter (its funnel in the header).
+    bool filtered(int c) const;
 
     int columnCount() const { return int(header.size()); }
     int rowCount() const { return int(rows.size()); }

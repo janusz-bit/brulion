@@ -32,6 +32,7 @@
 #include "editorhost.h"
 #include "editstyles.h"
 #include "pagecontroller.h"
+#include "pageicons.h"
 #include "tablelayout.h"
 #include "tablerows_p.h"
 #include "text/textsystem.h"
@@ -96,11 +97,9 @@ bool PageView::isTable(int row) const
     const QModelIndex index = m_model->index(row, 0);
     if (index.data(BlockListModel::ViewRole).toString() != u"table")
         return false;
-    // A table whose filter row is shown stays the QML view's (its fields are TableBlockView's); a
-    // table the calculator cannot read too.
+    // A table the calculator cannot read stays the QML view's.
     const QVariantMap data = index.data(BlockListModel::TableDataRole).toMap();
-    return !data.value(QStringLiteral("header")).toStringList().isEmpty()
-           && !data.value(QStringLiteral("filtering")).toBool();
+    return !data.value(QStringLiteral("header")).toStringList().isEmpty();
 }
 
 const PageView::TableEntry *PageView::tableEntry(int row) const
@@ -235,6 +234,11 @@ at::AnyElement PageView::renderTableRow(std::size_t row, const QModelIndex &inde
         m_tablesPurged = m_frame;
         std::erase_if(m_cellFrames, [this](const auto &kv) { return kv.second.frame + 2 < m_frame; });
         std::erase_if(m_tables, [this](const auto &kv) { return !kv.second || kv.second->frame + 2 < m_frame; });
+        // (A filter field goes with its table, or when the table no longer filters.)
+        std::erase_if(m_filterFields, [this](const auto &kv) {
+            const auto it = m_tables.find(kv.first.uid);
+            return it == m_tables.end() || !it->second || !it->second->grid.filtering;
+        });
     }
     const TableEntry *entry = tableEntry(int(row));
     if (!entry)
@@ -266,6 +270,11 @@ at::AnyElement PageView::renderTableRow(std::size_t row, const QModelIndex &inde
             std::move(header).child(renderTableCell(row, uid, grid, -1, c, false));
         std::move(rows).child(std::move(header));
     }
+    // The filter fields under it (tablefilters.cpp).
+    if (grid.filtering)
+        std::move(rows).child(renderFilterRow(row, uid, *entry));
+    else
+        std::erase_if(m_filterFields, [uid](const auto &kv) { return kv.first.uid == uid; });
     bool first = true;
     for (const int r : grid.shownRows(editing ? m_cellRow : -2)) {
         at::Div tr = at::div().id(at::ElementId::number(std::uint64_t(r) + 1)).flexRow().role(at::Role::Row);
@@ -293,13 +302,17 @@ at::AnyElement PageView::renderTableRow(std::size_t row, const QModelIndex &inde
                              .textSize(look.fontSize)
                              .lineHeight(look.lineHeight)
                              .child(at::div().id(u"table").flexRow().overflowXScroll().child(std::move(rows)));
-    // "+ Row" / "+ Column" while a cell is edited or the table is selected, always on touch UIs.
-    if (editable && (editing || index.data(BlockListModel::IsSelectedRole).toBool() || m_metrics.touch)) {
+    // "+ Row" / "+ Column" while a cell is edited or the table is selected, always on touch UIs;
+    // while it filters, how many rows show and "Clear filters" (also in reading mode).
+    const bool adds = editable && (editing || index.data(BlockListModel::IsSelectedRole).toBool() || m_metrics.touch);
+    if (adds || grid.filtering) {
         const at::EntityId self = m_selfId;
-        auto button = [&](std::u16string_view id, const QString &label, bool addColumn) {
+        // (0: add a row, 1: add a column, 2: clear the filters.)
+        auto button = [&](std::u16string_view id, const QString &label, int action) {
             const at::Color ink = m_palette.text;
             return at::div()
                     .id(id)
+                    .relative()
                     .flexRow()
                     .itemsCenter()
                     .gap(5)
@@ -312,19 +325,26 @@ at::AnyElement PageView::renderTableRow(std::size_t row, const QModelIndex &inde
                     .fontMedium()
                     .role(at::Role::Button)
                     .hover([hover = look.hover](at::Style &s) { s.background = at::Background::solid(hover); })
-                    .onClick([self, row, addColumn](const at::ClickEvent &, at::Window &, at::App &a) {
+                    .onClick([self, row, action](const at::ClickEvent &, at::Window &, at::App &a) {
                         a.updateEntity<PageView>(self, [&](PageView &v, at::Context<PageView> &) {
                             if (!v.m_controller)
                                 return;
-                            if (addColumn)
+                            if (action == 1)
                                 v.m_controller->addTableColumn(int(row));
-                            else
+                            else if (action == 0)
                                 v.m_controller->addTableRow(int(row));
+                            else
+                                v.m_controller->setTableFilterOpen(int(row), false);
                         });
                     })
-                    // The plus (Atrament has no icons yet: two bars).
-                    .child(at::canvas([ink](at::Rect b, at::Window &w, at::App &) {
+                    // The plus (two bars), the ×.
+                    .child(at::canvas([ink, action](at::Rect b, at::Window &w, at::App &) {
                                const at::Point c = b.center();
+                               if (action == 2) {
+                                   if (const auto icon = pageIcon(QStringLiteral("x")))
+                                       w.paintIcon(*icon, at::Rect::fromXYWH(c.x - 6, c.y - 6, 12, 12), ink);
+                                   return;
+                               }
                                const float arm = 5, t = 1.5f;
                                w.paintQuad(at::Rect::fromXYWH(c.x - arm, c.y - t / 2, 2 * arm, t), at::Background::solid(ink),
                                            {}, at::transparent(), at::Corners::all(t / 2));
@@ -335,12 +355,35 @@ at::AnyElement PageView::renderTableRow(std::size_t row, const QModelIndex &inde
                                    .flexShrink0())
                     .child(at::text(u16View(label)));
         };
-        std::move(column).child(at::div()
-                                        .flexRow()
-                                        .gap(4)
-                                        .mt(4)
-                                        .child(button(u"addRow", tableText("Row"), false))
-                                        .child(button(u"addColumn", tableText("Column"), true)));
+        at::Div bar = at::div().flexRow().flexWrap().itemsCenter().gap(4).mt(4);
+        if (adds)
+            std::move(bar).child(button(u"addRow", tableText("Row"), 0)).child(button(u"addColumn", tableText("Column"), 1));
+        if (grid.filtering) {
+            // (TableBlockView's filterStatus and clearFilters, the line under the add buttons when
+            // both do not fit side by side.)
+            const QString status = filterStatus(grid);
+            PageView *recorder = this;
+            const CellKey clearKey{uid, kClearFiltersRow, 0};
+            m_cellFrames[clearKey].frame = m_frame;
+            std::move(bar).child(at::div()
+                                         .id(u"filterStatus")
+                                         .flexRow()
+                                         .itemsCenter()
+                                         .gap(4)
+                                         .ml(adds ? 8 : 4)
+                                         .child(at::div()
+                                                        .textSize(look.statusTextSize)
+                                                        .lineHeight(std::round(look.statusTextSize * 1.4f))
+                                                        .textColor(look.muted)
+                                                        .child(at::text(u16View(status))))
+                                         .child(button(u"clearFilters", tableText("Clear filters"), 2)
+                                                        .child(at::canvas([recorder, clearKey](at::Rect b, at::Window &, at::App &) {
+                                                                   recorder->m_cellFrames[clearKey].bounds = b;
+                                                               })
+                                                                       .absolute()
+                                                                       .inset(0))));
+        }
+        std::move(column).child(std::move(bar));
     }
     if (editing) {
         const at::EntityId self = m_selfId;
@@ -397,11 +440,12 @@ at::AnyElement PageView::renderTableCell(std::size_t row, quint64 uid, const Tab
     const bool formulaTint = cell.formula && !edited;
     // In the selected rectangle of cells; the cursor cell of it (outlined).
     const bool picked = !edited && cellSelected(int(row), r, c);
+    const bool funnel = header && grid.filtered(c);
     const bool cursorCell = picked && m_cellSel.cells.cursorRow == r && m_cellSel.cells.cursorColumn == c;
     if (picked)
         std::move(d).selected(true);
     std::move(d).child(
-            at::canvas([self, key, top, header, c, edited, formulaTint, picked, cursorCell](at::Rect b, at::Window &w, at::App &) {
+            at::canvas([self, key, top, header, c, edited, formulaTint, picked, cursorCell, funnel](at::Rect b, at::Window &w, at::App &) {
                 const TableLook &look = self->m_tableLook;
                 self->m_cellFrames[key].bounds = b;
                 if (edited)
@@ -417,6 +461,14 @@ at::AnyElement PageView::renderTableCell(std::size_t row, quint64 uid, const Tab
                 if (c > 0)
                     w.paintQuad(at::Rect::fromXYWH(b.left(), b.top(), 1, b.height()),
                                 at::Background::solid(look.borderSubtle), {}, at::transparent(), {});
+                if (funnel) {
+                    // (BIcon "filter", 12 px, 4 px in from the right.)
+                    if (const auto icon = pageIcon(QStringLiteral("filter")))
+                        w.paintIcon(*icon, at::Rect::fromXYWH(b.right() - 16, b.center().y - 6, 12, 12), look.accent);
+                    else
+                        w.paintQuad(at::Rect::fromXYWH(b.right() - 13, b.center().y - 3, 6, 6), at::Background::solid(look.accent),
+                                    {}, at::transparent(), at::Corners::all(3));
+                }
             })
                     // The selection's cursor cell shown (sideways in the table, the table in the page).
                     .onPrepaint([self, key](at::Rect b, at::Window &w, at::App &) {

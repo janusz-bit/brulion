@@ -80,8 +80,7 @@ AtramentView {
         family: Theme.fontUi,
         english: editor !== null && editor.controller !== null && editor.controller.locale === "en"
     })
-    // Tables drawn and edited by Atrament (TableBlockView's look); a table showing its filter row
-    // stays the QML view's.
+    // Tables drawn and edited by Atrament (TableBlockView's look), their filter row too.
     drawsTables: true
     tableLook: ({
         background: Theme.bgElevated,
@@ -103,7 +102,12 @@ AtramentView {
         radius: Theme.radius,
         buttonHeight: Theme.controlHeightSm,
         buttonTextSize: Theme.textSm,
-        picked: Theme.alpha(Theme.accent, Theme.dark ? 0.26 : 0.16)
+        picked: Theme.alpha(Theme.accent, Theme.dark ? 0.26 : 0.16),
+        accent: Theme.accent,
+        muted: Theme.fgMuted,
+        filterHeight: Theme.touchUi ? 48 : 36,
+        fieldTextSize: Theme.textControl,
+        statusTextSize: Theme.textXs
     })
     // The toasts of a table's cell selection (copied, cut, pasted cells; nothing to paste).
     onNoticeRequested: (text, level) => {

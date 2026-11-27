@@ -838,6 +838,11 @@ void AtramentView::applyTableStyle()
         look.input = colour("input", look.input);
         look.hover = colour("hover", look.hover);
         look.picked = colour("picked", look.picked);
+        look.accent = colour("accent", look.accent);
+        look.muted = colour("muted", look.muted);
+        look.filterHeight = number("filterHeight", look.filterHeight);
+        look.fieldTextSize = number("fieldTextSize", look.fieldTextSize);
+        look.statusTextSize = number("statusTextSize", look.statusTextSize);
         look.fontFamily = family("fontFamily", look.fontFamily);
         look.monoFamily = family("monoFamily", look.monoFamily);
         look.fontSize = number("fontSize", look.fontSize);

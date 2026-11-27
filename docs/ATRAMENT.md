@@ -1088,9 +1088,8 @@ scrolling, `tst_atrament_editor`) before the next:
    menu with its Row and Column (`tableCellMenuRequested` → `BlockEditor.openCellBlockMenuAt`). For
    screen readers a table of rows of cells — Atrament's new generic roles `Table`, `Row`, `Cell`,
    `ColumnHeader` (`ui/accessibility.h`, mapped to Qt's in `qt/qtaccessibility.cpp`) —, each cell
-   named by its text and described by its column's header, the edited one a text input "Cell …". A
-   table showing its filter row stays the QML view's (its fields), as every table does with
-   `drawsTables` off. Tested by `tests/atrament/editor/tst_atrament_tables` (TableSelfTest's checks
+   named by its text and described by its column's header, the edited one a text input "Cell …".
+   With `drawsTables` off every table is the QML view's. Tested by `tests/atrament/editor/tst_atrament_tables` (TableSelfTest's checks
    of the keys and of the cell selection among them).
    * **The cell selection** (`tableselection.cpp`; TableBlockView's): Shift+arrows from the edited
      cell (a horizontal one at its text's edge) and Shift+click on a cell of its table select a
@@ -1112,7 +1111,15 @@ scrolling, `tst_atrament_editor`) before the next:
      also sideways (`canvas(…).onPrepaint(f)`, new in Atrament: a painter that also runs in prepaint,
      where the scroll containers around are known); selected cells are selected for screen
      readers. Its Ctrl keys win over the application's shortcuts (`AtramentView.cellsSelected`).
-   **Not yet** for tables: the filter row, the block menu's items that edit a cell afterwards (a new row's or column's: they
+   * **The filter row** (`tablefilters.cpp`): while a table filters (the block menu's "Filter
+     rows", "Filter by this column…") a field per column under the header — BTextField's look,
+     "Filter" in it, named "Filter of column …" for screen readers, its × emptying it —; typing
+     filters the rows (`PageController::setTableFilter`: nothing written; a composed word once
+     committed), Esc empties a field and in an empty one hides the row and selects the table, Enter
+     leaves the field; a filtered column's header has the funnel (BIcon "filter" in Theme.accent);
+     under the grid "N of M rows shown" and "Clear filters" next to "+ Row" / "+ Column" (also in
+     reading mode). `PageView::focusFilter` gives a column's field the keys.
+   **Not yet** for tables: the block menu's items that edit a cell afterwards (a new row's or column's: they
    change the table, `BlockEditor.editTableCell` finds no QML table to edit), Enter on a selected
    table editing its first cell, the touch toolbar's cell tools (the next cell, undo / redo, More)
    and the cell kept above them, a long press on a cell's chip (its menu), tooltips (a formula's
