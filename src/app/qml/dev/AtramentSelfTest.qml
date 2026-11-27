@@ -18,7 +18,8 @@ import Brulion
 // selection, a fold hiding the rows, Enter at the end of a zoomed paragraph and undoing it, a
 // pasted list becoming blocks, no-break spaces kept, a composed word kept out of the page until
 // it is committed (Backspace and Enter while composing, completions after a composed word), typing
-// into a block scrolled far away, a zoom's end keeping the edited block in view.
+// into a block scrolled far away, a zoom's end keeping the edited block in view; document mode's
+// keys (Enter leaving a list, Backspace removing a marker, Tab only for list items) and its toggle.
 // Steps run on the playground's step runner (EditorPlayground.runSteps).
 QtObject {
     id: test
@@ -132,6 +133,7 @@ QtObject {
         test.realKeys()
         test.composition()
         test.farAway()
+        test.document()
     }
     function reading(): void {
         if (window.at()) {
@@ -368,6 +370,61 @@ QtObject {
                                          "zooming out keeps the edited block in view: y " + test.rowTop(test.zoomRow))
         if (window.at()) test.typeKeys("ż")
         if (window.at()) test.check(Js.indexOf(test.info(test.zoomRow).plainText, "źdźbłoż") > 0, "and it takes the keys: " + test.info(test.zoomRow).plainText)
+    }
+
+    // Document mode (selftest's document part): list items, paragraphs, Enter leaving a list,
+    // Backspace removing a marker, Tab only for list items, ↑/↓ as in a text, the mode's toggle.
+    function document(): void {
+        if (window.at()) { page.stopEditing(); page.save(); page.path = host.documentPath }
+        if (window.at()) {
+            const heading = test.rowOf("Plan")
+            const top = test.rowTop(heading)
+            const mode = page.mode
+            window.waitStep(page.loaded && mode === "document" && editor.documentMode && heading >= 0 && top >= 0,
+                            "the document sample opens as a document drawn by Atrament: " + mode + ", heading " + heading + " at " + top)
+        }
+        if (window.at()) editor.startEditing(test.rowOf("Niedziela"), -1)
+        if (window.at()) window.waitStep(test.editing(test.rowOf("Niedziela")), "a list item is edited")
+        if (window.at()) test.key(Qt.Key_Return, Qt.NoModifier)
+        if (window.at()) window.waitStep(test.editing(test.rowOf("Niedziela") + 1) && test.info(page.editingRow).kind === "listItem",
+                                         "Enter in a list item adds a list item")
+        if (window.at()) test.typeKeys("Powrót ąę")
+        if (window.at()) test.key(Qt.Key_Return, Qt.NoModifier)
+        if (window.at()) test.realRow = page.editingRow
+        if (window.at()) test.key(Qt.Key_Return, Qt.NoModifier)
+        if (window.at()) window.waitStep(test.editing(test.realRow) && test.info(test.realRow).kind === "paragraph",
+                                         "Enter on an empty list item leaves the list: " + test.info(test.realRow).kind)
+        if (window.at()) test.typeKeys("Akapit po liście")
+        if (window.at()) test.key(Qt.Key_Tab, Qt.NoModifier)
+        if (window.at()) test.check(test.info(test.realRow).kind === "paragraph" && test.info(test.realRow).depth === 0
+                                    && test.editing(test.realRow), "Tab in a paragraph does nothing")
+        if (window.at()) editor.startEditing(test.rowOf("Powrót ąę"), 0)
+        if (window.at()) window.waitStep(test.editing(test.rowOf("Powrót ąę")) && test.editCursor() === 0, "a list item is edited at its start")
+        if (window.at()) test.key(Qt.Key_Backspace, Qt.NoModifier)
+        if (window.at()) test.check(test.info(test.rowOf("Powrót ąę")).kind === "paragraph" && page.editingRow === test.rowOf("Powrót ąę"),
+                                    "Backspace at the start of a list item removes its marker")
+        if (window.at()) test.key(Qt.Key_Z, Qt.ControlModifier)
+        if (window.at()) test.check(test.info(test.rowOf("Powrót ąę")).kind === "listItem", "Ctrl+Z brings the list item back")
+        if (window.at()) editor.startEditing(test.rowOf("Z powrotem bryczką"), 0)
+        if (window.at()) window.waitStep(test.editing(test.rowOf("Z powrotem bryczką")), "a nested list item is edited")
+        if (window.at()) test.key(Qt.Key_Tab, Qt.NoModifier)
+        if (window.at()) test.check(test.info(test.rowOf("Z powrotem bryczką")).depth === 2, "Tab indents a list item")
+        if (window.at()) test.key(Qt.Key_Backtab, Qt.ShiftModifier)
+        if (window.at()) test.check(test.info(test.rowOf("Z powrotem bryczką")).depth === 1, "Shift+Tab outdents it")
+        if (window.at()) editor.startEditing(test.rowOf("Pierwszego dnia"), 0)
+        if (window.at()) window.waitStep(test.editing(test.rowOf("Pierwszego dnia")), "a paragraph is edited")
+        if (window.at()) test.key(Qt.Key_Up, Qt.NoModifier)
+        if (window.at()) window.waitStep(test.editing(test.rowOf("Plan")), "Up goes to the previous block like in a text: " + page.editingRow)
+        if (window.at()) test.key(Qt.Key_Down, Qt.NoModifier)
+        if (window.at()) window.waitStep(test.editing(test.rowOf("Pierwszego dnia")), "Down comes back")
+        if (window.at()) { page.stopEditing(); page.toggleMode() }
+        if (window.at()) window.waitStep(page.mode === "outline" && editor.gutter > 0 && Js.indexOf(host.file(page.path), "brulion: outline") > 0
+                                         && test.rowTop(test.rowOf("Niedziela")) >= 0,
+                                         "the toggle switches to an outline (drawn again) and writes only the key")
+        if (window.at()) page.toggleMode()
+        if (window.at()) window.waitStep(page.mode === "document" && Js.indexOf(host.file(page.path), "brulion: document") > 0
+                                         && Js.indexOf(host.file(page.path), "Akapit po liście") > 0,
+                                         "and back to a document")
     }
 
     Component.onCompleted: window.runSteps("atramenttest")

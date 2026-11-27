@@ -809,7 +809,10 @@ scrolling, `tst_atrament_editor`) before the next:
    an error smaller in red, a total semibold under a rule —, a result node per line for screen
    readers ("Result: 178"); a click edits the lines at the character, Enter is a line break, the
    highlighter's Code rules colour comments in the note's face. Where a line starts comes from the
-   text's layout of the last frame: a frame that wraps the lines anew draws once more.
+   text's layout of the last frame: a frame that wraps the lines anew draws once more. Thematic
+   breaks (`---`, `rulerows.cpp`): BlockPartRule's 1-px line in `AtramentView.ruleColor` across the
+   text column, a line's height tall (a separator for screen readers), its Markdown in the field
+   while edited.
 
 ### Tests
 
@@ -827,8 +830,10 @@ scrolling, `tst_atrament_editor`) before the next:
   setting is never written) with real input — keys and typed letters through the window, an input
   method's composition to the AtramentView, clicks and taps on its rows (`AtramentView.rowTop` /
   `rowHeight` say where they are) — and checks the model, the field (`editRow`, `editText`,
-  `editCursor`), what an input method is told and the suggestion popup: the QML around the view
-  and the view tested together.
+  `editCursor`), what an input method is told and the suggestion popup — then document mode's
+  keys and its toggle: the QML around the view and the view tested together. It found a
+  composition left marked by Backspace, a zoom's end leaving the edited block out of view and
+  another page opening at the last one's scroll.
 
 ### Open questions
 
