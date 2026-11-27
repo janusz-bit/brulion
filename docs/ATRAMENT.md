@@ -1093,8 +1093,15 @@ scrolling, `tst_atrament_editor`) before the next:
    screen readers a table of rows of cells — Atrament's new generic roles `Table`, `Row`, `Cell`,
    `ColumnHeader` (`ui/accessibility.h`, mapped to Qt's in `qt/qtaccessibility.cpp`) —, each cell
    named by its text and described by its column's header, the edited one a text input "Cell …".
-   With `drawsTables` off every table is the QML view's. Tested by `tests/atrament/editor/tst_atrament_tables` (TableSelfTest's checks
-   of the keys and of the cell selection among them).
+   With `drawsTables` off every table is the QML view's. Tested by `tests/atrament/editor/
+   tst_atrament_tables` (TableSelfTest's checks of the keys, of the cell selection and of the filter
+   row among them) and `tst_editor_qml_atrament_table[_touch]` (qml/dev/AtramentTableSelfTest.qml,
+   `--editor-script atramenttabletest --atrament-editor`: TableSelfTest's steps with real input
+   against the page drawn by Atrament — the cell's block menus and their new cells edited after
+   them, the keys in a cell, sorting, the filter row, CSV, the cell selection with Shift+arrows and
+   Shift+click, copying, cutting, emptying, pasting, typing over a cell, Enter on the selected
+   table; on a phone the toolbar's More, Next cell, Undo, Redo and Hide keyboard with the edited
+   cell above it; TableSelfTest's chart part is the chart's, drawn by Atrament too, and left out).
    * **The cell selection** (`tableselection.cpp`; TableBlockView's): Shift+arrows from the edited
      cell (a horizontal one at its text's edge) and Shift+click on a cell of its table select a
      rectangle from it; Shift+click moves its end. While it is there no cell is edited and its keys
@@ -1222,7 +1229,9 @@ scrolling, `tst_atrament_editor`) before the next:
   `editCursor`), what an input method is told and the suggestion popup — then document mode's
   keys and its toggle: the QML around the view and the view tested together. It found a
   composition left marked by Backspace, a zoom's end leaving the edited block out of view and
-  another page opening at the last one's scroll.
+  another page opening at the last one's scroll. `tst_editor_qml_atrament_table[_touch]`
+  (qml/dev/AtramentTableSelfTest.qml) does the same with `tabletest`'s table steps (step 5's
+  tables entry).
 
 ### Open questions
 
