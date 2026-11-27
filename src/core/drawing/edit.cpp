@@ -2,6 +2,7 @@
 
 #include "drawing/geometry.h"
 #include "drawing/merge.h"
+#include "util/strings.h"
 
 #include <QHash>
 #include <QRandomGenerator>
@@ -211,12 +212,7 @@ void shiftArrowLabels(Drawing &d, const QSet<QString> &moved, const QHash<QStrin
 QString newElementId()
 {
     // nanoid's alphabet and length, as Excalidraw's element ids.
-    static constexpr char alphabet[] = "useandom-26T198340PX75pxJACKVERYMINDBUSHWOLF_GQZbfghjklqvwyzrict";
-    QString id;
-    id.reserve(21);
-    for (int i = 0; i < 21; ++i)
-        id += QLatin1Char(alphabet[QRandomGenerator::global()->bounded(64)]);
-    return id;
+    return strings::randomText(u"useandom-26T198340PX75pxJACKVERYMINDBUSHWOLF_GQZbfghjklqvwyzrict", 21);
 }
 
 EditStamp randomEditStamp(qint64 now)

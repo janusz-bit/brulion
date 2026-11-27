@@ -25,5 +25,6 @@ brulion_add_core_module(drawing
         excalidrawmd.h excalidrawmd.cpp
         drawingfile.h drawingfile.cpp
         backdrop.h backdrop.cpp
-        clipboard.h clipboard.cpp)
+        clipboard.h clipboard.cpp
+    DEPS util)
 target_link_libraries(brulion_core_drawing PRIVATE brulion_miniz)

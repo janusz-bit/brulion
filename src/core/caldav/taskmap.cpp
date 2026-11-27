@@ -8,9 +8,9 @@
 #include "markdown/tokenedit.h"
 #include "markdown/tokens.h"
 #include "text/text.h"
+#include "util/strings.h"
 
 #include <QJsonArray>
-#include <QRandomGenerator>
 #include <QRegularExpression>
 #include <QStringTokenizer>
 
@@ -570,11 +570,7 @@ QString uidForBlockId(const QString &id)
 
 QString detail::randomId(int length)
 {
-    static constexpr char Alphabet[] = "abcdefghijklmnopqrstuvwxyz0123456789";
-    QString id;
-    for (int i = 0; i < length; ++i)
-        id += QChar(QLatin1Char(Alphabet[QRandomGenerator::global()->bounded(36)]));
-    return id;
+    return strings::randomText(u"abcdefghijklmnopqrstuvwxyz0123456789", length);
 }
 
 QString newTaskBlockId()

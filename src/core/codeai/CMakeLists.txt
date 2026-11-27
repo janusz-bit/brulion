@@ -5,4 +5,4 @@
 brulion_add_core_module(codeai
     SOURCES
         codeai.h codeai.cpp
-    DEPS ai chat)
+    DEPS util ai chat)

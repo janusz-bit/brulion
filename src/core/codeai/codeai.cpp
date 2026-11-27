@@ -1,5 +1,7 @@
 #include "codeai.h"
 
+#include "util/strings.h"
+
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QList>
@@ -126,10 +128,7 @@ QString bounded(QStringView text, qsizetype max)
 {
     if (text.size() <= max)
         return text.toString();
-    qsizetype keep = std::max<qsizetype>(max, 0);
-    if (keep > 0 && text.at(keep - 1).isHighSurrogate())
-        --keep;
-    return text.left(keep).toString() + Truncated;
+    return text.left(strings::cutLength(text, max)).toString() + Truncated;
 }
 
 QString headAndTail(QStringView text, qsizetype max)
@@ -140,10 +139,8 @@ QString headAndTail(QStringView text, qsizetype max)
         return {};
     // (At least one character of room: `head` is never 0.)
     const qsizetype room = max - ContentCut.size();
-    qsizetype head = (room + 1) / 2;
-    qsizetype tail = room - head;
-    if (text.at(head - 1).isHighSurrogate())
-        --head;
+    const qsizetype head = strings::cutLength(text, (room + 1) / 2);
+    qsizetype tail = room - (room + 1) / 2;
     if (tail > 0 && text.at(text.size() - tail).isLowSurrogate())
         --tail;
     return text.left(head).toString() + ContentCut + text.right(tail).toString();

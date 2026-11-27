@@ -8,8 +8,8 @@
 #include "markdown/tasks.h"
 #include "markdown/tokens.h"
 #include "markdown/tokens_p.h"
+#include "util/strings.h"
 
-#include <QRandomGenerator>
 #include <QRegularExpression>
 
 #include <algorithm>
@@ -536,12 +536,7 @@ QString removeTaskMarker(const QString &content, int line)
 
 QString generateBlockId()
 {
-    static constexpr char16_t Alphabet[] = u"abcdefghijklmnopqrstuvwxyz0123456789";
-    QString out;
-    out.reserve(6);
-    for (int k = 0; k < 6; ++k)
-        out += QChar(Alphabet[QRandomGenerator::global()->bounded(36)]);
-    return out;
+    return strings::randomText(u"abcdefghijklmnopqrstuvwxyz0123456789", 6);
 }
 
 namespace {
