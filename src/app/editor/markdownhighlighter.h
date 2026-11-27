@@ -3,7 +3,10 @@
 // block refs, task/reminder tokens (📅 ⏳ 🛫 ⏰ 🔁 ✅ …), block ids, `key::` properties, quote
 // and list markers, comments, fences. A QSyntaxHighlighter attached to the QTextDocument of a
 // QML TextEdit through `textDocument` (QQuickTextDocument), or to any QTextDocument from C++
-// (setDocument, used by the tests).
+// (setDocument, used by the tests). Its rules are a pure function of markdownstyles.h
+// (styleMarkdownLine(): a line, the state the line before left and the mode in, style operations
+// out; the block editor drawn by Atrament colours its input with the same rules): the highlighter
+// applies their operations with its formats, built from the same table (rebuildFormats()).
 //
 //   TextEdit { id: edit; textFormat: TextEdit.PlainText }
 //   MarkdownHighlighter { textDocument: edit.textDocument; palette: ({ ... }); mode: "inline" }
@@ -52,13 +55,13 @@
 // document's layout changes (text, width, font) and announced only when different.
 #pragma once
 
+#include "markdownstyles.h"
 #include "richtextpills.h"
 #include "spellcheck.h"
 #include "text/find.h"
 
 #include <QColor>
 #include <QFont>
-#include <QHash>
 #include <QPointer>
 #include <QQuickTextDocument>
 #include <QSet>
@@ -68,6 +71,7 @@
 #include <QTimer>
 #include <QVariantMap>
 
+#include <array>
 #include <functional>
 #include <optional>
 
@@ -109,23 +113,10 @@ class MarkdownHighlighter : public QSyntaxHighlighter {
     Q_PROPERTY(QString chipToday READ chipToday WRITE setChipToday NOTIFY chipTodayChanged FINAL)
 
 public:
-    /// A reminder token of a line (positions in the line): `reminderChips`.
-    struct LineChip {
-        int from = 0;
-        int to = 0;
-        bool alarm = false;
-        QString label;
-        bool operator==(const LineChip &other) const = default;
-    };
-    /// The part of a line that is prose for spell checking ([from, to) of the line, `to` −1: its
-    /// end; `from` −1: none — fences, code, the frontmatter, formulas and comments over lines in
-    /// "source" mode, everything in "code" mode); `lineStart`: it starts the line (spell::findWords).
-    struct SpellRange {
-        int from = 0;
-        int to = -1;
-        bool lineStart = true;
-        bool operator==(const SpellRange &other) const = default;
-    };
+    /// A reminder token of a line (positions in the line): `reminderChips` (markdownstyles.h).
+    using LineChip = editor::LineChip;
+    /// The part of a line that is prose for spell checking (markdownstyles.h).
+    using SpellRange = editor::SpellRange;
 
     explicit MarkdownHighlighter(QObject *parent = nullptr);
     ~MarkdownHighlighter() override;
@@ -219,16 +210,18 @@ protected:
     void highlightBlock(const QString &text) override;
 
 private:
-    enum State { Normal = 0, Fence = 1, Frontmatter = 2, Comment = 3 };
-
     QColor color(const char *key, const QColor &fallback) const;
+    /// A role's colour from the palette (markdownstyles.h's PaletteColor: a key, a fallback key,
+    /// a default colour).
+    QColor paletteColor(const PaletteColor &source) const;
     void rebuildFormats();
+    /// The format of one style operation: its style's with the modifier and the tint.
+    QTextCharFormat formatOf(const StyleOp &op) const;
+    /// m_styleOptions from the mode, the language and the chips' settings.
+    void updateStyleOptions();
     void applyLineHeight(int from = 0, int charsAdded = -1);
-    void highlightInline(const QString &text, int offset, int length);
+    /// The line's styles (styleMarkdownLine()) applied, its state, prose and chips kept.
     void highlightLine(const QString &line);
-    /// Luau's colours over `line` (syntax/luau.h), starting in the packed lexer state `state`;
-    /// returns the state the next line starts in.
-    int highlightLuau(const QString &line, int state);
     /// One find option set (`option`: &text::FindOptions::matchCase, …).
     void setFindOption(bool text::FindOptions::*option, bool on);
     void findChangedTo(const QString &query, text::FindOptions options);
@@ -279,9 +272,14 @@ private:
     QString m_language;
     bool m_applyingFormat = false;
     QMetaObject::Connection m_contentsConnection;
-    /// By name ("heading", "marker", … "spelling": rebuildFormats()); each format carries its name
-    /// as a property, which the tests read back.
-    QHash<QString, QTextCharFormat> m_formats;
+    /// One per MarkdownStyle, and the misspelled words' (rebuildFormats()); each format carries its
+    /// name ("heading", "marker", … "spelling") as a property, which the tests read back.
+    std::array<QTextCharFormat, MarkdownStyleCount> m_styleFormats;
+    QTextCharFormat m_spellingFormat;
+    /// What styleMarkdownLine() is asked with (the mode, the language, the chips) and what it gives
+    /// for the line being highlighted (kept: its lists keep their capacity from line to line).
+    StyleOptions m_styleOptions;
+    LineStyles m_lineStyles;
     QString m_findQuery;
     text::FindOptions m_findOptions;
     QColor m_findColor = QColor(255, 196, 0, 90);

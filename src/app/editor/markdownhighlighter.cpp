@@ -2,13 +2,8 @@
 
 #include "richtext_p.h"
 
-#include "markdown/cloze.h"
-#include "markdown/highlight.h"
-#include "markdown/inline.h"
-#include "markdown/tokens.h"
 #include "spell/spellwords.h"
 #include "syntax/luau.h"
-#include "text/text.h"
 
 #include <QAbstractTextDocumentLayout>
 #include <QCoreApplication>
@@ -16,7 +11,6 @@
 #include <QFont>
 #include <QFontMetricsF>
 #include <QQuickTextDocument>
-#include <QRegularExpression>
 #include <QScopedValueRollback>
 #include <QTextBlock>
 #include <QTextBlockUserData>
@@ -34,45 +28,11 @@ namespace {
 /// Property holding the format's name (tests read it back from QTextLayout::formats()).
 constexpr int NameProperty = QTextFormat::UserProperty + 1;
 
-constexpr int StateMask = 0x7;
-/// A fence of Luau code (source mode): its lines are coloured as Luau, the lexer's state above it.
-constexpr int LuauFence = 1 << 12;
-constexpr int LuauShift = 13;
-/// A line of a display formula between `$$` lines (source mode; in a Normal state, whose fence
-/// bits are free): no prose.
-constexpr int MathFlag = 1 << 4;
 /// A text this long (characters) gets its spelling in slices (a large edit, a pass over every
 /// line); a smaller one at once.
 constexpr int LargeText = 20000;
 /// The time a slice of spelling takes at most before the event loop runs again.
 constexpr int SpellSliceMs = 6;
-
-/// A line that is only `$$` (in a list item or a quote too; not after a task box): it opens or
-/// closes a display formula (docs/SYNTAX.md "Formulas").
-bool isMathFence(const QString &line)
-{
-    static const QRegularExpression re(u"^\\s*(?:>\\s?)*\\s*(?:(?:[-*+]|\\d{1,9}[.)])\\s+)?\\$\\$\\s*$"_s);
-    return line.contains(u"$$"_s) && re.matchView(line).hasMatch();
-}
-
-int encodeFence(QChar ch, int length)
-{
-    return 1 | (ch == u'~' ? 0x8 : 0) | (std::min(length, 255) << 4);
-}
-
-/// The language of a fence line's info string ("```luau title" → "luau").
-QStringView fenceLanguage(QStringView line, qsizetype markerEnd)
-{
-    QStringView info = line.sliced(markerEnd).trimmed();
-    if (info.startsWith(u'{'))
-        info = info.sliced(1);
-    if (info.startsWith(u'.'))
-        info = info.sliced(1);
-    qsizetype end = 0;
-    while (end < info.size() && !info[end].isSpace() && info[end] != u'}')
-        ++end;
-    return info.first(end);
-}
 
 /// What the highlighting found on a line, kept on its QTextBlock (it follows the line when lines
 /// before it are added or removed): its reminder tokens (MarkdownHighlighter::reminderChips) and
@@ -95,6 +55,7 @@ QColor toColor(const QVariant &v)
 
 MarkdownHighlighter::MarkdownHighlighter(QObject *parent) : QSyntaxHighlighter(parent)
 {
+    updateStyleOptions();
     rebuildFormats();
     // Verdicts arrive in batches: the lines waiting for them are highlighted once per pass.
     m_spellTimer.setSingleShot(true);
@@ -178,6 +139,7 @@ void MarkdownHighlighter::setReminderChips(bool on)
     if (m_reminderChips == on)
         return;
     m_reminderChips = on;
+    updateStyleOptions();
     rebuildFormats();
     rehighlight();
     Q_EMIT reminderChipsChanged();
@@ -198,6 +160,7 @@ void MarkdownHighlighter::setChipLocale(const QString &locale)
     if (m_chipLocale == locale)
         return;
     m_chipLocale = locale;
+    updateStyleOptions();
     Q_EMIT chipLocaleChanged();
     if (m_reminderChips)
         rehighlight();
@@ -208,6 +171,7 @@ void MarkdownHighlighter::setChipToday(const QString &today)
     if (m_chipToday == today)
         return;
     m_chipToday = today;
+    updateStyleOptions();
     Q_EMIT chipTodayChanged();
     if (m_reminderChips)
         rehighlight();
@@ -386,6 +350,7 @@ void MarkdownHighlighter::setMode(const QString &mode)
     if (m_mode == mode)
         return;
     m_mode = mode;
+    updateStyleOptions();
     rehighlight();
     Q_EMIT modeChanged();
 }
@@ -395,6 +360,7 @@ void MarkdownHighlighter::setLanguage(const QString &language)
     if (m_language == language)
         return;
     m_language = language;
+    updateStyleOptions();
     rehighlight();
     Q_EMIT languageChanged();
 }
@@ -445,84 +411,74 @@ QColor MarkdownHighlighter::color(const char *key, const QColor &fallback) const
     return c.isValid() ? c : fallback;
 }
 
+QColor MarkdownHighlighter::paletteColor(const PaletteColor &source) const
+{
+    QColor c = toColor(m_palette.value(QString(source.key)));
+    if (!c.isValid() && !source.fallbackKey.isEmpty())
+        c = toColor(m_palette.value(QString(source.fallbackKey)));
+    return c.isValid() ? c : QColor::fromString(source.fallback);
+}
+
 void MarkdownHighlighter::rebuildFormats()
 {
-    m_formats.clear();
-    const auto make = [this](const QString &name) -> QTextCharFormat & {
-        QTextCharFormat &f = *m_formats.insert(name, {});
-        f.setProperty(NameProperty, name);
-        return f;
-    };
-    const QColor link = color("link", QColor(u"#2c6aa3"_s));
-    const QColor muted = color("muted", QColor(u"#535a6a"_s));
-    const QColor faint = color("faint", QColor(u"#676c7b"_s));
-    const QColor marker = color("marker", faint);
-    const QColor scheduled = color("scheduled", QColor(u"#6a4f93"_s));
-
-    QTextCharFormat &heading = make(u"heading"_s);
-    heading.setFontWeight(QFont::DemiBold);
-    heading.setForeground(color("heading", QColor(u"#1f2430"_s)));
-    make(u"marker"_s).setForeground(marker);
-    make(u"link"_s).setForeground(link);
-    make(u"blockRef"_s).setForeground(link);
-    QTextCharFormat &url = make(u"url"_s);
-    url.setForeground(color("url", link));
-    url.setFontUnderline(true);
-    make(u"tag"_s).setForeground(color("tag", QColor(u"#2b5f8f"_s)));
-    QTextCharFormat &code = make(u"code"_s);
-    code.setForeground(color("code", QColor(u"#1f2430"_s)));
-    code.setBackground(color("codeBackground", QColor(u"#f3eee2"_s)));
-    if (!m_monoFamily.isEmpty())
-        code.setFontFamilies({m_monoFamily});
-    QTextCharFormat &fence = make(u"fence"_s);
-    fence.setForeground(faint);
-    if (!m_monoFamily.isEmpty())
-        fence.setFontFamilies({m_monoFamily});
-    make(u"bold"_s).setFontWeight(QFont::Bold);
-    make(u"italic"_s).setFontItalic(true);
-    make(u"strike"_s).setFontStrikeOut(true);
-    make(u"highlight"_s).setBackground(color("highlightBackground", QColor(242, 179, 61, 97)));
-    make(u"muted"_s).setForeground(muted);
-    make(u"faint"_s).setForeground(faint);
-    make(u"blockId"_s).setForeground(faint);
-    make(u"property"_s).setForeground(muted);
-    QTextCharFormat &comment = make(u"comment"_s);
-    comment.setForeground(faint);
-    comment.setFontItalic(true);
-    make(u"due"_s).setForeground(color("due", link));
-    make(u"scheduled"_s).setForeground(scheduled);
-    make(u"start"_s).setForeground(scheduled);
-    const QColor reminder = color("reminder", QColor(u"#7a4f00"_s));
-    const QColor alarmColor = color("alarm", QColor(u"#7a4f00"_s));
-    // As chips (reminderChips) the text takes the chip's colours, on its background.
-    make(u"reminder"_s).setForeground(m_reminderChips ? color("reminderChip", reminder) : reminder);
-    QTextCharFormat &alarm = make(u"alarm"_s);
-    alarm.setForeground(m_reminderChips ? color("alarmChip", alarmColor) : alarmColor);
-    alarm.setFontWeight(QFont::DemiBold);
-    make(u"recurrence"_s).setForeground(color("recurrence", QColor(u"#2a6e44"_s)));
-    make(u"done"_s).setForeground(color("done", muted));
-    make(u"priority"_s).setForeground(color("priority", QColor(u"#a8382d"_s)));
-    // Luau (syntax/luau.h): one format per kind of span, named "luau.<kind>".
-    const QColor keyword = color("keyword", scheduled);
-    QTextCharFormat &luauKeyword = make(u"luau.keyword"_s);
-    luauKeyword.setForeground(keyword);
-    luauKeyword.setFontWeight(QFont::DemiBold);
-    make(u"luau.constant"_s).setForeground(color("constant", QColor(u"#9a5b00"_s)));
-    make(u"luau.builtin"_s).setForeground(color("builtin", link));
-    make(u"luau.api"_s).setForeground(color("builtin", link));
-    QTextCharFormat &luauFunction = make(u"luau.function"_s);
-    luauFunction.setForeground(color("function", color("heading", QColor(u"#1f2430"_s))));
-    luauFunction.setFontWeight(QFont::DemiBold);
-    make(u"luau.number"_s).setForeground(color("number", QColor(u"#9a5b00"_s)));
-    make(u"luau.string"_s).setForeground(color("string", QColor(u"#2a6e44"_s)));
-    make(u"luau.interpolation"_s).setForeground(keyword);
-    QTextCharFormat &luauComment = make(u"luau.comment"_s);
-    luauComment.setForeground(faint);
-    luauComment.setFontItalic(true);
+    // One format per style, from the table of markdownstyles.h (what each one sets, the palette
+    // keys of its colours with their fallbacks); the flattened runs read the same table.
+    for (int i = 0; i < MarkdownStyleCount; ++i) {
+        const auto style = MarkdownStyle(i);
+        const StyleAttributes a = styleAttributes(style);
+        QTextCharFormat f;
+        f.setProperty(NameProperty, QString(markdownStyleName(style)));
+        if (a.weight != FontWeight::Normal)
+            f.setFontWeight(a.weight == FontWeight::Bold ? QFont::Bold : QFont::DemiBold);
+        if (a.color != ColorRole::None)
+            f.setForeground(paletteColor(colorRolePalette(a.color, m_reminderChips)));
+        if (a.underline)
+            f.setFontUnderline(true);
+        if (a.background != BackgroundRole::None)
+            f.setBackground(paletteColor(backgroundRolePalette(a.background)));
+        if (a.monospace && !m_monoFamily.isEmpty())
+            f.setFontFamilies({m_monoFamily});
+        if (a.italic)
+            f.setFontItalic(true);
+        if (a.strike)
+            f.setFontStrikeOut(true);
+        m_styleFormats[size_t(i)] = f;
+    }
     // A plain underline in the colour: Qt Quick 6.11 draws no wavy SpellCheckUnderline.
-    QTextCharFormat &spelling = make(u"spelling"_s);
-    spelling.setUnderlineStyle(QTextCharFormat::SingleUnderline);
-    spelling.setUnderlineColor(m_spellColor);
+    m_spellingFormat = QTextCharFormat();
+    m_spellingFormat.setProperty(NameProperty, u"spelling"_s);
+    m_spellingFormat.setUnderlineStyle(QTextCharFormat::SingleUnderline);
+    m_spellingFormat.setUnderlineColor(m_spellColor);
+}
+
+QTextCharFormat MarkdownHighlighter::formatOf(const StyleOp &op) const
+{
+    QTextCharFormat f = m_styleFormats[size_t(op.style)];
+    switch (op.modifier) {
+    case StyleModifier::None: break;
+    case StyleModifier::DemiBold: f.setFontWeight(QFont::DemiBold); break;
+    case StyleModifier::OnHeading: {
+        // The heading's weight, the style's colour and name.
+        QTextCharFormat heading = m_styleFormats[size_t(MarkdownStyle::Heading)];
+        heading.merge(f);
+        f = heading;
+        break;
+    }
+    }
+    if (op.tint != markdown::HighlightColor::Default)
+        f.setBackground(QColor(markdown::highlightTint(op.tint)));
+    return f;
+}
+
+void MarkdownHighlighter::updateStyleOptions()
+{
+    m_styleOptions.mode = m_mode == u"code"     ? MarkdownMode::Code
+                          : m_mode == u"source" ? MarkdownMode::Source
+                                                : MarkdownMode::Inline;
+    m_styleOptions.luau = syntax::isLuauLanguage(m_language);
+    m_styleOptions.reminderChips = m_reminderChips && m_mode == u"inline";
+    m_styleOptions.chipLocale = m_chipLocale == u"en" ? dates::UiLocale::English : dates::UiLocale::Polish;
+    m_styleOptions.chipToday = QDate::fromString(m_chipToday, Qt::ISODate);
 }
 
 void MarkdownHighlighter::setRange(int from, int length, const QTextCharFormat &format)
@@ -859,7 +815,7 @@ void MarkdownHighlighter::highlightSpelling(const QString &line)
             // Qt Quick draws a highlighter's format only when it has a colour (QQuickTextNodeEngine
             // takes a layout's formats with a foreground or a background): plain text gets the
             // palette's "text" colour with its underline.
-            mergeRange(int(word.from), int(word.length()), m_formats[u"spelling"_s], color("text", QColor()));
+            mergeRange(int(word.from), int(word.length()), m_spellingFormat, color("text", QColor()));
             break;
         }
     }
@@ -903,300 +859,19 @@ void MarkdownHighlighter::highlightBlock(const QString &line)
 
 void MarkdownHighlighter::highlightLine(const QString &line)
 {
-    const int prev = previousBlockState() < 0 ? Normal : previousBlockState();
-    setCurrentBlockState(Normal);
-    const int size = int(line.size());
-    // The whole line is prose unless said otherwise below.
-    m_lineSpell = SpellRange();
-
-    if (m_mode == u"code") {
-        m_lineSpell.from = -1;
-        if (syntax::isLuauLanguage(m_language)) {
-            setCurrentBlockState(highlightLuau(line, prev));
-            return;
-        }
-        static const QRegularExpression commentRe(u"^\\s*(#|//).*$"_s);
-        if (commentRe.match(line).hasMatch())
-            setRange(0, size, m_formats[u"comment"_s]);
-        return;
+    // The rules are markdownstyles.h's; here their operations get the formats, in order.
+    if (m_styleOptions.mode == MarkdownMode::Source)
+        m_styleOptions.firstLine = currentBlock().blockNumber() == 0;
+    styleMarkdownLine(line, previousBlockState(), m_styleOptions, &m_lineStyles);
+    for (const StyleOp &op : std::as_const(m_lineStyles.ops)) {
+        if (op.merge)
+            mergeRange(op.from, op.length, formatOf(op));
+        else
+            setRange(op.from, op.length, formatOf(op));
     }
-
-    const bool source = m_mode == u"source";
-    if (source) {
-        const int kind = prev & StateMask;
-        const QStringView trimmed = QStringView(line).trimmed();
-        static const QRegularExpression fenceRe(u"^\\s{0,3}(`{3,}|~{3,})"_s);
-        const auto fm = fenceRe.match(line);
-        // Fences, code, the frontmatter, a comment over lines: no prose (set again below).
-        m_lineSpell.from = -1;
-        if (kind == Fence) {
-            const QChar ch = (prev & 0x8) ? u'~' : u'`';
-            const int len = (prev >> 4) & 0xff;
-            if (fm.hasMatch() && fm.capturedView(1).front() == ch && fm.capturedLength(1) >= len
-                && trimmed.size() == fm.capturedLength(1)) {
-                setRange(0, size, m_formats[u"fence"_s]);
-                return;
-            }
-            setRange(0, size, m_formats[u"code"_s]);
-            if (prev & LuauFence) {
-                const int luau = highlightLuau(line, prev >> LuauShift);
-                setCurrentBlockState((prev & ((1 << LuauShift) - 1)) | (luau << LuauShift));
-                return;
-            }
-            setCurrentBlockState(prev);
-            return;
-        }
-        if (kind == Frontmatter || (currentBlock().blockNumber() == 0 && trimmed == u"---")) {
-            // Its fences (the opening one starts it), else a `key:` line.
-            const bool opening = kind != Frontmatter;
-            if (opening || trimmed == u"---" || trimmed == u"...") {
-                setRange(0, size, m_formats[u"fence"_s]);
-                if (opening)
-                    setCurrentBlockState(Frontmatter);
-                return;
-            }
-            static const QRegularExpression keyRe(u"^(\\s*[^:#\\s][^:]*:)"_s);
-            setRange(0, size, m_formats[u"muted"_s]);
-            if (const auto km = keyRe.match(line); km.hasMatch())
-                setRange(0, int(km.capturedLength(1)), m_formats[u"property"_s]);
-            setCurrentBlockState(Frontmatter);
-            return;
-        }
-        if (fm.hasMatch()) {
-            setRange(0, size, m_formats[u"fence"_s]);
-            const bool luau = syntax::isLuauLanguage(fenceLanguage(line, fm.capturedEnd(1)));
-            setCurrentBlockState(encodeFence(fm.capturedView(1).front(), int(fm.capturedLength(1)))
-                                 | (luau ? LuauFence : 0));
-            return;
-        }
-        if (kind == Comment) {
-            const qsizetype close = line.indexOf(u"%%"_s);
-            if (close < 0) {
-                setRange(0, size, m_formats[u"comment"_s]);
-                setCurrentBlockState(Comment);
-                return;
-            }
-            setRange(0, int(close + 2), m_formats[u"comment"_s]);
-            highlightInline(line, int(close + 2), size - int(close + 2));
-            m_lineSpell = {int(close + 2), -1, false};
-            return;
-        }
-        m_lineSpell = SpellRange();
-        // A display formula between lines that are only `$$`: its lines are no prose.
-        const bool inMath = (prev & MathFlag) != 0;
-        if (isMathFence(line)) {
-            m_lineSpell.from = -1;
-            if (!inMath)
-                setCurrentBlockState(Normal | MathFlag);
-        } else if (inMath) {
-            m_lineSpell.from = -1;
-            setCurrentBlockState(Normal | MathFlag);
-        }
-    }
-
-    highlightInline(line, 0, size);
-    if (source) {
-        // An odd number of %% opens a comment that continues on the next lines (counted before
-        // masking the code spans, which copies the line).
-        const qsizetype marks = line.count(u"%%"_s);
-        if (marks % 2 == 1 && markdown::maskInlineCode(line).count(u"%%"_s) == marks) {
-            const qsizetype open = line.lastIndexOf(u"%%"_s);
-            setRange(int(open), size - int(open), m_formats[u"comment"_s]);
-            setCurrentBlockState(Comment);
-            if (m_lineSpell.from >= 0)
-                m_lineSpell.to = int(open);
-        }
-    }
-}
-
-int MarkdownHighlighter::highlightLuau(const QString &line, int state)
-{
-    syntax::LuauState lexer = syntax::LuauState::unpack(state);
-    for (const syntax::LuauSpan &span : syntax::lexLuauLine(line, &lexer))
-        setRange(span.from, span.length, m_formats[u"luau."_s + syntax::luauTokenName(span.kind)]);
-    return lexer.pack();
-}
-
-void MarkdownHighlighter::highlightInline(const QString &full, int offset, int length)
-{
-    const QString text = full.mid(offset, length);
-    if (text.isEmpty())
-        return;
-    const auto at = [offset](qsizetype p) { return int(offset + p); };
-    QString masked = text;
-
-    // Inline code spans and %%comments%% first: nothing inside them is syntax.
-    static const QRegularExpression codeRe(u"(`+)(.+?)\\1"_s);
-    for (auto it = codeRe.globalMatch(text); it.hasNext();) {
-        const auto m = it.next();
-        setRange(at(m.capturedStart()), int(m.capturedLength()), m_formats[u"code"_s]);
-        setRange(at(m.capturedStart()), int(m.capturedLength(1)), m_formats[u"fence"_s]);
-        setRange(at(m.capturedEnd() - m.capturedLength(1)), int(m.capturedLength(1)), m_formats[u"fence"_s]);
-        std::fill_n(masked.begin() + m.capturedStart(), m.capturedLength(), u' ');
-    }
-    // (HTML comments too: a flashcard's scheduling, `<!--SR:!2026-11-20,3,250-->`.)
-    static const QRegularExpression commentRe(u"%%.*?%%|<!--.*?-->"_s);
-    for (auto it = commentRe.globalMatch(masked); it.hasNext();) {
-        const auto m = it.next();
-        setRange(at(m.capturedStart()), int(m.capturedLength()), m_formats[u"comment"_s]);
-        std::fill_n(masked.begin() + m.capturedStart(), m.capturedLength(), u' ');
-    }
-    // Clozes of flashcards (`{{c1::answer::hint}}`, `{{cloze answer}}`): the answer highlighted,
-    // the braces, the number and the hint as markers (markdown/cloze.h).
-    if (masked.contains(u"{{")) {
-        for (const markdown::ClozeSpan &c : markdown::findClozes(masked)) {
-            setRange(at(c.from), int(c.textFrom - c.from), m_formats[u"marker"_s]);
-            setRange(at(c.textFrom), int(c.textTo - c.textFrom), m_formats[u"highlight"_s]);
-            setRange(at(c.textTo), int(c.to - c.textTo), m_formats[u"marker"_s]);
-        }
-    }
-
-    // Line-level syntax.
-    int contentStart = 0;
-    if (offset == 0) {
-        static const QRegularExpression listRe(u"^(\\s*)([-*+]|\\d{1,9}[.)])(\\s+)"_s);
-        static const QRegularExpression quoteRe(u"^(\\s*>\\s?)+"_s);
-        static const QRegularExpression checkboxRe(u"^\\[[^\\]]\\](?=\\s|$)"_s);
-        static const QRegularExpression keywordRe(u"^(TODO|DOING|DONE|LATER|NOW|WAITING|CANCELED|CANCELLED|IN-PROGRESS)(?=\\s|$)"_s);
-        if (const auto q = quoteRe.match(masked); q.hasMatch()) {
-            setRange(0, int(q.capturedLength()), m_formats[u"marker"_s]);
-            contentStart = int(q.capturedLength());
-            static const QRegularExpression calloutRe(u"^\\[![A-Za-z0-9_-]+\\][+-]?"_s);
-            if (const auto c = calloutRe.matchView(QStringView(masked).sliced(contentStart)); c.hasMatch()) {
-                QTextCharFormat f = m_formats.value(u"muted"_s);
-                f.setFontWeight(QFont::DemiBold);
-                setRange(contentStart, int(c.capturedLength()), f);
-            }
-        }
-        if (m_mode == u"source") {
-            if (const auto l = listRe.matchView(QStringView(masked).sliced(contentStart)); l.hasMatch()) {
-                setRange(contentStart + int(l.capturedStart(2)), int(l.capturedLength(2)), m_formats[u"marker"_s]);
-                contentStart += int(l.capturedLength());
-            }
-        }
-        const QStringView rest = QStringView(masked).sliced(contentStart);
-        if (const auto c = checkboxRe.matchView(rest); c.hasMatch()) {
-            setRange(contentStart, int(c.capturedLength()), m_formats[u"marker"_s]);
-        } else if (const auto k = keywordRe.matchView(rest); k.hasMatch()) {
-            QTextCharFormat f = m_formats.value(u"marker"_s);
-            f.setFontWeight(QFont::DemiBold);
-            setRange(contentStart, int(k.capturedLength()), f);
-        }
-        // Headings ("# Title", also inside list items).
-        static const QRegularExpression headingRe(u"^(\\s{0,3})(#{1,6})(\\s+|$)"_s);
-        if (const auto h = headingRe.matchView(rest); h.hasMatch()) {
-            setRange(contentStart, int(rest.size()), m_formats[u"heading"_s]);
-            // The # marks: the heading's weight, the marker's colour and name.
-            QTextCharFormat mark = m_formats.value(u"heading"_s);
-            mark.merge(m_formats[u"marker"_s]);
-            setRange(contentStart + int(h.capturedStart(2)), int(h.capturedLength(2)), mark);
-        }
-        // key:: value
-        static const QRegularExpression propRe(u"^\\s*([A-Za-z0-9_-]+)::"_s);
-        if (const auto p = propRe.matchView(rest); p.hasMatch())
-            setRange(contentStart + int(p.capturedStart(1)), int(p.capturedLength(1)) + 2, m_formats[u"property"_s]);
-    }
-
-    // Emphasis.
-    const auto emphasis = [&](const QRegularExpression &re, const QString &name, int markLen) {
-        for (auto it = re.globalMatch(masked); it.hasNext();) {
-            const auto m = it.next();
-            mergeRange(at(m.capturedStart()), int(m.capturedLength()), m_formats[name]);
-            mergeRange(at(m.capturedStart()), markLen, m_formats[u"marker"_s]);
-            mergeRange(at(m.capturedEnd() - markLen), markLen, m_formats[u"marker"_s]);
-        }
-    };
-    static const QRegularExpression boldRe(u"(\\*\\*|__)(?=\\S)(.+?)(?<=\\S)\\1"_s);
-    static const QRegularExpression italicRe(u"(?<![*\\w])\\*(?=[^\\s*])([^*\\n]+?)(?<=[^\\s*])\\*(?![*\\w])"_s);
-    static const QRegularExpression italicUnderscoreRe = text::unicodeRegex(u"(?<![\\w_])_(?=[^\\s_])([^_\\n]+?)(?<=[^\\s_])_(?![\\w_])"_s);
-    static const QRegularExpression strikeRe(u"~~(?=\\S)(.+?)(?<=\\S)~~"_s);
-    static const QRegularExpression highlightRe(u"==(?=\\S)(.+?)(?<=\\S)=="_s);
-    emphasis(boldRe, u"bold"_s, 2);
-    emphasis(italicRe, u"italic"_s, 1);
-    emphasis(italicUnderscoreRe, u"italic"_s, 1);
-    emphasis(strikeRe, u"strike"_s, 2);
-    emphasis(highlightRe, u"highlight"_s, 2);
-    // Coloured highlights `<mark …>…</mark>` (markdown/highlight.h): the text on its palette
-    // colour, the tags faint.
-    for (const markdown::MarkPair &p : markdown::findMarkPairs(masked)) {
-        QTextCharFormat tint = m_formats.value(u"highlight"_s);
-        if (p.open.color != markdown::HighlightColor::Default)
-            tint.setBackground(QColor(markdown::highlightTint(p.open.color)));
-        mergeRange(at(p.open.to), int(p.close.from - p.open.to), tint);
-        mergeRange(at(p.open.from), int(p.open.to - p.open.from), m_formats[u"faint"_s]);
-        mergeRange(at(p.close.from), int(p.close.to - p.close.from), m_formats[u"faint"_s]);
-    }
-
-    // Links.
-    static const QRegularExpression wikiRe(u"!?\\[\\[([^\\[\\]\\n]+)\\]\\]"_s);
-    for (auto it = wikiRe.globalMatch(masked); it.hasNext();) {
-        const auto m = it.next();
-        setRange(at(m.capturedStart()), int(m.capturedLength()), m_formats[u"link"_s]);
-        const int open = int(m.capturedStart(1) - m.capturedStart());
-        mergeRange(at(m.capturedStart()), open, m_formats[u"marker"_s]);
-        mergeRange(at(m.capturedEnd() - 2), 2, m_formats[u"marker"_s]);
-    }
-    static const QRegularExpression refRe(u"!?\\(\\(([A-Za-z0-9-]+)\\)\\)"_s);
-    for (auto it = refRe.globalMatch(masked); it.hasNext();) {
-        const auto m = it.next();
-        setRange(at(m.capturedStart()), int(m.capturedLength()), m_formats[u"blockRef"_s]);
-    }
-    static const QRegularExpression mdLinkRe(u"!?\\[([^\\]\\n]*)\\]\\(([^)\\n]*)\\)"_s);
-    for (auto it = mdLinkRe.globalMatch(masked); it.hasNext();) {
-        const auto m = it.next();
-        if (m.capturedStart() > 0 && masked.at(m.capturedStart() - 1) == u'[')
-            continue;
-        setRange(at(m.capturedStart()), int(m.capturedLength()), m_formats[u"marker"_s]);
-        setRange(at(m.capturedStart(1)), int(m.capturedLength(1)), m_formats[u"link"_s]);
-        setRange(at(m.capturedStart(2)), int(m.capturedLength(2)), m_formats[u"faint"_s]);
-    }
-    static const QRegularExpression urlRe(u"(?<![\\w(/])(https?://|mailto:)[^\\s<>()\\]]+"_s);
-    for (auto it = urlRe.globalMatch(masked); it.hasNext();) {
-        const auto m = it.next();
-        // Not inside a Markdown link target (already faint).
-        if (QSyntaxHighlighter::format(at(m.capturedStart())).property(NameProperty).toString() == u"faint")
-            continue;
-        setRange(at(m.capturedStart()), int(m.capturedLength()), m_formats[u"url"_s]);
-    }
-
-    // Tags.
-    static const QRegularExpression tagRe = text::unicodeRegex(u"(?:^|(?<=[\\s(]))#(\\[\\[[^\\]]+\\]\\]|[\\p{L}\\p{N}\\p{M}_\\-/]*[\\p{L}\\p{M}_\\-/][\\p{L}\\p{N}\\p{M}_\\-/]*)"_s);
-    for (auto it = tagRe.globalMatch(masked); it.hasNext();) {
-        const auto m = it.next();
-        setRange(at(m.capturedStart()), int(m.capturedLength()), m_formats[u"tag"_s]);
-    }
-
-    // Metadata tokens (dates, reminders, recurrence, priorities, block ids).
-    for (const markdown::Token &t : markdown::findTokens(masked)) {
-        QString name;
-        switch (t.kind) {
-        case markdown::TokenKind::Due: name = u"due"_s; break;
-        case markdown::TokenKind::Scheduled: name = u"scheduled"_s; break;
-        case markdown::TokenKind::Start: name = u"start"_s; break;
-        case markdown::TokenKind::Created:
-        case markdown::TokenKind::Done:
-        case markdown::TokenKind::Cancelled: name = u"done"_s; break;
-        case markdown::TokenKind::Recurrence: name = u"recurrence"_s; break;
-        case markdown::TokenKind::Priority:
-        case markdown::TokenKind::LogseqPriority: name = u"priority"_s; break;
-        case markdown::TokenKind::Reminder:
-        case markdown::TokenKind::ReminderCompat: name = t.alarm ? u"alarm"_s : u"reminder"_s; break;
-        case markdown::TokenKind::Planning: name = t.field == markdown::TokenKind::Due ? u"due"_s : u"scheduled"_s; break;
-        case markdown::TokenKind::TaskId:
-        case markdown::TokenKind::DependsOn:
-        case markdown::TokenKind::OnCompletion: name = u"muted"_s; break;
-        }
-        setRange(at(t.from), int(t.to - t.from), m_formats[name]);
-        if (m_reminderChips && m_mode == u"inline"
-            && (t.kind == markdown::TokenKind::Reminder || t.kind == markdown::TokenKind::ReminderCompat))
-            m_lineChips.append({at(t.from), at(t.to), t.alarm,
-                                markdown::reminderChipLabel(
-                                        t.spec(), t.alarm,
-                                        m_chipLocale == u"en" ? dates::UiLocale::English : dates::UiLocale::Polish,
-                                        QDate::fromString(m_chipToday, Qt::ISODate))});
-    }
-    if (const auto id = markdown::blockIdAtEnd(masked))
-        setRange(at(id->from), int(id->to - id->from), m_formats[u"blockId"_s]);
+    setCurrentBlockState(m_lineStyles.state);
+    m_lineSpell = m_lineStyles.spell;
+    m_lineChips = std::move(m_lineStyles.chips);
 }
 
 } // namespace brulion::editor

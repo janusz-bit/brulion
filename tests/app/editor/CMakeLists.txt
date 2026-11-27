@@ -50,6 +50,12 @@ brulion_add_test(tst_editor_suggestions
 brulion_add_test(tst_editor_highlighter
     SOURCES tst_editor_highlighter.cpp
     LIBS brulion_editor)
+# The highlighter's rules as a pure function (markdownstyles.h): every construct in each mode, source
+# mode's states across lines, the prose for spell checking, the reminder chips, the flattened runs and,
+# character by character over a corpus, the same look as MarkdownHighlighter's formats.
+brulion_add_test(tst_editor_markdownstyles
+    SOURCES tst_editor_markdownstyles.cpp
+    LIBS brulion_editor)
 # Source mode's TextEdit handing its edits to PageController one at a time (SourceTextSync): random
 # edits, undo / redo and formats over every kind of line ending, the fallbacks, the safety net and a
 # keystroke's cost on a 500 KB page against handing over the whole text.
