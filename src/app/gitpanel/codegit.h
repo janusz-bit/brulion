@@ -414,7 +414,8 @@ private:
     void withRepo(std::function<void(bool isRepo)> done);
     void endRefresh();
     void applyStatus(const gitcli::StatusReport &report);
-    void applyTurn(const QString &checkpoint, const gitcli::ChangesReport &report);
+    // The turn's rows from `report` when `checkpoint` is the turn's; the report's rows.
+    QVariantList applyTurn(const QString &checkpoint, const gitcli::ChangesReport &report);
     /// No repository (any more): the state emptied, `error` as the refresh's.
     void setNotRepo(const QString &error, bool wasRepo);
     void setRefreshError(const QString &error);

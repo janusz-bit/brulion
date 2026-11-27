@@ -822,7 +822,14 @@ void TestCodeGit::turnCheckpoint()
     // writes may have read the status first: the next one, which refresh() asked for, has them).
     QTRY_COMPARE_WITH_TIMEOUT(git.changeCount(), 4, Wait);
 
+    // A refresh (the watcher's, refresh()'s) keeps the turn's rows current and answers no request:
+    // changesSinceReady is changesSince()'s answer alone (on Windows the watcher's late refreshes
+    // answered a request two more times).
     QSignalSpy since(&git, &CodeGit::changesSinceReady);
+    git.refresh();
+    QTRY_VERIFY_WITH_TIMEOUT(git.refreshing(), Wait);
+    QTRY_VERIFY_WITH_TIMEOUT(!git.refreshing(), Wait);
+    QCOMPARE(since.count(), 0);
     git.changesSince(id);
     QTRY_COMPARE_WITH_TIMEOUT(since.count(), 1, Wait);
     QCOMPARE(since.at(0).at(0).toString(), id);

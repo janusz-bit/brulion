@@ -435,20 +435,20 @@ void CodeGit::loadRepoFacts()
     });
 }
 
-void CodeGit::applyTurn(const QString &checkpoint, const gitcli::ChangesReport &report)
+QVariantList CodeGit::applyTurn(const QString &checkpoint, const gitcli::ChangesReport &report)
 {
     const QVariantList rows = report.ok ? changeRows(report.changes) : QVariantList();
-    Q_EMIT changesSinceReady(checkpoint, rows);
     if (checkpoint != m_turnCheckpoint)
-        return;
+        return rows;
     const QString error = report.ok ? QString() : report.error;
     if (m_turnLoaded && rows == m_turnChanges && error == m_turnError)
-        return;
+        return rows;
     m_turnChanges = rows;
     m_turnError = error;
     m_turnLoaded = true;
     Q_EMIT turnChangesChanged();
     bump();
+    return rows;
 }
 
 void CodeGit::setNotRepo(const QString &error, bool wasRepo)
@@ -831,13 +831,14 @@ void CodeGit::changesSince(const QString &checkpoint)
         if (!isRepo) {
             gitcli::ChangesReport none;
             none.error = tr("Not a git repository");
-            applyTurn(checkpoint, none);
+            Q_EMIT changesSinceReady(checkpoint, applyTurn(checkpoint, none));
             return;
         }
+        // (The answer to this request alone: a refresh updates the turn's rows without one.)
         m_client.changesSince(m_info.topLevel, checkpoint,
                               [this, generation, checkpoint](const gitcli::ChangesReport &report) {
                                   if (generation == m_generation)
-                                      applyTurn(checkpoint, report);
+                                      Q_EMIT changesSinceReady(checkpoint, applyTurn(checkpoint, report));
                               });
     });
 }
