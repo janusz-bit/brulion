@@ -125,7 +125,8 @@ QtObject {
         return v ? QmlCall.integer(EditorInput.inputMethodQuery(v, Qt.ImCursorPosition)) : -1
     }
     /// The suggestion popup (BlockEditor's).
-    function popup(): SuggestionPopup { return editor.suggestions as SuggestionPopup }
+    // (Cast only once it exists: the popup's type is loaded with it.)
+    function popup(): SuggestionPopup { return editor.suggestions !== null ? editor.suggestions as SuggestionPopup : null }
     /// How many suggestions the popup lists.
     function suggestionCount(): int { return QmlCall.integer(QmlCall.get(window.suggestionModel(), "count")) }
     function suggestionsShown(): bool {
@@ -678,11 +679,13 @@ QtObject {
         target: test.host
         function onNavigated(route: var, newPane: bool) { test.navigations += 1 }
     }
-    function dateMenu(): DateChipMenu { return editor.dateMenu as DateChipMenu }
+    // (BMenu, as the editor declares them: DateChipMenu and LinkMenu are loaded when first used, and
+    // an `as` to them before that meets a type without its meta-object — UBSan in CI's build.)
+    function dateMenu(): BMenu { return editor.dateMenu }
     function dateMenuOpen(): bool { return test.dateMenu() !== null && test.dateMenu().opened }
     function blockMenu(): BMenu { return editor.blockMenu }
     function blockMenuOpen(): bool { return test.blockMenu() !== null && test.blockMenu().opened }
-    function linkMenu(): LinkMenu { return editor.linkMenu as LinkMenu }
+    function linkMenu(): BMenu { return editor.linkMenu }
     function linkMenuOpen(): bool { return test.linkMenu() !== null && test.linkMenu().opened }
     function dialogs(): EditorDialogs { return editor.dialogsNow() as EditorDialogs }
     function dateDialog(): BDialog {
