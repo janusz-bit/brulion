@@ -28,7 +28,9 @@
 //
 // The cost is an estimate of what the same tokens would cost on the provider's API (the price
 // table below, dated) — a subscription pays nothing more for them. A costUSD in the log wins over
-// the table. A model the table does not know: its tokens count, its cost is "not known".
+// the table. A model the table does not know: its tokens count, its cost is "not known". A name the
+// provider's backend resolves itself (Codex's "codex-auto-review") is priced as the model the
+// provider's program sends for an API key (prices.cpp: Aliases).
 #pragma once
 
 #include "agentlimits/limits.h"

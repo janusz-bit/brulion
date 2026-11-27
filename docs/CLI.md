@@ -1291,7 +1291,9 @@ brulion-cli --vault ~/Notatki acp usage --notebook --format text
 * **The cost** is the API's price of the same tokens (`pricesAsOf`: the date of the price table,
   `src/core/agentusage/prices.cpp`), or the log's own `costUSD`; a subscription pays nothing more for
   them. A model the table does not know: its tokens count, `costKnown: false` with
-  `unpricedRequests` / `unpricedTokens`, and `priced: false` on its row.
+  `unpricedRequests` / `unpricedTokens`, and `priced: false` on its row. Codex's automatic approval
+  review (`codex-auto-review`) is priced as `gpt-5.6-luna`, the model Codex asks for it with an API
+  key.
 * **The cache** is the app's (`<cache>/agent-usage/`, for the owner only): a run reads only what was
   appended to the logs since the last one, the app's or the command line's, and keeps the use of
   logs the agent has since deleted (for 400 days).

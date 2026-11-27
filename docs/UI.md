@@ -2204,7 +2204,11 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   one place (`src/core/agentusage/prices.cpp`, dated `PricesAsOf`: Anthropic's and OpenAI's prices
   per million tokens, the long-context tiers above 200 K / 272 K prompt tokens, fast mode's factor;
   a `costUSD` in the log wins; a model the table does not know counts its tokens and its cost "not
-  known"; Claude Code's `<synthetic>` messages cost nothing). Per day in local time, per model, per
+  known"; Claude Code's `<synthetic>` messages cost nothing; a name the provider's backend resolves
+  itself is priced as the model the provider's own program sends for an API key — Codex's automatic
+  approval review, whose rollouts name `codex-auto-review` with a ChatGPT sign-in, as `gpt-5.6-luna`,
+  what Codex asks for with an API key: `codex-rs/model-provider/src/provider.rs`; the history keeps
+  the log's name). Per day in local time, per model, per
   project folder (the session's `cwd`). Shown on the agent's row in Settings → Extensions → AI
   agents — its line under the command, "Today 1.2 M tokens · ≈ 4.10 USD · 30 days ≈ 61 USD" ("Today
   nothing · 30 days ≈ 61 USD", "No usage yet" without logs), and **Usage…** (`acpAgentUsage`,
@@ -2239,8 +2243,8 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   "What the agents used"). Tests: `tst_agentusage` (synthetic logs of both agents: a streamed
   message, a resumed session, cumulative Codex totals, Codex's response records, a fork, a truncated last line, malformed and
   huge lines, an unknown model, the cache reading only what was appended, a file that shrank or
-  was rewritten, a gone file, days across DST and in a +05:45 zone, the reader's rhythm; compressed
-  rollouts made by `zstd` 1.5.7 —
+  was rewritten, a gone file, days across DST and in a +05:45 zone, the reader's rhythm; an
+  automatic review's real lines, anonymised; compressed rollouts made by `zstd` 1.5.7 —
   `tests/core/agentusage/fixtures/make-fixtures.sh`: as Codex writes them, with a checksum, two
   frames, cut, broken, a window too large, a line too long —, one compressed, archived or made plain
   again later, both files at once, the text's limit),

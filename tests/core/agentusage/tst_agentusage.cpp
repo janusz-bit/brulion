@@ -202,6 +202,8 @@ class TestAgentUsage : public QObject {
 private Q_SLOTS:
     void modelNames_data();
     void modelNames();
+    void pricedAs_data();
+    void pricedAs();
     void prices();
     void claudeLines();
     void claudeLinesMalformed_data();
@@ -220,6 +222,7 @@ private Q_SLOTS:
     void codexForkCountsOnce();
     void codexResponseRecords();
     void codexRecordsHistory();
+    void codexAutoReview();
     void compressedRollouts_data();
     void compressedRollouts();
     void compressedLater();
@@ -269,6 +272,38 @@ void TestAgentUsage::modelNames()
     QFETCH(bool, priced);
     QCOMPARE(normalizedModel(model), normalized);
     QCOMPARE(priceOf(model).has_value(), priced);
+}
+
+/// Models the log names by an alias of the provider's: priced as the model the provider's own
+/// program sends for an API key (the same work on the API).
+void TestAgentUsage::pricedAs_data()
+{
+    QTest::addColumn<QString>("model");
+    QTest::addColumn<QString>("pricedAs");
+    // Codex's automatic approval review (its "guardian"): "codex-auto-review" with a ChatGPT
+    // sign-in, gpt-5.6-luna with an API key (codex-rs/model-provider/src/provider.rs, 0.150 on).
+    QTest::newRow("auto review") << u"codex-auto-review"_s << u"gpt-5.6-luna"_s;
+    QTest::newRow("auto review, upper case") << u" Codex-Auto-Review "_s << u"gpt-5.6-luna"_s;
+    QTest::newRow("auto review, provider prefix") << u"openai/codex-auto-review"_s << u"gpt-5.6-luna"_s;
+    QTest::newRow("a model itself") << u"gpt-5.6-luna"_s << u"gpt-5.6-luna"_s;
+}
+
+void TestAgentUsage::pricedAs()
+{
+    QFETCH(QString, model);
+    QFETCH(QString, pricedAs);
+    const std::optional<Price> price = priceOf(model);
+    const std::optional<Price> as = priceOf(pricedAs);
+    QVERIFY(price && as);
+    Tokens t;
+    t.input = 400'000;
+    t.cacheRead = 300'000;
+    t.output = 20'000;
+    for (const quint8 flags : {quint8(0), quint8(Fast), quint8(LongContext), quint8(Fast | LongContext)})
+        QVERIFY2(near(costOf(t, *price, flags), costOf(t, *as, flags)), qPrintable(QString::number(flags)));
+    QCOMPARE(price->longAbove, as->longAbove);
+    // (What the history shows keeps the log's name: only the price is the other model's.)
+    QCOMPARE(normalizedModel(model), model.trimmed().toLower().section(u'/', -1));
 }
 
 void TestAgentUsage::prices()
@@ -798,6 +833,43 @@ void TestAgentUsage::codexRecordsHistory()
     QCOMPARE(t.tokens.requests, 4);
     QCOMPARE(t.tokens.input + t.tokens.cacheRead, 5200);
     QCOMPARE(t.tokens.output, 610);
+}
+
+void TestAgentUsage::codexAutoReview()
+{
+    // A rollout of Codex's automatic approval review (Codex Desktop 0.155, ChatGPT sign-in), its lines
+    // as Codex wrote them — ids, paths and instructions shortened and anonymised: the model is
+    // "codex-auto-review", priced as gpt-5.6-luna; its tokens have a cost.
+    QTemporaryDir dir;
+    const QByteArray log =
+            R"({"timestamp":"2026-09-26T00:26:09.942Z","ordinal":0,"type":"session_meta","payload":{"session_id":"01a0dafd-e579-7b62-be3b-ff3ee7389b31","id":"01a0db1a-ec78-7e21-9e90-6087d37414d8","parent_thread_id":"01a0dafd-e579-7b62-be3b-ff3ee7389b31","timestamp":"2026-09-26T00:26:09.914Z","cwd":"/home/ola/Konfiguracja","originator":"Codex Desktop","cli_version":"0.155.0-alpha.16.3","source":{"subagent":{"other":"guardian"}},"thread_source":"guardian_review","model_provider":"openai","base_instructions":{"text":"You are judging one planned coding-agent action."}}})"
+            "\n"
+            R"({"timestamp":"2026-09-26T00:26:09.942Z","ordinal":2,"type":"event_msg","payload":{"type":"thread_settings_applied","thread_id":"01a0db1a-ec78-7e21-9e90-6087d37414d8","thread_settings":{"model":"codex-auto-review","model_provider_id":"openai","service_tier":"default","approval_policy":"never","approvals_reviewer":"auto_review"}}})"
+            "\n"
+            R"({"timestamp":"2026-09-26T00:26:10.608Z","ordinal":8,"type":"turn_context","payload":{"turn_id":"01a0db1a-ec99-7092-9400-9ccfc1aefad6","root_turn_id":"01a0db19-6f30-7a91-9b03-d154c4a34c95","cwd":"/home/ola/Konfiguracja","current_date":"2026-09-26","timezone":"Europe/Warsaw","approval_policy":"never","approvals_reviewer":"auto_review","sandbox_policy":{"type":"read-only"},"model":"codex-auto-review","effort":"medium","summary":"none"}})"
+            "\n"
+            R"({"timestamp":"2026-09-26T00:26:13.092Z","ordinal":14,"type":"token_usage_record","payload":{"thread_id":"01a0db1a-ec78-7e21-9e90-6087d37414d8","turn_id":"01a0db1a-ec99-7092-9400-9ccfc1aefad6","session_id":"01a0dafd-e579-7b62-be3b-ff3ee7389b31","root_turn_id":"01a0db19-6f30-7a91-9b03-d154c4a34c95","response_id":"resp_06087cee14316747016ab71122e54c87d2a436c87686ee9968","usage":{"input_tokens":29440,"cached_input_tokens":4864,"cache_write_input_tokens":0,"output_tokens":96,"reasoning_output_tokens":38,"total_tokens":29536},"turn_token_usage":{"input_tokens":29440,"cached_input_tokens":4864,"cache_write_input_tokens":0,"output_tokens":96,"reasoning_output_tokens":38,"total_tokens":29536},"thread_token_usage":{"input_tokens":29440,"cached_input_tokens":4864,"cache_write_input_tokens":0,"output_tokens":96,"reasoning_output_tokens":38,"total_tokens":29536}}})"
+            "\n"
+            R"({"timestamp":"2026-09-26T00:26:13.092Z","ordinal":15,"type":"event_msg","payload":{"type":"token_count","info":{"total_token_usage":{"input_tokens":29440,"cached_input_tokens":4864,"cache_write_input_tokens":0,"output_tokens":96,"reasoning_output_tokens":38,"total_tokens":29536},"last_token_usage":{"input_tokens":29440,"cached_input_tokens":4864,"cache_write_input_tokens":0,"output_tokens":96,"reasoning_output_tokens":38,"total_tokens":29536},"model_context_window":258400},"rate_limits":{"limit_id":"codex","primary":{"used_percent":35.0,"window_minutes":10080,"resets_at":1790769075},"plan_type":"prolite"}}})"
+            "\n";
+    writeFile(dir.filePath(u"sessions/2026/09/26/rollout-2026-09-26T02-26-09-01a0db1a-ec78-7e21-9e90-6087d37414d8.jsonl"_s),
+              log);
+    ReadOptions o = options(dir.filePath(u"cache.json"_s));
+    o.now = QDateTime(QDate(2026, 9, 27), QTime(12, 0), QTimeZone::UTC);
+    const History h = readHistory(codexSource(dir.path()), o);
+    QCOMPARE(h.skippedLines, 0);
+    const Report r = report(h, Query{QDate(2026, 9, 1), QDate(2026, 9, 30), {}});
+    QCOMPARE(r.total.tokens.requests, 1);
+    QCOMPARE(r.total.tokens.input, 29440 - 4864);
+    QCOMPARE(r.total.tokens.cacheRead, 4864);
+    QCOMPARE(r.total.tokens.output, 96);
+    QCOMPARE(r.total.tokens.reasoning, 38);
+    QVERIFY(r.total.costKnown());
+    QCOMPARE(r.models.size(), 1);
+    QCOMPARE(r.models.first().name, u"codex-auto-review"_s);
+    QCOMPARE(r.projects.first().name, u"/home/ola/Konfiguracja"_s);
+    QVERIFY2(near(r.total.cost, ((29440 - 4864) * 0.20 + 4864 * 0.02 + 96 * 1.20) / 1e6),
+             qPrintable(QString::number(r.total.cost, 'g', 12)));
 }
 
 void TestAgentUsage::compressedRollouts_data()
