@@ -2190,7 +2190,8 @@ private Q_SLOTS:
         // The real brulion-cli is the agents' tools (the first on PATH: toolsProgram()).
         const QByteArray path = qgetenv("PATH");
         auto restorePath = qScopeGuard([path] { qputenv("PATH", path); });
-        qputenv("PATH", QByteArray(QFileInfo(QStringLiteral(BRULION_CLI)).absolutePath().toLocal8Bit() + ':' + path));
+        qputenv("PATH", QByteArray(QFileInfo(QStringLiteral(BRULION_CLI)).absolutePath().toLocal8Bit()
+                                   + QDir::listSeparator().toLatin1() + path));
         const auto optionOf = [](const char *variable) {
             const QString o = qEnvironmentVariable(variable);
             return o.contains(u'=') ? QJsonObject{{o.section(u'=', 0, 0), o.section(u'=', 1)}} : QJsonObject{};
