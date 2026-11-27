@@ -872,6 +872,8 @@ private Q_SLOTS:
                 << QStringList{u"calendar"_s,   u"edit"_s,    u"dwa"_s, u"--occurrence"_s,
                                u"2026-12-15"_s, u"--title"_s, u"x"_s}
                 << 4 << "ambiguous_occurrence" << "";
+        QTest::newRow("no title") << QStringList{u"calendar"_s, u"add"_s, u"--start"_s, u"jutro"_s} << 2
+                                  << "missing_argument" << "";
         QTest::newRow("a title of spaces") << QStringList{u"calendar"_s, u"edit"_s, u"rada"_s, u"--title"_s, u"   "_s}
                                            << 2 << "no_title" << "no_title";
     }
