@@ -1,6 +1,7 @@
 # brulion_editor — the C++ side of the block editor (docs/UI.md "The block editor"): BlockListModel,
 # PageController (+ DayClock: the date for every open page; LazyHtmlMimeData: a copy's HTML rendered
-# on request; StreamSelection: a selection over several days of the journal stream), MarkdownHighlighter, RichTextPills (the
+# on request; StreamSelection: a selection over several days of the journal stream), MarkdownHighlighter (its rules
+# the pure function of markdownstyles.h, QtCore only: also the Atrament editor's input), RichTextPills (the
 # rounded chips of the rendered text), LinkPreview (what a link's hover preview shows), SuggestionModel,
 # EditorInput (TextEdit text and input-method helpers), SourceTextSync (source mode: the TextEdit's
 # edits handed to PageController one at a time), SpellCheck (spell checking on a worker thread:
@@ -50,6 +51,7 @@ qt_add_library(brulion_editor STATIC
     streamselection.h streamselection.cpp
     streamfind.h streamfind.cpp
     dayclock.h dayclock.cpp
+    markdownstyles.h markdownstyles.cpp
     markdownhighlighter.h markdownhighlighter.cpp
     spellcheck.h spellcheck.cpp
     spellmarks.h spellmarks.cpp

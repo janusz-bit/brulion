@@ -540,7 +540,20 @@ In the **app** (`src/app/editor/atrament/`, may use QtCore; only in builds with 
   `TextInput` over the block's source.
 * **The highlighter as a pure function**: `MarkdownHighlighter` is a `QSyntaxHighlighter` over a
   `QTextDocument`; its rules move into a function from a block's source to style ranges, used by
-  both the QML highlighter and the Atrament input (one set of rules, tested once).
+  both the QML highlighter and the Atrament input (one set of rules, tested once). **Built**
+  (`src/app/editor/markdownstyles.h`, QtCore only; `tests/app/editor/tst_editor_markdownstyles.cpp`):
+  `styleMarkdownLine(line, previousState, StyleOptions, LineStyles *)` — the mode (inline,
+  source, code; Luau) — gives a line's `StyleOp`s (`{from, length, style, merge, modifier, tint}`:
+  a `MarkdownStyle` — "heading", "marker", … "luau.comment" — set or merged in the highlighter's
+  order, a DemiBold or on-the-heading variant, a coloured `<mark>`'s tint), the state its next line
+  starts in (source mode's fences — a Luau fence's lexer state inside —, the frontmatter, `%%`
+  comments, `$$` formulas), its `SpellRange` and its reminder `LineChip`s; `flattenStyles(ops,
+  length)` turns them into non-overlapping `StyleRun`s of `StyleAttributes` — a `ColorRole` (the
+  palette key with its fallbacks: `colorRolePalette()`), a `BackgroundRole` or tint, the weight,
+  italic, strike, underline, monospace — for the Atrament input. `MarkdownHighlighter` applies the
+  operations with `setFormat` and builds its formats from the same table (`styleAttributes()`); the
+  test compares, character by character over a corpus in every mode, the flattened runs with its
+  `QTextLayout` formats.
 * **Keymaps**: the editor's keys (Enter splits, Backspace at the start merges, Tab / Shift+Tab
   indent, Alt+↑/↓ move, Ctrl+Enter toggles the task…) as actions in a key context `BlockEditor`,
   each one `PageController` call; the edited row's caret and the row to focus come from the
