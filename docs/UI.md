@@ -1880,10 +1880,15 @@ conversation (docs/EXTENSIONS.md "Chat partners"), or an AI agent of the user's 
   5, not the conversation nor the page it is about — with the message: their text where it takes
   embedded context, else links (an encrypted page: a link); the built-in assistant reads them with
   its own tools.
-* **Drafts**: what is written in the field and not sent stays with its conversation while another
-  is shown, and over a restart (`WorkspaceChats.draft()` / `setDraft()`, the notebook's device
-  state `chat/drafts`, following a rename; a new conversation's draft under ""); its pictures stay
-  with the field.
+* **Drafts**: what is written in the field and not sent — its text and its pictures — stays with
+  its conversation while another is shown, and over a restart (`WorkspaceChats.draft()` /
+  `draftPictures()` / `setDraft()`, the notebook's device state `chat/drafts`: an entry is the text,
+  or `{text, pictures}` with pictures — an older version's text-only entry is read as it is —,
+  following a rename; a new conversation's draft under "", a new thread of Code mode's under
+  `code:<project>`). The view keeps it when another conversation is shown, when it closes, before the
+  camera app opens and when the app leaves the front (`Workspace.saveOpenEditorsRequested`: Android
+  may end the app in the background without a word). Pictures a draft keeps stay in the notebook
+  when it closes (those added and neither sent nor kept go then).
 * **Questions asked before**: Up in an empty field brings back the user's questions of the
   conversation, newest first (Down goes forward again, to an empty field; editing one makes it a
   new message — `WorkspaceChats.prompts()`, core `chat::prompts`: without their pictures and the
@@ -1953,13 +1958,18 @@ conversation (docs/EXTENSIONS.md "Chat partners"), or an AI agent of the user's 
   picture at most 50 MB, a pick 200 MB, read into memory and stored as a file's are, the pick's
   pictures handed to the view that asked, `picturesPicked(pick, paths)`) or, on Android, opens a
   menu (`chatAttachMenu`) with
-  **Take a photo** (`chatTakePhoto`: the system's camera app, `platform/capture.h`) and **Picture
-  from a file…**; Ctrl+V with a picture on the clipboard (not with text) adds it, and pictures dropped
+  **Take a photo** (`chatTakePhoto`: the system's camera app, `platform/capture.h`'s `PhotoCamera`)
+  and **Picture from a file…**; the photo goes into the draft of the conversation it was taken for —
+  `WorkspaceChats.takePhoto(draft)`, then `placePhoto()`, the one place that decides: copied into
+  the notebook as a picked file is, added to that draft's pictures, `photoTaken(draft, path)` for a
+  field that shows it —, also when Android ended the app while the camera app was in front: the
+  camera keeps the photo with its notebook and draft (docs/ANDROID.md "Camera and dictation"), and
+  the next start puts it into that draft once the notebook is open; Ctrl+V with a picture on the clipboard (not with text) adds it, and pictures dropped
   on the conversation do too (`DropArea`, `chatDropHint` while they hover). Each is stored at once as
   an attachment of the notebook (`WorkspaceChats.addPicture` → `Workspace::importAttachment`, the
   attachments folder) and shown as a thumbnail above the field (`chatAttached`,
-  `chatAttachedPicture`) with × (`chatDetachPicture`: deleted again — `dropPicture`; pictures never
-  sent go when the view closes); sent, they are embeds in the user's message (`![[…]]`,
+  `chatAttachedPicture`) with × (`chatDetachPicture`: deleted again — `dropPicture`; pictures not
+  sent stay with the conversation's draft, above); sent, they are embeds in the user's message (`![[…]]`,
   docs/SYNTAX.md §14), and the model gets them as pictures (b.ai's `images`; the newest eight of the
   conversation). A model on the device that reads text only gets their names, and the field says so
   (`WorkspaceChats.seesPictures`).
@@ -2016,7 +2026,7 @@ archived by themselves (`setAutoArchiveDays()`, `archiveUntouched()`, `autoArchi
 (`secrets`: ChatSecrets, "A secret the agent asks for" above), the webhooks' server (`hooks`:
 HookServer, "Scheduled conversations" below), the
 pictures (`addPicture`, `addPictures(To)`, `addClipboardPicture`, `dropPicture`, `pictureUrl`,
-`picturePath`), the camera and dictation (`takePhoto` → `photoTaken`, `startDictation` /
+`picturePath`), the camera and dictation (`takePhoto(draft)` → `photoTaken(draft, path)` / `captureFailed(draft, why)`, `startDictation` /
 `stopDictation` / `cancelDictation` → `dictated`; `dictationReady`, `recognizing`, `dictationElapsed`,
 `dictationLimit`, `useSpeechRecognizer()`), the agents' subscription limits (`limits`: AgentLimits,
 "AI agents (ACP)" → "Its limits"), `historyBudget`, `seesPictures`, `onDevice`,

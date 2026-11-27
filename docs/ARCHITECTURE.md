@@ -303,7 +303,7 @@ Only what needs OS APIs; compiled per target (no `#ifdef`s in core). `platform.h
   (`openexternal_desktop.cpp`: `QDesktopServices::openUrl` of the local file), Android's
   ACTION_VIEW (`openexternal_android.cpp` → `AndroidBridge::viewFile` → `OpenWith.kt`: a content://
   URI of the FileProvider `<package>.qtprovider` with a read grant — its roots in
-  `android/res/xml/qtprovider_paths.xml`: the app's files and cache and the shared storage; a file
+  `android/res/xml/brulion_provider_paths.xml`: the app's files and cache and the shared storage; a file
   on a memory card copied into `cache/open/` first —), the browser's new tab (`wasm/wasmopen.cpp`:
   a blob: URL of the bytes typed explicitly, `window.open` inside the user's click, the opener cut,
   the last three URLs kept; blocked → the bytes saved as a download). `setOpenFileHook` records

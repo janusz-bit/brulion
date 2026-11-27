@@ -2,6 +2,10 @@
 # the Run value's command, Task Manager's switch, Autostart on INI files) and the Windows
 # AppUserModelID of the toasts (appidentity.h). Runs on every desktop platform.
 brulion_add_test(tst_autostart SOURCES tst_autostart.cpp LIBS brulion_platform)
+# The camera of capture.h: the photos the Android camera hands out (capturedPhotos: Polish names,
+# entries without a file left out) and a camera of the app's own registered (setPhotoCamera) — pure
+# or desktop-only, so tested on every platform.
+brulion_add_test(tst_capture SOURCES tst_capture.cpp LIBS brulion_platform)
 # The bookkeeping of the browser's file picker (pickedfiles.h, used by wasm/wasmfiles.h): files
 # read or skipped above the limit, the reading stopped at the pick's total, an empty file, a
 # cancel — pure, so tested on every platform.

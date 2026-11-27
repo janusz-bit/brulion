@@ -1,25 +1,18 @@
 // capture.h without a camera app or a speech recognizer of the system (desktop, the browser): the
 // chat picks a picture file instead of a photo; dictation only through a recognizer the app
-// registers (setSpeechRecognizer).
+// registers (setSpeechRecognizer), a photo only through a camera it registers (setPhotoCamera).
 #include "capture.h"
 
-namespace brulion::platform {
+namespace brulion::platform::detail {
 
-namespace detail {
 SpeechRecognizer *systemSpeechRecognizer()
 {
     return nullptr;
 }
-} // namespace detail
 
-bool cameraAvailable()
+PhotoCamera *systemPhotoCamera()
 {
-    return false;
+    return nullptr;
 }
 
-bool takePhoto(std::function<void(const QString &, const QString &)>)
-{
-    return false;
-}
-
-} // namespace brulion::platform
+} // namespace brulion::platform::detail

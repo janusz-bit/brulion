@@ -20,7 +20,7 @@ import java.util.concurrent.Executors
  * `src/platform/openexternal_android.cpp`): the file handed to the app the system has for its type —
  * ACTION_VIEW of a content:// URI of Brulion's FileProvider (`<package>.qtprovider`, non-exported,
  * a read grant for this one URI), no chooser (the system asks itself when there is no default app).
- * The provider's roots (android/res/xml/qtprovider_paths.xml) are the app's files and cache and the
+ * The provider's roots (android/res/xml/brulion_provider_paths.xml) are the app's files and cache and the
  * shared storage (`/storage/emulated/0`, where notebooks usually live); a file elsewhere — a memory
  * card — is copied into `cache/open/` first, on a background thread (older copies deleted), and the
  * app opens when the copy is there.

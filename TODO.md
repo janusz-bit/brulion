@@ -69,16 +69,16 @@ done in the repository simply disappears from the list.
   untried with Android's app (the phone asleep or in the background while a call waits, a
   screenshot of its window over a mobile network) and with `services.brulion-acp`.
 * **The AI chat and the writing assistant: what is still to check** — on a real phone: a photo
-  from the camera app for a message (the activity recreated while the camera is in front loses the
-  photo's path, kept only in memory) and dictation with Google's recognizer and with none
-  (GrapheneOS: docs/ANDROID.md "Camera and dictation"); Claude's summarised thinking with a real
-  key (`thoughts = true`, `ai::showsThinking`); the desktop's dictation (`media::Dictation`) with a
-  real microphone on Windows; the browser's picture picker for a message in a real browser (CI's
-  headless Chrome cannot open a file picker); the chat's notifications (an answer, a failure, a
-  question while the app is behind another, an AI agent's own — `brulion_app_chat_notify`: docs/UI.md
-  "AI chat") on a real phone — Android shows
-  them as a timer's end (`AndroidNotifier::showMessage`), untried — and in a real browser; and a side
-  chat's pane (`/btw`) on a real phone (in place of the conversation, Back closing it).
+  from the phone's camera app for a message (the emulator's camera and the app's process ended
+  while it is in front are checked: `scripts/android-emulator-test.sh --camera`) and dictation with
+  Google's recognizer and with none (GrapheneOS: docs/ANDROID.md "Camera and dictation"); Claude's
+  summarised thinking with a real key (`thoughts = true`, `ai::showsThinking`); the desktop's
+  dictation (`media::Dictation`) with a real microphone on Windows; the browser's picture picker
+  for a message in a real browser (CI's headless Chrome cannot open a file picker); the chat's
+  notifications (an answer, a failure, a question while the app is behind another, an AI agent's
+  own — `brulion_app_chat_notify`: docs/UI.md "AI chat") on a real phone — Android shows them as a
+  timer's end (`AndroidNotifier::showMessage`), untried — and in a real browser; and a side chat's
+  pane (`/btw`) on a real phone (in place of the conversation, Back closing it).
 * **The model on the device: what is still missing** — LFM3-VL 2B, LFM3 1.7B and Brulion
   Assistant 1.7B (LFM3 1.7B with the adapter trained for the assistant: docs/FINETUNE.md) run in
   the app through llama.cpp on Linux (the Nix package, the AppImage), Windows and Android

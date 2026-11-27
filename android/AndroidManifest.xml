@@ -403,7 +403,7 @@
             android:grantUriPermissions="true">
             <meta-data
                 android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/qtprovider_paths" />
+                android:resource="@xml/brulion_provider_paths" />
         </provider>
     </application>
 </manifest>

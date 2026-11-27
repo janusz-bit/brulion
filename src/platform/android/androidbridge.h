@@ -211,7 +211,7 @@ public:
      * Opens the file at @p path in the app the system has for @p mimeType (ACTION_VIEW, no
      * chooser: the system asks itself when there is no default) through a content:// URI of
      * Qt's FileProvider "<package>.qtprovider" with a read grant (OpenWith.kt). A file outside
-     * the provider's roots (android/res/xml/qtprovider_paths.xml: the app's files and cache,
+     * the provider's roots (android/res/xml/brulion_provider_paths.xml: the app's files and cache,
      * the shared storage — not a memory card) is copied into the cache first, in the
      * background (Copying; the app opens when the copy is there). NoApp: no app opens the type
      * (the system's toast is not shown). The PDF viewer's "Open in another app"
@@ -283,9 +283,18 @@ public:
 
     /// Does the device have an app for `kind`?
     bool canCapture(int kind) const;
-    /// Starts it (`language`: BCP 47, speech only); the result arrives as captured(). False when it
-    /// could not be asked.
+    /// Starts the speech recognizer (`language`: BCP 47); the result arrives as captured(1, …).
+    /// False when it could not be asked.
     bool capture(int kind, const QString &language);
+    /// Starts the camera app for a photo for `purpose` in the notebook `notebook`, both kept with
+    /// the photo in the app's cache (cache/camera/photos.json) before the camera starts; the photo
+    /// waits there for takePhotos() — over the end of this process too. captured(0, …) follows
+    /// while the process lives. False when it could not be asked.
+    bool takePhoto(const QString &notebook, const QString &purpose);
+    /// The photos taken for `notebook` (and for none) not handed out yet, oldest first, as
+    /// [{file, notebook, purpose}] — removed from the cache's list: each is handed out once (its
+    /// file is the caller's then). Those of other notebooks wait.
+    QJsonArray takePhotos(const QString &notebook);
     /// The app lock's flags on the activity's window (platform::setSecureWindow): FLAG_SECURE while
     /// `secure`; the recent apps' preview left out while `hideRecents` (Android 13+). Set again for
     /// an activity made anew (AppLock.kt).
@@ -322,8 +331,9 @@ Q_SIGNALS:
     /// The ringtone picker of pickSound() answered: `choice` is `{mode, uri, title}` or
     /// `{"error": …}` (no picker on this phone).
     void soundPicked(int kind, const QJsonObject &choice);
-    /// capture() of `kind` ended: {file} (a photo's path in the app's cache) / {text}, {cancelled:
-    /// true} or {error}.
+    /// capture() or takePhoto() of `kind` ended: dictation's {text}, {cancelled: true} or {error}; a
+    /// photo's {taken: true} (takePhotos() hands it out), or {purpose, cancelled: true} / {purpose,
+    /// error}.
     void captured(int kind, const QJsonObject &result);
     /// The on-screen keyboard covers `overlap` physical pixels of Qt's view (0: hidden, or the
     /// window was resized above it); `shown` while it is up or coming up; `animating` for every

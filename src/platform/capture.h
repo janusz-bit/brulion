@@ -1,8 +1,10 @@
 // A photo from the camera and dictation for the AI chat (docs/UI.md "AI chat", docs/ANDROID.md
 // "Camera and dictation"): what the device can give the chat's field besides typing.
 //
-//   if (platform::cameraAvailable())
-//       platform::takePhoto([](const QString &file, const QString &error) { … });
+//   if (platform::PhotoCamera *camera = platform::photoCamera()) {   // nullptr: no camera app
+//       connect(camera, &PhotoCamera::photosWaiting, …);   // then camera->takePhotos(notebook)
+//       camera->take(notebook, u"what asked for it"_s);
+//   }
 //   platform::SpeechRecognizer *speech = platform::speechRecognizer();   // nullptr: no dictation
 //   connect(speech, &SpeechRecognizer::recognized, …); speech->start(u"pl-PL"_s);
 //
@@ -12,6 +14,12 @@
 // MediaCapture.kt, with no CAMERA or RECORD_AUDIO permission of Brulion's own — capture_android.cpp;
 // elsewhere none — capture_none.cpp (the chat picks a picture file instead; no dictation).
 //
+// A photo outlives the app's process: Android may end it while the camera app is in front (it
+// needs the memory), and the camera's answer then starts the app anew. So the camera keeps what
+// it was asked for (`notebook`, `purpose`) with the photo — before the camera app starts — and
+// hands the photo out once, to whoever takes the photos of that notebook: the same process's
+// caller, or the next one's once its notebook is open (WorkspaceChats: the conversation's draft).
+//
 // The hook for speech recognition of the app's own: setSpeechRecognizer() — a recognizer registered
 // there is used instead of the system's, on every platform; the chat shows its microphone button
 // whenever speechRecognizer() is not null. The desktop app registers one that records and hears
@@ -20,10 +28,11 @@
 // whether it can listen at all (ready(): false without a speech model).
 #pragma once
 
+#include <QJsonArray>
+#include <QJsonObject>
+#include <QList>
 #include <QObject>
 #include <QString>
-
-#include <functional>
 
 namespace brulion::platform {
 
@@ -72,11 +81,50 @@ SpeechRecognizer *speechRecognizer();
 /// another one replaces it); nullptr: the system's again.
 void setSpeechRecognizer(SpeechRecognizer *recognizer);
 
-/// The device has a camera app to ask for a photo (Android with one).
-bool cameraAvailable();
-/// Asks the camera app for a photo: `done` gets its file (a JPEG in the app's cache, the caller
-/// copies it into the notebook) or "" — with `error` "" when the user took none. False when it
-/// could not be asked (no camera here): `done` is not called.
-bool takePhoto(std::function<void(const QString &file, const QString &error)> done);
+/// A photo the camera took, with what asked for it.
+struct CapturedPhoto {
+    QString file;     ///< a JPEG in the app's cache: the taker's now (it copies it and removes it)
+    QString notebook; ///< PhotoCamera::take()'s `notebook`
+    QString purpose;  ///< PhotoCamera::take()'s `purpose`
+    bool operator==(const CapturedPhoto &) const = default;
+};
+
+/// The photos of `array` as the Android camera hands them out ({file, notebook, purpose} each), in
+/// order; an entry without a file is left out. Pure.
+QList<CapturedPhoto> capturedPhotos(const QJsonArray &array);
+
+/// The device's camera app, asked for photos. Used from the GUI thread; its signals too.
+class PhotoCamera : public QObject {
+    Q_OBJECT
+public:
+    using QObject::QObject;
+    /// Asks the camera app for a photo for `purpose` (the caller's own words: what the photo is
+    /// for) in the notebook `notebook` (Vault::id()); both are kept with the photo. False when it
+    /// could not be asked.
+    virtual bool take(const QString &notebook, const QString &purpose) = 0;
+    /// The photos taken for `notebook` — and for none — that nobody took yet, also those taken
+    /// while an earlier process of the app was gone; oldest first, each handed out once. The others
+    /// wait for their notebook.
+    virtual QList<CapturedPhoto> takePhotos(const QString &notebook) = 0;
+
+protected:
+    /// The camera app's answer as the Android camera says it ({taken: true}, or {purpose,
+    /// cancelled} / {purpose, error}): photosWaiting(), else failed(purpose, the error or "").
+    void answered(const QJsonObject &answer);
+
+Q_SIGNALS:
+    /// A photo was taken: takePhotos() hands it out.
+    void photosWaiting();
+    /// No photo for `purpose`: the camera could not be used (`why`, in English) or the user took
+    /// none (`why` "").
+    void failed(const QString &purpose, const QString &why);
+};
+
+/// The camera photos are asked of: one the app registered (setPhotoCamera), else the system's
+/// camera app (Android with one), else nullptr — no camera on this device.
+PhotoCamera *photoCamera();
+/// Uses `camera` for photos from now on (taken over: deleted with the application, or when another
+/// one replaces it); nullptr: the system's again.
+void setPhotoCamera(PhotoCamera *camera);
 
 } // namespace brulion::platform

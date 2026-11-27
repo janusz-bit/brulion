@@ -59,13 +59,46 @@ bool failed(const char *method)
     return true;
 }
 
-bool callBool(const char *method)
+/// An argument of a BrulionAndroid method as JNI takes it: a QString as a Java String (the
+/// QJniObject lives to the end of the call's full expression), an int as a jint.
+QJniObject javaValue(const QString &text)
+{
+    return QJniObject::fromString(text);
+}
+jint javaValue(int number)
+{
+    return jint(number);
+}
+jobject jniArgument(const QJniObject &object)
+{
+    return object.object();
+}
+jint jniArgument(jint number)
+{
+    return number;
+}
+
+/// `result` of BrulionAndroid.<method> as a bool: false when the call threw.
+bool trueAnswer(const char *method, jboolean result)
+{
+    return !failed(method) && result != JNI_FALSE;
+}
+
+/// BrulionAndroid.<method>(Context, …): boolean (`signature`) with `arguments` (QString, int);
+/// false when there is no context or the call failed.
+template<typename... Arguments>
+bool callBoolWith(const char *method, const char *signature, const Arguments &...arguments)
 {
     const QJniObject context = appContext();
     if (!context.isValid())
         return false;
-    const jboolean result = QJniObject::callStaticMethod<jboolean>(kClass, method, kContextToBool, context.object());
-    return !failed(method) && result != JNI_FALSE;
+    return trueAnswer(method, QJniObject::callStaticMethod<jboolean>(kClass, method, signature, context.object(),
+                                                                     jniArgument(javaValue(arguments))...));
+}
+
+bool callBool(const char *method)
+{
+    return callBoolWith(method, kContextToBool);
 }
 
 /// BrulionAndroid.<method>(Context): void, with @p argument <method>(Context, String): void.
@@ -592,13 +625,7 @@ AndroidBridge::ViewResult AndroidBridge::viewFile(const QString &path, const QSt
 
 bool AndroidBridge::printPdf(const QString &path, const QString &jobName)
 {
-    const QJniObject context = appContext();
-    if (!context.isValid())
-        return false;
-    const jboolean ok = QJniObject::callStaticMethod<jboolean>(
-            kClass, "printPdf", "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;)Z", context.object(),
-            QJniObject::fromString(path).object<jstring>(), QJniObject::fromString(jobName).object<jstring>());
-    return !failed("printPdf") && ok;
+    return callBoolWith("printPdf", "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;)Z", path, jobName);
 }
 
 DownloadResult AndroidBridge::saveToDownloads(const QString &name, const QString &mimeType, const QByteArray &data)
@@ -728,45 +755,33 @@ QJsonObject AndroidBridge::setReminderSounds(const QJsonObject &sounds)
 
 bool AndroidBridge::pickSound(int kind, const QJsonObject &current)
 {
-    const QJniObject context = appContext();
-    if (!context.isValid())
-        return false;
-    const jboolean asked = QJniObject::callStaticMethod<jboolean>(
-            kClass, "pickSound", "(Landroid/content/Context;ILjava/lang/String;)Z", context.object(), jint(kind),
-            QJniObject::fromString(compactJson(current)).object<jstring>());
-    return !failed("pickSound") && asked != JNI_FALSE;
+    return callBoolWith("pickSound", "(Landroid/content/Context;ILjava/lang/String;)Z", kind, compactJson(current));
 }
 
 bool AndroidBridge::canCapture(int kind) const
 {
-    const QJniObject context = appContext();
-    if (!context.isValid())
-        return false;
-    const jboolean can = QJniObject::callStaticMethod<jboolean>(kClass, "canCapture", "(Landroid/content/Context;I)Z",
-                                                                context.object(), jint(kind));
-    return !failed("canCapture") && can != JNI_FALSE;
+    return callBoolWith("canCapture", "(Landroid/content/Context;I)Z", kind);
 }
 
 bool AndroidBridge::capture(int kind, const QString &language)
 {
-    const QJniObject context = appContext();
-    if (!context.isValid())
-        return false;
-    const jboolean asked = QJniObject::callStaticMethod<jboolean>(
-            kClass, "capture", "(Landroid/content/Context;ILjava/lang/String;)Z", context.object(), jint(kind),
-            QJniObject::fromString(language).object<jstring>());
-    return !failed("capture") && asked != JNI_FALSE;
+    return callBoolWith("capture", "(Landroid/content/Context;ILjava/lang/String;)Z", kind, language);
+}
+
+bool AndroidBridge::takePhoto(const QString &notebook, const QString &purpose)
+{
+    return callBoolWith("takePhoto", "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;)Z", notebook,
+                        purpose);
+}
+
+QJsonArray AndroidBridge::takePhotos(const QString &notebook)
+{
+    return callJson("takePhotos", notebook).array();
 }
 
 bool AndroidBridge::previewSound(const QJsonObject &choice)
 {
-    const QJniObject context = appContext();
-    if (!context.isValid())
-        return false;
-    const jboolean played = QJniObject::callStaticMethod<jboolean>(
-            kClass, "previewSound", "(Landroid/content/Context;Ljava/lang/String;)Z", context.object(),
-            QJniObject::fromString(compactJson(choice)).object<jstring>());
-    return !failed("previewSound") && played != JNI_FALSE;
+    return callBoolWith("previewSound", "(Landroid/content/Context;Ljava/lang/String;)Z", compactJson(choice));
 }
 
 void AndroidBridge::openSoundSettings(int kind)
@@ -843,26 +858,14 @@ bool AndroidBridge::deviceAuthAvailable()
 
 bool AndroidBridge::requestDeviceAuth(const QString &title, const QString &subtitle, const QString &cancel)
 {
-    const QJniObject context = appContext();
-    if (!context.isValid())
-        return false;
-    const jboolean asked = QJniObject::callStaticMethod<jboolean>(
-            kClass, "requestDeviceAuth",
-            "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Z", context.object(),
-            QJniObject::fromString(title).object<jstring>(), QJniObject::fromString(subtitle).object<jstring>(),
-            QJniObject::fromString(cancel).object<jstring>());
-    return !failed("requestDeviceAuth") && asked != JNI_FALSE;
+    return callBoolWith("requestDeviceAuth",
+                        "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)Z", title,
+                        subtitle, cancel);
 }
 
 bool AndroidBridge::copySensitiveText(const QString &text)
 {
-    const QJniObject context = appContext();
-    if (!context.isValid())
-        return false;
-    const jboolean copied = QJniObject::callStaticMethod<jboolean>(
-            kClass, "copySensitive", "(Landroid/content/Context;Ljava/lang/String;)Z", context.object(),
-            QJniObject::fromString(text).object<jstring>());
-    return !failed("copySensitive") && copied != JNI_FALSE;
+    return callBoolWith("copySensitive", "(Landroid/content/Context;Ljava/lang/String;)Z", text);
 }
 
 void AndroidBridge::deliverPendingActivation()

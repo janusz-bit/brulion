@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The roots of the FileProvider "<package>.qtprovider" (AndroidManifest.xml's meta-data names this
+     file): the share sheet of exports (the app's files dir), "Open in another app" of the PDF
+     viewer (OpenWith.kt: the notebook on the shared storage; a copy in the cache for one on a memory
+     card), the camera's photo for the AI chat (MediaCapture.kt: cache/camera). Not named
+     qtprovider_paths.xml: Qt 6.12's androiddeployqt leaves a file of that name out of the package
+     source directory ("Qt now bundles its own copy"), and Qt's own copy has no cache-path — the
+     camera app was then refused its file. Qt's roots are kept too (external files and cache). The
+     provider is not exported; every URI is granted to one app for one file, on the user's action
+     only. -->
+<paths>
+    <files-path name="files" path="." />
+    <cache-path name="cache" path="." />
+    <external-path name="external" path="." />
+    <external-files-path name="external_files" path="." />
+    <external-cache-path name="external_cache" path="." />
+</paths>
