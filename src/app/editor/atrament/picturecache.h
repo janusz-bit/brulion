@@ -19,11 +19,23 @@
 // Notes come from anywhere: a file larger than MaxPixels in its header is not decoded, nor one
 // QImageReader refuses (its allocation limit); a failure is remembered (no new try every frame)
 // until the file's header size the model reports changes.
+//
+// An animated picture (a GIF, an animated WebP where Qt reads one) is decoded whole, every frame
+// at the side asked for (the decoder composes each one), with how long each shows: `animation`
+// in the Result, its first frame `image` — at most MaxAnimationBytes of pixels (a larger one is
+// decoded smaller, its frames fitted into that), at most MaxFrames frames. The view decides which
+// frame shows when (the page drawn by Atrament: mediarows.cpp).
+//
+// Pictures an image provider makes (`image://<id>/…`: a drawing's preview — the app's "drawing"
+// provider, DrawingImageProvider) come from a provider registered for the process
+// (setImageProvider()), called on the cache's worker threads as Qt Quick calls a provider in its
+// reader thread: it must be thread-safe. The side asked for is the box it is fitted into.
 #pragma once
 
 #include "scene/scene.h"
 
 #include <QHash>
+#include <QImage>
 #include <QObject>
 #include <QSize>
 #include <QThreadPool>
@@ -43,6 +55,9 @@ public:
     // PictureDecode's sides (src/app/ui/picturedecode.h).
     static constexpr int MaxSide = 2048;
     static constexpr int MinSide = 64;
+    // An animation's frames together, at most (32 MB: 64 frames of 512 × 256) and how many.
+    static constexpr qint64 MaxAnimationBytes = 32LL * 1024 * 1024;
+    static constexpr int MaxFrames = 1000;
 
     explicit PictureCache(QObject *parent = nullptr);
     ~PictureCache() override;
@@ -50,18 +65,33 @@ public:
     // The process's cache (every page drawn by Atrament shares it).
     static std::shared_ptr<PictureCache> shared();
 
-    // A URL the cache reads: a local file or a data: URL. (image://, qrc:, http: are not its.)
+    // A URL the cache reads: a local file, a data: URL, image://<id>/… of a provider registered
+    // (setImageProvider). (qrc:, http: are not its.)
     static bool readable(const QUrl &url);
+    // The picture of `id` (an image:// URL's path and query, as Qt Quick gives a provider), `size`
+    // set to its own size, fitted into `requested`: QQuickImageProvider::requestImage's contract.
+    using ImageProvider = std::function<QImage(const QString &id, QSize *size, const QSize &requested)>;
+    // Registers the provider of image://<providerId>/… for the process (null: none).
+    static void setImageProvider(const QString &providerId, ImageProvider provider);
     // Whether QImageReader has a decoder for the picture format of `fileName` (by its suffix:
     // "svg" needs Qt Svg's plugin). Unknown suffixes: true (the reader looks at the bytes).
     static bool decodableName(const QString &fileName);
     // The side a place of `width` × `height` logical px at `scale` decodes at (PictureDecode::sideFor).
     static int sideFor(float width, float height, float scale);
 
+    // An animated picture's frames in order and how long each shows (ms: at least 20 — a GIF's 0
+    // or 10 shows for 100, as browsers do), one loop's length.
+    struct Animation {
+        std::vector<std::shared_ptr<const atrament::ImageData>> frames;
+        std::vector<int> delays;
+        int duration = 0;
+    };
     struct Result {
         // The decoded picture (null: not yet, or it failed); maybe of another side than asked
-        // for while that one is decoded.
+        // for while that one is decoded. An animation's first frame.
         std::shared_ptr<const atrament::ImageData> image;
+        // An animated picture's frames (null for a still one).
+        std::shared_ptr<const Animation> animation;
         // The file's own pixel size (an SVG's default size), once read; invalid before.
         QSize natural;
         bool failed = false;  // the file could not be read or decoded
@@ -99,6 +129,7 @@ private:
     struct Entry {
         QUrl url;
         std::shared_ptr<const atrament::ImageData> image;
+        std::shared_ptr<const Animation> animation;
         int side = 0;         // decoded for this side (0: none yet)
         bool full = false;    // at the file's own size: fits any larger side too
         bool scalable = false;
@@ -111,7 +142,7 @@ private:
     };
     void start(const QString &key, Entry &e, int side, bool scalable);
     void finished(const QString &key, const QUrl &url, int side, std::shared_ptr<const atrament::ImageData> image,
-                  QSize natural, bool full);
+                  std::shared_ptr<const Animation> animation, QSize natural, bool full);
     void trim(const QString &keep);
 
     QHash<QString, Entry> m_entries;

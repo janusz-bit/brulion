@@ -3,6 +3,7 @@
 // (PictureDecode's steps, never enlarged), premultiplied RGBA, from local files and data: URLs,
 // held pictures never evicted, the least recently asked for going first over the byte budget, a
 // header claiming too many pixels refused, a failure remembered until the file changes.
+#include "animatedgif.h"
 #include "picturecache.h"
 
 #include <QBuffer>
@@ -76,6 +77,9 @@ private Q_SLOTS:
     void budgetEvictsTheLeastRecent();
     void refusesHugeHeaders();
     void failureRemembered();
+    void animatedGifFrames();
+    void largeAnimationDecodedSmaller();
+    void imageProviderPictures();
 };
 
 void TestAtramentPictureCache::sidesInSteps()
@@ -216,6 +220,100 @@ void TestAtramentPictureCache::failureRemembered()
     const PictureCache::Result r = cache.picture(u"zepsuty"_s, url, 256, QSize(30, 20));
     QVERIFY(!r.failed);
     QTRY_VERIFY(cache.contains(u"zepsuty"_s));
+}
+
+void TestAtramentPictureCache::animatedGifFrames()
+{
+    // A GIF of three frames: every frame decoded (whole), how long each shows, the first as `image`.
+    QTemporaryDir dir;
+    const QUrl url = writeFile(dir, u"ruch.gif"_s, animatedGif(40, 20, {Qt::red, Qt::green, Qt::blue}, 10));
+    PictureCache cache;
+    QVERIFY(!cache.picture(u"ruch"_s, url, 64).image);
+    QTRY_VERIFY(cache.contains(u"ruch"_s));
+    {
+        const PictureCache::Result r = cache.picture(u"ruch"_s, url, 64);
+        QVERIFY(r.image);
+        QVERIFY(r.animation);
+        QCOMPARE(int(r.animation->frames.size()), 3);
+        QCOMPARE(r.animation->delays, (std::vector<int>{100, 100, 100}));
+        QCOMPARE(r.animation->duration, 300);
+        QCOMPARE(r.image, r.animation->frames.front());
+        QCOMPARE(r.natural, QSize(40, 20));
+        const QList<QColor> colours{Qt::red, Qt::green, Qt::blue};
+        for (int k = 0; k < 3; ++k) {
+            const auto &frame = *r.animation->frames[std::size_t(k)];
+            QCOMPARE(frame.width, 40);
+            QCOMPARE(frame.height, 20);
+            const brulion::atrament::Pixel p = frame.pixels[std::size_t(20 * 40 + 10) % frame.pixels.size()];
+            QCOMPARE(int(p.r), colours[k].red());
+            QCOMPARE(int(p.g), colours[k].green());
+            QCOMPARE(int(p.b), colours[k].blue());
+        }
+        QCOMPARE(cache.bytes(), qint64(3 * 40 * 20 * 4));
+    }
+    // Held while somebody draws it, the frames with it: the budget lets go of nothing then.
+    std::shared_ptr<const PictureCache::Animation> held = cache.peek(u"ruch"_s).animation;
+    QVERIFY(held);
+    cache.setBudget(0);
+    QVERIFY(cache.contains(u"ruch"_s));
+    held.reset();
+    cache.setBudget(0);
+    QVERIFY(!cache.contains(u"ruch"_s));
+    // A GIF of one frame is a still picture.
+    const QUrl still = writeFile(dir, u"jeden.gif"_s, animatedGif(8, 8, {Qt::yellow}, 10));
+    cache.setBudget(48LL * 1024 * 1024);
+    (void)cache.picture(u"jeden"_s, still, 64);
+    QTRY_VERIFY(cache.contains(u"jeden"_s));
+    QVERIFY(!cache.picture(u"jeden"_s, still, 64).animation);
+}
+
+void TestAtramentPictureCache::largeAnimationDecodedSmaller()
+{
+    // Four frames of 1600 × 1600 would be 41 MB: decoded smaller, all of them within the cap.
+    QTemporaryDir dir;
+    const QUrl url = writeFile(dir, u"duży.gif"_s, animatedGif(1600, 1600, {Qt::red, Qt::green, Qt::blue, Qt::black}, 1));
+    PictureCache cache;
+    (void)cache.picture(u"duży"_s, url, 2048);
+    QTRY_VERIFY_WITH_TIMEOUT(cache.contains(u"duży"_s), 20000);
+    const PictureCache::Result r = cache.picture(u"duży"_s, url, 2048);
+    QVERIFY(r.animation);
+    QCOMPARE(int(r.animation->frames.size()), 4);
+    QVERIFY(r.image->width < 1600 && r.image->width == r.image->height);
+    QVERIFY(cache.bytes() <= PictureCache::MaxAnimationBytes);
+    QCOMPARE(r.animation->delays.front(), 100); // (a hundredth: shown for 100 ms, as browsers do)
+}
+
+void TestAtramentPictureCache::imageProviderPictures()
+{
+    // image://<id>/…: a provider's picture (a drawing's preview), fitted into the side asked for,
+    // its own size known; an unregistered provider's URL is not the cache's.
+    const QUrl url(u"image://rysunek/assets/szkic.excalidraw?v=1&dark=1"_s);
+    QVERIFY(!PictureCache::readable(url));
+    QString asked;
+    QSize requested;
+    PictureCache::setImageProvider(u"rysunek"_s, [&asked, &requested](const QString &id, QSize *size, const QSize &req) {
+        // (On the cache's thread: the test reads it after the decode came back.)
+        asked = id;
+        requested = req;
+        if (size)
+            *size = QSize(800, 400);
+        QImage picture(req.width(), req.width() / 2, QImage::Format_ARGB32);
+        picture.fill(QColor(20, 40, 160));
+        return picture;
+    });
+    QVERIFY(PictureCache::readable(url));
+    PictureCache cache;
+    (void)cache.picture(u"drawing:szkic"_s, url, 256, QSize(800, 400), true);
+    QTRY_VERIFY(cache.contains(u"drawing:szkic"_s));
+    const PictureCache::Result r = cache.picture(u"drawing:szkic"_s, url, 256, QSize(800, 400), true);
+    QCOMPARE(asked, u"assets/szkic.excalidraw?v=1&dark=1"_s);
+    QCOMPARE(requested, QSize(256, 256));
+    QCOMPARE(r.natural, QSize(800, 400));
+    QCOMPARE(r.image->width, 256);
+    QCOMPARE(r.image->height, 128);
+    QCOMPARE(int(r.image->pixels.front().b), 160);
+    PictureCache::setImageProvider(u"rysunek"_s, {});
+    QVERIFY(!PictureCache::readable(url));
 }
 
 QTEST_MAIN(TestAtramentPictureCache)
