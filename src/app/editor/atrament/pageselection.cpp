@@ -237,6 +237,9 @@ bool PageView::selectionKey(const at::Keystroke &k, at::Context<PageView> &cx)
 
 at::AnyElement PageView::keyLayer()
 {
+    // (Embedded: only the stream's active day takes the keys nothing else took.)
+    if (!m_keysActive)
+        return at::div().absolute().size(0);
     // (A child of the page's root, which pushes no dispatch node of its own: its listener is the
     // root node's, on the path of every key — also while nothing in the window has the focus.)
     const at::EntityId id = m_selfId;

@@ -298,6 +298,67 @@ public:
     // Ends the input method's composition (the word becomes text the controller has).
     void commitComposition(atrament::Context<PageView> &cx);
 
+    // --- Embedded mode (docs/ATRAMENT.md "The journal stream as one list"): the page drawn inside
+    // another view's list — a day of the journal stream (journalview.h) — as a column of its header,
+    // its rows and its footer, with no list and no scrolling of its own. What would scroll the page's
+    // list goes to the view around it (the embedding).
+    struct PageEmbedding {
+        // Scrolls the view around by `dy` (clamped as the last frame measured it); whether it moved.
+        std::function<bool(float dy)> scrollBy;
+        // How far the view around scrolled since the last frame.
+        std::function<float()> scrolledSinceFrame;
+        // ↑ on the first line of the page's first block / ↓ on the last line of its last one, the
+        // caret at window x: true when the view around took it (the next day's block edited).
+        std::function<bool(bool up, float x)> pastEdge;
+    };
+    void setEmbedding(std::optional<PageEmbedding> embedding, atrament::Context<PageView> &cx);
+    bool embedded() const { return m_embedding.has_value(); }
+    // Embedded: the row the page asked to show since the last frame (the edited one after Enter, a
+    // zoom, ↑/↓; revealRow; Vim's zt / zz / zb; a table's cell) — the view around scrolls there.
+    struct Reveal {
+        int row = -1;
+        atrament::ListPosition position = atrament::ListPosition::Nearest;
+    };
+    std::optional<Reveal> takeReveal();
+    // Embedded: where row `row` is in the layout just computed for the page — its top from the
+    // layout's root (the section the page is drawn in) and its height; nothing for a row the page
+    // did not lay out.
+    std::optional<atrament::RowPart> embeddedPart(int row, atrament::Window &window) const;
+    // Embedded: the block selection's keys (those no focused element took) are this page's — the
+    // stream's active day's only.
+    void setKeysActive(bool on, atrament::Context<PageView> &cx);
+    bool keysActive() const { return m_keysActive; }
+    // Embedded: the strip under the last block takes taps `px` tall (a touch target reaching past
+    // the footer into the room below): a tap appends an empty block and edits it (onFooterTap
+    // instead when set).
+    void setFooterTapHeight(float px) { m_footerTap = std::max(0.0f, px); }
+    std::function<void()> onFooterTap;
+    // A mouse's release the page did not see (the view around had it): the press it may have begun
+    // on a block ends.
+    void pointerReleased(atrament::Context<PageView> &cx);
+    // The block a mouse's press began on that may become a drag selection (−1: none), and the drag
+    // having selected blocks elsewhere (another day): its release edits nothing.
+    int pressedRow() const;
+    void markDragSelected() { m_dragSelected = true; }
+    // The find bar's query the rows tint (tests).
+    const QString &findQuery() const { return m_find.query; }
+
+private:
+    std::optional<PageEmbedding> m_embedding;
+    std::optional<Reveal> m_reveal;
+    bool m_keysActive = true;
+    float m_footerTap = 0;
+    // Embedded: each row's layout node in the frame's last layout of the page (embeddedPart()).
+    std::vector<std::pair<int, atrament::NodeId>> m_rowNodes;
+    class RowBox;
+    // Shows a row: the page's list (scrollToRow), or embedded, the view around (takeReveal()).
+    void scrollRowTo(std::size_t row, atrament::ListPosition position);
+    // Scrolls the page's list (or embedded, the view around) by `dy`.
+    bool scrollPageBy(float dy);
+    atrament::AnyElement embeddedColumn();
+    atrament::AnyElement embeddedFooter();
+    void footerTapped();
+
 private:
     // The fold arrow's names for screen readers ("Expand", "Collapse": BlockDelegate's texts).
     QString m_foldNames[2];

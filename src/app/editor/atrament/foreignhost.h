@@ -64,8 +64,10 @@ public:
     // After each frame of the item (see above).
     void place();
 
-    // The delegate hosted for model row `row` (null: none now).
+    // The delegate hosted for model row `row` (null: none now); whether `item` is (or is inside) one
+    // of the delegates hosted here.
     QQuickItem *rowItem(int row) const;
+    bool hosts(const QQuickItem *item) const;
     int hostedCount() const { return int(m_hosted.size()); }
 
 private:

@@ -386,10 +386,14 @@ at::AnyElement PageView::render(at::Window &window, at::Context<PageView> &cx)
     if (const int edited = editedRow(); edited >= 0 && m_input) {
         if (m_focusInput)
             m_input->read(cx.app()).focusHandle().focus(window);
-        if (m_revealEdited)
-            m_handle.scrollToRow(std::size_t(edited), at::ListPosition::Nearest);
+        if (m_revealEdited && !m_embedding)
+            scrollRowTo(std::size_t(edited), at::ListPosition::Nearest);
     }
     m_focusInput = false;
+    // (Embedded: the view around takes the reveal before the frame — takeReveal(); one asked for
+    // since goes with the next frame.)
+    if (m_embedding && m_revealEdited && editedRow() >= 0)
+        m_reveal = Reveal{editedRow(), at::ListPosition::Nearest};
     m_revealEdited = false;
     // The text of rows not drawn for a while is forgotten (the handles of the rows on screen stay).
     const std::uint64_t frame = window.frameCount();
@@ -404,6 +408,8 @@ at::AnyElement PageView::render(at::Window &window, at::Context<PageView> &cx)
     m_frame = frame;
     m_selfId = cx.entityId();
     m_viewWidth = window.viewportSize().width;
+    if (m_embedding)
+        return embeddedColumn();
     PageView *self = this;
     const at::EntityId rootSelf = m_selfId;
     return at::div()
@@ -475,6 +481,13 @@ bool PageView::reveal(at::Rect r, float margin, float viewportHeight, at::Contex
         dy = std::min(r.bottom() - (viewportHeight - margin), r.top() - margin);
     if (std::abs(dy) < 0.5f)
         return false;
+    if (m_embedding) {
+        // (The view around scrolls: by pixels, the rows of the days around it laid out by then.)
+        if (!scrollPageBy(dy))
+            return false;
+        cx.notify();
+        return true;
+    }
     // By rows: the view's new top as an offset into the row under the area (rows below the view
     // are estimates, and a pixel scroll stops where the last frame's estimated height ends).
     const int row = rowAtY(r.top());
@@ -493,7 +506,7 @@ bool PageView::revealRow(int row, at::Context<PageView> &cx)
 {
     if (!m_model || row < 0 || row >= m_model->rowCount() || m_extents.isHidden(std::size_t(row)))
         return false;
-    m_handle.scrollToRow(std::size_t(row), at::ListPosition::Nearest);
+    scrollRowTo(std::size_t(row), at::ListPosition::Nearest);
     cx.notify();
     return true;
 }

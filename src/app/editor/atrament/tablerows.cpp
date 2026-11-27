@@ -627,7 +627,7 @@ bool PageView::editCell(int row, int tableRow, int column, int cursor, at::Conte
     focusCellInput(cx);
     // A table not on screen is scrolled to (the field then keeps its caret in view itself).
     if (std::find(m_drawn.begin(), m_drawn.end(), std::size_t(row)) == m_drawn.end())
-        m_handle.scrollToRow(std::size_t(row), at::ListPosition::Nearest);
+        scrollRowTo(std::size_t(row), at::ListPosition::Nearest);
     cx.notify();
     if (onEditingStarted)
         onEditingStarted();

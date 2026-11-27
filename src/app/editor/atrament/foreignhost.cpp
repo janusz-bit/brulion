@@ -109,6 +109,16 @@ QQuickItem *ForeignRowHost::hostedItem(int row, quint64 uid)
     return item;
 }
 
+bool ForeignRowHost::hosts(const QQuickItem *item) const
+{
+    if (!item)
+        return false;
+    for (const auto &[uid, h] : m_hosted)
+        if (h.item && (h.item == item || h.item->isAncestorOf(item)))
+            return true;
+    return false;
+}
+
 void ForeignRowHost::release(quint64 uid)
 {
     const auto it = m_hosted.find(uid);
@@ -175,9 +185,11 @@ bool ForeignRowHost::tellHeights()
             rows.push_back({h.row, float(h.item->height())});
     const float header = m_header ? float(m_header->height()) : 0.0f;
     const float footer = m_footer ? float(m_footer->height()) : 0.0f;
+    const bool edges = m_header || m_footer;
     return m_page.update(m_app, [&](PageView &page, at::Context<PageView> &cx) {
-        bool changed = page.setHeaderHeight(header);
-        changed = page.setFooterHeight(footer) || changed;
+        // (A host without a header and a footer — a day of the journal stream — leaves the page's.)
+        bool changed = edges && page.setHeaderHeight(header);
+        changed = (edges && page.setFooterHeight(footer)) || changed;
         for (const Height &h : rows) {
             // Only rows the page does not draw itself (a delegate on its way out keeps nothing).
             if (!page.drawsRow(h.row))
