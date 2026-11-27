@@ -347,6 +347,8 @@ void AtramentView::applyStyle()
         p.muted = atColor(m_mutedColor);
         p.link = atColor(m_linkColor);
         p.guide = atColor(m_guideColor);
+        if (m_ruleColor.isValid())
+            p.rule = atColor(m_ruleColor);
         p.background = atColor(m_backgroundColor);
         page.setStyle(m, p);
         page.setSelectionLook({atColor(m_bandColor), atColor(m_ringColor), float(m_bandRadius)});
@@ -362,14 +364,15 @@ void AtramentView::applyStyle()
         // The edited text coloured by the highlighter's rules (markdownstyles.h) in the code face.
         page.setEditStyles(std::make_shared<const EditStyler>(m_highlighterPalette, p.codeFamily), cx);
         PageView::CodeLook code;
-        auto colour = [this](const char *key, at::Color fallback) {
-            const QVariant v = m_codeLook.value(QString::fromLatin1(key));
+        const QVariantMap *look = &m_codeLook;
+        auto colour = [&look](const char *key, at::Color fallback) {
+            const QVariant v = look->value(QString::fromLatin1(key));
             const QColor c = v.metaType() == QMetaType::fromType<QColor>() ? v.value<QColor>() : QColor::fromString(v.toString());
             return c.isValid() ? atColor(c) : fallback;
         };
-        auto number = [this](const char *key, float fallback) {
+        auto number = [&look](const char *key, float fallback) {
             bool ok = false;
-            const double d = m_codeLook.value(QString::fromLatin1(key)).toDouble(&ok);
+            const double d = look->value(QString::fromLatin1(key)).toDouble(&ok);
             return ok && d > 0 ? float(d) : fallback;
         };
         code.background = colour("background", code.background);
@@ -380,6 +383,23 @@ void AtramentView::applyStyle()
         code.lineHeight = number("lineHeight", code.lineHeight);
         code.labelSize = number("labelSize", code.labelSize);
         page.setDrawsCode(m_drawsCode, code, cx);
+        look = &m_calcLook;
+        PageView::CalcLook calc;
+        calc.background = colour("background", calc.background);
+        calc.frame = colour("frame", calc.frame);
+        calc.separator = colour("separator", calc.separator);
+        calc.rule = colour("rule", calc.rule);
+        calc.label = colour("label", calc.label);
+        calc.muted = colour("muted", calc.muted);
+        calc.error = colour("error", calc.error);
+        calc.radius = number("radius", calc.radius);
+        calc.labelSize = number("labelSize", calc.labelSize);
+        calc.errorSize = number("errorSize", calc.errorSize);
+        if (const QString family = m_calcLook.value(u"uiFamily"_s).toString(); !family.isEmpty())
+            calc.uiFamily = std::u16string(u16View(family));
+        if (const QString title = m_calcLook.value(u"title"_s).toString(); !title.isEmpty())
+            calc.title = std::u16string(u16View(title));
+        page.setDrawsCalc(m_drawsCalc, calc, cx);
         page.setEditLook(atColor(m_caretColor), atColor(m_selectionColor),
                          std::u16string(u16View(m_placeholderText)), std::u16string(u16View(m_editLabel)), cx);
         cx.notify();

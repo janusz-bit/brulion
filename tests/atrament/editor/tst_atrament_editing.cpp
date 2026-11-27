@@ -128,6 +128,8 @@ private Q_SLOTS:
     void revealScrollsTheLeast();
     void highlighterRulesColourTheField();
     void codeBlocksDrawnAndEdited();
+    void calculationsDrawnAndEdited();
+    void rulesDrawnAndEdited();
     void zoomOutKeepsEditedInView();
 };
 
@@ -806,6 +808,89 @@ void TestAtramentEditing::codeBlocksDrawnAndEdited()
     // ↑ from the first line goes to the paragraph above.
     h.tw.simulateKeystrokes(u"ctrl-home up");
     QCOMPARE(h.controller.editingRow(), 0);
+}
+
+// A calculation drawn by Atrament (CalcBlockView): its lines as written, each result on its line
+// right of them (also below a line the width wraps), an error in place of a result, a click
+// editing the lines at the character, Enter a line break with no "> ".
+void TestAtramentEditing::calculationsDrawnAndEdited()
+{
+    Harness h(u"Akapit.\n\n```calc\nopis = 1 + 2 + 3 + 4 + 5 + 6 + 7 + 8 + 9 + 10 + 11 + 12 + 13 + 14 + 15 + 16 + 17 + 18\n"
+              "cena = 89\nilość = 2\ncena * ilość\nnieznane + 1\n```\n\nKoniec.\n"_s);
+    QCOMPARE(h.model()->index(1).data(BlockListModel::ViewRole).toString(), u"calc"_s);
+    QVERIFY(!h.view().drawsRow(1)); // a foreign row until the page draws calculations
+    h.app.windows().front()->setAccessibilityEnabled(true);
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &cx) { v.setDrawsCalc(true, PageView::CalcLook{}, cx); });
+    h.tw.settle();
+    QVERIFY(h.view().drawsRow(1));
+    QVERIFY(h.view().editsRow(1));
+    const auto *t = h.view().rowText(1);
+    QVERIFY(t && t->layout());
+    const QString source = h.editText(1);
+    QCOMPARE(str(t->layout()->text()), source);
+    // The first line wraps at this width: the results below it are on their own lines' tops.
+    QVERIFY(t->layout()->lines().size() > 5);
+    // (The tree of the window's last frame: read again after each.)
+    const QString dump = str(h.app.windows().front()->accessibilityTree().dump());
+    auto node = [&](const QString &name) -> const at::AccessibilityNode * {
+        for (const at::AccessibilityNode *n : h.app.windows().front()->accessibilityTree().nodes())
+            if (str(std::u16string(n->name)) == name)
+                return n;
+        return nullptr;
+    };
+    auto lineTop = [&](int line) {
+        int offset = 0;
+        for (int k = 0; k < line; ++k)
+            offset = int(source.indexOf(u'\n', offset)) + 1;
+        return t->bounds().top() + t->layout()->caretRect(offset).top();
+    };
+    const at::AccessibilityNode *product = node(u"Result: 178"_s);
+    QVERIFY2(product, qPrintable(dump));
+    QCOMPARE(product->bounds.top(), lineTop(3));
+    QVERIFY(product->bounds.left() > t->bounds().right());
+    const at::AccessibilityNode *price = node(u"Result: 89"_s);
+    QVERIFY2(price, qPrintable(dump));
+    QCOMPARE(price->bounds.top(), lineTop(1));
+    QVERIFY2(dump.contains(u"Error: "_s), qPrintable(dump));
+    // A click edits at the character under it (the lines are shown as written).
+    h.clickInto(1, source.indexOf(u"cena") + 2);
+    QCOMPARE(h.controller.editingRow(), 1);
+    QCOMPARE(h.inputText(), source);
+    QCOMPARE(h.inputCaret(), int(source.indexOf(u"cena")) + 2);
+    // Enter is a line break (no quote's "> "): the block stays one, its results follow.
+    h.tw.simulateKeystrokes(u"ctrl-end enter");
+    h.tw.simulateTyping(u"ilość * 3");
+    QCOMPARE(h.model()->rowCount(), 3);
+    QCOMPARE(h.editText(1), source + u"\nilość * 3"_s);
+    h.tw.settle();
+    QVERIFY2(node(u"Result: 6"_s), qPrintable(str(h.app.windows().front()->accessibilityTree().dump())));
+}
+
+// A thematic break (`---`, BlockPartRule): a line across the text column at the row's middle, a
+// line's height tall; a click edits its Markdown, Esc draws the line again.
+void TestAtramentEditing::rulesDrawnAndEdited()
+{
+    Harness h(u"Nad linią.\n\n---\n\nPod linią.\n"_s);
+    QCOMPARE(h.model()->index(1).data(BlockListModel::ViewRole).toString(), u"rule"_s);
+    QVERIFY(h.view().drawsRow(1));
+    const std::optional<at::Rect> b = h.view().rowBounds(1);
+    QVERIFY(b);
+    const PageMetrics &m = h.view().metrics();
+    QVERIFY2(b->height() <= m.lineHeight + 2 * m.rowPad + 0.5f, qPrintable(QString::number(b->height())));
+    const int y = int(b->top() + b->height() / 2);
+    const float x = m.contentX + m.gutter + 40;
+    const auto line = h.tw.pixel(int(x), y);
+    const auto paper = h.tw.pixel(int(x), int(b->top()) + 1);
+    QVERIFY2(line.r < paper.r - 20, qPrintable(u"%1 vs %2"_s.arg(line.r).arg(paper.r)));
+    h.tw.simulateClick({x, float(y)});
+    h.tw.settle();
+    QCOMPARE(h.controller.editingRow(), 1);
+    QCOMPARE(h.inputText(), u"---"_s);
+    h.tw.simulateKeystrokes(u"escape");
+    h.tw.settle();
+    QCOMPARE(h.controller.editingRow(), -1);
+    QVERIFY(h.view().drawsRow(1));
+    QVERIFY(h.tw.pixel(int(x), y).r < paper.r - 20);
 }
 
 // Zooming out while a block far down the page is edited: the rows above it come back and the

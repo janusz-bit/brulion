@@ -36,6 +36,7 @@ struct PagePalette {
     atrament::Color tagBackground = atrament::rgba(0x2b8a3e1f);
     float boxRadius = 4; // Theme.radiusXs: inline code's and highlights' corners
     atrament::Color guide = atrament::rgba(0x8c959f59);
+    atrament::Color rule = atrament::rgba(0x8c959f80); // Theme.border: a thematic break's line
     atrament::Color background = atrament::rgb(0xffffff);
     std::u16string bodyFamily = u"Brulion Inter";
     std::u16string codeFamily = u"Brulion JetBrains Mono";

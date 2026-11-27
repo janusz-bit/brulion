@@ -38,6 +38,23 @@ AtramentView {
         lineHeight: Theme.lineHeightPx(Theme.textSm, 1.5),
         labelSize: Theme.textXs
     })
+    ruleColor: Theme.border
+    // Calculations drawn and edited by Atrament (CalcBlockView's look).
+    drawsCalc: true
+    calcLook: ({
+        background: Theme.bgSunken,
+        frame: Theme.alpha(Theme.focusRing, 0.5),
+        separator: Theme.borderSubtle,
+        rule: Theme.borderStrong,
+        label: Theme.fgFaint,
+        muted: Theme.fgMuted,
+        error: Theme.dangerText,
+        radius: Theme.radius,
+        labelSize: Theme.textXs,
+        errorSize: Theme.textSm,
+        uiFamily: Theme.fontUi,
+        title: qsTr("Calculation")
+    })
     bandColor: Theme.bgSelected
     ringColor: Theme.focusRing
     bandRadius: Theme.radiusSm

@@ -53,6 +53,8 @@ class AtramentView : public brulion::atrament::AtramentItem {
     Q_PROPERTY(QColor mutedColor MEMBER m_mutedColor NOTIFY styleChanged FINAL)
     Q_PROPERTY(QColor linkColor MEMBER m_linkColor NOTIFY styleChanged FINAL)
     Q_PROPERTY(QColor guideColor MEMBER m_guideColor NOTIFY styleChanged FINAL)
+    // A thematic break's line (BlockPartRule: Theme.border).
+    Q_PROPERTY(QColor ruleColor MEMBER m_ruleColor NOTIFY styleChanged FINAL)
     Q_PROPERTY(QColor backgroundColor MEMBER m_backgroundColor NOTIFY styleChanged FINAL)
     // "page", editing (docs/ATRAMENT.md M2 step 2): the editor's PageController (its `blocks` is the
     // page model, which it sets when none is given); without one the page is read only. The edited
@@ -70,6 +72,11 @@ class AtramentView : public brulion::atrament::AtramentItem {
     // Theme values; pageview.h CodeLook).
     Q_PROPERTY(bool drawsCode MEMBER m_drawsCode NOTIFY styleChanged FINAL)
     Q_PROPERTY(QVariantMap codeLook MEMBER m_codeLook NOTIFY styleChanged FINAL)
+    // Calculations drawn and edited by Atrament (CalcBlockView's look: PageView::CalcLook's keys —
+    // background, frame, separator, rule, label, muted, error colours; radius, labelSize,
+    // errorSize; uiFamily, title).
+    Q_PROPERTY(bool drawsCalc MEMBER m_drawsCalc NOTIFY styleChanged FINAL)
+    Q_PROPERTY(QVariantMap calcLook MEMBER m_calcLook NOTIFY styleChanged FINAL)
     // The find bar's query and options (NoteFind): its matches tinted with findColor.
     Q_PROPERTY(QString findQuery MEMBER m_findQuery NOTIFY findChanged FINAL)
     Q_PROPERTY(bool findMatchCase MEMBER m_findMatchCase NOTIFY findChanged FINAL)
@@ -217,6 +224,7 @@ private:
     QColor m_mutedColor{0x6e, 0x77, 0x81};
     QColor m_linkColor{0x3b, 0x5b, 0xdb};
     QColor m_guideColor{0x8c, 0x95, 0x9f, 0x59};
+    QColor m_ruleColor;
     QColor m_backgroundColor{Qt::white};
     // Editing.
     void connectController();
@@ -228,6 +236,8 @@ private:
     QVariantMap m_highlighterPalette;
     bool m_drawsCode = false;
     QVariantMap m_codeLook;
+    bool m_drawsCalc = false;
+    QVariantMap m_calcLook;
     void applyFind();
     qreal m_contentHeight = 0;
     QString m_findQuery;

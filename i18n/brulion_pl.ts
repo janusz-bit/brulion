@@ -11054,6 +11054,16 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <translation>Wpisz „/”, aby wybrać polecenie</translation>
     </message>
     <message>
+        <location filename="../src/app/qml/editor/EditorAtramentPage.qml" line="26"/>
+        <source>Block text</source>
+        <translation>Tekst bloku</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/editor/EditorAtramentPage.qml" line="55"/>
+        <source>Calculation</source>
+        <translation>Obliczenia</translation>
+    </message>
+    <message>
         <location filename="../src/app/qml/editor/EditorAtramentPage.qml" line="79"/>
         <source>Page</source>
         <translation>Strona</translation>

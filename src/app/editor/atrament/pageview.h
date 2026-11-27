@@ -145,6 +145,27 @@ public:
     };
     void setDrawsCode(bool on, const CodeLook &look, atrament::Context<PageView> &cx);
     bool drawsCode() const { return m_drawsCode; }
+    // Calculations (```calc, CalcBlockView): the lines in the note's font on a sunken panel under a
+    // small "Calculation", each line's result (BlockListModel's calcResults) right-aligned on its
+    // line past a thin separator — an assignment's muted, an error smaller in red, a total
+    // (`sum`, `razem`…) semibold under a rule —, a frame while edited; a click edits the lines at
+    // the character (calcrows.cpp).
+    struct CalcLook {
+        atrament::Color background = atrament::rgb(0xf3f1ec); // Theme.bgSunken
+        atrament::Color frame = atrament::rgba(0x2f6feb80);   // Theme.focusRing at 0.5
+        atrament::Color separator = atrament::rgba(0x8c959f33); // Theme.borderSubtle
+        atrament::Color rule = atrament::rgb(0x8c959f);       // Theme.borderStrong
+        atrament::Color label = atrament::rgb(0x9aa0a6);      // Theme.fgFaint
+        atrament::Color muted = atrament::rgb(0x6b6f76);      // Theme.fgMuted
+        atrament::Color error = atrament::rgb(0xc4314b);      // Theme.dangerText
+        float radius = 10;                                    // Theme.radius
+        float labelSize = 10;                                 // Theme.textXs
+        float errorSize = 12;                                 // Theme.textSm
+        std::u16string uiFamily;                              // Theme.fontUi
+        std::u16string title = u"Calculation";
+    };
+    void setDrawsCalc(bool on, const CalcLook &look, atrament::Context<PageView> &cx);
+    bool drawsCalc() const { return m_drawsCalc; }
     // The highlighter's rules for the edited text: the field takes its Inline styler for text
     // rows, its Code one (with the block's language) for code (editstyles.h); replaces
     // setEditStyler's.
@@ -320,6 +341,17 @@ private:
     bool m_inputCode = false;
     atrament::AnyElement renderCodeRow(std::size_t row, const QModelIndex &index, float textX, bool edited);
     bool isCode(int row) const;
+    atrament::AnyElement renderCalcRow(std::size_t row, const QModelIndex &index, float textX, bool edited);
+    bool isCalc(int row) const;
+    atrament::AnyElement renderRuleRow(float textX, bool edited);
+    bool isRule(int row) const;
+    // A code block, a calculation or a rule drawn by Atrament: its text is edited as it is shown.
+    bool isPanel(int row) const { return isCode(row) || isCalc(row) || isRule(row); }
+    bool m_drawsCalc = false;
+    CalcLook m_calcLook;
+    // Per calculation: where each of its lines starts (from its text's top), as the last frame
+    // laid them out — its results' places; a frame that wraps them anew draws once more.
+    std::unordered_map<quint64, std::vector<float>> m_calcTops;
     struct Find {
         QString query;
         bool matchCase = false;

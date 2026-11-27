@@ -802,7 +802,14 @@ scrolling, `tst_atrament_editor`) before the next:
    coloured by the highlighter's Code mode (`EditStyler`, Luau for ```luau / ```lua), a click
    editing it at the character (the code is shown as it is edited), Enter a line break and Tab a
    tab in the field, ↑/↓ across blocks. With line numbers on (the device's setting or the note's
-   `line-numbers`) code blocks stay the QML view's (no numbers in Atrament yet).
+   `line-numbers`) code blocks stay the QML view's (no numbers in Atrament yet). Calculations
+   (`PageView::setDrawsCalc`, `AtramentView.drawsCalc` / `calcLook`, `calcrows.cpp`): CalcBlockView's
+   panel under its small "Calculation", the lines in the note's face, each line's result
+   (`calcResults`) right-aligned at its line's top past a thin separator — an assignment's muted,
+   an error smaller in red, a total semibold under a rule —, a result node per line for screen
+   readers ("Result: 178"); a click edits the lines at the character, Enter is a line break, the
+   highlighter's Code rules colour comments in the note's face. Where a line starts comes from the
+   text's layout of the last frame: a frame that wraps the lines anew draws once more.
 
 ### Tests
 

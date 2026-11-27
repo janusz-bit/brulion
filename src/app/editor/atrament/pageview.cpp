@@ -352,7 +352,7 @@ bool PageView::drawsRow(int row) const
 {
     if (!m_model || row < 0 || row >= m_model->rowCount())
         return false;
-    if (isCode(row))
+    if (isPanel(row))
         return true;
     const QModelIndex index = m_model->index(row, 0);
     const auto text = index.data(BlockListModel::RenderedTextRole).value<RenderedTextRef>();
@@ -525,11 +525,13 @@ at::AnyElement PageView::renderRow(std::size_t row)
         return d;
     };
 
-    if (m_drawsCode && view == u"code") {
+    if (isPanel(int(row))) {
         const quint64 codeUid = index.data(BlockListModel::UidRole).toString().toULongLong();
         const bool codeEdited = m_input && codeUid == m_editUid;
         m_drawn.push_back(row);
-        at::Div codeRow = line().child(renderCodeRow(row, index, textX, codeEdited));
+        at::Div codeRow = line().child(view == u"calc"   ? renderCalcRow(row, index, textX, codeEdited)
+                                       : view == u"rule" ? renderRuleRow(textX, codeEdited)
+                                                         : renderCodeRow(row, index, textX, codeEdited));
         const at::EntityId codeSelf = m_selfId;
         if (codeEdited)
             return std::move(codeRow).captureKeyDown([codeSelf](const at::KeyDownEvent &e, at::Window &w, at::App &a) {

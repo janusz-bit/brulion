@@ -7,6 +7,8 @@ qt_add_library(brulion_editor_atrament STATIC
     renderedspans.h renderedspans.cpp
     pageview.h pageview.cpp
     pageediting.cpp
+    calcrows.cpp
+    rulerows.cpp
     editstyles.h editstyles.cpp
     foreignrows.h foreignrows.cpp
     foreignhost.h foreignhost.cpp
