@@ -1471,6 +1471,19 @@ QVariantMap BlockListModel::computeChartData(int i) const
     return out;
 }
 
+markdown::RenderedText BlockListModel::tableCellText(int row, const QString &cell) const
+{
+    const int i = docIndexOfRow(row);
+    if (i < 0 || QStringView(cell).trimmed().isEmpty())
+        return {};
+    // (computeTableData()'s renderer of cells.)
+    markdown::RenderContext ctx = renderContext(i);
+    ctx.hideTransclusions = false;
+    ctx.dateLinks = true;
+    ctx.dayLinks = false;
+    return markdown::InlineRenderer(std::move(ctx)).renderBlockRuns(cell, BlockKind::Paragraph);
+}
+
 bool BlockListModel::updateTable(RowState &st, int docIndex)
 {
     QVariantMap table = computeTableData(docIndex); // sets resultsUseScope / resultsUseRefs

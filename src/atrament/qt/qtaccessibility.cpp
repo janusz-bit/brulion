@@ -59,6 +59,10 @@ QAccessible::Role qtRole(Role role)
     case Role::ProgressBar: return QAccessible::ProgressBar;
     case Role::Slider: return QAccessible::Slider;
     case Role::Dialog: return QAccessible::Dialog;
+    case Role::Table: return QAccessible::Table;
+    case Role::Row: return QAccessible::Row;
+    case Role::Cell: return QAccessible::Cell;
+    case Role::ColumnHeader: return QAccessible::ColumnHeader;
     }
     return QAccessible::NoRole;
 }

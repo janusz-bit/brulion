@@ -327,6 +327,11 @@ public:
     void setTableFilter(int row, int column, const QString &text);
     /// Show or hide the table's filter row; hiding it clears the filters.
     void setTableFilterOpen(int row, bool open);
+    /// Table cell text `cell` of the table in `row` rendered as its `tableData` renders it (the
+    /// cell's `html`), as RenderedText with its source map (positions in `cell`): where a click on
+    /// a cell the Atrament editor draws puts the caret (editor/atrament/tablerows.cpp). Empty for
+    /// a row that is no block of the page.
+    markdown::RenderedText tableCellText(int row, const QString &cell) const;
 
 Q_SIGNALS:
     void countChanged();

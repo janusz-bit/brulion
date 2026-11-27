@@ -11,3 +11,6 @@ brulion_add_test(tst_atrament_editor_hosting SOURCES tst_atrament_editor_hosting
 target_compile_definitions(tst_atrament_editor_hosting PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 set_tests_properties(tst_atrament_editor_hosting PROPERTIES
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QML_NO_TOUCH_COMPRESSION=1;QML_IMPORT_PATH=${_brulion_atrament_qml_root}")
+# Tables drawn and edited by Atrament (tablerows.cpp, tablelayout.h).
+brulion_add_test(tst_atrament_tables SOURCES tst_atrament_tables.cpp LIBS brulion_editor_atrament)
+target_compile_definitions(tst_atrament_tables PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")

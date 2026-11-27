@@ -38,6 +38,50 @@ AtramentView {
         lineHeight: Theme.lineHeightPx(Theme.textSm, 1.5),
         labelSize: Theme.textXs
     })
+    // Tables drawn and edited by Atrament (TableBlockView's look); a table showing its filter row
+    // stays the QML view's.
+    drawsTables: true
+    tableLook: ({
+        background: Theme.bgElevated,
+        header: Theme.bgSunken,
+        border: Theme.border,
+        borderStrong: Theme.borderStrong,
+        borderSubtle: Theme.borderSubtle,
+        focusRing: Theme.focusRing,
+        formula: Theme.alpha(Theme.info, Theme.dark ? 0.07 : 0.06),
+        error: Theme.dangerText,
+        input: Theme.bgElevated2,
+        hover: Theme.bgHover,
+        fontFamily: Theme.fontUi,
+        monoFamily: Theme.fontMono,
+        fontSize: Theme.textBase,
+        lineHeight: Theme.lineHeightPx(Theme.textBase, 1.4),
+        rowHeight: Theme.touchUi ? 40 : 32,
+        cellPadding: Theme.space3,
+        radius: Theme.radius,
+        buttonHeight: Theme.controlHeightSm,
+        buttonTextSize: Theme.textSm
+    })
+    // A click on a cell edits it (Shift / Ctrl+click and the touch selection mode select blocks).
+    onTableCellTapped: (row, tableRow, column, cursor, modifiers) => {
+        if (!root.editor || root.editor.blockTappedWith(row, modifiers) || root.editor.readOnlyRefuses())
+            return
+        root.editTableCell(row, tableRow, column, cursor)
+    }
+    // A link of a cell (TableBlockView's): a date chip opens the date dialog, a reminder, recurrence or
+    // priority chip edits the cell (its menu is the right button's), any other link opens.
+    onTableLinkClicked: (row, tableRow, column, link, x, y) => {
+        if (!root.editor || root.editor.openCellTokenDialog(row, tableRow, column, link))
+            return
+        if (Js.startsWith(link, "reminder:") || root.editor.editsOnClick(link))
+            root.editTableCell(row, tableRow, column, -1)
+        else
+            root.editor.activateLink(row, link)
+    }
+    onTableCellMenuRequested: (row, tableRow, column, rowCount, columnCount, align, sceneX, sceneY) => {
+        if (root.editor)
+            root.editor.openCellBlockMenuAt(row, Qt.point(sceneX, sceneY), tableRow, column, rowCount, columnCount, align)
+    }
     bandColor: Theme.bgSelected
     ringColor: Theme.focusRing
     bandRadius: Theme.radiusSm

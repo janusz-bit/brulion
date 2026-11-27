@@ -101,6 +101,13 @@ class AtramentView : public brulion::atrament::AtramentItem {
     Q_PROPERTY(QQmlComponent *delegate READ delegate WRITE setDelegate NOTIFY delegateChanged FINAL)
     Q_PROPERTY(QQuickItem *header READ header WRITE setHeader NOTIFY headerChanged FINAL)
     Q_PROPERTY(QQuickItem *footer READ footer WRITE setFooter NOTIFY footerChanged FINAL)
+    // "page": tables drawn and edited by Atrament (editor/atrament/tablerows.cpp; off: the QML
+    // delegate hosts them, as it does a table showing its filter row), and their look: { background,
+    // header, border, borderStrong, borderSubtle, focusRing, formula, error, input, hover (colours),
+    // fontFamily, monoFamily, fontSize, lineHeight, rowHeight, cellPadding, radius, buttonHeight,
+    // buttonTextSize } (TableBlockView's Theme values; pageview.h TableLook).
+    Q_PROPERTY(bool drawsTables MEMBER m_drawsTables NOTIFY styleChanged FINAL)
+    Q_PROPERTY(QVariantMap tableLook MEMBER m_tableLook NOTIFY styleChanged FINAL)
 
 public:
     explicit AtramentView(QQuickItem *parent = nullptr);
@@ -139,6 +146,9 @@ public:
     void setFooter(QQuickItem *item);
     // "page": the delegate over model row `row` (null: the row is Atrament's, or not near the view).
     Q_INVOKABLE QQuickItem *rowItem(int row) const;
+    // "page": edits cell (`tableRow`, `column`) (−1: the header) of the table in `row` with the caret
+    // at `cursor` of its text (−1: its end), when Atrament draws that table.
+    Q_INVOKABLE bool editTableCell(int row, int tableRow, int column, int cursor);
 
 Q_SIGNALS:
     void viewChanged();
@@ -184,6 +194,15 @@ Q_SIGNALS:
     void delegateChanged();
     void headerChanged();
     void footerChanged();
+    // "page", tables drawn by Atrament: a click or a tap on a cell asks to edit it at `cursor` (the
+    // editor decides: BlockEditor.blockTappedWith, then editTableCell()); a link of a cell clicked
+    // at a point of this item (TableBlockView's: a date chip's dialog, a link); a right-click on a
+    // cell at a point of the scene (BlockEditor.openCellBlockMenuAt: the table's size, the
+    // column's alignment).
+    void tableCellTapped(int row, int tableRow, int column, int cursor, int modifiers);
+    void tableLinkClicked(int row, int tableRow, int column, const QString &link, qreal x, qreal y);
+    void tableCellMenuRequested(int row, int tableRow, int column, int rowCount, int columnCount,
+                                const QString &align, qreal sceneX, qreal sceneY);
 
 protected:
     void componentComplete() override;
@@ -246,4 +265,9 @@ private:
     QPointer<QQmlComponent> m_delegate;
     QPointer<QQuickItem> m_header;
     QPointer<QQuickItem> m_footer;
+    // Tables drawn by Atrament.
+    void applyTableStyle();
+    void connectTables();
+    bool m_drawsTables = true;
+    QVariantMap m_tableLook;
 };
