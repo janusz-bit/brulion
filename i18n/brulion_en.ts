@@ -178,7 +178,7 @@
 <context>
     <name>BlockEditor</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1269"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1304"/>
         <source>Copied %n block(s) from several days</source>
         <translation>
             <numerusform>Copied %n block from several days</numerusform>
@@ -186,7 +186,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1271"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1306"/>
         <source>Copied %n block(s)</source>
         <translation>
             <numerusform>Copied %n block</numerusform>
@@ -194,7 +194,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1313"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1348"/>
         <source>Cut %n block(s)</source>
         <translation>
             <numerusform>Cut %n block</numerusform>
@@ -202,7 +202,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1329"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1364"/>
         <source>Deleted %n block(s)</source>
         <translation>
             <numerusform>Deleted %n block</numerusform>
@@ -210,7 +210,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1402"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="1437"/>
         <source>Pasted %n picture(s) from the internet</source>
         <translation>
             <numerusform>Pasted %n picture from the internet</numerusform>
@@ -218,7 +218,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2738"/>
+        <location filename="../src/app/qml/editor/BlockEditor.qml" line="2862"/>
         <source>%n picture(s) saved to the notebook</source>
         <translation>
             <numerusform>%n picture saved to the notebook</numerusform>
@@ -606,7 +606,7 @@
 <context>
     <name>CodeSidebar</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/code/CodeSidebar.qml" line="633"/>
+        <location filename="../src/app/qml/code/CodeSidebar.qml" line="647"/>
         <source>The worktree has uncommitted changes in %n file(s): deleting it loses them.</source>
         <translation>
             <numerusform>The worktree has uncommitted changes in %n file: deleting it loses them.</numerusform>
@@ -1442,7 +1442,8 @@
 <context>
     <name>JournalsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/JournalsView.qml" line="679"/>
+        <location filename="../src/app/qml/editor/EditorAtramentJournal.qml" line="183"/>
+        <location filename="../src/app/qml/views/JournalsView.qml" line="706"/>
         <source>%n day(s) with notes</source>
         <translation>
             <numerusform>%n day with notes</numerusform>
