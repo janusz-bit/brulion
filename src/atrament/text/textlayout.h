@@ -20,6 +20,10 @@
 // ascent + descent + line gap; the baseline sits so that the extra height is shared above and
 // below (CSS's half-leading).
 //
+// A run's baseline shift (FontRun::baselineShift: a superscript, a subscript) moves its glyphs up
+// or down from the line's baseline and its ascent and descent with them (the line's height counts
+// the moved run, as CSS's line box counts a `vertical-align`ed inline).
+//
 // Inline boxes (an icon, a checkbox in a line): a run with `inlineBox` is laid out as one box of
 // that size instead of glyphs — its text (U+FFFC, or no-break spaces reserved for it) keeps its
 // offsets but is never drawn. The line reserves the box's width, and its ascent and descent count
@@ -65,6 +69,10 @@ struct FontRun {
     // The run is one inline box of this size (see above); its face and size still give the
     // metrics of an empty line and the break width.
     std::optional<InlineBox> inlineBox = {};
+    // Raises the run's glyphs above the line's baseline by this many logical px (negative: lowers
+    // them) — a superscript, a subscript (CSS's `vertical-align` by a length). The run's ascent and
+    // descent move with it, so a line grows to hold a raised or lowered run.
+    float baselineShift = 0;
 };
 
 struct PositionedGlyph {
@@ -99,6 +107,7 @@ struct LaidOutRun {
     float ascent = 0;
     float descent = 0;
     bool inlineBox = false;
+    float baselineShift = 0; // FontRun::baselineShift (px, up)
 };
 
 // An inline box placed on its line (TextLayout::inlineBoxes()).

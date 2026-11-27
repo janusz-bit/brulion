@@ -20,6 +20,8 @@
 #include "base/function.h"
 #include "layout/layout.h"
 #include "scene/scene.h"
+#include "scene/vectoricon.h"
+#include "scene/vectorpath.h"
 #include "text/textlayout.h"
 #include "ui/accessibility.h"
 #include "ui/app.h"
@@ -53,6 +55,7 @@ struct TextPaintStyle {
     std::optional<UnderlineStyle> underline;
     bool strikethrough = false;
     std::optional<TextBackground> background; // a shape under the glyphs (ui/style.h)
+    bool overline = false;                    // a line over them, at the font's ascent
 };
 
 // Where a line of a paragraph starts within `boxWidth` when aligned (paintText's offset).
@@ -288,6 +291,13 @@ public:
         insertPath(std::move(painter.m_builder), color);
     }
     void paintUnderline(Point origin, float width, float thickness, Color color, bool wavy);
+    // Vector paths and icons (scene/vectorpath.h, scene/vectoricon.h; docs/ATRAMENT.md "Vector
+    // paths and icons"): `path` under `t` (logical px) filled, or stroked with `style` (its width
+    // and dashes in the path's units, scaled by `t`), as path primitives; an icon's viewBox fitted
+    // into the largest square centred in `bounds`, snapped to whole device pixels, in `color`.
+    void fillPath(const VectorPath &path, const PathTransform &t, Color color);
+    void strokePath(const VectorPath &path, const PathTransform &t, const StrokeStyle &style, Color color);
+    void paintIcon(const VectorIcon &icon, Rect bounds, Color color);
 
     // Scene statistics of the last frame, for tests.
     struct FrameStats {

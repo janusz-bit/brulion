@@ -190,10 +190,52 @@ public:
   cluster (`nextCaretStop` / `previousCaretStop`, `offsetAt` never inside it); `inlineBoxes()`
   says where each ended up. `Text` calls the object's painter in paint, after the text, with its
   box in window coordinates, the baseline, the text's colour and size there.
+* **Baseline shifts and overlines** (a formula's scripts and radicands): `FontRun::baselineShift`
+  raises a run's glyphs above the line's baseline (negative: lowers them) and moves its ascent and
+  descent with them — the line grows to hold a raised or lowered run (CSS's `vertical-align` by a
+  length), `glyphRects` and decorations follow it, x and carets do not move (`LaidOutRun::
+  baselineShift`; part of the layout cache's key, kept by rewrapping). In `ui`, a span's
+  `style.baselineShift` (px) and `style.overline` (a line at the font's ascent over its glyphs,
+  `TextPaintStyle::overline`). Tested by `tests/atrament/text/tst_atrament_text_shift` and
+  `tests/atrament/ui/tst_atrament_vectorpaint`.
 * Glyphs are rasterized once per (face, glyph, size, subpixel x offset) into an A8 atlas; the
   renderers read the same atlas.
 * Caches are generational: what was used in the last frame stays, the rest is dropped at the end
   of the next.
+
+### Vector paths and icons
+
+`scene/vectorpath.h`, `scene/vectoricon.h` (Qt-free): what diagrams, charts and icons are drawn with.
+
+* **`VectorPath`**: moveTo / lineTo / quadTo / cubicTo / close, SVG's elliptical `arcTo` (endpoint
+  parameters, radii grown to join the points, zero radii a line), `addRect` with rounded corners,
+  `addEllipse`; `flatten(PathTransform, tolerance)` cuts curves into lines (Wang's formula) under a
+  uniform scale and a translation into contours that know whether they were closed.
+* **Strokes are paths**: `strokeContours(contours, StrokeStyle, PathBuilder&)` makes the outline of
+  a line of a width — a rectangle per segment, a join per corner (`LineJoin::Round`: a disc, or a
+  wedge where the turn is flatter than the tolerance; `Miter` up to `miterLimit`, else `Bevel`), a
+  cap per open end (`Butt`, `Round`, `Square`; a contour of one point is a dot) — as polygons of
+  one orientation, so the non-zero fill of the rasterizer (min(|winding|, 1)) is their union; discs
+  are polygons of the circle's area. Dashes (`dashes`, `dashOffset`, SVG's rules: an odd list
+  repeats, a negative length or a pattern too fine for the line's length is solid) cut the
+  flattened line first (`dashContours`). Decision: no stroke primitive — the result is the scene's
+  `PathPrimitive`, which the CPU raster fills and the QRhi renderer rasterizes into its path atlas
+  as before; one shader less, the same pixels in both.
+* **`Window::fillPath(path, transform, colour)`, `strokePath(path, transform, style, colour)`**
+  (logical px, the stroke's width and dashes in the path's units scaled by the transform) and
+  **`paintIcon(icon, bounds, colour)`**.
+* **`VectorIcon::parseSvg(text)`**: a monochrome icon from SVG's subset — `<svg viewBox>`, `<g>`,
+  `<path d>` (every command of SVG 1.1, implicit repeats, compact numbers and flags), `<rect rx
+  ry>`, `<circle>`, `<ellipse>`, `<line>`, `<polyline>`, `<polygon>`; fill, stroke, stroke-width,
+  stroke-linecap, stroke-linejoin, stroke-miterlimit inherited (any paint but `none` paints: one
+  colour, the caller's); `<defs>`, `<clipPath>`, text, styles skipped; malformed input gives what
+  was read before the mistake, oversized input nothing. Every icon of `assets/icons` (Lucide's,
+  BIcon's) reads. `outline(side)` — the filled and the stroked outline fitted into a square of
+  `side` device px — is kept for the icon's last four sizes; `paintIcon` snaps the square to whole
+  device px and copies the outline's points into the frame.
+* Tested by `tests/atrament/scene/tst_atrament_vector` (coverage of strokes, caps, joins, holes,
+  dashes, path data, the subset, malformed input) and `tests/atrament/ui/tst_atrament_vectorpaint`
+  (pixels at scale 1 and 2, masks, an icon's outline reused).
 
 ### Input methods
 
@@ -585,8 +627,9 @@ In **Atrament** (`src/atrament/ui`, Qt-free, generic — nothing Brulion-specifi
   or the palette's (`chipBackground`, `tagBackground`, `codeBackground`, `highlightBackground`) —
   and a page's app icon (`RenderedObject::Icon`) an inline object of `kPageIconSize` (the room of
   the three no-break spaces it covers, its middle where the QML editor centres its icon).
-  Atrament has no icon renderer yet: a placeholder — a rounded square outlined in the link's
-  colour — is drawn there until one comes (`BIcon`'s icons as paths or atlas sprites).
+  The icon is BIcon's SVG drawn as vector paths ("Vector paths and icons";
+  `src/app/editor/atrament/pageicons.h`: read once per name from `:/icons`, never outside it) in
+  the link's colour; a rounded square outlined in that colour stands for a name with no icon.
 * **Hit regions in text**: the range of a span reported under the pointer (a link's `href`, a
   chip), its hover look, and a link node per span in the accessibility tree (`Role::Link`). **Built**:
   `Text::link(range, onClick)` (`src/atrament/ui/text.h`, `tests/atrament/ui/tst_atrament_links`)
@@ -816,6 +859,29 @@ scrolling, `tst_atrament_editor`) before the next:
    breaks (`---`, `rulerows.cpp`): BlockPartRule's 1-px line in `AtramentView.ruleColor` across the
    text column, a line's height tall (a separator for screen readers), its Markdown in the field
    while edited.
+   Charts and Mermaid diagrams (`PageView::setDrawsDiagrams`, `AtramentView.drawsDiagrams` — on —
+   and `diagramLook`; `src/app/editor/atrament/diagramrows.cpp`, `diagrampaint.h`): the core scene
+   (`diagram::render`, `chart::layoutChart` at the column's width) painted by `paintDiagram` with
+   Atrament's paths and text — MermaidView's painter: the same items and colours
+   (`diagram::themedPalette`, light and dark), round caps and joins, dotted 2/3 and dashed 6/4,
+   labels in the app's font measured by Atrament's own fonts (`atramentMetrics`) — on
+   ChartBlockView's / MermaidBlockView's sunken panel; `DiagramElement` is as tall as the scene at
+   its width (scaled down, never up; a diagram to 70 % at most, then the row scrolls sideways);
+   the text alternative is the panel's image node (a chart: its type, every value as the
+   description; a diagram: its title or kind); a source that cannot be drawn shows itself with the
+   translated reason under it (danger colour, a type Brulion does not draw muted); a click edits the
+   fenced source in the field (the code highlighter's colours; on the shown source at the
+   character) with the diagram drawn under it as it is typed, Enter a line break, Tab a tab, Esc
+   and ↑/↓ leave it. Math formulas (`setDrawsMath`, `AtramentView.drawsMath` — on —;
+   `mathrows.cpp`): `renderMath`'s rich text read into runs (`renderedTextFromHtml`, the block's
+   `renderedText`) and drawn as Atrament text, centred on the panel in the editor's font (Brulion
+   Math's symbols by fallback): scripts at 0.7 of the size raised 0.4 em or lowered 0.2 em
+   (`baselineShift`), the radicand overlined, \texttt in the code face; a formula with what the
+   text does not draw yet (small capitals, `PageView::mathDrawable`) stays the QML view's, decided
+   per formula — and when the editing starts: an edited formula stays whose editor it was until it
+   is left. A click edits the LaTeX source (Enter a line break, the field left-aligned where
+   MathBlockView centres it). Page icons drawn from BIcon's SVGs ("Vector paths and icons").
+   Tested by `tests/atrament/editor/tst_atrament_diagrams`.
 
 ### Tests
 

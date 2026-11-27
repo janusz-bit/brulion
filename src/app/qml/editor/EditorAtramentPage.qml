@@ -55,6 +55,29 @@ AtramentView {
         uiFamily: Theme.fontUi,
         title: qsTr("Calculation")
     })
+    // Charts, Mermaid diagrams and math formulas drawn and edited by Atrament (drawsDiagrams,
+    // drawsMath: on), in ChartBlockView's, MermaidBlockView's and MathBlockView's look.
+    diagramLook: ({
+        panel: Theme.bgSunken,
+        panelBorder: Theme.borderSubtle,
+        editingBorder: Theme.alpha(Theme.focusRing, 0.5),
+        label: Theme.fgFaint,
+        text: Theme.fg,
+        muted: Theme.fgMuted,
+        border: Theme.border,
+        accent: Theme.accent,
+        danger: Theme.dangerText,
+        dark: Theme.dark,
+        radius: Theme.radius,
+        framedPad: Theme.space2,
+        codeSize: Theme.textSm,
+        codeLineHeight: Theme.lineHeightPx(Theme.textSm, 1.5),
+        labelSize: Theme.textXs,
+        chartFontSize: Theme.textSm,
+        mermaidFontSize: Theme.textSm + 1,
+        family: Theme.fontUi,
+        english: editor !== null && editor.controller !== null && editor.controller.locale === "en"
+    })
     bandColor: Theme.bgSelected
     ringColor: Theme.focusRing
     bandRadius: Theme.radiusSm

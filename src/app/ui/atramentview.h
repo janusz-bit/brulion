@@ -77,6 +77,14 @@ class AtramentView : public brulion::atrament::AtramentItem {
     // errorSize; uiFamily, title).
     Q_PROPERTY(bool drawsCalc MEMBER m_drawsCalc NOTIFY styleChanged FINAL)
     Q_PROPERTY(QVariantMap calcLook MEMBER m_calcLook NOTIFY styleChanged FINAL)
+    // Charts and Mermaid diagrams, math formulas drawn and edited by Atrament (on by default; off:
+    // the QML views host them), and their look: { panel, panelBorder, editingBorder, label, text,
+    // muted, border, accent, danger (colours), dark, radius, framedPad, codeSize, codeLineHeight, labelSize,
+    // chartFontSize, mermaidFontSize, family, english } (the QML views' Theme values; pageview.h
+    // ViewLook).
+    Q_PROPERTY(bool drawsDiagrams MEMBER m_drawsDiagrams NOTIFY styleChanged FINAL)
+    Q_PROPERTY(bool drawsMath MEMBER m_drawsMath NOTIFY styleChanged FINAL)
+    Q_PROPERTY(QVariantMap diagramLook MEMBER m_diagramLook NOTIFY styleChanged FINAL)
     // The find bar's query and options (NoteFind): its matches tinted with findColor.
     Q_PROPERTY(QString findQuery MEMBER m_findQuery NOTIFY findChanged FINAL)
     Q_PROPERTY(bool findMatchCase MEMBER m_findMatchCase NOTIFY findChanged FINAL)
@@ -248,6 +256,9 @@ private:
     QVariantMap m_codeLook;
     bool m_drawsCalc = false;
     QVariantMap m_calcLook;
+    bool m_drawsDiagrams = true;
+    bool m_drawsMath = true;
+    QVariantMap m_diagramLook;
     void applyFind();
     qreal m_contentHeight = 0;
     QString m_findQuery;

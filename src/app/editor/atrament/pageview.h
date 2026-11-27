@@ -404,6 +404,84 @@ private:
     std::vector<ForeignFrame> m_foreignFrames;
     float m_headerHeight = 0;
     float m_footerHeight = 0;
+
+    // --- Charts, Mermaid diagrams and math formulas drawn by Atrament (diagramrows.cpp,
+    // mathrows.cpp, diagrampaint.h; docs/ATRAMENT.md M2 step 5 "Blocks with views"). Off, they are
+    // foreign rows (ChartBlockView, MermaidBlockView, MathBlockView).
+public:
+    // The panels' and the diagrams' look (the QML views' Theme values): the sunken panel and its
+    // border (Theme.focusRing at half opacity while edited), the source's label, the diagram's
+    // theme colours (diagram::ThemeColors: Theme.fg, fgMuted, bgSunken, border, accent, dark), its
+    // font and sizes, the message of a source that cannot be drawn (Theme.dangerText; a Mermaid
+    // type Brulion does not draw: Theme.fgMuted).
+    struct ViewLook {
+        atrament::Color panel = atrament::rgb(0xf3f1ec);
+        atrament::Color panelBorder = atrament::rgba(0x8c959f33);
+        atrament::Color editingBorder = atrament::rgba(0x3b5bdb80);
+        atrament::Color label = atrament::rgb(0x9aa0a6);
+        atrament::Color text = atrament::rgb(0x1f2430);
+        atrament::Color muted = atrament::rgb(0x535a6a);
+        atrament::Color border = atrament::rgb(0xddd6c6);
+        atrament::Color accent = atrament::rgb(0x2c6aa3);
+        bool dark = false;
+        atrament::Color danger = atrament::rgb(0xa8382d);
+        float radius = 10;
+        float framedPad = 8;         // an outline's air above and below a framed block (Theme.space2)
+        float codeSize = 12;         // the source (Theme.textSm, 1.5 line height)
+        float codeLineHeight = 18;
+        float labelSize = 10;        // the label and the message (Theme.textXs)
+        float chartFontSize = 12;    // ChartView's Theme.textSm
+        float mermaidFontSize = 13;  // MermaidView's Theme.textSm + 1
+        std::u16string family = u"Brulion Inter"; // Theme.fontUi
+        bool english = false;        // a chart's numbers (PageController.locale "en")
+    };
+    void setViewLook(const ViewLook &look, atrament::Context<PageView> &cx);
+    const ViewLook &viewLook() const { return m_viewLook; }
+    void setDrawsDiagrams(bool on, atrament::Context<PageView> &cx);
+    bool drawsDiagrams() const { return m_drawsDiagrams; }
+    void setDrawsMath(bool on, atrament::Context<PageView> &cx);
+    bool drawsMath() const { return m_drawsMath; }
+    // Whether Atrament draws model row `row` as a chart or a Mermaid diagram / as a formula: a
+    // formula only when its rendered text is drawable (mathDrawable), and the one Atrament edits.
+    bool isDiagram(int row) const;
+    bool isMath(int row) const;
+    // What a drawn chart, diagram or formula row shows (tests, the host): "chart" | "mermaid" |
+    // "math"; "ok" | "error" | "unsupported"; the translated message; the text alternative (a
+    // screen reader's name and description); the diagram's size at the last frame's width.
+    struct ViewRowInfo {
+        QString kind;
+        QString status;
+        QString message;
+        QString name;
+        QString description;
+        atrament::Size size;
+    };
+    ViewRowInfo viewRowInfo(int row) const;
+    // A formula Atrament's text draws well: sub- and superscripts, italic and bold, the
+    // radicand's overline, \texttt and \textsf; small capitals and anything else keep the QML view.
+    static bool mathDrawable(const markdown::RenderedText &text);
+    // A formula's runs as spans: scripts at 0.7 of `fontSize`, raised 0.4 em / lowered 0.2 em, the
+    // radicand overlined, \texttt in the code face and \textsf in `sansFamily`.
+    static std::vector<atrament::TextSpan> mathSpans(const markdown::RenderedText &text, float fontSize,
+                                                     const PagePalette &palette, std::u16string_view sansFamily);
+    struct ViewCaches; // laid-out diagrams and charts (diagramrows.cpp)
+
+private:
+    // The row's panel (renderRow's branch for them), its click and the edited field's keys.
+    atrament::AnyElement renderViewRow(std::size_t row, const QModelIndex &index, float textX, atrament::Div line);
+    atrament::AnyElement renderDiagramPanel(std::size_t row, const QModelIndex &index, float textX, bool edited);
+    atrament::AnyElement renderMathPanel(std::size_t row, const QModelIndex &index, float textX, bool edited);
+    // Whether the field shows the row's source as code (a diagram's; code's is isCode) and whether
+    // its Enter is a line break and Tab a tab (code, diagrams, formulas).
+    bool editsAsCode(int row) const;
+    bool editsSource(int row) const;
+    // A formula the field may edit: drawable when the editing starts, then Atrament's until it ends.
+    bool mathEditable(int row) const;
+    void viewRowClicked(std::size_t row, const atrament::ClickEvent &click, atrament::Context<PageView> &cx);
+    std::shared_ptr<ViewCaches> m_viewCaches;
+    ViewLook m_viewLook;
+    bool m_drawsDiagrams = false;
+    bool m_drawsMath = false;
 };
 
 } // namespace atr

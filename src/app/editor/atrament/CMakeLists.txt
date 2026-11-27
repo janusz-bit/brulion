@@ -13,6 +13,10 @@ qt_add_library(brulion_editor_atrament STATIC
     editstyles.h editstyles.cpp
     foreignrows.h foreignrows.cpp
     foreignhost.h foreignhost.cpp
+    diagrampaint.h diagrampaint.cpp
+    diagramrows.cpp
+    mathrows.cpp
+    pageicons.h pageicons.cpp
 )
 target_include_directories(brulion_editor_atrament PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(brulion_editor_atrament PUBLIC brulion_editor brulion_atrament_ui brulion_atrament_qt

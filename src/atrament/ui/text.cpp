@@ -77,7 +77,7 @@ void Text::buildRuns(Window &window)
     m_align = base.align;
     m_whiteSpace = base.whiteSpace;
     auto paintStyle = [](const TextStyle &s) {
-        return TextPaintStyle { s.color, s.underline, s.strikethrough, s.background };
+        return TextPaintStyle { s.color, s.underline, s.strikethrough, s.background, s.overline };
     };
     auto run = [&](int length, const TextStyle &s, std::uint32_t styleIndex, const InlineObject *object) {
         FontRun r;
@@ -86,6 +86,7 @@ void Text::buildRuns(Window &window)
         r.fontSize = s.fontSize;
         r.styleIndex = styleIndex;
         r.features = s.fontFeatures;
+        r.baselineShift = s.baselineShift;
         if (object) {
             const InlineObjectSize &size = object->size;
             const float unit = size.em ? s.fontSize : 1.0f;

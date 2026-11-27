@@ -81,6 +81,11 @@ struct TextStyle {
     bool strikethrough = false;
     std::optional<TextBackground> background; // a shape under the text
     std::u16string fontFeatures;
+    // A line over the glyphs, at the font's ascent (CSS's `text-decoration: overline`).
+    bool overline = false;
+    // Raised above the baseline by this many px, negative lowered (FontRun::baselineShift: a
+    // superscript, a subscript). Not inherited by a nested shift: a span sets the whole value.
+    float baselineShift = 0;
 
     float resolvedLineHeight() const
     {
@@ -107,11 +112,14 @@ struct TextStyleRefinement {
     std::optional<bool> strikethrough;
     std::optional<std::optional<TextBackground>> background;
     std::optional<std::u16string> fontFeatures;
+    std::optional<bool> overline;
+    std::optional<float> baselineShift;
 
     bool isEmpty() const
     {
         return !fontFamily && !fontSize && !fontWeight && !fontStyle && !color && !lineHeight && !lineHeightScale
-                && !align && !whiteSpace && !underline && !strikethrough && !background && !fontFeatures;
+                && !align && !whiteSpace && !underline && !strikethrough && !background && !fontFeatures
+                && !overline && !baselineShift;
     }
     void applyTo(TextStyle &s) const;
 };

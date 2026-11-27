@@ -1045,6 +1045,14 @@ void Window::paintTextGlyphs(const TextLayout &layout, Point origin, std::span<c
             float x1;
             FaceId face;
             float fontSize;
+            float shift; // the run's baseline shift (decorations follow a raised or lowered run)
+        };
+        // The baseline shift of the run a cluster is in.
+        const std::vector<LaidOutRun> &runs = layout.runs();
+        auto shiftAt = [&runs](int cluster) {
+            auto it = std::upper_bound(runs.begin(), runs.end(), cluster,
+                    [](int c, const LaidOutRun &r) { return c < r.end; });
+            return it == runs.end() ? 0.0f : it->baselineShift;
         };
         std::vector<Segment> segments;
         for (std::uint32_t i = line.firstGlyph; i < end; ++i) {
@@ -1053,7 +1061,7 @@ void Window::paintTextGlyphs(const TextLayout &layout, Point origin, std::span<c
             if (segments.empty() || segments.back().style != g.styleIndex) {
                 if (!segments.empty())
                     segments.back().x1 = x;
-                segments.push_back(Segment { g.styleIndex, x, x, g.face, g.fontSize });
+                segments.push_back(Segment { g.styleIndex, x, x, g.face, g.fontSize, shiftAt(g.cluster) });
             }
         }
         if (!segments.empty())
@@ -1065,10 +1073,15 @@ void Window::paintTextGlyphs(const TextLayout &layout, Point origin, std::span<c
         }
         for (const Segment &s : segments) {
             const TextPaintStyle &style = styleOf(s.style);
-            if (!style.underline && !style.strikethrough)
+            if (!style.underline && !style.strikethrough && !style.overline)
                 continue;
             const FontMetrics metrics = fonts.metrics(s.face);
-            const float baseline = origin.y + line.baseline;
+            const float baseline = origin.y + line.baseline - s.shift;
+            if (style.overline) {
+                const float thickness = std::max(1.0f, metrics.underlineThickness * s.fontSize);
+                paintQuad(Rect::fromXYWH(origin.x + dx + s.x0, baseline - metrics.ascent * s.fontSize, s.x1 - s.x0, thickness),
+                        Background::solid(style.color), {}, transparent(), {});
+            }
             if (style.underline) {
                 const UnderlineStyle &u = *style.underline;
                 const float thickness = std::max(u.thickness, metrics.underlineThickness * s.fontSize);
@@ -1110,6 +1123,60 @@ void Window::insertPath(PathBuilder &&builder, Color color)
     PathPrimitive path = std::move(builder).build(faded(color), deviceMask());
     if (path.points.size() >= 3 && path.bounds.intersects(path.mask.bounds))
         m_building->scene.insert(std::move(path));
+}
+
+void Window::fillPath(const VectorPath &path, const PathTransform &t, Color color)
+{
+    if (!m_building || path.isEmpty())
+        return;
+    const PathTransform device{t.scale * m_scale, t.offset * m_scale};
+    PathBuilder builder;
+    fillContours(path.flatten(device), builder);
+    insertPath(std::move(builder), color);
+}
+
+void Window::strokePath(const VectorPath &path, const PathTransform &t, const StrokeStyle &style, Color color)
+{
+    if (!m_building || path.isEmpty())
+        return;
+    const float k = t.scale * m_scale;
+    const PathTransform device{k, t.offset * m_scale};
+    StrokeStyle scaled = style;
+    scaled.width *= k;
+    for (float &d : scaled.dashes)
+        d *= k;
+    scaled.dashOffset *= k;
+    PathBuilder builder;
+    strokeContours(path.flatten(device), scaled, builder);
+    insertPath(std::move(builder), color);
+}
+
+void Window::paintIcon(const VectorIcon &icon, Rect bounds, Color color)
+{
+    if (!m_building)
+        return;
+    const float side = std::round(std::min(bounds.width(), bounds.height()) * m_scale);
+    if (!(side > 0))
+        return;
+    // Whole device pixels: the outline made for this size is reused, wherever the icon is.
+    const Point origin{std::round((bounds.left() + bounds.width() / 2) * m_scale - side / 2),
+                       std::round((bounds.top() + bounds.height() / 2) * m_scale - side / 2)};
+    const ContentMask mask = deviceMask();
+    if (!Rect{origin, {side, side}}.intersects(mask.bounds))
+        return;
+    const std::shared_ptr<const VectorIcon::Outline> outline = icon.outline(side);
+    for (const PathPrimitive *shape : {&outline->fill, &outline->stroke}) {
+        if (shape->points.size() < 3)
+            continue;
+        PathPrimitive p = *shape;
+        for (Point &pt : p.points)
+            pt += origin;
+        p.bounds = p.bounds.translated(origin);
+        p.color = faded(color);
+        p.mask = mask;
+        if (p.bounds.intersects(mask.bounds))
+            m_building->scene.insert(std::move(p));
+    }
 }
 
 void Window::paintUnderline(Point origin, float width, float thickness, Color color, bool wavy)

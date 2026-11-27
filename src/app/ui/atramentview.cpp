@@ -438,6 +438,41 @@ void AtramentView::applyStyle()
         if (const QString title = m_calcLook.value(u"title"_s).toString(); !title.isEmpty())
             calc.title = std::u16string(u16View(title));
         page.setDrawsCalc(m_drawsCalc, calc, cx);
+        // Charts, Mermaid diagrams and formulas (diagramrows.cpp, mathrows.cpp).
+        PageView::ViewLook views;
+        auto viewColour = [this](const char *key, at::Color fallback) {
+            const QVariant v = m_diagramLook.value(QString::fromLatin1(key));
+            const QColor c = v.metaType() == QMetaType::fromType<QColor>() ? v.value<QColor>() : QColor::fromString(v.toString());
+            return c.isValid() ? atColor(c) : fallback;
+        };
+        auto viewNumber = [this](const char *key, float fallback) {
+            bool ok = false;
+            const double d = m_diagramLook.value(QString::fromLatin1(key)).toDouble(&ok);
+            return ok && d > 0 ? float(d) : fallback;
+        };
+        views.panel = viewColour("panel", views.panel);
+        views.panelBorder = viewColour("panelBorder", views.panelBorder);
+        views.editingBorder = viewColour("editingBorder", views.editingBorder);
+        views.label = viewColour("label", views.label);
+        views.text = viewColour("text", views.text);
+        views.muted = viewColour("muted", views.muted);
+        views.border = viewColour("border", views.border);
+        views.accent = viewColour("accent", views.accent);
+        views.danger = viewColour("danger", views.danger);
+        views.dark = m_diagramLook.value(QStringLiteral("dark")).toBool();
+        views.english = m_diagramLook.value(QStringLiteral("english")).toBool();
+        views.radius = viewNumber("radius", views.radius);
+        views.framedPad = viewNumber("framedPad", views.framedPad);
+        views.codeSize = viewNumber("codeSize", views.codeSize);
+        views.codeLineHeight = viewNumber("codeLineHeight", views.codeLineHeight);
+        views.labelSize = viewNumber("labelSize", views.labelSize);
+        views.chartFontSize = viewNumber("chartFontSize", views.chartFontSize);
+        views.mermaidFontSize = viewNumber("mermaidFontSize", views.mermaidFontSize);
+        if (const QString family = m_diagramLook.value(QStringLiteral("family")).toString(); !family.isEmpty())
+            views.family = std::u16string(u16View(family));
+        page.setViewLook(views, cx);
+        page.setDrawsDiagrams(m_drawsDiagrams, cx);
+        page.setDrawsMath(m_drawsMath, cx);
         page.setEditLook(atColor(m_caretColor), atColor(m_selectionColor),
                          std::u16string(u16View(m_placeholderText)), std::u16string(u16View(m_editLabel)), cx);
         cx.notify();

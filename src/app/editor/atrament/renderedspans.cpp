@@ -1,5 +1,7 @@
 #include "renderedspans.h"
 
+#include "pageicons.h"
+
 #include <QColor>
 #include <QStringList>
 
@@ -109,12 +111,16 @@ std::vector<at::TextSpan> renderedSpans(const markdown::RenderedText &text, cons
         const at::Color color = cssColor(object.color, palette.link);
         at::InlineObject icon;
         icon.size = kPageIconSize;
-        icon.paint = [color](const at::InlineObjectPaint &p, at::Window &window) {
-            // A placeholder for the icon (none in Atrament yet): a rounded square, outlined and
-            // faintly filled, as large as BIcon's (9/10 of the room).
+        icon.paint = [color, vector = pageIcon(object.name)](const at::InlineObjectPaint &p, at::Window &window) {
+            // BIcon's icon, as large as BIcon is there (9/10 of the room), in the link's colour.
             const float side = std::round(std::min(p.bounds.width(), p.bounds.height()) * 0.9f);
             const at::Rect r = at::Rect::fromXYWH(p.bounds.left() + (p.bounds.width() - side) / 2,
                                                   p.bounds.top() + (p.bounds.height() - side) / 2, side, side);
+            if (vector) {
+                window.paintIcon(*vector, r, color);
+                return;
+            }
+            // An icon this build does not have: a rounded square, outlined and faintly filled.
             window.paintQuad(r, at::Background::solid(color.fadedBy(0.2f)), at::Edges::all(std::max(1.0f, side / 10)),
                              color, at::Corners::all(side / 4));
         };
