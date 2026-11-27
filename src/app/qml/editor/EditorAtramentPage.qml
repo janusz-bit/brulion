@@ -94,6 +94,11 @@ AtramentView {
         if (!root.editor.editsOnClick(link) || !root.editor.openDateMenu(row, link, root, x, y))
             root.editor.activateLink(row, link)
     }
+    // A chip's or a link's own menu (a right-click, a finger held on it).
+    onLinkMenuRequested: (row, link, x, y) => {
+        if (root.editor && !root.editor.openDateMenu(row, link, root, x, y))
+            root.editor.openBlockLinkMenu(row, link, root, x, y)
+    }
     onTaskToggled: row => {
         if (root.editor && root.editor.controller)
             root.editor.controller.toggleTask(row)

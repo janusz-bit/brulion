@@ -184,6 +184,29 @@ qreal AtramentView::rowHeight(int row) const
     return -1;
 }
 
+QPointF AtramentView::linkPoint(int row, const QString &hrefPart) const
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_page)
+        if (const auto p = m_page->entity.read(runtime().app).linkPoint(row, hrefPart))
+            return {p->x, p->y};
+#endif
+    Q_UNUSED(row);
+    Q_UNUSED(hrefPart);
+    return {-1, -1};
+}
+
+QPointF AtramentView::taskBoxPoint(int row) const
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_page)
+        if (const auto p = m_page->entity.read(runtime().app).taskBoxPoint(row))
+            return {p->x, p->y};
+#endif
+    Q_UNUSED(row);
+    return {-1, -1};
+}
+
 void AtramentView::commitComposition()
 {
     // The input method's own word first (it keeps it outside the text), then the field's.
@@ -464,6 +487,10 @@ void AtramentView::attachView()
                     page.onLinkAt = [guard](int row, const QString &href, at::Point p) {
                         if (guard)
                             Q_EMIT guard->linkClicked(row, href, p.x, p.y);
+                    };
+                    page.onLinkMenu = [guard](int row, const QString &href, at::Point p) {
+                        if (guard)
+                            Q_EMIT guard->linkMenuRequested(row, href, p.x, p.y);
                     };
                     page.onToggleTask = [guard](int row) {
                         if (guard)

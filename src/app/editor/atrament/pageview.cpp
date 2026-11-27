@@ -582,13 +582,21 @@ at::AnyElement PageView::renderRow(std::size_t row)
             ++j;
         if (!href.isEmpty()) {
             // (The listener lives in the frame arena, which destroys it — the href with it.)
-            std::move(body).link(at::Range{int(text.runs[i].from), int(text.runs[j - 1].to)},
-                                 [self, row, href](const at::ClickEvent &click, at::Window &, at::App &) {
-                                     if (self->onLinkAt)
-                                         self->onLinkAt(int(row), href, click.up.position);
-                                     else if (self->onLink)
-                                         self->onLink(int(row), href);
-                                 });
+            at::TextLink::MenuListener menu;
+            if (onLinkMenu)
+                menu = [self, row, href](at::Point p, at::Window &, at::App &) {
+                    if (self->onLinkMenu)
+                        self->onLinkMenu(int(row), href, p);
+                };
+            std::move(body).link(
+                    at::Range{int(text.runs[i].from), int(text.runs[j - 1].to)},
+                    [self, row, href](const at::ClickEvent &click, at::Window &, at::App &) {
+                        if (self->onLinkAt)
+                            self->onLinkAt(int(row), href, click.up.position);
+                        else if (self->onLink)
+                            self->onLink(int(row), href);
+                    },
+                    std::move(menu));
         }
         i = j;
     }

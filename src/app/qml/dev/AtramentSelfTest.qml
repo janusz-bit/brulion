@@ -20,7 +20,8 @@ import Brulion
 // it is committed (Backspace and Enter while composing, completions after a composed word), typing
 // into a block scrolled far away, a zoom's end keeping the edited block in view; document mode's
 // keys (Enter leaving a list, Backspace removing a marker, Tab only for list items) and its toggle;
-// reading mode's taps (the toast and its "Edit"); "/" commands setting a task's status.
+// reading mode's taps (the toast and its "Edit"); "/" commands setting a task's status; the
+// gestures on chips, tags, links and task boxes (also in reading mode).
 // Steps run on the playground's step runner (EditorPlayground.runSteps).
 QtObject {
     id: test
@@ -143,6 +144,7 @@ QtObject {
         test.document()
         test.readingMode()
         test.slashCommands()
+        test.chips()
     }
     function reading(): void {
         if (window.at()) {
@@ -643,6 +645,121 @@ QtObject {
             window.waitStep(ok, "the Logseq keyword follows: " + host.file("Zadania.md"))
         }
         if (window.at()) page.stopEditing()
+    }
+
+    // Links, chips and task boxes in drawn rows (the datechips and reading tests' gestures): a
+    // right-click or a finger held on a 📅 chip opens DateChipMenu — never the block menu, no
+    // block selected —; a plain click / tap opens the date dialog on it, editing nothing; the
+    // same gesture on a #tag opens the link menu; a click on a [[link]] opens its page; the task's
+    // box toggles it (one undo step) — and in reading mode the box changes nothing while the link
+    // still opens.
+    property int navigations: 0
+    property int navigationsBefore: 0
+    property Connections navigationWatch: Connections {
+        target: test.host
+        function onNavigated(route: var, newPane: bool) { test.navigations += 1 }
+    }
+    function dateMenu(): DateChipMenu { return editor.dateMenu as DateChipMenu }
+    function dateMenuOpen(): bool { return test.dateMenu() !== null && test.dateMenu().opened }
+    function blockMenu(): BMenu { return editor.blockMenu }
+    function blockMenuOpen(): bool { return test.blockMenu() !== null && test.blockMenu().opened }
+    function linkMenu(): LinkMenu { return editor.linkMenu as LinkMenu }
+    function linkMenuOpen(): bool { return test.linkMenu() !== null && test.linkMenu().opened }
+    function dialogs(): EditorDialogs { return editor.dialogsNow() as EditorDialogs }
+    function dateDialog(): BDialog {
+        const d = test.dialogs()
+        return d ? d.dateDialog : null
+    }
+    function dateDialogOpen(): bool { return test.dateDialog() !== null && test.dateDialog().opened }
+    property point spot: Qt.point(-1, -1)
+    /// Finds the link of `row` whose href has `hrefPart` (spot), false when it is not drawn.
+    function findLink(row: int, hrefPart: string): bool {
+        const at = row
+        const part = hrefPart
+        const v = test.view() as AtramentView
+        if (!v)
+            return false
+        test.spot = v.linkPoint(at, part)
+        return test.spot.x >= 0
+    }
+    function findTaskBox(row: int): bool {
+        const at = row
+        const v = test.view() as AtramentView
+        if (!v)
+            return false
+        test.spot = v.taskBoxPoint(at)
+        return test.spot.x >= 0
+    }
+    function tapSpot(): void { window.tapPoint(test.view(), test.spot.x, test.spot.y) }
+    /// Steps: a right-click on the spot, or a finger held there until `opened` (then lifted).
+    function menuGesture(what: string, opened: bool): void {
+        const shown = opened
+        if (!window.touchRun) {
+            if (window.at())
+                window.rightClick(test.view(), test.spot.x, test.spot.y)
+            return
+        }
+        if (window.at())
+            window.taskEvents.touchPress(test.view(), test.spot.x, test.spot.y)
+        if (window.at())
+            window.waiting(shown)
+        if (window.at())
+            window.taskEvents.touchRelease(test.view(), test.spot.x, test.spot.y)
+    }
+    readonly property string chipsContent: "- [ ] Kupić płytki 📅 2026-10-16 ⏫ #zakupy\n- Link do [[Inna strona]] tutaj\n"
+    function chips(): void {
+        if (window.at()) {
+            page.stopEditing()
+            page.save()
+            host.setFile("Inna strona.md", "- tam\n")
+            host.setFile("Terminy.md", test.chipsContent)
+            page.path = "Terminy.md"
+        }
+        if (window.at()) window.waitStep(page.loaded && test.findLink(0, "date:") && test.findLink(1, "page:"),
+                                         "the chips and links are drawn")
+        if (window.at()) test.findLink(0, "date:")
+        test.menuGesture("date", test.dateMenuOpen())
+        if (window.at()) window.waitStep(test.dateMenuOpen() && !test.blockMenuOpen() && page.selectedRow < 0 && page.editingRow < 0,
+                                         (window.touchRun ? "a finger held" : "a right-click") + " on a 📅 chip opens its menu, no block menu, nothing selected")
+        if (window.at()) test.dateMenu().close()
+        if (window.at()) window.waitStep(!test.dateMenuOpen(), "the chip's menu closes")
+        if (window.at()) { test.findLink(0, "date:"); test.tapSpot() }
+        if (window.at()) window.waitStep(test.dateDialogOpen() && page.editingRow < 0, "a click on the 📅 chip opens the date dialog, editing nothing")
+        if (window.at()) test.dateDialog().close()
+        if (window.at()) window.waitStep(!test.dateDialogOpen(), "the dialog closes")
+        if (window.at()) test.findLink(0, "tag:")
+        test.menuGesture("tag", test.linkMenuOpen())
+        if (window.at()) window.waitStep(test.linkMenuOpen() && !test.blockMenuOpen() && page.editingRow < 0,
+                                         "the same gesture on a #tag opens the link menu")
+        if (window.at()) test.linkMenu().close()
+        if (window.at()) window.waitStep(!test.linkMenuOpen(), "the link menu closes")
+        if (window.at()) {
+            test.navigationsBefore = test.navigations
+            test.findLink(1, "page:")
+            test.tapSpot()
+        }
+        if (window.at()) window.waitStep(test.navigations > test.navigationsBefore && page.editingRow < 0,
+                                         "a click on a [[link]] opens its page and edits nothing")
+        if (window.at()) { test.findTaskBox(0); test.tapSpot() }
+        if (window.at()) window.waitStep(test.info(0).taskStatus === "done" && Js.indexOf(host.file("Terminy.md"), "- [x] Kupić płytki") === 0,
+                                         "the task's box completes it: " + host.file("Terminy.md"))
+        if (window.at()) page.undo()
+        if (window.at()) window.waitStep(test.info(0).taskStatus === "todo", "one undo step opens it again")
+        if (window.at()) {
+            page.save()
+            page.readOnly = true
+        }
+        if (window.at()) { test.findTaskBox(0); test.tapSpot() }
+        if (window.at()) window.waitStep(true, "the box tapped in reading mode")
+        if (window.at()) test.check(test.info(0).taskStatus === "todo" && host.file("Terminy.md") === test.chipsContent,
+                                    "in reading mode the box changes nothing")
+        if (window.at()) {
+            test.navigationsBefore = test.navigations
+            test.findLink(1, "page:")
+            test.tapSpot()
+        }
+        if (window.at()) window.waitStep(test.navigations > test.navigationsBefore, "and a link still opens")
+        if (window.at()) page.readOnly = false
     }
 
     Component.onCompleted: window.runSteps("atramenttest")

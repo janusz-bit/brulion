@@ -139,6 +139,11 @@ public:
     // "the row is in view" (qml/dev/AtramentSelfTest.qml).
     Q_INVOKABLE qreal rowTop(int row) const;
     Q_INVOKABLE qreal rowHeight(int row) const;
+    // Where drawn row `row`'s first link whose href contains `hrefPart` is ("page:", "tag:",
+    // "date:"…) and its task's box (the middle, in this item), (−1, −1) when not drawn there: what
+    // the self-tests click.
+    Q_INVOKABLE QPointF linkPoint(int row, const QString &hrefPart) const;
+    Q_INVOKABLE QPointF taskBoxPoint(int row) const;
 
     // The process's Atrament App, made on first use.
     static brulion::atrament::App &atramentApp();
@@ -159,6 +164,9 @@ Q_SIGNALS:
     void linkActivated(int row, const QString &link);
     // The same with the click's place in this item (a date chip's menu opens there).
     void linkClicked(int row, const QString &link, qreal x, qreal y);
+    // A right-click or a finger held on a link of row `row` (a chip, a tag, a page): its menu at
+    // (x, y) of this item (BlockEditor.openDateMenu / openBlockLinkMenu), not the block's.
+    void linkMenuRequested(int row, const QString &link, qreal x, qreal y);
     void taskToggled(int row);
     void styleChanged();
     void pageControllerChanged();

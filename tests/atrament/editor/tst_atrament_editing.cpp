@@ -132,6 +132,8 @@ private Q_SLOTS:
     void rulesDrawnAndEdited();
     void zoomOutKeepsEditedInView();
     void anotherPageOpensAtItsTop();
+    void pointsOfLinksAndTaskBoxes();
+    void chipAndTagMenus();
 };
 
 void TestAtramentEditing::clickEditsAtTheCharacter()
@@ -951,6 +953,68 @@ void TestAtramentEditing::anotherPageOpensAtItsTop()
     QCOMPARE(h.view().handle().scroll().offset.y, 0.0f);
     const std::optional<at::Rect> first = h.view().rowBounds(0);
     QVERIFY(first && first->top() >= 0 && first->top() < 20);
+}
+
+// Where a row's link (by its href) and its task's box are, as the self-tests in the app find
+// them (AtramentView.linkPoint / taskBoxPoint): a click there opens the link, toggles the task.
+void TestAtramentEditing::pointsOfLinksAndTaskBoxes()
+{
+    Harness h(u"- [ ] Zadzwonić do [[Ani Żółtej]] w sprawie #pilne\n- zwykły\n"_s);
+    QString opened;
+    int toggled = -1;
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &) {
+        v.onLink = [&](int, const QString &href) { opened = href; };
+        v.onToggleTask = [&](int row) { toggled = row; };
+    });
+    const std::optional<at::Point> link = h.view().linkPoint(0, u"page:"_s);
+    QVERIFY(link);
+    h.tw.simulateClick(*link);
+    h.tw.settle();
+    QVERIFY2(opened.startsWith(u"page:"_s) && opened.contains(u"Ani"_s), qPrintable(opened));
+    const std::optional<at::Point> tag = h.view().linkPoint(0, u"tag:"_s);
+    QVERIFY(tag && tag->x > link->x);
+    QVERIFY(!h.view().linkPoint(1, u"page:"_s));
+    const std::optional<at::Point> box = h.view().taskBoxPoint(0);
+    QVERIFY(box);
+    h.tw.simulateClick(*box);
+    h.tw.settle();
+    QCOMPARE(toggled, 0);
+    QVERIFY(!h.view().taskBoxPoint(1));
+}
+
+// A right-click or a finger held on a chip or a tag asks for its own menu (DateChipMenu, the
+// link menu), never the block's menu or the touch selection mode.
+void TestAtramentEditing::chipAndTagMenus()
+{
+    using namespace std::chrono_literals;
+    Harness h(u"- [ ] Kupić płytki 📅 2026-10-16 #zakupy\n"_s);
+    QString menuFor;
+    int blockMenus = 0;
+    int held = 0;
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &cx) {
+        v.onLinkMenu = [&](int, const QString &href, at::Point) { menuFor = href; };
+        v.onBlockMenu = [&](int, at::Point) { ++blockMenus; };
+        v.onLongPressRow = [&](int) { ++held; };
+        cx.notify();
+    });
+    h.tw.settle();
+    const std::optional<at::Point> date = h.view().linkPoint(0, u"date:"_s);
+    QVERIFY(date);
+    h.tw.simulateClick(*date, at::MouseButton::Right);
+    QVERIFY2(menuFor.startsWith(u"date:"_s), qPrintable(menuFor));
+    QCOMPARE(blockMenus, 0);
+    const std::optional<at::Point> tag = h.view().linkPoint(0, u"tag:"_s);
+    QVERIFY(tag);
+    h.tw.simulateTouchDown(*tag);
+    h.tw.advance(600ms);
+    h.tw.simulateTouchUp(*tag);
+    QVERIFY2(menuFor.startsWith(u"tag:"_s), qPrintable(menuFor));
+    QCOMPARE(held, 0);
+    // Beside them: the block's menu.
+    const std::optional<at::Point> box = h.view().taskBoxPoint(0);
+    QVERIFY(box);
+    h.tw.simulateClick({box->x + 40, box->y}, at::MouseButton::Right);
+    QCOMPARE(blockMenus, 1);
 }
 
 QTEST_MAIN(TestAtramentEditing)

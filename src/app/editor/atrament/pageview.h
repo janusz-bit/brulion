@@ -188,6 +188,9 @@ public:
     // The same with the click's window point (a chip's menu opens there); used instead of onLink
     // for clicks when set.
     std::function<void(int row, const QString &href, atrament::Point at)> onLinkAt;
+    // A right-click or a finger held on a link of row `row` (a chip's, a tag's, a page's): its
+    // menu at the window point, instead of the block's menu or the touch selection mode.
+    std::function<void(int row, const QString &href, atrament::Point at)> onLinkMenu;
     std::function<void(int row)> onToggleTask;
     // The outline's bullet clicked (zoom into the block); a right-click on a row at a window point
     // (the block menu). Unset: no bullet click, no menu.
@@ -243,6 +246,10 @@ public:
     bool reveal(atrament::Rect r, float margin, float viewportHeight, atrament::Context<PageView> &cx);
     // The rendered text of drawn row `row` as laid out in the last frame (nullptr: not drawn).
     const atrament::TextLayoutHandle *rowText(int row) const;
+    // Where drawn row `row`'s first link whose href contains `hrefPart` is, and its task's box (the
+    // middle, window px, by the last frame): what the self-tests in the app click (pagepoints.cpp).
+    std::optional<atrament::Point> linkPoint(int row, const QString &hrefPart) const;
+    std::optional<atrament::Point> taskBoxPoint(int row) const;
     // What the host does instead of the view's own handling (each unset: the view's default).
     // A click or a tap asking to edit `row` at `cursor` (modifiers: Shift / Ctrl+click select
     // blocks in the QML editor) — true when the host handled it.

@@ -9,6 +9,7 @@ qt_add_library(brulion_editor_atrament STATIC
     pageediting.cpp
     calcrows.cpp
     rulerows.cpp
+    pagepoints.cpp
     editstyles.h editstyles.cpp
     foreignrows.h foreignrows.cpp
     foreignhost.h foreignhost.cpp
