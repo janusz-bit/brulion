@@ -592,7 +592,10 @@ In **Atrament** (`src/atrament/ui`, Qt-free, generic — nothing Brulion-specifi
   `Text::link(range, onClick)` (`src/atrament/ui/text.h`, `tests/atrament/ui/tst_atrament_links`)
   — a hitbox per line of the range, the pointing hand, an underline while hovered (the range's
   pieces get paint styles of their own), the click (or a tap) runs `onClick` and stops there,
-  a link node named by the range's text that a screen reader activates.
+  a link node named by the range's text that a screen reader activates. A link may have a menu
+  of its own (`link(range, onClick, onMenu)`: a chip's, a tag's): a right-click on it or a finger
+  held on it runs `onMenu` at that point instead of the row's right-click or long press around it
+  (the page's chips open DateChipMenu, its tags and links the link menu).
 * **A styled `TextInput`**: the input's text with spans from a callback (the edited block's
   Markdown highlighted: markers dimmed, bold bold, code in its face), so editing keeps the look of
   `InlineEditor.qml`'s `MarkdownHighlighter`. **Built** (the rules: `src/app/editor/atrament/editstyles.h`,
