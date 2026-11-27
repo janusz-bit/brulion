@@ -64,6 +64,11 @@ struct MouseDownEvent {
     int clickCount = 1; // 2 for a double click, 3 for a triple click
     PointerKind pointer = PointerKind::Mouse;
     EventTime time{0};
+    // A finger's (or a pen's) press that something over the window takes — a Qt Quick item the
+    // host placed over it (qt/qthost.h "Hosted children"): the window's touch gesture follows it
+    // and turns its drag into a scroll ("Touch" in docs/ATRAMENT.md), but no element gets the
+    // press, its moves or its release.
+    bool scrollOnly = false;
 };
 
 struct MouseUpEvent {

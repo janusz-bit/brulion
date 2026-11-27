@@ -185,6 +185,7 @@ private Q_SLOTS:
     void penScrolls();
     void cancelledTouch();
     void uniformListRevealsFocusedField();
+    void scrollOnlyPress();
 };
 
 void TestAtramentTouch::velocityTracker()
@@ -671,6 +672,64 @@ void TestAtramentTouch::uniformListRevealsFocusedField()
     h.window->blur();
     h.tw.settle();
     QVERIFY(!h.tw.inputHandler());
+}
+
+void TestAtramentTouch::scrollOnlyPress()
+{
+    // A press something over the window has (a hosted Qt Quick item: MouseDownEvent::scrollOnly):
+    // the gesture follows it, and its drag scrolls, but no element ever gets it.
+    Harness h;
+    Entity<Rows> rows = h.app.newEntity<Rows>();
+    h.open(rows);
+    auto pressOnly = [&](Point p) {
+        MouseDownEvent down;
+        down.position = p;
+        down.pointer = PointerKind::Touch;
+        down.scrollOnly = true;
+        return h.tw.simulateInput(down);
+    };
+    auto offset = [&] { return rows.read(h.app).scroll.offset().y; };
+    // Held, then lifted: no press look, no click — the tap is the item's.
+    QVERIFY(pressOnly({100, 125}));
+    QVERIFY(h.window->touchActive());
+    h.tw.advance(500ms); // past the tap timeout and the long press
+    QVERIFY(!h.anyGreen());
+    h.tw.simulateTouchUp({100, 125});
+    QVERIFY(!h.window->touchActive());
+    QCOMPARE(rows.read(h.app).clicks, 0);
+    QCOMPARE(offset(), 0.0f);
+    // A drag: past the slop it scrolls, 1:1, and a fling carries on.
+    QVERIFY(pressOnly({100, 250}));
+    h.tw.simulateTouchMove({100, 245});
+    QVERIFY(!h.window->touchScrolling());
+    h.tw.simulateTouchMove({100, 200});
+    QVERIFY(h.window->touchScrolling());
+    QCOMPARE(offset(), 50 - h.platform->touchSlop());
+    h.tw.advance(100ms);
+    h.tw.simulateTouchMove({100, 150});
+    h.tw.simulateTouchUp({100, 150});
+    QVERIFY(h.window->touchScrolled());
+    QCOMPARE(rows.read(h.app).clicks, 0);
+    h.tw.advance(1000ms);
+    // A sideways drag nothing scrolls: the gesture lets it go (it is the item's drag).
+    QVERIFY(pressOnly({100, 150}));
+    h.tw.simulateTouchMove({160, 152});
+    QVERIFY(!h.window->touchActive());
+    h.tw.simulateTouchUp({160, 152});
+    QCOMPARE(rows.read(h.app).clicks, 0);
+    // A field under such a press is never focused by it, held or tapped.
+    Harness still;
+    Entity<Form> form = still.app.newEntity<Form>();
+    still.open(form);
+    MouseDownEvent onField;
+    onField.position = {30, 75};
+    onField.pointer = PointerKind::Touch;
+    onField.scrollOnly = true;
+    still.tw.simulateInput(onField);
+    still.tw.advance(500ms);
+    QVERIFY(!form.read(still.app).field.read(still.app).focusHandle().isFocused(*still.window));
+    still.tw.simulateTouchUp({30, 75});
+    QVERIFY(!form.read(still.app).field.read(still.app).focusHandle().isFocused(*still.window));
 }
 
 QTEST_GUILESS_MAIN(TestAtramentTouch)

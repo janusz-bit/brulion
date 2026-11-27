@@ -6595,8 +6595,10 @@ which is laid out from the row's new `renderedText`.
 and quotes (their frames), rules, the frontmatter, rows with pictures, PDFs or embedded pages,
 and task rows until the item draws a task box, are hosted the same way, while their rows meet the
 viewport and its margin; a small pool per view kind reuses them (as `ListView`'s `reuseItems`, but
-only for the same view, so a row never changes its kind of content). Their heights are their
-delegates' and they keep the delegate rules above (final height at creation, no height change
+only for the same view, so a row never changes its kind of content). A hosted delegate is made
+by `hostedrow.h` (the row's roles as required properties, `index`, a model object of its own) —
+shared with the Atrament page, which hosts its foreign rows the same way (docs/ATRAMENT.md "Rows
+Atrament does not draw yet"). Their heights are their delegates' and they keep the delegate rules above (final height at creation, no height change
 while only scrolling, create only what is shown); a hosted row that grows moves the rows below it,
 never the view. The item draws the text rows — paragraphs, headings, list items, the bullets,
 numbers, guide lines, the selection band and the flash —, which are 90–98 % of the rows of the

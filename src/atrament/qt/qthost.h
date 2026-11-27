@@ -22,6 +22,28 @@
 // cursorPositionChanged() signal), makes it forget a composition that ended without it, shows the
 // virtual keyboard for a field and hides it when no field has the focus.
 //
+// Hosted children: Qt Quick items placed over the window's frame — parts of a view Atrament does not
+// draw yet (the block editor's foreign rows: a QML delegate over each, docs/ATRAMENT.md "Rows
+// Atrament does not draw yet"). A subclass makes them children of the item and places them in
+// placeHostedChildren(), called after every frame the window builds, in the same polish: they move
+// in the very frame that shows the window's new scroll position, never a frame behind. What they
+// measure (a height that moves the window's rows) goes back to the view, whose next frame is then
+// built at once, in the same polish (a few in a row at most). The item clips its children to
+// itself. Each child takes its own input and keeps Qt Quick's keyboard focus and accessibility
+// (its own nodes, after the window's tree among the item's children), with these exceptions:
+// * A finger's (or a pen's) drag that starts on a child still scrolls the window, as a Flickable
+//   steals a drag from its delegates: the item filters its children's touch events
+//   (childMouseEventFilter), the window's touch gesture follows the finger without giving its
+//   elements the press (MouseDownEvent::scrollOnly), and once the drag becomes a scroll the item
+//   takes the touch — the child's press is cancelled (Qt's ungrab), the content follows the
+//   finger, the fling goes on. A child keeping its grab (keepTouchGrab / keepMouseGrab: a slider,
+//   a Flickable dragging its own way) keeps the drag; a tap stays the child's. A finger landing on
+//   a flinging list stops it and drags it on: that press never reaches the child.
+// * The wheel a child does not take reaches the item (Qt Quick's delivery: from the child up), and
+//   scrolls the window.
+// * A press on the window's own content (not on a child) takes the keyboard back from a child;
+//   while a child has it the window counts as inactive (isActive(): no caret drawn).
+//
 // Frames are built on the GUI thread (in updatePolish), never on Qt Quick's render thread. They are
 // drawn by the GPU renderer (qrhirenderer.h) in a QSGRenderNode, inside Qt Quick's own render pass,
 // where Qt Quick runs on QRhi; by the CPU renderer into a texture where it does not (the software
@@ -31,6 +53,7 @@
 #include "raster/raster.h"
 #include "ui/platform.h"
 
+#include <QEventPoint>
 #include <QImage>
 #include <QPointer>
 #include <QQuickItem>
@@ -122,6 +145,13 @@ public:
     void setAccessibilityFocusing(bool on) { m_accessibilityFocusing = on; }
 
 protected:
+    // Hosted children (above): place them over the frame the window just built. A change it
+    // makes that moves the window's content asks for a frame as any change does: built at once.
+    virtual void placeHostedChildren() { }
+    // The Qt Quick item with the keyboard is this one (not a hosted child, not another item).
+    bool ownsQtFocus() const;
+    bool childMouseEventFilter(QQuickItem *child, QEvent *event) override;
+
     void updatePolish() override;
     QSGNode *updatePaintNode(QSGNode *old, UpdatePaintNodeData *) override;
     void geometryChange(const QRectF &newGeometry, const QRectF &oldGeometry) override;
@@ -169,6 +199,14 @@ private:
     void cancelPointer();
     bool gpuAvailable() const;
     void checkGpuRenderer();
+    // A finger or a pen on a hosted child (childMouseEventFilter): whether the item takes it now.
+    bool filterHostedPoint(QQuickItem *child, QPointerEvent *event, const QEventPoint &point, PointerKind pointer);
+    void endHostedTouch(Point p);
+    void cancelHostedGrabbers(QPointerEvent *event, const QEventPoint &point);
+    bool overHostedChild(Point p) const;
+    void activeFocusItemChanged();
+    // The window's signals the item follows (frames swapped, the active focus item).
+    void followWindow(QQuickWindow *window);
 
     App *m_app = nullptr;
     Window *m_window = nullptr;
@@ -198,10 +236,24 @@ private:
     int m_clickCount = 0;
     // The press in progress (a cancel ends it), and the finger it belongs to (a touch point's id).
     bool m_building = false; // in updatePolish, building a frame
+    bool m_frameWanted = false; // a frame was asked for (requestFrame, a fling's next frame)
     bool m_animationFramePosted = false;
     std::optional<MouseButton> m_pressedButton;
     PointerKind m_pressedPointer = PointerKind::Mouse;
     int m_touchId = -1;
+    // A finger (or a pen) pressed on a hosted child, followed by the window's touch gesture until
+    // it scrolls (then the item takes it: m_touchId) or lifts. The last point seen: the filter is
+    // asked again for each child the same event is delivered to.
+    struct HostedTouch {
+        int id = -1;
+        PointerKind pointer = PointerKind::Touch;
+        QEventPoint::State state = QEventPoint::State::Unknown;
+        quint64 timestamp = 0;
+        QPointF scenePosition;
+    };
+    HostedTouch m_hostedTouch;
+    bool m_hostedFocus = false; // a hosted child has Qt's keyboard focus
+    QMetaObject::Connection m_activeFocusChanged;
     std::unique_ptr<AtramentAccessibility> m_accessibility;
     // The input method's view of the focused field, as last told (inputStateChanged).
     struct ImeState {

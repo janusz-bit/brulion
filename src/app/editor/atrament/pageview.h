@@ -6,14 +6,17 @@
 // Drawn by Atrament: rows whose rendered text it can draw (RenderedText::drawable) and whose view is
 // text, a heading or a quote — paragraphs, list items with their bullet or number, headings,
 // quotes with their bar, tasks with their box (done and cancelled struck through). Every other row
-// is *foreign* (code, tables, math, queries, pictures, frontmatter…): today a placeholder of its
-// estimated height; the QML delegate placed over it comes with the host (`foreignRows()` lists
-// them per frame for that).
+// is *foreign* (code, tables, math, queries, pictures, frontmatter…): an empty row of the height
+// its QML delegate has, which the host places over it after each frame (foreignrows.h: where each
+// was painted, `foreignFrames()`; its delegate's height back, `setForeignHeight()`). The page's
+// header and footer (the title and properties above the blocks, the room under them) are the
+// list's header and footer, QML items placed the same way.
 //
 //   auto page = app.newEntity<PageView>(model);   // a BlockListModel the caller keeps alive
 //   AtramentItem::attach(app, page)               // or a TestWindow in tests
 #pragma once
 
+#include "foreignrows.h"
 #include "pagerows.h"
 #include "renderedspans.h"
 
@@ -24,6 +27,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 #include <vector>
 
 namespace brulion::editor {
@@ -45,6 +49,10 @@ public:
     std::size_t rowAt(float y) const override;
     void setMeasured(std::size_t row, float height) override;
     void markAllEstimated() override;
+
+    // The frame's foreign rows (PageView's): their heights are their QML delegates'
+    // (PageView::setForeignHeight), the list's layout of them is no measurement.
+    const std::vector<std::size_t> *foreign = nullptr;
 
 private:
     float headerHeight() const;
@@ -109,6 +117,38 @@ private:
     std::vector<QMetaObject::Connection> m_connections;
     std::vector<std::size_t> m_drawn;
     std::vector<std::size_t> m_foreign;
+
+    // --- Foreign rows, the header and the footer: QML items placed over the frame by the host
+    // (foreignrows.h, foreignrows.cpp; docs/ATRAMENT.md "Rows Atrament does not draw yet").
+public:
+    // Where the last frame painted the foreign rows, the header and the footer.
+    const std::vector<ForeignFrame> &foreignFrames() const { return m_foreignFrames; }
+    // A foreign row's height as its QML delegate lays it out: the row's measured height from now
+    // on (rows above the anchor move nothing on screen). Whether it changed; call it inside an
+    // update and notify (the page draws again).
+    bool setForeignHeight(int row, float height);
+    // The heights of the QML items above the blocks and below them.
+    bool setHeaderHeight(float height);
+    bool setFooterHeight(float height);
+    float headerHeight() const { return m_headerHeight; }
+    float footerHeight() const { return m_footerHeight; }
+    // The foreign rows from `above` px above the view to `below` px below it, laid out or not, by
+    // the last frame's scroll (their delegates are made and measured before they scroll in).
+    std::vector<int> foreignRowsNear(float above, float below) const;
+    // Where model row `row` is in the window (logical px) by the last frame's scroll, its height
+    // the estimate until it is measured; nothing before the first frame or for a hidden row.
+    std::optional<atrament::Rect> rowBounds(int row) const;
+    // The model row at window y by the last frame's scroll (−1: the header, the footer, none).
+    int rowAtY(float y) const;
+
+private:
+    atrament::AnyElement foreignRow(std::size_t row);
+    atrament::AnyElement edgeElement(ForeignFrame::Kind kind);
+    const ForeignFrame *edgeFrame(ForeignFrame::Kind kind) const;
+
+    std::vector<ForeignFrame> m_foreignFrames;
+    float m_headerHeight = 0;
+    float m_footerHeight = 0;
 };
 
 } // namespace atr

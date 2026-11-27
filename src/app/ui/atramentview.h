@@ -10,6 +10,7 @@
 
 #include <QColor>
 #include <QPointer>
+#include <QQmlComponent>
 #include <QQmlEngine>
 #include <QString>
 
@@ -43,6 +44,15 @@ class AtramentView : public brulion::atrament::AtramentItem {
     Q_PROPERTY(QColor guideColor MEMBER m_guideColor NOTIFY styleChanged FINAL)
     Q_PROPERTY(QColor backgroundColor MEMBER m_backgroundColor NOTIFY styleChanged FINAL)
 
+    // "page": the rows Atrament does not draw yet (foreign rows: code, tables, math, pictures,
+    // queries, the properties…) are `delegate` (the editor's BlockDelegate) placed over them, and
+    // `header` / `footer` are the items above the blocks and below them (the title, the
+    // properties, the zoom's breadcrumb; the room to tap under the last block) — the list's rows
+    // too, scrolling with it (editor/atrament/foreignhost.h; qthost.h "Hosted children").
+    Q_PROPERTY(QQmlComponent *delegate READ delegate WRITE setDelegate NOTIFY delegateChanged FINAL)
+    Q_PROPERTY(QQuickItem *header READ header WRITE setHeader NOTIFY headerChanged FINAL)
+    Q_PROPERTY(QQuickItem *footer READ footer WRITE setFooter NOTIFY footerChanged FINAL)
+
 public:
     explicit AtramentView(QQuickItem *parent = nullptr);
     ~AtramentView() override;
@@ -55,6 +65,15 @@ public:
     // The process's Atrament App, made on first use.
     static brulion::atrament::App &atramentApp();
 
+    QQmlComponent *delegate() const { return m_delegate.data(); }
+    void setDelegate(QQmlComponent *delegate);
+    QQuickItem *header() const { return m_header.data(); }
+    void setHeader(QQuickItem *item);
+    QQuickItem *footer() const { return m_footer.data(); }
+    void setFooter(QQuickItem *item);
+    // "page": the delegate over model row `row` (null: the row is Atrament's, or not near the view).
+    Q_INVOKABLE QQuickItem *rowItem(int row) const;
+
 Q_SIGNALS:
     void viewChanged();
     void pageModelChanged();
@@ -62,9 +81,13 @@ Q_SIGNALS:
     void linkActivated(int row, const QString &link);
     void taskToggled(int row);
     void styleChanged();
+    void delegateChanged();
+    void headerChanged();
+    void footerChanged();
 
 protected:
     void componentComplete() override;
+    void placeHostedChildren() override;
 
 private:
     void attachView();
@@ -90,4 +113,7 @@ private:
     QColor m_linkColor{0x3b, 0x5b, 0xdb};
     QColor m_guideColor{0x8c, 0x95, 0x9f, 0x59};
     QColor m_backgroundColor{Qt::white};
+    QPointer<QQmlComponent> m_delegate;
+    QPointer<QQuickItem> m_header;
+    QPointer<QQuickItem> m_footer;
 };

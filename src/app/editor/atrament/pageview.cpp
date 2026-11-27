@@ -61,6 +61,8 @@ std::size_t PageExtents::rowAt(float y) const
 
 void PageExtents::setMeasured(std::size_t row, float height)
 {
+    if (foreign && std::find(foreign->begin(), foreign->end(), row) != foreign->end())
+        return;
     if (row < count())
         m_rows.setRowHeight(PageRows::treeRow(int(row)), height, true);
 }
@@ -205,6 +207,8 @@ at::AnyElement PageView::render(at::Window &, at::Context<PageView> &)
 {
     m_drawn.clear();
     m_foreign.clear();
+    m_foreignFrames.clear();
+    m_extents.foreign = &m_foreign;
     PageView *self = this;
     return at::div()
             .sizeFull()
@@ -215,6 +219,12 @@ at::AnyElement PageView::render(at::Window &, at::Context<PageView> &)
                                 return self->renderRow(row);
                             })
                            .trackScroll(m_handle)
+                           .header([self](at::Window &, at::App &) {
+                               return self->edgeElement(ForeignFrame::Kind::Header);
+                           })
+                           .footer([self](at::Window &, at::App &) {
+                               return self->edgeElement(ForeignFrame::Kind::Footer);
+                           })
                            .ariaLabel(u"Page")
                            .flex1()
                            .textSize(m_metrics.fontSize)
@@ -252,14 +262,9 @@ at::AnyElement PageView::renderRow(std::size_t row)
     };
 
     if (!rendered.drawable() || !drawable(view)) {
-        // A foreign row: what the QML delegate will show over it, its height reserved.
+        // A foreign row: its QML delegate's place (foreignrows.cpp).
         m_foreign.push_back(row);
-        const float h = float(m_rows->heights().height(PageRows::treeRow(int(row))));
-        return line().child(at::div()
-                                    .ml(textX)
-                                    .h(std::max(h - 2 * m.rowPad, m.lineHeight))
-                                    .rounded(6)
-                                    .bg(m_palette.codeBackground));
+        return foreignRow(row);
     }
     m_drawn.push_back(row);
 

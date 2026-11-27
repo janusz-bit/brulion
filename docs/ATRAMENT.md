@@ -282,6 +282,18 @@ dragging; the wheel does as before.
   touch is cancelled or stolen (a press stuck down, a scroll that never ends), brings hover events
   where the finger was and double clicks of its own; and the touch events have the second finger
   for a pinch later. A pen comes as the mouse Qt makes of it, of kind Pen, and scrolls as a finger.
+* **Over hosted Qt Quick items** (qthost.h "Hosted children": a QML delegate over a row Atrament
+  does not draw) the item filters its children's touch events, as a Flickable does its delegates':
+  the window's gesture follows a finger pressed on a child without giving its elements the press
+  (`MouseDownEvent::scrollOnly`: no press, no tap, no long press — only the slop, the container,
+  the scroll), the child keeps the press; once the drag becomes a scroll the item takes the touch
+  (the child's grab is cancelled, its handlers that watched passively too — a TapHandler would
+  otherwise fire its long press mid-scroll), and the content follows the finger and flings. A
+  child that keeps its grab (`keepTouchGrab` / `keepMouseGrab`: a slider, an inner Flickable
+  dragging its own way) keeps the drag; a drag nothing scrolls stays the child's; a tap is the
+  child's; a finger on a flinging list stops it and drags on, a press the child never gets. A
+  press that no child takes reaches the item as any other. The wheel a child leaves reaches the
+  item by Qt Quick's own delivery.
 * Left for later: two fingers (pinch, two-finger scroll), an overscroll effect, a drag an element
   claims in a container's own direction (a vertical slider in a vertical list: today the list
   takes it), smooth programmatic scrolling.
@@ -304,7 +316,7 @@ Elements describe themselves:
 | `div()` | none by default; a **button** with an `id` and `onClick`, a **checkbox** with `checked(…)`, a **scroll view** when it scrolls, a **group** when it tracks focus or has a label; `role(Role::…)` gives any role (`Role::None`: no node) |
 | `Text` / a string | names the node around it when that one is named by its content (button, checkbox, link, heading, tab, list item, menu item — as on the web), else a **text** node of its own |
 | `TextInput` | a **text input**: the text as its value, the selection and caret, `label` as its name and the placeholder as its description (the placeholder names it when there is no label) |
-| `uniformList` | a **list** with its row count; each shown row a **list item** with its index, described by the row's root element (its click, `selected(…)`, its text as the name) |
+| `uniformList`, `list` | a **list** with its row count; each shown row a **list item** with its index, described by the row's root element (its click, `selected(…)`, its text as the name); a row whose root is `ariaHidden()` is none (a hosted Qt Quick item over it has its own nodes); `list()`'s header and footer are no rows |
 | `img(…).alt(u"…")` | an **image**; without `alt` decoration |
 
 The builder methods of `div()`: `role(Role)`, `ariaLabel(u"…")` (the name, in place of the text
@@ -334,7 +346,9 @@ selected: Qt's Android bridge (6.12) gives Android's nodes no selected state at 
 `AccessibilityNodeInfo.setSelected`), which is why the emulator's tree showed the gallery's tabs
 without one — Qt Quick's own TabButton is a checkable button for the same reason. The item is
 marked accessible as QML's `Accessible` would (`QQuickItemPrivate`, Qt6::QuickPrivate), so its
-window lists it; `Accessible.name` set in QML names it. The tree is turned on when Qt says an assistive technology is active, or when one first
+window lists it; `Accessible.name` set in QML names it. Its hosted children (Qt Quick items over the
+frame, qthost.h) follow the tree's nodes among its children — Qt Quick's own interfaces, whose
+parent is the item — and are found first under a point. The tree is turned on when Qt says an assistive technology is active, or when one first
 asks; an action draws its frame at once, so the next question sees its result. The tree's changes
 leave as `QAccessibleEvent`s — Focus, NameChanged, TextUpdated, TextCaretMoved and
 TextSelectionChanged, StateChanged one state at a time, ObjectCreated / ObjectShow and
@@ -516,7 +530,10 @@ In **Atrament** (`src/atrament/ui`, Qt-free, generic — nothing Brulion-specifi
   `rowsInserted` / `rowsRemoved` in front of the anchor (the top is sticky); a user's scroll
   re-anchors on the first measured row in view (rows above measured later move nothing on
   screen); a list scrolled to its end stays there (the rows filling the view from the bottom
-  measured first); a new width makes every height an estimate (`markAllEstimated`).
+  measured first); a new width makes every height an estimate (`markAllEstimated`). A header and a
+  footer (`list(…).header(render).footer(render)`: a page's title above its blocks, the room under
+  them) scroll with the rows, laid out at the list's width in every frame — no rows of the extents,
+  no list items; a list at its very top stays there while its header grows.
 * **Inline boxes in text**: a `TextSpan` with a background shape (a pill, a box, rounded, padded)
   drawn under its glyphs across line breaks, and an inline object of a given size (an icon, a
   checkbox) the line layout reserves room for — what `RenderedBackground` and `RenderedObject`
@@ -569,6 +586,42 @@ view — what `PageItem` does with its "rich" rows. Foreign rows scroll with the
 positions change in the same frame), take their own input, and leave the accessibility tree to
 Qt Quick's own nodes. Each step below turns kinds of foreign rows into Atrament rows.
 
+**Built** (2026-11-27; `src/app/editor/atrament/foreignrows.h`, `foreignhost.h`, `qt/qthost.h`
+"Hosted children"):
+
+* **PageView** paints a foreign row as an empty box of the row's height (the delegate's once
+  measured, the estimate before), aria-hidden (no list item: the delegate's nodes are Qt Quick's),
+  with a `canvas` that records where the frame put it — row, block uid, bounds in window px, the
+  list's content mask: `PageView::foreignFrames()`. The page's **header** (the title, the first
+  property's draft, the zoom's breadcrumb: BlockEditor's `header`) and **footer** (the room under the
+  last block; a tap there appends an empty block and edits it) are the list's header and footer,
+  boxes of their QML items' heights recorded the same way. `setForeignHeight(row, px)` makes the
+  delegate's height the row's measured one — the list's own layout of a foreign row never counts
+  as a measurement (`PageExtents::foreign`) —, `setHeaderHeight` / `setFooterHeight` the edges';
+  `foreignRowsNear(above, below)` and `rowBounds(row)` place rows not in the frame.
+* **ForeignRowHost** (owned by `AtramentView` for "page"; `delegate`, `header`, `footer` properties,
+  given by `EditorAtramentPage.qml`) runs after every frame the item builds
+  (`AtramentItem::placeHostedChildren`, in the same polish, before Qt Quick syncs): each painted
+  foreign row gets its delegate — made as `PageItem` makes its hosted rows (`hostedrow.h`, shared
+  with it: the row's roles as required properties, `index`, a model object), kept by the block's
+  uid — over its box; rows half a screen above and below the view get theirs too, measured before
+  they scroll in; delegates more than one and a half screens away go unless edited or holding the
+  keyboard. The heights go back to the page, and when one changed the item builds the next frame
+  at once, in the same polish (`AtramentItem` builds up to four in a row): nothing lags behind,
+  and rows above the anchor measured late move nothing on screen. A height that changes later (a
+  picture loaded) is told when it changes. Delegates follow the model's moves and roles.
+* **Input**: the delegates take their own taps, clicks and keyboard focus; a finger's drag that
+  starts on one scrolls the page ("Touch" above: the hosted children's drags), the wheel over one
+  scrolls it; a press on the page's own rows takes the keyboard back from a delegate (while one has
+  it the Atrament window is inactive: no caret).
+* Tested: `tst_atrament_editor` (the frames as the list scrolls, heights fed back, a height above
+  the anchor moving nothing, the header and footer, rows near the view, no list items) and
+  `tst_atrament_editor_hosting` (a real offscreen Qt Quick window: a code block and a table hosted
+  at their rows, following a scroll and released far away, a finger's drag on a MouseArea's and on
+  a TapHandler's delegate scrolling, taps staying theirs, the wheel, the accessible children).
+* **Not yet**: the hosted code editor's caret kept in view (`BlockEditor.ensureVisible` knows only the
+  list and `PageItemView`), the editor's find highlight and block selection over hosted rows.
+
 ### Steps
 
 Each step ships behind the setting and is measured (memory per block, frame time while
@@ -587,9 +640,9 @@ scrolling, `tst_atrament_editor`) before the next:
    `AtramentView { view: "page" }` (qml/editor/EditorAtramentPage.qml) instead of the
    `ListView`'s rows when Settings → Editor → "Draw the editor with Atrament"
    (`AppSettings.editorAtrament`, shown where `DeviceInfo.atrament`) is on; tested by
-   `tests/atrament/editor/tst_atrament_editor`. **Not yet**: foreign rows are placeholders of their
-   height (no QML delegate placed over them), callouts are foreign, a tap does not edit a block,
-   the page's title and properties above the blocks are not shown. Links, chips and tags open
+   `tests/atrament/editor/tst_atrament_editor`. Foreign rows are the editor's QML delegates placed
+   over the list, the page's title and properties its header ("Rows Atrament does not draw yet").
+   **Not yet**: callouts are foreign, a tap does not edit a block. Links, chips and tags open
    (`AtramentView.linkActivated` → `BlockEditor.activateLink`) and a task's box toggles it
    (`taskToggled` → `PageController.toggleTask`), through the hit regions below.
 2. **Editing text rows.** The styled input in the edited row: typing, the keymaps, Enter / Backspace

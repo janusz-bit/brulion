@@ -2,6 +2,7 @@
 
 #include "blocklistmodel.h"
 #include "editorhost.h"
+#include "hostedrow.h"
 
 #include <QFontMetricsF>
 #include <QPainter>
@@ -29,23 +30,6 @@ namespace {
 
 /// Rows laid out and kept beyond those near the view (least recently drawn dropped first).
 constexpr int KeptRows = 256;
-
-/// The roles BlockRowData reads from a delegate's model object (blockrowdata.h).
-const QList<QByteArray> &rowDataRoles()
-{
-    static const QList<QByteArray> roles = {"html",        "renderedText", "editText",    "lang",
-                                            "calloutType", "isSelected",   "calcResults", "tableData",
-                                            "chartData",   "query",        "properties",  "propertiesInfo"};
-    return roles;
-}
-
-/// The delegate's own property named `role` (−1: none) — declared by the delegate, not one of
-/// QQuickItem's (the role `visible` is BlockDelegate's `shown`, not Item.visible).
-int delegateProperty(const QMetaObject *meta, const QByteArray &role)
-{
-    const int p = meta->indexOfProperty(role.constData());
-    return p >= QQuickItem::staticMetaObject.propertyCount() && meta->property(p).isWritable() ? p : -1;
-}
 
 using Vertex = QSGGeometry::ColoredPoint2D;
 
@@ -506,45 +490,18 @@ QQuickItem *PageItem::hostedItem(int row)
         if (h->item) {
             if (h->row != row) {
                 h->row = row;
-                h->item->setProperty("index", row);
+                hostedrow::setIndex(h->item, row);
             }
             return h->item;
         }
         delete h;
         m_hosted.remove(uid);
     }
-    if (!m_delegate || !m_delegate->isReady())
+    // The delegate with the row's roles, its index and a model object of its own (hostedrow.h).
+    QQmlPropertyMap *roles = nullptr;
+    QQuickItem *item = hostedrow::create(m_delegate, this, m_model, row, &roles);
+    if (!item)
         return nullptr;
-    QQmlContext *context = m_delegate->creationContext() ? m_delegate->creationContext() : qmlContext(this);
-    if (!context && m_delegate->engine())
-        context = m_delegate->engine()->rootContext();
-    if (!context)
-        return nullptr;
-    QObject *object = m_delegate->beginCreate(context);
-    auto *item = qobject_cast<QQuickItem *>(object);
-    if (!item) {
-        delete object;
-        return nullptr;
-    }
-    // The model object BlockRowData reads, and every required property the delegate names after a
-    // role (as QQmlDelegateModel gives a ListView's delegate).
-    auto *roles = QQmlPropertyMap::create(item);
-    const QModelIndex index = m_model->index(row);
-    const QHash<int, QByteArray> names = m_model->roleNames();
-    QVariantMap initial;
-    const QMetaObject *meta = item->metaObject();
-    for (auto it = names.cbegin(); it != names.cend(); ++it) {
-        const QString name = QString::fromLatin1(it.value());
-        if (rowDataRoles().contains(it.value()))
-            roles->insert(name, m_model->data(index, it.key()));
-        if (delegateProperty(meta, it.value()) >= 0)
-            initial.insert(name, m_model->data(index, it.key()));
-    }
-    initial.insert(u"index"_s, row);
-    initial.insert(u"model"_s, QVariant::fromValue<QObject *>(roles));
-    m_delegate->setInitialProperties(item, initial);
-    item->setParentItem(this);
-    m_delegate->completeCreate();
     auto *h = new Hosted;
     h->item = item;
     h->roles = roles;
@@ -559,11 +516,7 @@ void PageItem::releaseHosted(quint64 uid)
     Hosted *h = m_hosted.take(uid);
     if (!h)
         return;
-    if (h->item) {
-        h->item->setVisible(false);
-        h->item->setParentItem(nullptr);
-        h->item->deleteLater();
-    }
+    hostedrow::release(h->item);
     delete h;
 }
 
@@ -575,18 +528,14 @@ void PageItem::rowsChanged()
             Hosted *h = it.value();
             const int row = m_model->rowOfUid(it.key());
             if (row < 0 || !h->item) {
-                if (h->item) {
-                    h->item->setVisible(false);
-                    h->item->setParentItem(nullptr);
-                    h->item->deleteLater();
-                }
+                hostedrow::release(h->item);
                 delete h;
                 it = m_hosted.erase(it);
                 continue;
             }
             if (row != h->row) {
                 h->row = row;
-                h->item->setProperty("index", row);
+                hostedrow::setIndex(h->item, row);
             }
             ++it;
         }
@@ -605,7 +554,6 @@ void PageItem::rowDataChanged(int first, int last, const QList<int> &roles)
     const bool linesOnly = !roles.isEmpty() && std::all_of(roles.cbegin(), roles.cend(), [](int role) {
         return role == BlockListModel::LineRole;
     });
-    const QHash<int, QByteArray> names = m_model->roleNames();
     for (int row = std::max(0, first); row <= last && row < m_model->count(); ++row) {
         const quint64 uid = m_model->uidAt(row);
         if (!linesOnly) {
@@ -619,17 +567,7 @@ void PageItem::rowDataChanged(int first, int last, const QList<int> &roles)
         Hosted *h = m_hosted.value(uid);
         if (!h || !h->item)
             continue;
-        const QModelIndex index = m_model->index(row);
-        const QMetaObject *meta = h->item->metaObject();
-        for (auto it = names.cbegin(); it != names.cend(); ++it) {
-            if (!roles.isEmpty() && !roles.contains(it.key()))
-                continue;
-            const QVariant value = m_model->data(index, it.key());
-            if (rowDataRoles().contains(it.value()))
-                h->roles->insert(QString::fromLatin1(it.value()), value);
-            if (const int p = delegateProperty(meta, it.value()); p >= 0)
-                meta->property(p).write(h->item, value);
-        }
+        hostedrow::update(h->item, h->roles, m_model, row, roles);
     }
     polish();
     update();
@@ -719,11 +657,7 @@ void PageItem::updatePolish()
             ++it;
             continue;
         }
-        if (h->item) {
-            h->item->setVisible(false);
-            h->item->setParentItem(nullptr);
-            h->item->deleteLater();
-        }
+        hostedrow::release(h->item);
         delete h;
         it = m_hosted.erase(it);
     }

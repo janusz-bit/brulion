@@ -168,6 +168,21 @@ TextChange textChange(std::u16string_view before, std::u16string_view after)
             toQString(after.substr(prefix, after.size() - prefix - suffix))};
 }
 
+// The item's hosted children (qthost.h "Hosted children") as Qt Quick's accessibility sees them:
+// the accessible items among them, else the accessible items inside (Qt's unignored children).
+void hostedAccessibleItems(QQuickItem *item, QList<QQuickItem *> &out)
+{
+    const QList<QQuickItem *> children = item->childItems();
+    for (QQuickItem *c : children) {
+        if (!c->isVisible())
+            continue;
+        if (QQuickItemPrivate::get(c)->isAccessible)
+            out.append(c);
+        else
+            hostedAccessibleItems(c, out);
+    }
+}
+
 // --- the item's interface
 
 class ItemInterface final : public QAccessibleObject {
@@ -199,16 +214,31 @@ public:
         return t ? t->root() : nullptr;
     }
 
-    int childCount() const override
+    // The window's nodes, then the hosted children's own (their rows are left out of the tree).
+    int nodeCount() const
     {
         const AccessibilityNode *r = rootNode();
         return r ? r->childCount : 0;
     }
+    QList<QQuickItem *> hostedItems() const
+    {
+        QList<QQuickItem *> items;
+        if (m_item)
+            hostedAccessibleItems(m_item, items);
+        return items;
+    }
+
+    int childCount() const override { return nodeCount() + int(hostedItems().size()); }
 
     QAccessibleInterface *child(int index) const override
     {
         const AccessibilityNode *r = rootNode();
         const AccessibilityTree *t = m_bridge ? m_bridge->tree() : nullptr;
+        if (index >= nodeCount()) {
+            const QList<QQuickItem *> items = hostedItems();
+            const int k = index - nodeCount();
+            return k >= 0 && k < items.size() ? QAccessible::queryAccessibleInterface(items.at(k)) : nullptr;
+        }
         const AccessibilityNode *c = r && t ? t->child(*r, index) : nullptr;
         return c ? m_bridge->interfaceFor(c->id) : nullptr;
     }
@@ -786,11 +816,21 @@ int ItemInterface::indexOfChild(const QAccessibleInterface *child) const
 {
     const auto *c = dynamic_cast<const NodeInterface *>(child);
     const AccessibilityNode *n = c ? c->node() : nullptr;
-    return n && n->parent == 0 ? n->indexInParent : -1;
+    if (n)
+        return n->parent == 0 ? n->indexInParent : -1;
+    const qsizetype k = child ? hostedItems().indexOf(qobject_cast<QQuickItem *>(child->object())) : -1;
+    return k >= 0 ? nodeCount() + int(k) : -1;
 }
 
 QAccessibleInterface *ItemInterface::childAt(int x, int y) const
 {
+    // A hosted child over the window first (it is drawn over it).
+    const QList<QQuickItem *> items = hostedItems();
+    for (qsizetype i = items.size(); i-- > 0;) {
+        QAccessibleInterface *c = QAccessible::queryAccessibleInterface(items.at(i));
+        if (c && !c->state().invisible && c->rect().contains(x, y))
+            return c;
+    }
     const AccessibilityTree *t = m_bridge ? m_bridge->tree() : nullptr;
     const AccessibilityNode *r = t ? t->root() : nullptr;
     if (!r)

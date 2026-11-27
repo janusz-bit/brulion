@@ -281,13 +281,23 @@ bool Window::touchDown(const MouseDownEvent &down)
         m_touchScrolled = true;
         return true;
     }
-    m_touch.longPressTimer =
-            m_app.setTimeout(m_app.platform().longPressInterval(), [this](App &) { touchLongPressed(); });
     bool scrollable = false;
     for (const ScrollTarget &t : scrollTargetsAt(down.position)) {
         const Point max = t.state->maxOffset();
         scrollable = scrollable || (t.x && max.x > kScrollEpsilon) || (t.y && max.y > kScrollEpsilon);
     }
+    if (down.scrollOnly) {
+        // Something over the window has the press (a hosted item): only a scroll can come of it here.
+        if (!scrollable) {
+            endTouch();
+            return false;
+        }
+        m_touch.phase = TouchPhaseState::Waiting;
+        m_touch.scrollOnly = true;
+        return true;
+    }
+    m_touch.longPressTimer =
+            m_app.setTimeout(m_app.platform().longPressInterval(), [this](App &) { touchLongPressed(); });
     if (scrollable) {
         m_touch.phase = TouchPhaseState::Waiting;
         m_touch.pressTimer = m_app.setTimeout(kTapTimeout, [this](App &) { deliverTouchPress(); });
@@ -300,7 +310,7 @@ bool Window::touchDown(const MouseDownEvent &down)
 
 void Window::deliverTouchPress()
 {
-    if (m_touch.phase != TouchPhaseState::Waiting)
+    if (m_touch.phase != TouchPhaseState::Waiting || m_touch.scrollOnly)
         return;
     m_touch.phase = TouchPhaseState::Pressed;
     m_touch.pressTimer = {};
@@ -351,6 +361,10 @@ bool Window::touchMove(const MouseMoveEvent &move)
             m_touch.decided = true;
             if (beginTouchScroll(dragged))
                 return true;
+            if (m_touch.scrollOnly) {
+                endTouch(); // nothing scrolls that way: the drag stays with whoever has the press
+                return false;
+            }
             deliverTouchPress(); // nothing scrolls that way: the elements' drag
         }
     }
@@ -428,6 +442,10 @@ bool Window::touchUp(const MouseUpEvent &up)
 {
     if (m_touch.phase == TouchPhaseState::None)
         return false;
+    if (m_touch.scrollOnly && m_touch.phase != TouchPhaseState::Scrolling) {
+        endTouch(); // no scroll came of it: a tap or a drag of whoever had the press
+        return true;
+    }
     m_touch.pressTimer = {};
     m_touch.longPressTimer = {};
     const double t = touchSeconds(up.time);

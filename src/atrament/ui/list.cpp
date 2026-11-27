@@ -122,9 +122,10 @@ void paintListRows(const ListRowsPaint &list, Window &window, App &app)
     window.pushContentMask(inner);
     std::optional<std::size_t> focusedRow;
     auto paintRow = [&](AnyElement &row, std::size_t index) {
-        // Each row is a list item known by its index; the row's root element describes it.
+        // Each row is a list item known by its index; the row's root element describes it. A row
+        // whose root is hidden is none (another tree has it: a hosted Qt Quick item over it).
         AccessibilityNode *item = nullptr;
-        if (node) {
+        if (node && !(row.element() && row.element()->accessibilityHidden())) {
             item = window.beginAccessibilityNode(Role::ListItem, row.bounds(), hashCombine(0x726f77ull, index) | 1);
             if (item) {
                 item->rowIndex = std::int64_t(index);
@@ -138,10 +139,14 @@ void paintListRows(const ListRowsPaint &list, Window &window, App &app)
         if (item)
             window.endAccessibilityNode();
     };
+    if (list.header && !list.header->isEmpty())
+        list.header->paint(window, app);
     for (std::size_t k = 0; k < list.rows.size(); ++k)
         paintRow(list.rows[k], list.indices ? list.indices[k] : list.first + k);
     if (list.kept && !list.kept->isEmpty())
         paintRow(*list.kept, list.keptIndex);
+    if (list.footer && !list.footer->isEmpty())
+        list.footer->paint(window, app);
     if (list.focusedRow)
         *list.focusedRow = focusedRow;
     window.popContentMask();
@@ -185,7 +190,9 @@ void UniformList::paint(Rect bounds, Window &window, App &app)
                            nullptr,
                            &m_kept,
                            m_keptIndex,
-                           m_focusState ? &m_focusState->row : nullptr},
+                           m_focusState ? &m_focusState->row : nullptr,
+                           nullptr,
+                           nullptr},
                           window, app);
 }
 
