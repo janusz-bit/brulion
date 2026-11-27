@@ -14,6 +14,8 @@
 #include "text/fonts.h"
 #include "ui/testplatform.h"
 
+#include <QClipboard>
+#include <QGuiApplication>
 #include <QTest>
 
 #include <memory>
@@ -81,6 +83,20 @@ struct Harness {
         const at::Rect caret = t->layout()->caretRect(offset).translated(t->bounds().origin);
         return {caret.left() + 0.5f, caret.top() + caret.height() / 2};
     }
+    // The middle of the caret before offset `offset` of the edited field.
+    at::Point editPoint(int offset)
+    {
+        const at::Rect caret = view().input()->read(app).boundsForRange(at::Range{offset, offset}).value_or(at::Rect{});
+        return {caret.left() + 0.5f, caret.top() + caret.height() / 2};
+    }
+    at::Range inputSelection() { return view().input() ? view().input()->read(app).selection().range() : at::Range{-1, -1}; }
+    bool textCommand(PageView::TextCommand command, QVariantMap *result = nullptr)
+    {
+        bool done = false;
+        page.update(app, [&](PageView &v, at::Context<PageView> &cx) { done = v.textCommand(command, cx, result); });
+        tw.settle();
+        return done;
+    }
     // Starts editing row `row` by a click before its display offset `offset`.
     void clickInto(int row, int offset)
     {
@@ -139,6 +155,8 @@ private Q_SLOTS:
     void pointsInTheEditedText();
     void taskBoxMenu();
     void taskMenuAtTheCaret();
+    void textMenuOnARightClick();
+    void textCommandsActOnTheSelection();
 };
 
 void TestAtramentEditing::clickEditsAtTheCharacter()
@@ -1157,6 +1175,86 @@ void TestAtramentEditing::taskMenuAtTheCaret()
     QCOMPARE(h.inputCaret(), caret);
     const std::optional<at::Point> p = h.view().editPoint(caret);
     QVERIFY(p && std::abs(at.x - p->x) < 2 && at.y > p->y);
+void TestAtramentEditing::textMenuOnARightClick()
+{
+    // InlineEditor's text menu (BlockEditor.openTextMenu): a right-click in the edited text, the
+    // caret moved there unless the click is in the selection; beside the text the block's menu.
+    Harness h(u"- Jadę w\u00a0góry z\u00a0Anią\n- Drugi punkt\n"_s);
+    int blockMenus = 0;
+    QList<int> menuRows;
+    QList<bool> spelled;
+    at::Point menuAt;
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &) {
+        v.onBlockMenu = [&](int, at::Point) { ++blockMenus; };
+        v.onTextMenu = [&](int row, const std::optional<PageView::Misspelling> &spelling, at::Point at) {
+            menuRows.append(row);
+            spelled.append(bool(spelling));
+            menuAt = at;
+        };
+    });
+    h.clickInto(0, 1);
+    QCOMPARE(h.view().editedRow(), 0);
+    const at::Point inWord = h.editPoint(8);
+    h.tw.simulateClick(inWord, at::MouseButton::Right);
+    h.tw.settle();
+    QCOMPARE(menuRows, QList<int>{0});
+    QCOMPARE(spelled, QList<bool>{false});
+    QCOMPARE(menuAt.x, inWord.x);
+    QCOMPARE(blockMenus, 0);
+    QCOMPARE(h.inputCaret(), 8);
+    QCOMPARE(h.controller.editingRow(), 0);
+    // A selection: a right-click inside it keeps it (the menu acts on it), outside it the caret moves.
+    h.page.update(h.app, [](PageView &v, at::Context<PageView> &cx) { v.selectInEdited(0, 5, 12, cx); });
+    h.tw.settle();
+    h.tw.simulateClick(h.editPoint(9), at::MouseButton::Right);
+    h.tw.settle();
+    QCOMPARE(menuRows.size(), 2);
+    QCOMPARE(h.inputSelection().start, 5);
+    QCOMPARE(h.inputSelection().end, 12);
+    h.tw.simulateClick(h.editPoint(2), at::MouseButton::Right);
+    h.tw.settle();
+    QCOMPARE(menuRows.size(), 3);
+    QVERIFY(h.inputSelection().isEmpty());
+    QCOMPARE(h.inputCaret(), 2);
+    // Beside the text (the bullet's column): the block's menu; a drawn row's text: the block's too.
+    const at::Rect field = *h.view().input()->read(h.app).bounds();
+    h.tw.simulateClick({field.left() - 8, inWord.y}, at::MouseButton::Right);
+    QCOMPARE(blockMenus, 1);
+    h.tw.simulateClick(h.pointOf(1, 3), at::MouseButton::Right);
+    QCOMPARE(blockMenus, 2);
+    QCOMPARE(menuRows.size(), 3);
+}
+
+void TestAtramentEditing::textCommandsActOnTheSelection()
+{
+    // The menu's Cut, Copy, Paste and Select all: what the field's keys do — the controller's exact
+    // copy (no-break spaces kept), its paste (Markdown into blocks), the whole text selected.
+    Harness h(u"- Jadę w\u00a0góry z\u00a0Anią\n- Drugi punkt\n"_s);
+    h.clickInto(0, 1);
+    QVERIFY(!h.textCommand(PageView::TextCommand::Copy)); // nothing selected
+    h.page.update(h.app, [](PageView &v, at::Context<PageView> &cx) { v.selectInEdited(0, 5, 13, cx); });
+    h.tw.settle();
+    QVERIFY(h.textCommand(PageView::TextCommand::Copy));
+    QCOMPARE(h.controller.clipboardText(), u"w\u00a0góry z"_s);
+    QCOMPARE(h.editText(0), u"Jadę w\u00a0góry z\u00a0Anią"_s);
+    QVERIFY(h.textCommand(PageView::TextCommand::Cut));
+    QCOMPARE(h.editText(0), u"Jadę \u00a0Anią"_s);
+    QCOMPARE(h.inputText(), u"Jadę \u00a0Anią"_s);
+    QCOMPARE(h.inputCaret(), 5);
+    QVERIFY(h.textCommand(PageView::TextCommand::Paste));
+    QCOMPARE(h.editText(0), u"Jadę w\u00a0góry z\u00a0Anią"_s);
+    QVERIFY(h.textCommand(PageView::TextCommand::SelectAll));
+    QCOMPARE(h.inputSelection().start, 0);
+    QCOMPARE(h.inputSelection().end, int(h.inputText().size()));
+    // A pasted list becomes blocks (PageController::pasteClipboard), its answer for the host.
+    QGuiApplication::clipboard()->setText(u"- pierwszy\n- drugi"_s);
+    h.page.update(h.app, [](PageView &v, at::Context<PageView> &cx) { v.selectInEdited(0, 0, 0, cx); });
+    h.tw.settle();
+    const int count = h.model()->rowCount();
+    QVariantMap pasted;
+    QVERIFY(h.textCommand(PageView::TextCommand::Paste, &pasted));
+    QCOMPARE(h.model()->rowCount(), count + 1);
+    QVERIFY(pasted.value(u"row"_s, -1).toInt() >= 0);
 }
 
 QTEST_MAIN(TestAtramentEditing)

@@ -402,6 +402,7 @@ at::AnyElement PageView::render(at::Window &window, at::Context<PageView> &cx)
         }
     }
     m_frame = frame;
+    mediaFrame(); // (the pictures and texts of the last frame forgotten, whether media rows show or not)
     m_selfId = cx.entityId();
     m_viewWidth = window.viewportSize().width;
     PageView *self = this;
@@ -546,12 +547,14 @@ at::AnyElement PageView::renderRow(std::size_t row)
                                      });
                                  });
         }
-        if (onBlockMenu || onSpellingMenu)
-            // A right-click on a block: its menu (BlockEditor.openBlockMenuAt) — on a misspelled
-            // word the spelling's (pagespell.cpp).
+        if (onBlockMenu || onSpellingMenu || onTextMenu)
+            // A right-click on a block: its menu (BlockEditor.openBlockMenuAt) — in the edited text
+            // the text's (pagetextmenu.cpp), on a misspelled word the spelling's (pagespell.cpp).
             std::move(d).onMouseDown(at::MouseButton::Right,
                                      [menuSelf, row](const at::MouseDownEvent &e, at::Window &w, at::App &a) {
-                                         a.updateEntity<PageView>(menuSelf, [&](PageView &v, at::Context<PageView> &) {
+                                         a.updateEntity<PageView>(menuSelf, [&](PageView &v, at::Context<PageView> &c) {
+                                             if (v.textMenuAt(int(row), e.position, c))
+                                                 return;
                                              if (!v.spellingMenuAt(int(row), e.position) && v.onBlockMenu)
                                                  v.onBlockMenu(int(row), e.position);
                                          });
@@ -559,7 +562,8 @@ at::AnyElement PageView::renderRow(std::size_t row)
                                      });
         if (m.contentWidth > 0)
             std::move(d).maxW(m.contentX + m.contentWidth);
-        if (!edge.isEmpty()) {
+        // (A block with pictures or embedded blocks has one band under all of it: mediaRow()'s.)
+        if (!edge.isEmpty() && !m_mediaInner) {
             // (pageselection.cpp: the band and the touch selection mode's grips.)
             if (std::optional<at::AnyElement> band = selectionBand(int(row)))
                 std::move(d).child(std::move(*band));

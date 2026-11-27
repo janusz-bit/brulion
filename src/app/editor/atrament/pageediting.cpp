@@ -505,26 +505,15 @@ bool PageView::editorKey(const at::Keystroke &k, at::Window &window, at::Context
             }
             return true;
         }
-        if ((k.key == u"c" || k.key == u"x") && !m.shift && !selected.isEmpty()) {
-            // The exact text (no-break spaces kept) and the copy's HTML: the controller's.
-            const QVariantMap r = ctl->copyEditText(row, selected.start, selected.end, k.key == u"x");
-            if (!r.value(QStringLiteral("ok")).toBool())
-                return false; // the field copies it itself
-            if (k.key == u"x")
-                m_input->update(app, [&](at::TextInput &t, at::Context<at::TextInput> &c) { t.replace(selected, u"", c); });
-            return true;
-        }
-        if (k.key == u"v" && !m.shift && !code) { // (a source takes the text as it is: the field's paste)
+        // The exact text (no-break spaces kept) and the copy's HTML: the controller's (else the
+        // field copies it itself). Pasted Markdown splits into blocks, HTML from other apps comes as
+        // Markdown, a copied picture goes in as an attachment; a source takes the text as it is
+        // (the field's paste). (pagetextmenu.cpp: the text menu's commands do the same.)
+        if ((k.key == u"c" || k.key == u"x") && !m.shift && !selected.isEmpty())
+            return copyEdited(k.key == u"x", cx);
+        if (k.key == u"v" && !m.shift && !code) {
             commitWord();
-            // Markdown splits into blocks, HTML from other apps comes as Markdown, a copied picture
-            // goes in as an attachment (PageController::pasteClipboard / pasteImage).
-            if (ctl->clipboardHasImage()) {
-                const QVariantMap r = ctl->pasteImage(row, selected.start, selected.end);
-                if (r.value(QStringLiteral("row"), -1).toInt() >= 0)
-                    return true;
-            }
-            const QVariantMap r = ctl->pasteClipboard(row, selected.start, selected.end);
-            return r.value(QStringLiteral("row"), -1).toInt() >= 0;
+            return pasteEdited(cx, nullptr);
         }
         if (k.key == u"a" && !m.shift) {
             // Notion's second Ctrl+A: the whole block's text selected already (or none): every

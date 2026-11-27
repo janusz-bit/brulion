@@ -12,6 +12,7 @@ qt_add_library(brulion_editor_atrament STATIC
     pagepoints.cpp
     pagespell.cpp
     pagechips.cpp
+    pagetextmenu.cpp
     pagevim.cpp
     pagecode.cpp
     pageselection.cpp

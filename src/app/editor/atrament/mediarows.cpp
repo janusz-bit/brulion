@@ -11,6 +11,7 @@
 #include "blocklistmodel.h"
 #include "editorhost.h"
 #include "pagecontroller.h"
+#include "pageicons.h"
 #include "picturecache.h"
 #include "queryresultmodel.h"
 #include "renderedtextitem.h"
@@ -38,7 +39,14 @@ bool textView(const QString &view)
     return view == u"text" || view == u"heading" || view == u"quote" || view == u"callout";
 }
 
-enum class EmbedKind { Picture, PdfTile, Chip, Foreign };
+enum class EmbedKind { Picture, PdfTile, Chip, WebPending, Foreign };
+
+// A drawing's preview in the app's theme (the embed's `url` light, `darkUrl` dark).
+QUrl drawingUrl(const QVariantMap &e, bool dark)
+{
+    const QUrl darkUrl = e.value(u"darkUrl"_s).toUrl();
+    return dark && darkUrl.isValid() && !darkUrl.isEmpty() ? darkUrl : e.value(u"url"_s).toUrl();
+}
 
 // An SVG: a local file by its name, a picture from the internet by the format of its bytes.
 bool scalableEmbed(const QVariantMap &e)
@@ -52,13 +60,16 @@ bool scalableEmbed(const QVariantMap &e)
 }
 
 // What EmbedView would show for an embed, as far as Atrament draws it: a picture (a local one, a
-// cached one from the internet, a format the device cannot decode — its frame says so), a PDF's
-// thumbnail, a chip; Foreign for the rest (drawings — their previews come from an image provider —,
-// players, bases, a picture from the internet not shown yet, a PDF's thumbnail being drawn).
-EmbedKind embedKind(const QVariantMap &e)
+// cached one from the internet, a format the device cannot decode — its frame says so — a drawing's
+// preview from its image provider), a PDF's thumbnail, a chip, a picture from the internet not shown
+// yet (its placeholder: "Show", "Save to notebook"); Foreign for the rest (players, bases, a PDF's
+// thumbnail being drawn, a drawing whose preview's provider is not registered).
+EmbedKind embedKind(const QVariantMap &e, bool dark)
 {
-    if (e.value(u"base"_s).toBool() || e.value(u"media"_s).toBool() || e.value(u"drawing"_s).toBool())
+    if (e.value(u"base"_s).toBool() || e.value(u"media"_s).toBool())
         return EmbedKind::Foreign;
+    if (e.value(u"drawing"_s).toBool())
+        return PictureCache::readable(drawingUrl(e, dark)) ? EmbedKind::Picture : EmbedKind::Foreign;
     const QUrl url = e.value(u"url"_s).toUrl();
     if (e.value(u"pdf"_s).toBool()) {
         const QString state = e.value(u"state"_s).toString();
@@ -70,6 +81,8 @@ EmbedKind embedKind(const QVariantMap &e)
     if (!e.value(u"image"_s).toBool() || (!web && url.isEmpty()))
         return EmbedKind::Chip;
     const bool decodable = e.value(u"decodable"_s, true).toBool();
+    if (web && e.value(u"state"_s).toString() != u"ready")
+        return EmbedKind::WebPending;
     if (web) {
         const QString format = e.value(u"format"_s).toString().toLower();
         return e.value(u"state"_s).toString() == u"ready" && decodable && PictureCache::readable(url)
@@ -85,8 +98,10 @@ EmbedKind embedKind(const QVariantMap &e)
 }
 
 // The cache's key of an embed's picture: short (a data: URL is the whole file).
-QString pictureKey(const QVariantMap &e)
+QString pictureKey(const QVariantMap &e, bool dark)
 {
+    if (e.value(u"drawing"_s).toBool())
+        return u"drawing:"_s + e.value(u"path"_s).toString() + (dark ? u"#dark"_s : QString());
     if (e.value(u"web"_s).toBool())
         return u"web:"_s + e.value(u"target"_s).toString();
     if (e.value(u"pdf"_s).toBool())
@@ -117,6 +132,28 @@ bool otherShape(QSize seen, QSize header)
     const double w = double(seen.height()) * header.width() / header.height();
     return std::abs(seen.height() - h) > std::max(1.5, 0.02 * h) && std::abs(seen.width() - w) > std::max(1.5, 0.02 * w);
 }
+
+// A drawing at its own size, never enlarged, fitted into 1024 × 420 (EmbedView's drawingScale).
+QSizeF drawingShown(QSize file)
+{
+    const double s = std::min({1.0, 1024.0 / file.width(), 420.0 / file.height()});
+    return {std::floor(file.width() * s), std::floor(file.height() * s)};
+}
+
+// One of the app's icons (BIcon's: pageicons.h) `size` px square in `color`; nothing where the
+// icons are not (tests).
+at::AnyElement iconElement(const QString &name, float size, at::Color color)
+{
+    std::shared_ptr<const at::VectorIcon> icon = pageIcon(name);
+    return at::canvas([icon, color](at::Rect b, at::Window &w, at::App &) {
+               if (icon)
+                   w.paintIcon(*icon, b, color);
+           })
+            .size(size)
+            .flexShrink0();
+}
+
+constexpr std::chrono::milliseconds kSpinnerStep{33}; // a spinner's frames (30 a second)
 
 // At most as wide as the column (CSS's max-width: 100%).
 at::Div capWidth(at::Div &&d)
@@ -266,9 +303,10 @@ std::optional<bool> PageView::drawsMediaRow(int row) const
     if (!noText && !index.data(BlockListModel::RenderedTextRole).value<RenderedTextRef>().drawable())
         return false;
     for (const QVariant &v : embeds) {
-        switch (embedKind(v.toMap())) {
+        switch (embedKind(v.toMap(), m_mediaLook.dark)) {
         case EmbedKind::Picture:
         case EmbedKind::PdfTile:
+        case EmbedKind::WebPending:
             if (!(m_mediaKinds & Pictures))
                 return false;
             break;
@@ -296,10 +334,25 @@ void PageView::mediaFrame()
         return;
     m_pictureFrame = m_frame;
     m_pictureFrames.clear();
+    m_partTexts.clear();
     if (!m_media)
         return;
     m_media->heldBefore = std::move(m_media->held);
     m_media->held.clear();
+    m_media->heldAnimationsBefore = std::move(m_media->heldAnimations);
+    m_media->heldAnimations.clear();
+    // The animations drawn in the last frame stayed on screen until now (drawn again in this one,
+    // they go on; else they wait from now).
+    if (!m_media->playback.isEmpty()) {
+        const auto now = m_media->now();
+        for (Media::Playback &p : m_media->playback)
+            if (p.drawn + 1 == m_frame)
+                p.hiddenAt = now;
+    }
+    // (Where an animation waits is kept while the page shows it now and then; a long session's
+    // others go.)
+    if (m_media->playback.size() > 256)
+        m_media->playback.removeIf([this](const auto &it) { return it.value().drawn + 600 < m_frame; });
     for (auto it = m_media->transclusions.begin(); it != m_media->transclusions.end();)
         it = it->second.frame + 3 < m_frame ? m_media->transclusions.erase(it) : std::next(it);
     for (auto it = m_media->queries.begin(); it != m_media->queries.end();) {
@@ -313,6 +366,65 @@ void PageView::mediaFrame()
             ++it;
         }
     }
+}
+
+std::chrono::steady_clock::time_point PageView::Media::now() const
+{
+    return app ? app->platform().now() : std::chrono::steady_clock::now();
+}
+
+void PageView::Media::wakeUp(std::chrono::steady_clock::time_point due, std::chrono::steady_clock::time_point now)
+{
+    if (!app || (wakeAt && *wakeAt <= due))
+        return;
+    wakeAt = due;
+    const auto delay = std::max(std::chrono::milliseconds(1),
+                                std::chrono::ceil<std::chrono::milliseconds>(due - now));
+    const at::EntityId page = self;
+    wake = app->setTimeout(delay, [page](at::App &a) {
+        a.updateEntity<PageView>(page, [](PageView &v, at::Context<PageView> &c) {
+            if (v.m_media)
+                v.m_media->wakeAt.reset();
+            c.notify();
+        });
+    });
+}
+
+int PageView::Media::animationFrame(const QString &key, const PictureCache::Animation &a, std::uint64_t pageFrame,
+                                    std::chrono::steady_clock::time_point now)
+{
+    using std::chrono::milliseconds;
+    const std::size_t n = a.frames.size();
+    if (n == 0)
+        return -1;
+    Playback &p = playback[key];
+    if (p.frames != n) {
+        // Another animation (or another decode of it with other frames): from its start.
+        p = Playback{};
+        p.frames = n;
+        p.due = now + milliseconds(a.delays.front());
+    } else if (p.drawn + 1 < pageFrame) {
+        // Not drawn in the last frame (off screen since hiddenAt): on from where it waited.
+        p.due = now + std::max(std::chrono::steady_clock::duration::zero(), p.due - p.hiddenAt);
+    }
+    // The frames whose time is over (a slow frame skips some; far behind, on from here).
+    for (std::size_t guard = 0; now >= p.due && guard < n; ++guard) {
+        p.frame = int((std::size_t(p.frame) + 1) % n);
+        p.due += milliseconds(a.delays[std::size_t(p.frame)]);
+    }
+    if (now >= p.due)
+        p.due = now + milliseconds(a.delays[std::size_t(p.frame)]);
+    p.drawn = pageFrame;
+    wakeUp(p.due, now);
+    return p.frame;
+}
+
+PageView::PartText &PageView::partText(std::size_t row, int item)
+{
+    PartText &t = m_partTexts.emplace_back();
+    t.row = int(row);
+    t.item = item;
+    return t;
 }
 
 void PageView::mediaClicked(std::size_t row, const at::ClickEvent &click)
@@ -386,18 +498,6 @@ std::optional<at::AnyElement> PageView::mediaRow(std::size_t row, const QModelIn
                            .pb(m.rowPad);
     if (m.contentWidth > 0)
         std::move(part).maxW(m.contentX + m.contentWidth);
-    const QString edge = index.data(BlockListModel::SelectionEdgeRole).toString();
-    if (!edge.isEmpty()) {
-        // The band goes on under the parts (BlockPartSelectionBand over the whole block).
-        const bool start = edge == u"single" || edge == u"first";
-        const bool end = edge == u"single" || edge == u"last";
-        const float r = m_selectionLook.radius;
-        std::move(part).bg(m_selectionLook.band).roundedB(end ? r : 0);
-        if (noText)
-            std::move(part).roundedT(start ? r : 0);
-        if (edge != u"single")
-            std::move(part).borderL(2).borderColor(m_selectionLook.ring.fadedBy(0.4f));
-    }
     if (!embeds.isEmpty())
         std::move(part).child(embedsPart(row, embeds, 0));
     if (!transclusions.isEmpty())
@@ -425,6 +525,10 @@ std::optional<at::AnyElement> PageView::mediaRow(std::size_t row, const QModelIn
                     a.updateEntity<PageView>(selfId, [&](PageView &v, at::Context<PageView> &) { v.mediaClicked(row, click); });
                 });
     at::Div whole = at::div().id(at::ElementId::number(uid)).flexCol();
+    // A selected block on one band under its text and its parts (BlockPartSelectionBand over the
+    // whole block; its grips at its ends), under them all (its first child).
+    if (std::optional<at::AnyElement> band = selectionBand(int(row)))
+        std::move(whole).child(std::move(*band));
     if (text)
         std::move(whole).child(std::move(*text));
     return at::AnyElement(std::move(whole).child(std::move(part)));
@@ -439,7 +543,7 @@ at::AnyElement PageView::embedsPart(std::size_t row, const QVariantList &embeds,
     at::Div column = at::div().id(u"embeds").wFull().flexCol().itemsStart().gap(look.spacing);
     for (qsizetype k = 0; k < embeds.size(); ++k) {
         const QVariantMap e = embeds.at(k).toMap();
-        const EmbedKind kind = embedKind(e);
+        const EmbedKind kind = embedKind(e, look.dark);
         const QString name = e.value(u"name"_s).toString();
         const QString alt = e.value(u"alt"_s).toString();
         const bool web = e.value(u"web"_s).toBool();
@@ -506,7 +610,7 @@ at::AnyElement PageView::embedsPart(std::size_t row, const QVariantList &embeds,
                                           .arg(name)
                                           .arg(page)
                                           .arg(pages > 0 ? QString::number(pages) : u"?"_s);
-            const QString key = pictureKey(e);
+            const QString key = pictureKey(e, false);
             const QUrl url = e.value(u"url"_s).toUrl();
             const at::Color frameColor = look.frame;
             const float r = look.radiusSm;
@@ -567,22 +671,32 @@ at::AnyElement PageView::embedsPart(std::size_t row, const QVariantList &embeds,
             continue;
         }
 
+        if (kind == EmbedKind::WebPending) {
+            std::move(column).child(webPending(row, e, embed));
+            continue;
+        }
+
         // A picture: at its natural size, at most the column's width and 420 px high, its aspect
         // ratio kept. The size comes from the file's header (the model's), so the row is as tall
         // before the picture is decoded as after; a picture without one is 320 × 180 until it is
         // decoded, then takes what it measured (once). A raster picture is stretched to its frame
-        // (they have its shape), an SVG fitted into it.
-        const QString key = pictureKey(e);
-        const QUrl url = e.value(u"url"_s).toUrl();
-        const bool decodable = e.value(u"decodable"_s, true).toBool();
-        const bool scalable = scalableEmbed(e);
+        // (they have its shape), an SVG fitted into it. A drawing's preview (its image provider's,
+        // in the theme's version) at its own size, never enlarged, fitted as an SVG; a pen in its
+        // corner says a click edits it. An animated picture plays while shown (its frames from the
+        // cache, each as long as it says: Media::animationFrame), a spinner turns while it loads.
+        const bool drawing = e.value(u"drawing"_s).toBool();
+        const QString key = pictureKey(e, look.dark);
+        const QUrl url = drawing ? drawingUrl(e, look.dark) : e.value(u"url"_s).toUrl();
+        const bool decodable = drawing || e.value(u"decodable"_s, true).toBool();
+        const bool scalable = drawing || scalableEmbed(e);
         const QSize header(e.value(u"width"_s).toInt(), e.value(u"height"_s).toInt());
         const PictureCache::Result seen = m_media->cache->peek(key);
         const float dpr = scalable ? m_media->scale : 1.0f;
         const bool measured = header.isEmpty() || otherShape(seen.natural, header);
-        QSizeF natural = !measured ? shownSize(header, scalable, dpr)
-                         : !seen.natural.isEmpty() ? shownSize(seen.natural, scalable, dpr)
-                                                   : QSizeF(320, 180);
+        auto sizeOf = [drawing, scalable, dpr](QSize file) {
+            return drawing ? drawingShown(file) : shownSize(file, scalable, dpr);
+        };
+        QSizeF natural = !measured ? sizeOf(header) : !seen.natural.isEmpty() ? sizeOf(seen.natural) : QSizeF(320, 180);
         if (natural.isEmpty())
             natural = QSizeF(320, 180);
         const float aspect = float(natural.width() / std::max(1.0, natural.height()));
@@ -596,8 +710,12 @@ at::AnyElement PageView::embedsPart(std::size_t row, const QVariantList &embeds,
         else if (seen.failed)
             message = translated("EmbedView", "Cannot load %1").arg(name);
         const float radius = look.radius;
-        const bool backing = look.lightBacking;
+        const bool backing = look.lightBacking && !drawing; // (a drawing has a dark version)
         const at::Color backingColor = look.backing;
+        const at::Color spinnerColor = m_palette.muted;
+        const at::Color badge = look.queryBackground.fadedBy(0.9f);
+        const at::Color badgeBorder = look.frame;
+        const float badgeRadius = look.radiusSm;
         at::Div frame = at::div()
                                 .id(at::ElementId::number(quint64(k) + 1))
                                 .relative()
@@ -615,10 +733,13 @@ at::AnyElement PageView::embedsPart(std::size_t row, const QVariantList &embeds,
             std::move(frame).border(1).borderColor(look.frame);
         std::move(frame).child(
                 at::canvas([self, key, url, header, scalable, decodable, row, embed, radius, backing, backingColor,
-                            bordered](at::Rect b, at::Window &w, at::App &) {
+                            bordered, drawing, spinnerColor, badge, badgeBorder, badgeRadius](at::Rect b, at::Window &w,
+                                                                                              at::App &) {
                     Media &md = *self->m_media;
                     md.scale = w.scaleFactor();
                     bool decoded = false;
+                    bool loading = false;
+                    int frame = -1;
                     // (The canvas fills the frame's padding box: inside its border, when it has one.)
                     const at::Rect outer = bordered ? at::Rect::fromLTRB(b.left() - 1, b.top() - 1, b.right() + 1,
                                                                          b.bottom() + 1)
@@ -633,11 +754,18 @@ at::AnyElement PageView::embedsPart(std::size_t row, const QVariantList &embeds,
                         const int side = known ? PictureCache::sideFor(inner.width(), inner.height(), md.scale)
                                                : PictureCache::MaxSide;
                         const PictureCache::Result p = md.cache->picture(key, url, side, header, scalable);
-                        if (p.image) {
+                        std::shared_ptr<const at::ImageData> image = p.image;
+                        if (p.animation) {
+                            md.heldAnimations.push_back(p.animation);
+                            frame = md.animationFrame(key, *p.animation, self->m_frame, md.now());
+                            if (frame >= 0)
+                                image = p.animation->frames[std::size_t(frame)];
+                        }
+                        if (image) {
                             decoded = true;
-                            md.held.push_back(p.image);
+                            md.held.push_back(image);
                             const at::Rect target =
-                                    scalable ? at::Img::fitRect({float(p.image->width), float(p.image->height)}, inner,
+                                    scalable ? at::Img::fitRect({float(image->width), float(image->height)}, inner,
                                                                 at::ObjectFit::Contain)
                                              : inner;
                             const at::Corners corners = at::Corners::all(std::max(0.0f, radius - 1));
@@ -645,10 +773,25 @@ at::AnyElement PageView::embedsPart(std::size_t row, const QVariantList &embeds,
                             // PNG's dark lines would vanish into the page).
                             if (backing)
                                 w.paintQuad(target, at::Background::solid(backingColor), {}, {}, corners);
-                            w.paintPicture(target, corners, p.image);
+                            w.paintPicture(target, corners, image);
+                            // A drawing: a pen in the corner says a click edits it.
+                            if (drawing && outer.width() >= 72 && outer.height() >= 48) {
+                                const float size = 16 + 2 * 4 + 2;
+                                const at::Rect box = at::Rect::fromXYWH(outer.right() - 8 - size, outer.top() + 8, size, size);
+                                w.paintQuad(box, at::Background::solid(badge), at::Edges::all(1), badgeBorder,
+                                            at::Corners::all(badgeRadius));
+                                if (const auto pen = pageIcon(u"pen-tool"_s))
+                                    w.paintIcon(*pen, at::Rect::fromXYWH(box.left() + 5, box.top() + 5, 16, 16), spinnerColor);
+                            }
+                        } else if (!p.failed) {
+                            // Loading: BSpinner in the middle, turning on Atrament's clock.
+                            loading = true;
+                            const auto now = md.now();
+                            paintSpinner(w, inner.center(), 20, spinnerColor, now);
+                            md.wakeUp(now + kSpinnerStep, now);
                         }
                     }
-                    self->m_pictureFrames.push_back({int(row), embed, outer, decoded});
+                    self->m_pictureFrames.push_back({int(row), embed, outer, decoded, loading, frame});
                 }).absolute().inset(0));
         // What the picture shows, for screen readers (EmbedView's Accessible.name).
         std::move(frame).child(at::img(nullptr).alt(u16View(alt.isEmpty() ? name : alt)).absolute().inset(0));
@@ -681,6 +824,104 @@ at::AnyElement PageView::embedsPart(std::size_t row, const QVariantList &embeds,
         std::move(column).child(std::move(frame));
     }
     return column;
+}
+
+// A picture from the internet not shown yet (EmbedView's placeholder): its frame names what it is
+// — its alt text, or why it could not be fetched — and its site, with "Show" ("Try again" after a
+// failure) and "Save to notebook"; while it loads only a spinner shows, the words keeping their room.
+at::AnyElement PageView::webPending(std::size_t row, const QVariantMap &e, int index)
+{
+    const MediaLook &look = m_mediaLook;
+    const QString state = e.value(u"state"_s).toString();
+    const bool failed = state == u"failed";
+    const bool loading = state == u"loading";
+    const QString alt = e.value(u"alt"_s).toString();
+    const QString said = failed ? e.value(u"error"_s).toString() : alt;
+    PageView *self = this;
+    auto ui = [&look](at::Div &&d) -> at::Div {
+        if (!look.uiFamily.empty())
+            return std::move(d).fontFamily(look.uiFamily);
+        return std::move(d);
+    };
+    const at::Color ink = m_palette.muted;
+    // BButton, small: outlined ("secondary") or "ghost".
+    auto button = [&](const QString &label, const QString &icon, bool ghost, bool save) {
+        at::Div b = ui(at::div()
+                               .id(save ? u"save" : u"show")
+                               .flexRow()
+                               .itemsCenter()
+                               .gap(5)
+                               .h(28)
+                               .px(10)
+                               .rounded(look.radius)
+                               .textSize(look.smallSize)
+                               .textColor(m_palette.text)
+                               .whitespaceNowrap()
+                               .role(at::Role::Button)
+                               .child(iconElement(icon, 14, m_palette.text))
+                               .child(at::text(u16View(label))));
+        const at::Color hover = look.hover;
+        if (ghost)
+            std::move(b).hover([hover](at::Style &st) { st.background = at::Background::solid(hover); });
+        else
+            std::move(b).bg(look.queryBackground).border(1).borderColor(look.borderStrong);
+        if (!loading)
+            std::move(b).cursorPointer().onClick([self, row, e, save](const at::ClickEvent &, at::Window &, at::App &) {
+                if (self->onWebPicture)
+                    self->onWebPicture(int(row), e, save);
+            });
+        return b;
+    };
+    at::Div words = at::div()
+                            .flexCol()
+                            .itemsCenter()
+                            .gap(look.spacing)
+                            .wFull()
+                            .opacity(loading ? 0.0f : 1.0f)
+                            .child(iconElement(failed ? u"triangle-alert"_s : u"image"_s, 20, ink));
+    if (!said.isEmpty())
+        std::move(words).child(ui(at::div().wFull().textSize(look.smallSize).textColor(ink).textCenter().child(
+                at::text(u16View(said)).maxLines(failed ? 3 : 2))));
+    std::move(words)
+            .child(ui(at::div().wFull().textSize(look.smallSize).textColor(ink).textCenter().whitespaceNowrap().overflowHidden().child(
+                    at::text(u16View(translated("EmbedView", "Picture from %1").arg(e.value(u"host"_s).toString()))))))
+            .child(at::div()
+                           .flexRow()
+                           .flexWrap()
+                           .justifyCenter()
+                           .gap(look.spacing)
+                           .child(button(failed ? translated("EmbedView", "Try again") : translated("EmbedView", "Show"),
+                                         failed ? u"refresh-cw"_s : u"eye"_s, false, false))
+                           .child(button(translated("EmbedView", "Save to notebook"), u"download"_s, true, true)));
+    return at::div()
+            .id(at::ElementId::number(quint64(index) + 1))
+            .relative()
+            .w(320)
+            .when(true, capWidth)
+            .minH(180)
+            .rounded(look.radius)
+            .bg(m_palette.background)
+            .border(1)
+            .borderColor(look.frame)
+            .flexCol()
+            .justifyCenter()
+            .itemsCenter()
+            .p(12)
+            .child(std::move(words))
+            // Where it is (tests), the spinner while it loads.
+            .child(at::canvas([self, row, index, loading, ink](at::Rect b, at::Window &w, at::App &) {
+                       Media &md = *self->m_media;
+                       if (loading) {
+                           const auto now = md.now();
+                           paintSpinner(w, b.center(), 20, ink, now);
+                           md.wakeUp(now + kSpinnerStep, now);
+                       }
+                       self->m_pictureFrames.push_back(
+                               {int(row), index, at::Rect::fromLTRB(b.left() - 1, b.top() - 1, b.right() + 1, b.bottom() + 1),
+                                false, loading, -1});
+                   })
+                           .absolute()
+                           .inset(0));
 }
 
 // --- Embedded pages, sections and blocks (TransclusionView) ----------------------------------------
@@ -839,21 +1080,34 @@ at::AnyElement PageView::transclusionsPart(std::size_t row, quint64 uid, const Q
                 const QString path = e.path;
                 const int line = e.line;
                 const QString raw = e.raw;
+                PartText &part = partText(row, -1);
                 for (qsizetype i = 0; i < rt.runs.size();) {
                     const QString &link = rt.runs[i].href;
                     qsizetype j = i + 1;
                     while (j < rt.runs.size() && rt.runs[j].href == link && rt.runs[j].from == rt.runs[j - 1].to)
                         ++j;
-                    if (!link.isEmpty())
-                        std::move(t).link(at::Range{int(rt.runs[i].from), int(rt.runs[j - 1].to)},
+                    if (!link.isEmpty()) {
+                        const at::Range range{int(rt.runs[i].from), int(rt.runs[j - 1].to)};
+                        // Its menu (a chip's in the block's own file, a link's): TransclusionView's.
+                        at::TextLink::MenuListener menu;
+                        if (onEmbeddedLinkMenu)
+                            menu = [self, row, link, path, line, raw](at::Point p, at::Window &, at::App &) {
+                                if (self->onEmbeddedLinkMenu)
+                                    self->onEmbeddedLinkMenu(int(row), link, path, line, raw, p);
+                            };
+                        std::move(t).link(range,
                                           [self, row, link, path, line, raw](const at::ClickEvent &, at::Window &, at::App &) {
                                               if (self->onEmbeddedLink)
                                                   self->onEmbeddedLink(int(row), link, path, line, raw);
                                               else if (self->onLink)
                                                   self->onLink(int(row), link);
-                                          });
+                                          },
+                                          std::move(menu));
+                        part.links.emplace_back(range, link);
+                    }
                     i = j;
                 }
+                std::move(t).trackLayout(part.handle);
                 std::move(body).child(std::move(t));
             }
             std::move(entry).flexRow().itemsStart().pl(textLeft).pt(1).pb(e.level > 0 ? look.spacing / 2 - 1 : 1);

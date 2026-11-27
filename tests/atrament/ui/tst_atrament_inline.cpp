@@ -51,9 +51,11 @@ struct Para {
     float size = kSize;
     std::vector<TextLink> links;
     int clicks = 0;
+    int maxLines = 0;
+    TextLayoutHandle handle;
     AnyElement render(Window &, Context<Para> &cx)
     {
-        Text t = Text(text).spans(spans);
+        Text t = Text(text).spans(spans).maxLines(maxLines).trackLayout(handle);
         App *app = &cx.app();
         const EntityId id = cx.entityId();
         for (const TextLink &l : links)
@@ -215,6 +217,7 @@ private Q_SLOTS:
     void inlineObjectWrapsAsOneUnit();
     void spansAroundAnObject();
     void linkOverAnObject();
+    void maxLinesEndsWithAnEllipsis();
 };
 
 void TestAtramentInline::pillAroundGlyphs()
@@ -528,6 +531,41 @@ void TestAtramentInline::linkOverAnObject()
     QCOMPARE(h.para.read(h.app).clicks, 1);
     h.tw.simulateMouseMove({p.bounds.left() + 3, p.bounds.top() + 3});
     QCOMPARE(h.tw.cursor(), CursorStyle::PointingHand);
+}
+
+void TestAtramentInline::maxLinesEndsWithAnEllipsis()
+{
+    // A query result's text (QueryBlockView's BRichText, maximumLineCount 4): at most N lines, the
+    // last ending with "…" where its text would go on, inside the width.
+    const std::u16string t = u"Zażółć gęślą jaźń, a potem pojechać do Łodzi po świeże pączki z różą, "
+                             u"kupić źdźbła trawy dla żółwia i wrócić przez Gdańsk, Kraków oraz Wrocław.";
+    Harness h(t, {}, 160);
+    QVERIFY(h.para.read(h.app).handle.layout()->lines().size() > 3);
+    QCOMPARE(h.para.read(h.app).handle.layout()->text(), t); // no limit: the whole text
+    h.change([](Para &p) { p.maxLines = 3; });
+    const TextLayout *shown = h.para.read(h.app).handle.layout();
+    QVERIFY(shown);
+    QCOMPARE(shown->lines().size(), std::size_t(3));
+    const std::u16string &text = shown->text();
+    QVERIFY(text.size() < t.size());
+    QCOMPARE(text.back(), u'…');
+    // What is shown is the text's start, no space before the ellipsis, within the width.
+    QCOMPARE(text.substr(0, text.size() - 1), t.substr(0, text.size() - 1));
+    QVERIFY(text[text.size() - 2] != u' ');
+    QVERIFY2(shown->lines().back().width <= 160.01f, qPrintable(QString::number(shown->lines().back().width)));
+    QVERIFY(near(shown->size().height, 3 * kLine, 0.01f));
+    // Its last line takes as much of the text as fits with the ellipsis: one more grapheme does not.
+    const std::shared_ptr<const TextLayout> full = h.layout(t, {}, 160);
+    const TextLine &third = full->lines()[2];
+    QVERIFY(int(text.size()) - 1 <= third.end);
+    // A text of fewer lines than the limit is left as it is.
+    h.change([](Para &p) { p.maxLines = 30; });
+    QCOMPARE(h.para.read(h.app).handle.layout()->text(), t);
+    h.change([](Para &p) {
+        p.text = u"Krótki tekst";
+        p.maxLines = 1;
+    });
+    QCOMPARE(h.para.read(h.app).handle.layout()->text(), std::u16string(u"Krótki tekst"));
 }
 
 QTEST_GUILESS_MAIN(TestAtramentInline)

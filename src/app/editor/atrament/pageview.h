@@ -673,6 +673,7 @@ public:
         int queryItems = 50;     // QueryResultModel.maxItems (20 on touch)
         bool frames = false;     // pictures' hairline frames (AppSettings.pictureFrames, `picture-frames`)
         bool lightBacking = false; // a light backing under pictures (a dark theme, `picture-backing`)
+        bool dark = false;       // the app's theme: a drawing's dark preview (its embed's `darkUrl`)
         std::u16string uiFamily; // Theme.fontUi ("": the page's)
         // Words of the views (translated by the host; English by default).
         QString embeddedName = QStringLiteral("Embedded: %1");
@@ -691,6 +692,11 @@ public:
     // A right-click or a finger held on a picture from the internet: its menu at a window point.
     std::function<void(int row, const QVariantMap &embed)> onEmbedClick;
     std::function<void(int row, const QVariantMap &embed, atrament::Point at)> onEmbedMenu;
+    // A picture from the internet not shown yet (EmbedView's placeholder: its site, "Show" — "Try
+    // again" after a failure — and "Save to notebook"): `save` false asks to show it
+    // (PageController::showWebPicture), true to store it in the notebook
+    // (BlockEditor.downloadWebPictures); the embed's `target` is its address.
+    std::function<void(int row, const QVariantMap &embed, bool save)> onWebPicture;
     // A link of an embedded block's text clicked: its file, line and Markdown (a date chip's dialog,
     // a task's place: TransclusionView.activate). Unset: onLink with the link.
     std::function<void(int row, const QString &link, const QString &path, int line, const QString &raw)>
@@ -701,16 +707,40 @@ public:
     std::function<void(int row, int item, const QString &link, const QString &path, int line, const QString &raw)>
             onQueryLink;
     std::function<void(int row, const QVariantMap &answer)> onQueryAnswer;
+    // A right-click or a finger held on a link of an embedded block's text (a chip, a tag, a page) /
+    // of a query result's text (not the item's quiet page link "open:"): its menu at window point
+    // `at` — the token's in the block's own file, else the link's (TransclusionView.linkMenu,
+    // QueryBlockView.resultMenu) — instead of the block's menu or the touch selection mode.
+    // Unset: those links have no menu of their own.
+    std::function<void(int row, const QString &link, const QString &path, int line, const QString &raw, atrament::Point at)>
+            onEmbeddedLinkMenu;
+    std::function<void(int row, int item, const QString &link, const QString &path, int line, const QString &raw,
+                       atrament::Point at)>
+            onQueryLinkMenu;
+    // The texts of embedded blocks and query results as the last frame laid them out — the row, a
+    // result's item (−1: an embedded block's text), the links given to it (their ranges and
+    // hrefs) and its layout: where their links are (linkPoint(), the self-tests' gestures; tests).
+    struct PartText {
+        int row = -1;
+        int item = -1;
+        std::vector<std::pair<atrament::Range, QString>> links;
+        atrament::TextLayoutHandle handle;
+    };
+    const std::vector<PartText> &partTexts() const { return m_partTexts; }
     // What QueryResultModel::activateLink answers for item `item` of query row `row`'s results.
     QVariantMap activateQueryLink(int row, int item, const QString &link);
     // The results of query row `row` drawn in the last frames (nullptr: none).
     QueryResultModel *queryResults(int row) const;
     // Where the last frame drew pictures: row, the embed's index, window bounds, whether decoded.
+    // Its spinner turning (the picture loading: decoded, or fetched from the internet), the frame
+    // of an animation drawn (−1: a still picture).
     struct PictureFrame {
         int row = -1;
         int embed = -1;
         atrament::Rect bounds;
         bool decoded = false;
+        bool loading = false;
+        int frame = -1;
     };
     const std::vector<PictureFrame> &pictureFrames() const { return m_pictureFrames; }
 
@@ -718,6 +748,7 @@ private:
     struct Media; // mediarows.cpp: the frames' state (pictures held, query models, parsed embeds)
     std::optional<atrament::AnyElement> mediaRow(std::size_t row, const QModelIndex &index);
     atrament::AnyElement embedsPart(std::size_t row, const QVariantList &embeds, float width);
+    atrament::AnyElement webPending(std::size_t row, const QVariantMap &embed, int index);
     atrament::AnyElement transclusionsPart(std::size_t row, quint64 uid, const QVariantList &transclusions);
     atrament::AnyElement queryRow(std::size_t row, const QModelIndex &index, float textX);
     void mediaClicked(std::size_t row, const atrament::ClickEvent &click);
@@ -728,6 +759,9 @@ private:
     std::shared_ptr<Media> m_media;
     std::vector<PictureFrame> m_pictureFrames;
     std::uint64_t m_pictureFrame = 0;
+    std::vector<PartText> m_partTexts;
+    // A text of an embedded block or a query result recorded for the frame (partTexts()).
+    PartText &partText(std::size_t row, int item);
     // --- The edited text's spell marks, reminder chips and Vim keys; code blocks' line numbers
     // (pagespell.cpp, pagechips.cpp, pagevim.cpp, pagecode.cpp; docs/ATRAMENT.md M2 step 2's and
     // step 5's entries — what InlineEditor, MarkdownHighlighter, spellmarks.h and CodeBlockView do).
@@ -751,6 +785,24 @@ public:
     // A right-click on a misspelled word (on touch UIs a tap on one in the edited text): its menu
     // at window point `at` (BlockEditor's spelling items). Unset: the block menu as elsewhere.
     std::function<void(const Misspelling &, atrament::Point at)> onSpellingMenu;
+
+    // The edited text's own menu (pagetextmenu.cpp; InlineEditor's right-click, BlockEditor.
+    // openTextMenu: Cut, Copy, Paste, Highlight…, the AI's, Select all): a right-click inside the
+    // edited block's field — the input method's word committed, the caret moved to the pointer
+    // unless it is inside the selection (the menu acts on it) — at window point `at`, with the
+    // misspelled word there if any (its corrections first). Beside the field (the bullet, the
+    // margin) a right-click is the block's menu. Unset: the edited text's right-click is the
+    // spelling's menu on a misspelled word, else the block's, as on a drawn row.
+    std::function<void(int row, const std::optional<Misspelling> &spelling, atrament::Point at)> onTextMenu;
+    // The menu's commands on the edited text, as its keys do them (editorKey's Ctrl+X / C / V / A):
+    // the controller's exact copy and cut (no-break spaces kept; the field's own when it cannot),
+    // its paste (Markdown into blocks, HTML as Markdown, a copied picture as an attachment; a
+    // source — code, a diagram's, a formula's — takes the text as it is: the field's paste), the
+    // field's whole text selected. False when nothing was done (no block edited, nothing selected
+    // to copy, reading mode, nothing to paste); `result` gets the controller's paste answer (its
+    // row, pictures from the internet it brought: BlockEditor.offerPastedPictures).
+    enum class TextCommand : std::uint8_t { Cut, Copy, Paste, SelectAll };
+    bool textCommand(TextCommand command, atrament::Context<PageView> &cx, QVariantMap *result = nullptr);
 
     // Reminder chips while editing (InlineEditor's, markdownstyles.h's LineChip): each ⏰ / ⏰!
     // token of the edited text is laid out as the pill of its words ("⏰ jutro 18:00"), one unit for
@@ -789,6 +841,12 @@ private:
     void appendRowSpelling(int row, const markdown::RenderedText &text, std::vector<atrament::TextSpan> &spans) const;
     void editCaretMoved(int caret, atrament::Context<PageView> &cx);
     bool spellingMenuAt(int row, atrament::Point p);
+    // The edited text's menu (pagetextmenu.cpp): a right-click at `p` inside the field of `row`;
+    // the controller's copy (cut) of the field's selection and its paste there — false when it
+    // did not (nothing selected, the clipboard without text).
+    bool textMenuAt(int row, atrament::Point p, atrament::Context<PageView> &cx);
+    bool copyEdited(bool cut, atrament::Context<PageView> &cx);
+    bool pasteEdited(atrament::Context<PageView> &cx, QVariantMap *result);
     void editedRowTapped(int row, const atrament::MouseUpEvent &e);
     void restyleInput(atrament::Context<PageView> &cx);
     // The edited text's spans: the highlighter's, the find bar's, the spelling's, the chips'.

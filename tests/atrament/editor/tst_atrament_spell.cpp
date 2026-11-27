@@ -169,6 +169,7 @@ private Q_SLOTS:
     void rightClickOpensTheSpellingMenu();
     void tapOnTouchOpensTheSpellingMenu();
     void correctionAndDictionary();
+    void textMenuCarriesTheMisspelledWord();
 };
 
 void TestAtramentSpell::editedTextMarked()
@@ -352,6 +353,32 @@ void TestAtramentSpell::correctionAndDictionary()
     h.spell->addToDictionary(u"gęśly"_s);
     h.settleSpelling();
     QVERIFY(h.editMarks().isEmpty());
+}
+
+void TestAtramentSpell::textMenuCarriesTheMisspelledWord()
+{
+    // With the edited text's own menu (InlineEditor's right-click): on a misspelled word it is that
+    // menu, the word's corrections first — not the spelling's alone; elsewhere in the text too.
+    Harness h(u"- kot zażułć\n"_s);
+    QList<std::optional<PageView::Misspelling>> textMenus;
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &) {
+        v.onTextMenu = [&](int, const std::optional<PageView::Misspelling> &spelling, at::Point) { textMenus.append(spelling); };
+    });
+    h.clickInto(0, 1);
+    h.settleSpelling();
+    h.tw.simulateClick(h.editPointOf(7), at::MouseButton::Right);
+    QCOMPARE(textMenus.size(), 1);
+    QVERIFY(textMenus[0]);
+    QCOMPARE(textMenus[0]->from, 4);
+    QCOMPARE(textMenus[0]->to, 10);
+    QCOMPARE(textMenus[0]->word, u"zażułć"_s);
+    QVERIFY(textMenus[0]->edited);
+    QVERIFY(h.menus.isEmpty());
+    QCOMPARE(h.blockMenus, 0);
+    h.tw.simulateClick(h.editPointOf(1), at::MouseButton::Right);
+    QCOMPARE(textMenus.size(), 2);
+    QVERIFY(!textMenus[1]);
+    QVERIFY(h.menus.isEmpty());
 }
 
 QTEST_MAIN(TestAtramentSpell)

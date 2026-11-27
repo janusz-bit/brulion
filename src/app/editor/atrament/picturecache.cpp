@@ -5,6 +5,7 @@
 #include <QFileInfo>
 #include <QImage>
 #include <QImageReader>
+#include <QMutex>
 #include <QRegularExpression>
 #include <QSet>
 
@@ -48,14 +49,107 @@ QByteArray formatHint(const QUrl &url)
 
 struct Decoded {
     std::shared_ptr<at::ImageData> image;
+    std::shared_ptr<PictureCache::Animation> animation;
     QSize natural;
     bool full = false;
 };
+
+// The image providers of image:// URLs (setImageProvider), for every cache of the process.
+struct Providers {
+    QMutex mutex;
+    QHash<QString, std::shared_ptr<const PictureCache::ImageProvider>> byId;
+};
+
+Providers &providers()
+{
+    static Providers p;
+    return p;
+}
+
+std::shared_ptr<const PictureCache::ImageProvider> providerOf(const QString &id)
+{
+    Providers &p = providers();
+    QMutexLocker lock(&p.mutex);
+    return p.byId.value(id);
+}
+
+std::shared_ptr<at::ImageData> imageData(QImage picture)
+{
+    picture = picture.convertToFormat(QImage::Format_RGBA8888_Premultiplied);
+    const int w = picture.width();
+    const int h = picture.height();
+    std::vector<at::Pixel> pixels(std::size_t(w) * std::size_t(h));
+    for (int y = 0; y < h; ++y)
+        std::memcpy(pixels.data() + std::size_t(y) * std::size_t(w), picture.constScanLine(y), std::size_t(w) * 4);
+    return at::ImageData::make(w, h, std::move(pixels));
+}
+
+// An image provider's picture (image://<id>/…), fitted into side × side.
+Decoded provided(const QUrl &url, int side)
+{
+    Decoded out;
+    const std::shared_ptr<const PictureCache::ImageProvider> provider = providerOf(url.host());
+    if (!provider || !*provider)
+        return out;
+    // (The id as Qt Quick gives it to a provider: the path after the provider's name, the query.)
+    const QString id = url.toString(QUrl::RemoveScheme | QUrl::RemoveAuthority).mid(1);
+    QSize natural;
+    QImage picture = (*provider)(id, &natural, QSize(side, side));
+    if (picture.isNull())
+        return out;
+    if (qint64(picture.width()) * qint64(picture.height()) > PictureCache::MaxPixels)
+        return {};
+    if (picture.width() > side || picture.height() > side)
+        picture = picture.scaled(side, side, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    out.natural = natural.isValid() && !natural.isEmpty() ? natural : picture.size();
+    out.image = imageData(std::move(picture));
+    return out;
+}
+
+// Every frame of an animated picture at `target` (none when it has one frame: a still picture).
+void decodeFrames(QImageReader &reader, QSize target, Decoded &out)
+{
+    const int count = reader.imageCount(); // (0: not known before reading)
+    if (target.isValid() && !target.isEmpty() && count > 1) {
+        // More pixels than an animation may hold: every frame smaller, fitted into that.
+        const qint64 frame = qint64(target.width()) * target.height() * 4;
+        const qint64 total = frame * std::min(count, PictureCache::MaxFrames);
+        if (total > PictureCache::MaxAnimationBytes) {
+            const double f = std::sqrt(double(PictureCache::MaxAnimationBytes) / double(total));
+            target = QSize(std::max(1, int(target.width() * f)), std::max(1, int(target.height() * f)));
+            reader.setScaledSize(target);
+            out.full = false;
+        }
+    }
+    auto animation = std::make_shared<PictureCache::Animation>();
+    qint64 bytes = 0;
+    while (int(animation->frames.size()) < PictureCache::MaxFrames) {
+        QImage picture = reader.read();
+        if (picture.isNull())
+            break;
+        bytes += qint64(picture.width()) * picture.height() * 4;
+        if (bytes > PictureCache::MaxAnimationBytes && !animation->frames.empty())
+            break;
+        int delay = reader.nextImageDelay();
+        if (delay < 20)
+            delay = 100;
+        animation->frames.push_back(imageData(std::move(picture)));
+        animation->delays.push_back(delay);
+        animation->duration += delay;
+    }
+    if (animation->frames.empty())
+        return;
+    out.image = std::const_pointer_cast<at::ImageData>(animation->frames.front());
+    if (animation->frames.size() > 1)
+        out.animation = std::move(animation);
+}
 
 // Reads and decodes on a worker thread (QImageReader is reentrant).
 Decoded decode(const QUrl &url, int side, bool scalable)
 {
     Decoded out;
+    if (url.scheme() == u"image"_s)
+        return provided(url, side);
     QByteArray bytes;
     std::unique_ptr<QIODevice> device;
     if (url.isLocalFile()) {
@@ -78,14 +172,18 @@ Decoded decode(const QUrl &url, int side, bool scalable)
     if (size.isValid() && qint64(size.width()) * qint64(size.height()) > PictureCache::MaxPixels)
         return out;
     out.natural = size;
+    QSize target = size;
     if (size.isValid() && !size.isEmpty()) {
         const double s = std::min(double(side) / size.width(), double(side) / size.height());
-        QSize target = size;
         if (scalable || s < 1)
             target = QSize(std::max(1, int(std::lround(size.width() * s))), std::max(1, int(std::lround(size.height() * s))));
         out.full = !scalable && s >= 1;
         if (target != size)
             reader.setScaledSize(target);
+    }
+    if (reader.supportsAnimation() && reader.imageCount() != 1 && size.isValid() && !size.isEmpty()) {
+        decodeFrames(reader, target, out);
+        return out;
     }
     QImage picture = reader.read();
     if (picture.isNull())
@@ -102,13 +200,7 @@ Decoded decode(const QUrl &url, int side, bool scalable)
                                      std::max(1, int(std::lround(picture.height() * s))), Qt::IgnoreAspectRatio,
                                      Qt::SmoothTransformation);
     }
-    picture = picture.convertToFormat(QImage::Format_RGBA8888_Premultiplied);
-    const int w = picture.width();
-    const int h = picture.height();
-    std::vector<at::Pixel> pixels(std::size_t(w) * std::size_t(h));
-    for (int y = 0; y < h; ++y)
-        std::memcpy(pixels.data() + std::size_t(y) * std::size_t(w), picture.constScanLine(y), std::size_t(w) * 4);
-    out.image = at::ImageData::make(w, h, std::move(pixels));
+    out.image = imageData(std::move(picture));
     return out;
 }
 
@@ -136,7 +228,19 @@ std::shared_ptr<PictureCache> PictureCache::shared()
 
 bool PictureCache::readable(const QUrl &url)
 {
+    if (url.scheme() == u"image"_s)
+        return bool(providerOf(url.host()));
     return url.isLocalFile() || url.scheme() == u"data"_s;
+}
+
+void PictureCache::setImageProvider(const QString &providerId, ImageProvider provider)
+{
+    Providers &p = providers();
+    QMutexLocker lock(&p.mutex);
+    if (provider)
+        p.byId.insert(providerId, std::make_shared<const ImageProvider>(std::move(provider)));
+    else
+        p.byId.remove(providerId);
 }
 
 bool PictureCache::decodableName(const QString &fileName)
@@ -194,9 +298,9 @@ PictureCache::Result PictureCache::picture(const QString &key, const QUrl &url, 
     }
     if (headerKnown)
         e.header = header;
-    Result r{e.image, e.natural, e.failed, e.loadingSide != 0};
+    Result r{e.image, e.animation, e.natural, e.failed, e.loadingSide != 0};
     if (e.failed || !readable(url))
-        return {e.image, e.natural, true, false};
+        return {e.image, e.animation, e.natural, true, false};
     // Good enough: decoded for this side, at the file's own size (a larger side gains nothing),
     // or for a side up to twice as large (sharp; another view showing it larger).
     const bool fits = e.image
@@ -213,7 +317,7 @@ PictureCache::Result PictureCache::peek(const QString &key) const
     const auto it = m_entries.constFind(key);
     if (it == m_entries.cend())
         return {};
-    return {it->image, it->natural, it->failed, it->loadingSide != 0};
+    return {it->image, it->animation, it->natural, it->failed, it->loadingSide != 0};
 }
 
 void PictureCache::start(const QString &key, Entry &e, int side, bool scalable)
@@ -226,15 +330,16 @@ void PictureCache::start(const QString &key, Entry &e, int side, bool scalable)
         // (The cache waits for its decodes in its destructor: `this` is there.)
         QMetaObject::invokeMethod(
                 this,
-                [this, key, url, side, image = std::move(d.image), natural = d.natural, full = d.full]() mutable {
-                    finished(key, url, side, std::move(image), natural, full);
+                [this, key, url, side, image = std::move(d.image), animation = std::move(d.animation),
+                 natural = d.natural, full = d.full]() mutable {
+                    finished(key, url, side, std::move(image), std::move(animation), natural, full);
                 },
                 Qt::QueuedConnection);
     });
 }
 
 void PictureCache::finished(const QString &key, const QUrl &url, int side, std::shared_ptr<const at::ImageData> image,
-                            QSize natural, bool full)
+                            std::shared_ptr<const Animation> animation, QSize natural, bool full)
 {
     --m_pending;
     auto it = m_entries.find(key);
@@ -249,9 +354,15 @@ void PictureCache::finished(const QString &key, const QUrl &url, int side, std::
         e.natural = natural;
     if (image) {
         m_bytes -= e.bytes;
-        e.bytes = qint64(image->width) * qint64(image->height) * 4;
+        e.bytes = 0;
+        if (animation)
+            for (const auto &frame : animation->frames)
+                e.bytes += qint64(frame->width) * qint64(frame->height) * 4;
+        else
+            e.bytes = qint64(image->width) * qint64(image->height) * 4;
         m_bytes += e.bytes;
         e.image = std::move(image);
+        e.animation = std::move(animation);
         e.side = side;
         e.full = full;
         e.failed = false;
@@ -273,7 +384,10 @@ void PictureCache::trim(const QString &keep)
         // The least recently asked for picture nobody holds (a view's frames keep theirs).
         auto oldest = m_entries.end();
         for (auto it = m_entries.begin(); it != m_entries.end(); ++it) {
-            if (!it->image || it.key() == keep || it->image.use_count() > 1)
+            // (An animation's first frame is its `image` too: held when either is held elsewhere.)
+            const long own = it->animation ? 2 : 1;
+            if (!it->image || it.key() == keep || it->image.use_count() > own
+                || (it->animation && it->animation.use_count() > 1))
                 continue;
             if (oldest == m_entries.end() || it->used < oldest->used)
                 oldest = it;
@@ -283,6 +397,7 @@ void PictureCache::trim(const QString &keep)
         m_bytes -= oldest->bytes;
         // Its size stays known (a frame of the right size when it comes back), the pixels go.
         oldest->image.reset();
+        oldest->animation.reset();
         oldest->bytes = 0;
         oldest->side = 0;
         oldest->full = false;

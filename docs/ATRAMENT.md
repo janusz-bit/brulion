@@ -198,6 +198,11 @@ public:
   `style.baselineShift` (px) and `style.overline` (a line at the font's ascent over its glyphs,
   `TextPaintStyle::overline`). Tested by `tests/atrament/text/tst_atrament_text_shift` and
   `tests/atrament/ui/tst_atrament_vectorpaint`.
+* **At most N lines** (`Text::maxLines(n)`, CSS's line-clamp: a query result's four lines): the text
+  past the n-th line is left out and that line ends with "…" in the style of its last character,
+  cut at the last grapheme from which the ellipsis fits the width (spaces before it dropped). The
+  layout the element keeps — carets, hit tests, links, `trackLayout`'s handle — is of the text
+  shown; a screen reader still gets the whole text. Tested by `tests/atrament/ui/tst_atrament_inline`.
 * **A text field's caret, objects and read-only state** (`TextInput`, `ui/textinput.h`): the caret
   is a bar before the character (the default, blinking), a block over the character after it (as
   wide as that character on its line — its caret stop: an inline object whole —, half an em at a
@@ -910,9 +915,27 @@ scrolling, `tst_atrament_editor`) before the next:
      the highlighted text selected again (`selectInEdited`).
    Tested by `tst_atrament_spell`, `tst_atrament_chips` and `tst_atrament_vim` (tst_editor_vim's
    key rows typed into the Atrament window), TextInput's carets, read-only state and objects by
-   `tests/atrament/ui/tst_atrament_textinput`. **Not yet**: the edited text's own context menu (Cut /
-   Copy / Paste / Highlight… / the AI; a right-click there is the block menu, a misspelled word's
-   the spelling's), the highlight menu from that text menu.
+   `tests/atrament/ui/tst_atrament_textinput`.
+   * **The edited text's menu** (`pagetextmenu.cpp`; InlineEditor's right-click): a right-click
+     inside the edited field (beside it — the bullet, the margin — the block menu as before) commits
+     the input method's word, moves the caret to the pointer unless it is inside the selection, and
+     asks for the text menu (`onTextMenu(row, misspelling, at)` → `AtramentView.textMenuRequested`
+     → `BlockEditor.openAtramentTextMenu`): BlockEditor's own menu, its items acting on the field
+     (`textMenuAtrament`) — Cut, Copy, Paste and Select all through `AtramentView.textCommand`
+     (`PageView::textCommand`: what the keys do, the controller's exact copy and paste, a paste's
+     pictures from the internet offered as after Ctrl+V), "Highlight…" and "Block…" under the
+     caret once it closed (`EditorAtramentPage.openMenuAtCaret`; the colours through
+     `applyHighlight`), the AI's items and "Encrypt selection…" on the field's selection
+     (`BlockEditor.pointedAt()` "atrament"), a misspelled word's corrections at its top
+     (`replaceRange`); the keyboard back in the field when it closes. On touch UIs the platform's
+     long press selects a word through the input method and its handles and floating toolbar ask
+     the item what is selected (`ImCurrentSelection`, `ImReadOnly`); the toolbar's Cut / Copy /
+     Paste / Select all reach the field as Ctrl+X / C / V / A without text
+     (`QAndroidInputContext::sendShortcut`) — the editor's keys, the controller's copy and paste. A
+     tap on a misspelled word still opens only its corrections. Tested by `tst_atrament_editing`
+     (`textMenuOnARightClick`, `textCommandsActOnTheSelection`), `tst_atrament_spell` and the
+     self-test (`atramenttest`: the menu's items with real clicks, the highlight, a correction; on
+     a phone the input method's selection and the toolbar's shortcuts).
 3. **Selection.** Block selection (Shift+click, Shift+arrows, a mouse's drag across rows), its band,
    copy / cut / paste through `PageController`'s selection; on a phone the long press and the
    handles. **Built** (2026-11-27; `src/app/editor/atrament/pageselection.cpp`, `pagedrag.cpp`):
@@ -1090,7 +1113,23 @@ scrolling, `tst_atrament_editor`) before the next:
      internet its menu (`embedMenuRequested` → WebPictureMenu), elsewhere the block's menu. A
      PDF's thumbnail is PdfEmbedTile's (white paper of the page's shape, the caption with the page
      count), other files are BChip's chips (an icon of Atrament's own — a page, a picture — and the
-     name). Animated GIFs show their first frame.
+     name). While a picture loads BSpinner turns in its frame (a ring and an arc of 100°, once in
+     850 ms: `paintSpinner`, the page drawn again every 33 ms on Atrament's clock while it does). An
+     **animated picture** (a GIF) plays while it is shown — its frames from the cache, each as long
+     as it says (`Media::animationFrame`: one timer on Atrament's clock for the page, the earliest
+     frame due; `PictureFrame::frame`) — and waits where it was while scrolled away (nothing is drawn
+     for it then: no timer), going on with the time it had left when it comes back; it loops.
+     A **picture from the internet not shown yet** (`web`, its state "ask", "loading" or "failed")
+     is EmbedView's placeholder: a 320 px frame at least 180 high naming its alt text (or why it
+     could not be fetched) and its site ("Picture from …"), "Show" ("Try again" after a failure)
+     and "Save to notebook" (`onWebPicture` → `AtramentView.webPictureRequested` →
+     `PageController.showWebPicture` / `BlockEditor.downloadWebPictures`; nothing is fetched
+     before), only the spinner while it loads (the words keeping their room); then its picture.
+     A **drawing** (`drawing`: its preview from the app's "drawing" image provider,
+     `EditorHost::drawingUrl`, the dark version in the dark theme — `MediaLook::dark`) is drawn at
+     its own size, never enlarged (fitted into 1024 × 420), fitted into its frame as an SVG, without
+     the light backing, a pen in its corner (BIcon's `pen-tool` on a raised square) when the frame
+     is at least 72 × 48; a click opens the drawing editor (`embedClicked`).
    * **PictureCache** (one per process, `PictureCache::shared()`): QImageReader on two worker
      threads, from `file:` and `data:` URLs (a picture from the internet once cached), at the
      frame's longer side in device pixels in PictureDecode's steps (never enlarged; an SVG rendered
@@ -1098,7 +1137,14 @@ scrolling, `tst_atrament_editor`) before the next:
      page keeps the pictures of its last two frames, so a screenful larger than the budget stays
      whole and nothing is decoded twice per frame —, the least recently asked for first; one
      picture per file, decoded again for another side while the old one is shown; a header of more
-     than 50 MP refused, a failure remembered until the file's size changes.
+     than 50 MP refused, a failure remembered until the file's size changes. An animated picture is
+     decoded whole on the worker (every frame, composed by the decoder, with its delay — 0 or 10 ms
+     shown for 100, as browsers do; `Result::animation`, its first frame `image`), at most 32 MB of
+     frames (`MaxAnimationBytes`: a larger one decoded smaller to fit) and 1 000 frames; the budget
+     counts every frame and lets go of none while a page holds the animation. Pictures of image
+     providers (`image://<id>/…`) come from a provider function registered for the process
+     (`PictureCache::setImageProvider`, QQuickImageProvider::requestImage's contract, called on the
+     worker threads: AtramentView registers DrawingImageProvider as "drawing").
    * **Embedded pages, sections and blocks** in TransclusionView's frame: the source's edge line,
      the header (a link: opens the source), the blocks rendered read-only (their HTML read into
      `RenderedText`: headings, quotes, closed tasks, code as plain text in the code face, rules,
@@ -1111,19 +1157,32 @@ scrolling, `tst_atrament_editor`) before the next:
      drawn, run when it is first drawn): the header with the count, the filters as chips, group
      headers, tasks with a working box (`QueryResultModel::toggleTask`), items rendered as text with
      their links and their page as a quiet link (a daily note by its date), Dataview TABLE rows as
-     columns under their headers, at most 4 lines an item (clipped), "Show N more", the messages
+     columns under their headers, at most 4 lines an item ("…" after the fourth), "Show N more", the messages
      (still indexing, nothing found, an error, no notebook). A click on an item opens it
      (`queryAnswered` → BlockEditor.revealRow on this page), a link goes through
      `queryLinkActivated` (a date chip's dialog, else `AtramentView.activateQueryLink`), a click on
      the header or the filters edits the query — while edited the row is the QML delegate's (its
      InlineEditor, the results following the typed query).
-   Tested by `tests/atrament/editor/tst_atrament_media` and `tst_atrament_picturecache`. **Not
-   yet** (the QML delegate's rows): drawings (their previews come from an image provider), sounds
-   and videos, Obsidian bases and database views (`view:`, ```base), a picture from the internet
-   not shown yet ("Show", "Save to notebook"), a PDF's thumbnail being drawn or failed. Nor: an
-   animation, the spinner while a picture loads, the menus of embedded blocks' and results' tokens
-   and links (a right-click opens the block's menu), link previews on hover, "…" after a result's
-   fourth line, a selected block's band under its pictures drawn as a second piece, BIcon's icons.
+   Tested by `tests/atrament/editor/tst_atrament_media` (an animation playing, waiting off screen
+   and going on; the spinner; a picture from the internet's placeholder and its buttons; a
+   drawing's preview from a provider, its dark version) and `tst_atrament_picturecache`. **Not
+   yet** (the QML delegate's rows): sounds and videos, Obsidian bases and database views (`view:`,
+   ```base), a PDF's thumbnail being drawn or failed. Nor: link previews on hover, BIcon's icons
+   for files' chips and the transclusions' headers (Atrament's own glyphs there), an animation's
+   loop count (every animation loops), Theme.reducedMotion for the spinner, the pen badge's
+   hover look.
+   * **Menus inside embedded blocks and results** (2026-11-27): a right-click or a finger held on
+     a chip or a link of an embedded block's text or of a query result's opens its own menu, not the
+     block's (`onEmbeddedLinkMenu`, `onQueryLinkMenu` → `AtramentView.embeddedLinkMenuRequested` /
+     `queryLinkMenuRequested` → `EditorAtramentPage.openPartLinkMenu`): the token's menu in the
+     block's own file (`BlockEditor.openTokenMenuIn`), else the link menu, whose "Open" follows the
+     link as TransclusionView and QueryBlockView do (`linkMenuOpenRequested` with the page as its
+     requester; a result's link through `activateQueryLink(…, newPane)`). A result's quiet page
+     link ("open:") has none. A result's item ends with "…" after its fourth line
+     (`Text::maxLines`). A selected block with pictures or embedded blocks lies on one band
+     (`selectionBand()` under the whole block, its grips at its ends). The embedded blocks' and the
+     results' texts are kept per frame (`PageView::partTexts()`), so `linkPoint()` — what the
+     self-tests click — finds their links too. Tested by `tst_atrament_media` and the self-test.
 
 ### Tests
 
@@ -1144,13 +1203,17 @@ scrolling, `tst_atrament_editor`) before the next:
   `editCursor`), what an input method is told and the suggestion popup — then document mode's
   keys and its toggle, the zoom's breadcrumb (a hosted QML item) clicked, reading mode's taps and
   toast, "/" commands setting a task's status, the gestures on chips, tags, links and task boxes
-  (`AtramentView.linkPoint` / `taskBoxPoint` say where they are), sources taking "[[" as text: the
-  QML around the view and the view tested together (130 checks a run). It found a composition left
+  (`AtramentView.linkPoint` / `taskBoxPoint` say where they are), sources taking "[[" as text,
+  spell checking's correction, a task box's status menu and Ctrl+Shift+Enter's, the edited text's
+  menu (a right-click's items with real clicks: copy, cut, paste, select all, a highlight, a
+  misspelled word's correction; on a phone the input method's selection and the floating
+  toolbar's shortcuts) and the menus of chips and links inside an embedded block and a query
+  result: the QML around the view and the view tested together. It found a composition left
   marked by Backspace, a zoom's end leaving the edited block out of view, another page opening at
   the last one's scroll, a tap in reading mode saying nothing, a right-click on a chip opening the
   block menu (and a finger held on a tag the selection mode), a revealed row left short of the view
-  past estimated heights, `BlockEditor.ensureRowVisible` doing nothing for the Atrament page, and
-  suggestions opening in code.
+  past estimated heights, `BlockEditor.ensureRowVisible` doing nothing for the Atrament page,
+  suggestions opening in code, a task box with no status menu.
 
 ### Open questions
 

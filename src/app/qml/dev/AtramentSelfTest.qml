@@ -22,7 +22,10 @@ import Brulion
 // into a block scrolled far away, a zoom's end keeping the edited block in view; document mode's
 // keys (Enter leaving a list, Backspace removing a marker, Tab only for list items) and its toggle;
 // reading mode's taps (the toast and its "Edit"); "/" commands setting a task's status; the
-// gestures on chips, tags, links and task boxes (also in reading mode).
+// gestures on chips, tags, links and task boxes (also in reading mode); the edited text's menu (a
+// right-click in it: Copy, Cut, Paste, Select all, Highlight…, a misspelled word's corrections; on
+// a phone what Android's selection handles and floating toolbar give it through the input method);
+// the menus of chips and links inside an embedded block and a query result.
 // Steps run on the playground's step runner (EditorPlayground.runSteps).
 QtObject {
     id: test
@@ -149,6 +152,11 @@ QtObject {
         test.sources()
         test.spelling()
         test.taskMenu()
+        if (window.touchRun)
+            test.touchTextTools()
+        else
+            test.textMenus()
+        test.embedMenus()
     }
     function reading(): void {
         if (window.at()) {
@@ -810,6 +818,41 @@ QtObject {
     function spellMenuOpen(): bool { return test.spellMenu() !== null && test.spellMenu().opened }
     function suggestion(text: string): T.MenuItem {
         const menu = test.spellMenu()
+
+    // The edited text's menu (InlineEditor's right-click, BlockEditor.openTextMenu) on the page drawn
+    // by Atrament: a right-click in the edited text opens it and no block menu, the selection kept;
+    // its Copy copies the exact characters, Cut cuts them (no-break spaces kept), Paste puts them
+    // back, Select all selects the block's text, Highlight… opens the colours (a colour highlights
+    // the selection, one undo step); on a misspelled word its corrections come first, a correction
+    // replaces the word.
+    property int menuRow: -1
+    readonly property string menuText: "Jadę w\u00a0góry z\u00a0Anią"
+    function textMenu(): BMenu { return editor.textMenu }
+    function textMenuOpen(): bool { return test.textMenu() !== null && test.textMenu().opened }
+    function highlightMenu(): BMenu { return editor.highlightMenu }
+    function highlightMenuOpen(): bool { return test.highlightMenu() !== null && test.highlightMenu().opened }
+    function clip(): string { return page.clipboardText() }
+    /// The edited field's selection as "from–to".
+    function editSelection(): string {
+        const v = test.view()
+        return v ? QmlCall.integer(QmlCall.get(v, "editSelectionStart")) + "–"
+                   + QmlCall.integer(QmlCall.get(v, "editSelectionEnd")) : ""
+    }
+    function selectEdited(from: int, to: int): void {
+        const a = from
+        const b = to
+        QmlCall.call3(test.view(), "selectInEdited", test.menuRow, a, b)
+    }
+    /// A right-click at the edited text's caret (the end of its selection: the menu keeps it).
+    function rightClickAtCaret(): void {
+        const v = test.view() as AtramentView
+        if (v)
+            window.rightClick(v, v.editCaretRect.x + 0.5, v.editCaretRect.y + v.editCaretRect.height / 2)
+    }
+    function menuItem(name: string): Item { return window.menuItemNamed(test.textMenu(), name) }
+    /// The text menu's correction `text` (null: not offered).
+    function suggestion(text: string): T.MenuItem {
+        const menu = test.textMenu()
         for (let i = 0; menu && i < menu.count; ++i) {
             const it = menu.itemAt(i) as T.MenuItem
             if (it && it.objectName === "spellSuggestion" && it.text === text)
@@ -964,6 +1007,170 @@ QtObject {
                        + ", text kept " + same + ", " + test.editText())
         }
         if (window.at()) page.stopEditing()
+    }
+
+    function sourceHas(text: string): bool { return Js.indexOf(page.sourceText, text) >= 0 }
+    readonly property list<string> polishWords: ["ala", "ma", "kota", "kot", "psa", "i"]
+    readonly property list<string> englishWords: ["team"]
+    function openMenuPage(): void {
+        if (window.at()) {
+            page.stopEditing()
+            page.save()
+            host.setFile("Menu tekstu.md", "- " + test.menuText + "\n- Ala ma kotta i psa\n")
+            page.path = "Menu tekstu.md"
+        }
+        if (window.at()) window.waitStep(page.loaded && test.rowOf("Jadę") === 0 && test.rowTop(0) >= 0,
+                                         "the page for the text menu opens")
+        if (window.at()) {
+            test.menuRow = 0
+            editor.startEditing(0, -1)
+        }
+        if (window.at()) window.waitStep(test.editing(0), "its block is edited")
+    }
+    function textMenus(): void {
+        test.openMenuPage()
+        if (window.at()) test.selectEdited(0, 4)
+        if (window.at()) test.rightClickAtCaret()
+        if (window.at()) window.waitStep(test.textMenuOpen() && !test.blockMenuOpen(),
+                                         "a right-click in the edited text opens its menu, no block menu")
+        if (window.at()) {
+            test.check(test.editSelection() === "0–4", "the selection stays while the menu is open: " + test.editSelection())
+            test.check(test.menuItem("editTextCut") !== null && test.menuItem("editTextCut").enabled
+                       && test.menuItem("editTextHighlight") !== null, "with Wytnij and Zakreśl…")
+            window.tapItem(test.menuItem("editTextCopy"))
+        }
+        if (window.at()) window.waitStep(test.clip() === "Jadę" && !test.textMenuOpen() && test.editing(0),
+                                         "its Kopiuj copies the selected text, the block stays edited: " + test.clip())
+        // Cut and Paste: the exact characters, no-break spaces kept.
+        if (window.at()) test.selectEdited(5, 13)
+        if (window.at()) test.rightClickAtCaret()
+        if (window.at()) window.waitStep(test.textMenuOpen(), "the menu over another selection")
+        if (window.at()) window.tapItem(test.menuItem("editTextCut"))
+        if (window.at()) window.waitStep(test.clip() === "w\u00a0góry z" && test.sourceHas("- Jadę \u00a0Anią\n"),
+                                         "Wytnij cuts the exact characters: " + Js.stringify(test.clip()))
+        if (window.at()) test.rightClickAtCaret()
+        if (window.at()) window.waitStep(test.textMenuOpen() && !test.menuItem("editTextCut").enabled,
+                                         "the menu at the caret, Wytnij off with nothing selected")
+        if (window.at()) window.tapItem(test.menuItem("editTextPaste"))
+        if (window.at()) window.waitStep(test.sourceHas("- " + test.menuText + "\n") && test.editing(0),
+                                         "Wklej puts them back: " + Js.stringify(Js.slice(page.sourceText, 0, 40)))
+        if (window.at()) test.rightClickAtCaret()
+        if (window.at()) window.waitStep(test.textMenuOpen(), "the menu once more")
+        if (window.at()) window.tapItem(test.menuItem("editTextSelectAll"))
+        if (window.at()) window.waitStep(test.editSelection() === "0–" + test.menuText.length,
+                                         "Zaznacz wszystko selects the block's text: " + test.editSelection())
+        // Highlight…: the colours, then the colour on the selection.
+        if (window.at()) test.selectEdited(0, 4)
+        if (window.at()) test.rightClickAtCaret()
+        if (window.at()) window.waitStep(test.textMenuOpen(), "the menu for Zakreśl…")
+        if (window.at()) window.tapItem(test.menuItem("editTextHighlight"))
+        if (window.at()) window.waitStep(test.highlightMenuOpen() && !test.textMenuOpen(), "Zakreśl… opens the colours")
+        if (window.at()) window.tapItem(window.menuItemNamed(test.highlightMenu(), "highlight-red"))
+        if (window.at()) window.waitStep(test.sourceHas("- <mark style=\"background: #FF5582A6;\">Jadę</mark> w") && test.editing(0)
+                                         && test.editSelection() !== "0–0",
+                                         "Czerwony highlights the selection, which stays selected: "
+                                         + Js.stringify(Js.slice(page.sourceText, 0, 60)) + ", " + test.editSelection())
+        if (window.at()) page.undo()
+        if (window.at()) window.waitStep(test.sourceHas("- " + test.menuText + "\n"), "the highlight is one undo step")
+        // A misspelled word: its corrections first, then the text's items; a correction replaces it.
+        if (window.at()) {
+            SpellCheck.useWordLists(Js.withKey(Js.withKey({}, "pl", test.polishWords), "en", test.englishWords))
+            SpellCheck.languageSetting = "pl,en"
+            SpellCheck.enabled = true
+            test.menuRow = 1
+            editor.startEditing(1, 9)
+        }
+        if (window.at()) window.waitStep(test.editing(1) && SpellCheck.active && SpellCheck.idle(),
+                                         "a block with a misspelled word is edited, its words checked")
+        if (window.at()) test.selectEdited(9, 9)
+        if (window.at()) test.rightClickAtCaret()
+        if (window.at()) window.waitStep(test.textMenuOpen() && window.menuIndexOf(test.textMenu(), "spellSuggestion") === 0
+                                         && test.menuItem("editTextCut") !== null && test.menuItem("editTextCut").visible,
+                                         "on a misspelled word the menu offers its corrections first, the text's items after them")
+        if (window.at()) window.waitStep(test.suggestion("kota") !== null, "“kota” is offered")
+        if (window.at()) window.tapItem(test.suggestion("kota"))
+        if (window.at()) window.waitStep(test.sourceHas("- Ala ma kota i psa\n") && !test.textMenuOpen(),
+                                         "the correction replaces the word: " + Js.stringify(page.sourceText))
+        if (window.at()) {
+            SpellCheck.enabled = false
+            page.stopEditing()
+        }
+    }
+
+    // A phone: the text menu is the platform's — Android's long press selects the word through the
+    // input method (QAndroidInputContext::longPress: a selection back from the word's end), its
+    // handles and floating toolbar ask the field what is selected and whether it is read-only, and
+    // the toolbar's Cut / Copy / Paste / Select all come as key shortcuts without text
+    // (QAndroidInputContext::sendShortcut) — the same through the window to the page drawn by
+    // Atrament: the controller's exact copy, cut and paste.
+    function touchTextTools(): void {
+        test.openMenuPage()
+        if (window.at()) EditorInput.sendInputMethodSelection(test.view(), 4, -4)
+        if (window.at()) {
+            const v = test.view()
+            const selected = QmlCall.text(EditorInput.inputMethodQuery(v, Qt.ImCurrentSelection))
+            const readOnly = QmlCall.isTrue(EditorInput.inputMethodQuery(v, Qt.ImReadOnly))
+            test.check(test.editSelection() === "0–4" && selected === "Jadę" && !readOnly,
+                       "the input method's long press selects a word the toolbar sees, editable: " + test.editSelection()
+                       + " “" + selected + "”")
+        }
+        if (window.at()) test.key(Qt.Key_C, Qt.ControlModifier)
+        if (window.at()) window.waitStep(test.clip() === "Jadę" && test.editing(0), "the toolbar's Copy copies it: " + test.clip())
+        if (window.at()) EditorInput.sendInputMethodSelection(test.view(), 13, -8)
+        if (window.at()) test.key(Qt.Key_X, Qt.ControlModifier)
+        if (window.at()) window.waitStep(test.clip() === "w\u00a0góry z" && test.sourceHas("- Jadę \u00a0Anią\n"),
+                                         "its Cut cuts the exact characters: " + Js.stringify(test.clip()))
+        if (window.at()) test.key(Qt.Key_V, Qt.ControlModifier)
+        if (window.at()) window.waitStep(test.sourceHas("- " + test.menuText + "\n") && test.editing(0),
+                                         "its Paste puts them back: " + Js.stringify(Js.slice(page.sourceText, 0, 40)))
+        if (window.at()) test.key(Qt.Key_A, Qt.ControlModifier)
+        if (window.at()) window.waitStep(test.editSelection() === "0–" + test.menuText.length, "its Select all selects the text: "
+                                         + test.editSelection())
+        if (window.at()) page.stopEditing()
+    }
+
+    // Chips and links inside an embedded block and a query result (TransclusionView's,
+    // QueryBlockView's): a right-click or a finger held on a 📅 chip opens DateChipMenu, on a
+    // [[link]] the link menu — never the block menu —, whose "Otwórz" opens the page.
+    readonly property string embedsContent: "- ![[Przepisy#Zupa]]\n\n```query\ntype:tasks tag:zakupy\n```\n"
+    function embedMenus(): void {
+        if (window.at()) {
+            page.stopEditing()
+            page.save()
+            host.setFile("Przepisy.md", "# Zupa\n- Pokrój marchew 📅 2026-10-16 i [[Seler]]\n")
+            host.setFile("Seler.md", "- korzeń\n")
+            host.setFile("Sklep.md", "- [ ] Kupić chleb w [[Piekarnia]] 📅 2026-10-17 #zakupy\n")
+            host.setFile("Osadzenia.md", test.embedsContent)
+            page.path = "Osadzenia.md"
+        }
+        if (window.at()) window.waitStep(page.loaded && test.findLink(0, "Seler") && test.findLink(1, "Piekarnia"),
+                                         "the embedded block's and the query result's links are drawn")
+        if (window.at()) test.findLink(0, "date:")
+        test.menuGesture("date", test.dateMenuOpen())
+        if (window.at()) window.waitStep(test.dateMenuOpen() && !test.blockMenuOpen() && page.selectedRow < 0,
+                                         (window.touchRun ? "a finger held" : "a right-click")
+                                         + " on an embedded block's 📅 chip opens its menu, no block menu")
+        if (window.at()) test.dateMenu().close()
+        if (window.at()) window.waitStep(!test.dateMenuOpen(), "the chip's menu closes")
+        if (window.at()) test.findLink(0, "Seler")
+        test.menuGesture("link", test.linkMenuOpen())
+        if (window.at()) window.waitStep(test.linkMenuOpen() && !test.blockMenuOpen(), "the same on its [[link]] opens the link menu")
+        if (window.at()) {
+            test.navigationsBefore = test.navigations
+            window.tapItem(window.menuItemNamed(test.linkMenu(), "linkMenuOpen"))
+        }
+        if (window.at()) window.waitStep(test.navigations > test.navigationsBefore && !test.linkMenuOpen(),
+                                         "its Otwórz opens the page")
+        if (window.at()) test.findLink(1, "date:")
+        test.menuGesture("result date", test.dateMenuOpen())
+        if (window.at()) window.waitStep(test.dateMenuOpen() && !test.blockMenuOpen(),
+                                         "a query result's 📅 chip opens its menu, no block menu")
+        if (window.at()) test.dateMenu().close()
+        if (window.at()) test.findLink(1, "Piekarnia")
+        test.menuGesture("result link", test.linkMenuOpen())
+        if (window.at()) window.waitStep(test.linkMenuOpen() && !test.blockMenuOpen(), "a query result's [[link]] opens the link menu")
+        if (window.at()) test.linkMenu().close()
+        if (window.at()) window.waitStep(!test.linkMenuOpen(), "the link menu closes")
     }
 
     Component.onCompleted: window.runSteps("atramenttest")
