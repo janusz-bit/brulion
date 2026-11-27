@@ -69,7 +69,7 @@ bool PageView::editsRow(int row) const
 {
     if (!m_model || !m_controller || row < 0 || row >= m_model->rowCount())
         return false;
-    if (isCode(row))
+    if (editsSource(row)) // code, a diagram's or a formula's source (diagramrows.cpp)
         return true;
     const QModelIndex index = m_model->index(row, 0);
     const auto text = index.data(BlockListModel::RenderedTextRole).value<RenderedTextRef>();
@@ -126,7 +126,7 @@ void PageView::applyEditStyler(at::Context<PageView> &cx)
         return;
     // What the field shows: a code block's code or a text block's Markdown.
     const int row = editedRow();
-    const bool code = row >= 0 && isCode(row);
+    const bool code = row >= 0 && editsAsCode(row);
     const QString lang = code ? m_model->index(row, 0).data(BlockListModel::LangRole).toString() : QString();
     m_inputCode = code;
     m_inputLanguage = lang;
@@ -229,7 +229,7 @@ void PageView::loadInput(int row, int cursor, at::Context<PageView> &cx)
     }
     m_editUid = m_model->uidAt(row);
     {
-        const bool code = isCode(row);
+        const bool code = editsAsCode(row);
         const QString lang = code ? m_model->index(row, 0).data(BlockListModel::LangRole).toString() : QString();
         if (code != m_inputCode || lang != m_inputLanguage)
             applyEditStyler(cx);
@@ -289,7 +289,7 @@ void PageView::inputChanged(at::Context<PageView> &cx)
         return;
     const int caret = input.selection().focus;
     const QString view = m_model->index(row, 0).data(BlockListModel::ViewRole).toString();
-    const bool multiline = view == u"quote" || view == u"callout" || view == u"code";
+    const bool multiline = view == u"quote" || view == u"callout" || view == u"code" || editsSource(row);
     if (!multiline && !m_softBreak) {
         // Line breaks that did not come from Shift+Enter: an input method's Enter (Android commits
         // "\n" as text) splits the block, pasted Markdown becomes blocks.
@@ -380,7 +380,7 @@ bool PageView::editorKey(const at::Keystroke &k, at::Window &window, at::Context
     const QModelIndex index = m_model->index(row, 0);
     const QString view = index.data(BlockListModel::ViewRole).toString();
     const QString kind = index.data(BlockListModel::KindRole).toString();
-    const bool code = view == u"code";
+    const bool code = view == u"code" || editsSource(row); // (a diagram's or a formula's source too)
     const bool multiline = view == u"quote" || view == u"callout" || code;
     const bool document = ctl->documentMode();
     const at::TextLayout *layout = input.layout();
@@ -417,7 +417,7 @@ bool PageView::editorKey(const at::Keystroke &k, at::Window &window, at::Context
                 m_input->update(app, [&](at::TextInput &t, at::Context<at::TextInput> &c) { t.replace(selected, u"", c); });
             return true;
         }
-        if (k.key == u"v" && !m.shift) {
+        if (k.key == u"v" && !m.shift && !code) { // (a source takes the text as it is: the field's paste)
             commitWord();
             // Markdown splits into blocks, HTML from other apps comes as Markdown, a copied picture
             // goes in as an attachment (PageController::pasteClipboard / pasteImage).
@@ -601,7 +601,7 @@ int PageView::editCursorAt(int row, at::Point p) const
     const std::optional<int> display = it->second.offsetAt(p);
     if (!display)
         return -1;
-    if (isCode(row)) // the code is shown as it is edited
+    if (editsAsCode(row)) // the code (a diagram's source) is shown as it is edited
         return std::clamp(*display, 0, int(m_model->editTextAt(row).size()));
     const QModelIndex index = m_model->index(row, 0);
     const auto rendered = index.data(BlockListModel::RenderedTextRole).value<RenderedTextRef>();

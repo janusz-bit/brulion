@@ -352,7 +352,7 @@ bool PageView::drawsRow(int row) const
 {
     if (!m_model || row < 0 || row >= m_model->rowCount())
         return false;
-    if (isCode(row))
+    if (isCode(row) || isDiagram(row) || isMath(row)) // (charts, diagrams, formulas: diagramrows.cpp)
         return true;
     const QModelIndex index = m_model->index(row, 0);
     const auto text = index.data(BlockListModel::RenderedTextRole).value<RenderedTextRef>();
@@ -525,6 +525,10 @@ at::AnyElement PageView::renderRow(std::size_t row)
         return d;
     };
 
+    if (isDiagram(int(row)) || isMath(int(row))) { // charts, diagrams, formulas (diagramrows.cpp)
+        m_drawn.push_back(row);
+        return renderViewRow(row, index, textX, line());
+    }
     if (m_drawsCode && view == u"code") {
         const quint64 codeUid = index.data(BlockListModel::UidRole).toString().toULongLong();
         const bool codeEdited = m_input && codeUid == m_editUid;

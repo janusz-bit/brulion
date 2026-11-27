@@ -8,8 +8,8 @@
 // code and a highlight a box of `boxRadius`, around the glyphs — the font's ascent above and descent
 // below the baseline, as tall as the run's text whatever the line's height —, the adjacent runs of
 // one tinted element (`tintElement`) one shape. A page's app icon (RenderedObject::Icon over its
-// no-break spaces) is an inline object of their room: Atrament has no icons yet, so a placeholder
-// is drawn there — a rounded square in the link's colour.
+// no-break spaces) is an inline object of their room: BIcon's icon drawn there as Atrament vector
+// paths (pageicons.h) in the link's colour — a rounded square for a name this build has no icon of.
 #pragma once
 
 #include "markdown/renderedtext.h"

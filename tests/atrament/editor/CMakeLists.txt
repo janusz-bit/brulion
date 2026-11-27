@@ -2,6 +2,9 @@ brulion_add_test(tst_atrament_editor SOURCES tst_atrament_editor.cpp LIBS brulio
 target_compile_definitions(tst_atrament_editor PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 brulion_add_test(tst_atrament_editing SOURCES tst_atrament_editing.cpp LIBS brulion_editor_atrament)
 target_compile_definitions(tst_atrament_editing PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+# Charts, Mermaid diagrams, formulas and page icons drawn by Atrament (diagramrows.cpp, mathrows.cpp).
+brulion_add_test(tst_atrament_diagrams SOURCES tst_atrament_diagrams.cpp LIBS brulion_editor_atrament)
+target_compile_definitions(tst_atrament_diagrams PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 # Foreign rows hosted in an AtramentItem (foreignhost.h): QML delegates over a page's code blocks and
 # tables, its header and footer, following the scroll, a finger's drag on them scrolling the page —
 # an offscreen Qt Quick window with the software renderer (Qt Quick's QML module for the delegates).

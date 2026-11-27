@@ -627,8 +627,9 @@ In **Atrament** (`src/atrament/ui`, Qt-free, generic — nothing Brulion-specifi
   or the palette's (`chipBackground`, `tagBackground`, `codeBackground`, `highlightBackground`) —
   and a page's app icon (`RenderedObject::Icon`) an inline object of `kPageIconSize` (the room of
   the three no-break spaces it covers, its middle where the QML editor centres its icon).
-  Atrament has no icon renderer yet: a placeholder — a rounded square outlined in the link's
-  colour — is drawn there until one comes (`BIcon`'s icons as paths or atlas sprites).
+  The icon is BIcon's SVG drawn as vector paths ("Vector paths and icons";
+  `src/app/editor/atrament/pageicons.h`: read once per name from `:/icons`, never outside it) in
+  the link's colour; a rounded square outlined in that colour stands for a name with no icon.
 * **Hit regions in text**: the range of a span reported under the pointer (a link's `href`, a
   chip), its hover look, and a link node per span in the accessibility tree (`Role::Link`). **Built**:
   `Text::link(range, onClick)` (`src/atrament/ui/text.h`, `tests/atrament/ui/tst_atrament_links`)
@@ -845,6 +846,29 @@ scrolling, `tst_atrament_editor`) before the next:
    editing it at the character (the code is shown as it is edited), Enter a line break and Tab a
    tab in the field, ↑/↓ across blocks. With line numbers on (the device's setting or the note's
    `line-numbers`) code blocks stay the QML view's (no numbers in Atrament yet).
+   Charts and Mermaid diagrams (`PageView::setDrawsDiagrams`, `AtramentView.drawsDiagrams` — on —
+   and `diagramLook`; `src/app/editor/atrament/diagramrows.cpp`, `diagrampaint.h`): the core scene
+   (`diagram::render`, `chart::layoutChart` at the column's width) painted by `paintDiagram` with
+   Atrament's paths and text — MermaidView's painter: the same items and colours
+   (`diagram::themedPalette`, light and dark), round caps and joins, dotted 2/3 and dashed 6/4,
+   labels in the app's font measured by Atrament's own fonts (`atramentMetrics`) — on
+   ChartBlockView's / MermaidBlockView's sunken panel; `DiagramElement` is as tall as the scene at
+   its width (scaled down, never up; a diagram to 70 % at most, then the row scrolls sideways);
+   the text alternative is the panel's image node (a chart: its type, every value as the
+   description; a diagram: its title or kind); a source that cannot be drawn shows itself with the
+   translated reason under it (danger colour, a type Brulion does not draw muted); a click edits the
+   fenced source in the field (the code highlighter's colours; on the shown source at the
+   character) with the diagram drawn under it as it is typed, Enter a line break, Tab a tab, Esc
+   and ↑/↓ leave it. Math formulas (`setDrawsMath`, `AtramentView.drawsMath` — on —;
+   `mathrows.cpp`): `renderMath`'s rich text read into runs (`renderedTextFromHtml`, the block's
+   `renderedText`) and drawn as Atrament text, centred on the panel in the editor's font (Brulion
+   Math's symbols by fallback): scripts at 0.7 of the size raised 0.4 em or lowered 0.2 em
+   (`baselineShift`), the radicand overlined, \texttt in the code face; a formula with what the
+   text does not draw yet (small capitals, `PageView::mathDrawable`) stays the QML view's, decided
+   per formula — and when the editing starts: an edited formula stays whose editor it was until it
+   is left. A click edits the LaTeX source (Enter a line break, the field left-aligned where
+   MathBlockView centres it). Page icons drawn from BIcon's SVGs ("Vector paths and icons").
+   Tested by `tests/atrament/editor/tst_atrament_diagrams`.
 
 ### Tests
 
