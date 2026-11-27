@@ -4148,8 +4148,10 @@ documentation notebook.
   rules — the edited block's prose by the highlighter's `SpellRange`s, the word at the caret left
   alone while it is typed; the drawn blocks' with `wholePage`, only where shown as written — under a
   wavy line in `Theme.danger` (Atrament draws one; Qt Quick's is straight). A right-click on a
-  marked word, or a tap on one in the edited block on touch UIs, opens the same spelling items
-  (`BlockEditor.openAtramentSpellingMenu`).
+  marked word in a drawn block, or a tap on one in the edited block on touch UIs, opens the same
+  spelling items (`BlockEditor.openAtramentSpellingMenu`); a right-click in the edited block opens
+  its text menu with the word's corrections at the top (`BlockEditor.openAtramentTextMenu`, as
+  InlineEditor's).
 * **Settings** (Settings → Editor, shown only where `SpellCheck.available`): "Check spelling"
   (`AppSettings.spellCheck`, default on), "Underline in the whole page" (`spellWholePage`,
   `spelling/wholePage`: default on, off on Android — every word on screen would go to the system's

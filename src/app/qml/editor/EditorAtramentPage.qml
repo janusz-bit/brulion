@@ -168,6 +168,47 @@ AtramentView {
         if (root.editor)
             root.editor.openAtramentSpellingMenu(row, edited, spelling, root, x, y)
     }
+    // A right-click in the edited text: the editor's text menu acting on this field (Cut, Copy,
+    // Paste, Highlight…, the AI, Select all; a misspelled word's corrections first).
+    onTextMenuRequested: (row, spelling, x, y) => {
+        if (root.editor)
+            root.editor.openAtramentTextMenu(row, spelling, root, x, y)
+    }
+    /// The text menu's "Highlight…" and "Block…" once it has closed: the colours, or the block's
+    /// menu, under the edited text's caret (BlockEditor.openAfterTextMenu's).
+    function openMenuAtCaret(highlight: bool): void {
+        if (!root.editor || root.editRow < 0)
+            return
+        const caret = root.editCaretRect
+        const x = caret.x
+        const bottom = caret.y + caret.height
+        if (highlight)
+            root.editor.openHighlightMenu(null, root, x, bottom)
+        else
+            root.editor.openBlockMenu(root.editRow, root, x, bottom)
+    }
+    // A link's or a chip's menu inside an embedded block or a query result (TransclusionView's,
+    // QueryBlockView's): the token's menu in its own file, else the link's, whose "Open" follows
+    // the link their way (onLinkMenuOpenRequested below).
+    property int menuRow: -1
+    /// A query result's item (−1: an embedded block's link).
+    property int menuItem: -1
+    property string menuPath: ""
+    property int menuLine: -1
+    property string menuRaw: ""
+    function openPartLinkMenu(row: int, item: int, link: string, path: string, line: int, raw: string, x: real,
+                              y: real): void {
+        if (!root.editor || root.editor.openTokenMenuIn(path, line, raw, link, root, x, y))
+            return
+        root.menuRow = row
+        root.menuItem = item
+        root.menuPath = path
+        root.menuLine = line
+        root.menuRaw = raw
+        root.editor.openLinkMenu(link, path, row, root, root, x, y)
+    }
+    onEmbeddedLinkMenuRequested: (row, link, path, line, raw, x, y) => root.openPartLinkMenu(row, -1, link, path, line, raw, x, y)
+    onQueryLinkMenuRequested: (row, item, link, path, line, raw, x, y) => root.openPartLinkMenu(row, item, link, path, line, raw, x, y)
     // A reminder chip of the edited text: its dialog, or (a right-click, a finger held on it) its menu.
     onReminderChipActivated: (row, from, to, menu, x, y) => {
         if (!root.editor)
@@ -335,6 +376,18 @@ AtramentView {
     Connections {
         target: root.editor
         function onFindSelectionChanged() { root.selectFindMatch() }
+        function onLinkMenuOpenRequested(requester: Item, link: string, newPane: bool) {
+            if (requester !== root || !root.editor || !root.editor.controller)
+                return
+            if (root.menuItem >= 0) {
+                queryAnswer.map = root.activateQueryLink(root.menuRow, root.menuItem, link, newPane)
+                root.followQueryAnswer()
+            } else if (newPane) {
+                root.editor.controller.activateLink(root.menuRow, link, true)
+            } else {
+                root.activateEmbedded(root.menuRow, link, root.menuPath, root.menuLine, root.menuRaw)
+            }
+        }
     }
     // ---- Pictures, files, embedded blocks, queries (what EmbedView, TransclusionView and
     // QueryBlockView open)

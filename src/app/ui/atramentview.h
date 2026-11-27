@@ -212,7 +212,7 @@ public:
     Q_INVOKABLE bool editTableCell(int row, int tableRow, int column, int cursor);
     // "page": what a query block's results answer for a link of item `item` ("open:": the item)
     // — QueryResultModel::activateLink / open: { action: "scrollTo", row } …
-    Q_INVOKABLE QVariantMap activateQueryLink(int row, int item, const QString &link);
+    Q_INVOKABLE QVariantMap activateQueryLink(int row, int item, const QString &link, bool newPane = false);
 
     QObject *spellCheck() const { return m_spellCheck.data(); }
     void setSpellCheck(QObject *spell);
@@ -222,6 +222,10 @@ public:
     int editSelectionEnd() const;
     // In a selectionCommand handler: the editor took the command (PageView's own default is skipped).
     Q_INVOKABLE void acceptSelectionCommand() { m_commandTaken = true; }
+    // "page": the edited text's menu commands, as its keys do them (PageView::textCommand): "cut",
+    // "copy", "paste", "selectAll" — { done } and, for a paste, the controller's answer (its row,
+    // pictures from the internet it brought: BlockEditor.offerPastedPictures).
+    Q_INVOKABLE QVariantMap textCommand(const QString &command);
     QRectF selectionRect() const { return m_selectionRect; }
 
 Q_SIGNALS:
@@ -298,6 +302,18 @@ Q_SIGNALS:
     // text when `edited` (PageController.replaceRange), else of the block's body
     // (PageController.replaceInBody; BlockEditor.openRenderedSpellingMenu).
     void spellingMenuRequested(int row, bool edited, const QVariantMap &spelling, qreal x, qreal y);
+    // A right-click in the edited block's text (BlockEditor.openAtramentTextMenu: Cut, Copy, Paste,
+    // Highlight…, the AI, Select all) at (x, y) of this item, the caret moved there unless inside
+    // the selection; `spelling` the misspelled word there ({from, to, word, text} of the editText;
+    // {} for none): its corrections first.
+    void textMenuRequested(int row, const QVariantMap &spelling, qreal x, qreal y);
+    // A right-click or a finger held on a link of an embedded block's text (TransclusionView's) or of
+    // a query result's (QueryBlockView's, item `item`): its menu at (x, y) of this item — the
+    // token's in its own file (BlockEditor.openTokenMenuIn), else the link's.
+    void embeddedLinkMenuRequested(int row, const QString &link, const QString &path, int line, const QString &raw,
+                                   qreal x, qreal y);
+    void queryLinkMenuRequested(int row, int item, const QString &link, const QString &path, int line,
+                                const QString &raw, qreal x, qreal y);
     // A reminder chip of the edited text clicked (`menu` false: BlockEditor.editReminderInText) or
     // right-clicked / held (`menu` true: its menu) at (x, y): the token's editText range.
     void reminderChipActivated(int row, int from, int to, bool menu, qreal x, qreal y);

@@ -144,6 +144,17 @@ void EditorInput::sendInputMethod(QQuickItem *item, const QString &preedit, cons
     QCoreApplication::sendEvent(item, &event);
 }
 
+void EditorInput::sendInputMethodSelection(QQuickItem *item, int start, int length) const
+{
+    if (!item)
+        return;
+    // (As QAndroidInputContext::longPress sends it: the cursor attribute, then the selection.)
+    const QList<QInputMethodEvent::Attribute> attributes{{QInputMethodEvent::Cursor, 0, 0, QVariant()},
+                                                         {QInputMethodEvent::Selection, start, length, QVariant()}};
+    QInputMethodEvent event(QString(), attributes);
+    QCoreApplication::sendEvent(item, &event);
+}
+
 QList<int> EditorInput::changedRange(const QString &before, const QString &after) const
 {
     const TextDelta d = TextDelta::between(before, after);

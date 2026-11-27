@@ -1088,9 +1088,18 @@ FocusScope {
         const edit = activeEditor
         if (edit && edit.active && controller.editingRow >= 0)
             return "edit"
+        if (atramentEditing())
+            return "atrament"
         if (!inSpan && controller.selectionCount > 0)
             return "blocks"
         return ""
+    }
+    /// The block being edited is the page drawn by Atrament's (its field: atramentPage's editText,
+    /// editSelectionStart / End, editCursor).
+    function atramentEditing(): bool {
+        const page = atramentPage
+        return page !== null && controller !== null && controller.editingRow >= 0
+               && QmlCall.integer(QmlCall.get(page, "editRow")) === controller.editingRow
     }
     /// What an extension's command gets as ctx.selection (docs/EXTENSIONS.md "Commands"): the text
     /// selected in source mode or in the block being edited, else the selected blocks as Markdown,
@@ -1108,6 +1117,13 @@ FocusScope {
             const from = Math.min(edit.selectionStart, edit.selectionEnd)
             const to = Math.max(edit.selectionStart, edit.selectionEnd)
             return differs(from, to) ? Js.slice("" + edit.plain(), from, to) : ""
+        }
+        case "atrament": {
+            // (Typed copies: passed on after other calls.)
+            const text = "" + QmlCall.text(QmlCall.get(atramentPage, "editText"))
+            const from = 0 + QmlCall.integer(QmlCall.get(atramentPage, "editSelectionStart"))
+            const to = 0 + QmlCall.integer(QmlCall.get(atramentPage, "editSelectionEnd"))
+            return from !== to ? Js.slice(text, from, to) : ""
         }
         case "blocks":
             return controller.selectionMarkdown()
@@ -4694,6 +4710,20 @@ FocusScope {
             const to = (action === "continue" ? edit.cursorPosition : edit.selectionEnd) + 0
             return QmlCall.isTrue(QmlCall.call6(editor.writingDialog, "startInline", action, preset, r, text, from, to))
         }
+        if (pointed === "atrament") {
+            // The block the page drawn by Atrament edits: its field's text and selection.
+            const page = atramentPage
+            QmlCall.call(page, "commitComposition")
+            // (Typed copies: passed on after other calls.)
+            const r = 0 + QmlCall.integer(QmlCall.get(page, "editRow"))
+            const text = "" + QmlCall.text(QmlCall.get(page, "editText"))
+            const caret = 0 + QmlCall.integer(QmlCall.get(page, "editCursor"))
+            const start = 0 + QmlCall.integer(QmlCall.get(page, "editSelectionStart"))
+            const end = 0 + QmlCall.integer(QmlCall.get(page, "editSelectionEnd"))
+            const continuing = action === "continue"
+            return QmlCall.isTrue(QmlCall.call6(editor.writingDialog, "startInline", action, preset, r, text,
+                                                continuing ? caret : start, continuing ? caret : end))
+        }
         if (pointed === "blocks") {
             const markdown = "" + controller.selectionMarkdown()
             const first = controller.selectionFirstRow + 0
@@ -4840,6 +4870,46 @@ FocusScope {
     }
     /// Only the spelling's part (touch UIs).
     property bool textMenuSpellingOnly: false
+    /// The menu acts on the block the page drawn by Atrament edits (no InlineEditor: atramentPage's
+    /// field — its textCommand(), editSelectionStart / End), and whether its text was selected when
+    /// the menu opened.
+    property bool textMenuAtrament: false
+    property bool textMenuSelected: false
+    /// The text menu of the block the page drawn by Atrament edits (AtramentView.textMenuRequested:
+    /// a right-click in its text, the caret moved there already), at (x, y) of `item`; `spelling`
+    /// the misspelled word there ({}: none) — its corrections first.
+    function openAtramentTextMenu(row: int, spelling: var, item: Item, x: real, y: real): void {
+        if (!controller || !item || !atramentPage)
+            return
+        if (!textMenu)
+            textMenu = textMenuComponent.createObject(editor) as BMenu
+        textMenuEdit = null
+        textMenuAtrament = true
+        const start = 0 + QmlCall.integer(QmlCall.get(atramentPage, "editSelectionStart"))
+        const end = 0 + QmlCall.integer(QmlCall.get(atramentPage, "editSelectionEnd"))
+        textMenuSelected = start !== end
+        textMenuTarget = "atramentEdit"
+        textMenuSource = null
+        textMenuRow = row
+        textMenuSpelling.map = spelling
+        const word = textMenuSpelling.word()
+        textMenuSpellingOnly = false
+        if (word !== "" && suggestionsOf(word).length === 0)
+            SpellCheck.requestSuggestions(word)
+        closeSuggestions()
+        textMenu.bottomMargin = menuBottomMargin()
+        textMenu.popup(item, x, y)
+    }
+    /// A command of the text menu on the field of the page drawn by Atrament ("cut", "copy",
+    /// "paste", "selectAll": AtramentView.textCommand); a paste's pictures from the internet are
+    /// offered as after Ctrl+V.
+    function atramentTextCommand(command: string): void {
+        if (!atramentPage)
+            return
+        pastedNow.map = QmlCall.call1(atramentPage, "textCommand", command)
+        if (command === "paste" && resultRow(pastedNow.map) >= 0)
+            offerPastedPictures(pastedNow.map)
+    }
     function openTextMenu(input: TextEdit, x: real, y: real): void {
         // (A TextEdit: an InlineEditor passes itself, which compiled code cannot do as its own type.)
         const edit = input as InlineEditor
@@ -4887,6 +4957,7 @@ FocusScope {
         if (!textMenu)
             textMenu = textMenuComponent.createObject(editor) as BMenu
         textMenuEdit = null
+        textMenuAtrament = target === "atramentEdit"
         textMenuTarget = target
         textMenuSource = source
         textMenuRow = row
@@ -4933,6 +5004,7 @@ FocusScope {
         if (!textMenu)
             textMenu = textMenuComponent.createObject(editor) as BMenu
         textMenuEdit = edit
+        textMenuAtrament = false
         textMenuTarget = "edit"
         textMenuSource = null
         textMenuRow = -1
@@ -4958,7 +5030,10 @@ FocusScope {
             id: menu
             objectName: "editTextMenu"
             readonly property InlineEditor edit: editor.textMenuEdit
-            readonly property bool hasSelection: edit !== null && editor.differs(edit.selectionStart, edit.selectionEnd)
+            /// The field of the page drawn by Atrament (no InlineEditor).
+            readonly property bool atrament: editor.textMenuAtrament
+            readonly property bool hasSelection: atrament ? editor.textMenuSelected
+                                                          : edit !== null && editor.differs(edit.selectionStart, edit.selectionEnd)
             /// The misspelled word ("" when none).
             readonly property string word: textMenuSpelling.word()
             readonly property bool misspelled: word !== ""
@@ -5032,7 +5107,12 @@ FocusScope {
                 iconName: "scissors"
                 shortcut: "Ctrl+X"
                 enabled: menu.hasSelection
-                onTriggered: editor.copyEditSelection(menu.edit, true)
+                onTriggered: {
+                    if (menu.atrament)
+                        editor.atramentTextCommand("cut")
+                    else
+                        editor.copyEditSelection(menu.edit, true)
+                }
             }
             HidingMenuItem {
                 objectName: "editTextCopy"
@@ -5041,7 +5121,12 @@ FocusScope {
                 iconName: "copy"
                 shortcut: "Ctrl+C"
                 enabled: menu.hasSelection
-                onTriggered: editor.copyEditSelection(menu.edit, false)
+                onTriggered: {
+                    if (menu.atrament)
+                        editor.atramentTextCommand("copy")
+                    else
+                        editor.copyEditSelection(menu.edit, false)
+                }
             }
             HidingMenuItem {
                 objectName: "editTextPaste"
@@ -5051,7 +5136,9 @@ FocusScope {
                 iconName: "clipboard-paste"
                 shortcut: "Ctrl+V"
                 onTriggered: {
-                    if (menu.edit && !menu.edit.multiline && editor.controller.clipboardHasImage())
+                    if (menu.atrament)
+                        editor.atramentTextCommand("paste")
+                    else if (menu.edit && !menu.edit.multiline && editor.controller.clipboardHasImage())
                         editor.controller.pasteImage(menu.edit.row, menu.edit.selectionStart, menu.edit.selectionEnd)
                     else if (menu.edit && (menu.edit.multiline || !editor.pasteIntoEdit(menu.edit)))
                         menu.edit.paste()
@@ -5065,7 +5152,12 @@ FocusScope {
                 visible: menu.textItems
                 text: qsTr("Highlight…")
                 iconName: "highlighter"
-                onTriggered: editor.openAfterTextMenu(menu.edit, true)
+                onTriggered: {
+                    if (menu.atrament)
+                        editor.openAfterAtramentTextMenu(true)
+                    else
+                        editor.openAfterTextMenu(menu.edit, true)
+                }
             }
             // The AI in the editor (the selection, else the block's text).
             HidingMenuSeparator {
@@ -5102,24 +5194,45 @@ FocusScope {
                 enabled: menu.hasSelection
                 text: qsTr("Encrypt selection…")
                 iconName: "lock"
-                onTriggered: editor.encryptSelection(menu.edit)
+                onTriggered: {
+                    if (menu.atrament)
+                        editor.encryptAtramentSelection()
+                    else
+                        editor.encryptSelection(menu.edit)
+                }
             }
             HidingMenuItem {
                 objectName: "editTextSelectAll"
                 visible: menu.textItems
                 text: qsTr("Select all")
                 shortcut: "Ctrl+A"
-                onTriggered: if (menu.edit) menu.edit.selectAll()
+                onTriggered: {
+                    if (menu.atrament)
+                        editor.atramentTextCommand("selectAll")
+                    else if (menu.edit)
+                        menu.edit.selectAll()
+                }
             }
             HidingMenuItem {
                 objectName: "editTextBlockMenu"
                 visible: menu.textItems
                 text: qsTr("Block…")
                 iconName: "ellipsis"
-                onTriggered: editor.openAfterTextMenu(menu.edit, false)
+                onTriggered: {
+                    if (menu.atrament)
+                        editor.openAfterAtramentTextMenu(false)
+                    else
+                        editor.openAfterTextMenu(menu.edit, false)
+                }
             }
-            // The keyboard goes back to the edited text (its selection stayed: persistentSelection).
-            onClosed: if (edit && edit.active) edit.ensureFocus()
+            // The keyboard goes back to the edited text (its selection stayed: persistentSelection;
+            // the page drawn by Atrament keeps its field's).
+            onClosed: {
+                if (menu.atrament && editor.atramentPage)
+                    editor.atramentPage.forceActiveFocus()
+                else if (edit && edit.active)
+                    edit.ensureFocus()
+            }
         }
     }
 
@@ -5182,6 +5295,28 @@ FocusScope {
         const selected = "" + edit.selectedText
         QmlCall.call3(encryptedDialog, "openNew", controller.path, selected, true)
     }
+    /// The same for the field of the page drawn by Atrament (its text menu).
+    function encryptAtramentSelection(): void {
+        const page = atramentPage
+        if (!controller || !page || !atramentEditing() || readOnlyRefuses())
+            return
+        QmlCall.call(page, "commitComposition")
+        // (Typed copies: passed on after other calls.)
+        const row = 0 + QmlCall.integer(QmlCall.get(page, "editRow"))
+        const from = 0 + QmlCall.integer(QmlCall.get(page, "editSelectionStart"))
+        const to = 0 + QmlCall.integer(QmlCall.get(page, "editSelectionEnd"))
+        const text = "" + QmlCall.text(QmlCall.get(page, "editText"))
+        if (from === to) {
+            notice(qsTr("Select the text to encrypt"), "info", null)
+            return
+        }
+        trackEncrypted(row)
+        encryptedFrom = from
+        encryptedTo = to
+        ensureEncryptedDialog()
+        const selected = "" + Js.slice(text, from, to)
+        QmlCall.call3(encryptedDialog, "openNew", controller.path, selected, true)
+    }
     /// "Insert encrypted text" (the slash command, the palette): a new fragment at `cursor` of `row`.
     function insertEncrypted(row: int, cursor: int): void {
         if (!controller || row < 0 || readOnlyRefuses())
@@ -5242,16 +5377,31 @@ FocusScope {
     function openAfterTextMenu(edit: InlineEditor, highlight: bool): void {
         if (!edit)
             return
+        menuLater.atrament = false
         menuLater.edit = edit
+        menuLater.highlight = highlight
+        menuLater.restart()
+    }
+    /// The same for the field of the page drawn by Atrament: under its caret
+    /// (EditorAtramentPage.openMenuAtCaret).
+    function openAfterAtramentTextMenu(highlight: bool): void {
+        menuLater.edit = null
+        menuLater.atrament = true
         menuLater.highlight = highlight
         menuLater.restart()
     }
     Later {
         id: menuLater
         property InlineEditor edit: null
+        property bool atrament: false
         property bool highlight: false
         onTriggered: {
             const edit = menuLater.edit
+            if (editor.alive && menuLater.atrament && editor.atramentPage) {
+                menuLater.atrament = false
+                QmlCall.call1(editor.atramentPage, "openMenuAtCaret", menuLater.highlight)
+                return
+            }
             if (!editor.alive || !edit)
                 return
             const bottom = edit.caretRect.y + edit.caretRect.height

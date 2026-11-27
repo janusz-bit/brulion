@@ -690,6 +690,26 @@ void AtramentView::attachView()
                                                    {u"text"_s, m.text}};
                         Q_EMIT guard->spellingMenuRequested(m.row, m.edited, spelling, p.x, p.y);
                     };
+                    page.onTextMenu = [guard](int row, const std::optional<brulion::editor::atr::PageView::Misspelling> &m,
+                                              at::Point p) {
+                        if (!guard)
+                            return;
+                        QVariantMap spelling;
+                        if (m)
+                            spelling = QVariantMap{{u"from"_s, m->from}, {u"to"_s, m->to}, {u"word"_s, m->word},
+                                                   {u"text"_s, m->text}};
+                        Q_EMIT guard->textMenuRequested(row, spelling, p.x, p.y);
+                    };
+                    page.onEmbeddedLinkMenu = [guard](int row, const QString &link, const QString &path, int line,
+                                                      const QString &raw, at::Point p) {
+                        if (guard)
+                            Q_EMIT guard->embeddedLinkMenuRequested(row, link, path, line, raw, p.x, p.y);
+                    };
+                    page.onQueryLinkMenu = [guard](int row, int item, const QString &link, const QString &path, int line,
+                                                   const QString &raw, at::Point p) {
+                        if (guard)
+                            Q_EMIT guard->queryLinkMenuRequested(row, item, link, path, line, raw, p.x, p.y);
+                    };
                     page.onReminderChip = [guard](int row, int from, int to, bool menu, at::Point p) {
                         if (guard)
                             Q_EMIT guard->reminderChipActivated(row, from, to, menu, p.x, p.y);
@@ -769,7 +789,7 @@ QQuickItem *AtramentView::rowItem(int row) const
     return nullptr;
 }
 
-QVariantMap AtramentView::activateQueryLink(int row, int item, const QString &link)
+QVariantMap AtramentView::activateQueryLink(int row, int item, const QString &link, bool newPane)
 {
     QVariantMap answer;
 #ifdef BRULION_HAS_ATRAMENT_EDITOR
@@ -777,11 +797,40 @@ QVariantMap AtramentView::activateQueryLink(int row, int item, const QString &li
     brulion::editor::QueryResultModel *results =
             m_page ? m_page->entity.read(runtime().app).queryResults(row) : nullptr;
     if (results)
-        answer = link == u"open:"_s ? results->open(item, false) : results->activateLink(item, link, false);
+        answer = link == u"open:"_s ? results->open(item, newPane) : results->activateLink(item, link, newPane);
 #else
     Q_UNUSED(row)
     Q_UNUSED(item)
     Q_UNUSED(link)
+    Q_UNUSED(newPane)
+#endif
+    return answer;
+}
+
+QVariantMap AtramentView::textCommand(const QString &command)
+{
+    QVariantMap answer;
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    using brulion::editor::atr::PageView;
+    std::optional<PageView::TextCommand> c;
+    if (command == u"cut")
+        c = PageView::TextCommand::Cut;
+    else if (command == u"copy")
+        c = PageView::TextCommand::Copy;
+    else if (command == u"paste")
+        c = PageView::TextCommand::Paste;
+    else if (command == u"selectAll")
+        c = PageView::TextCommand::SelectAll;
+    // The input method's own word first (it keeps it outside the text).
+    QGuiApplication::inputMethod()->commit();
+    bool done = false;
+    if (m_page && c)
+        m_page->entity.update(runtime().app, [&](PageView &page, at::Context<PageView> &cx) {
+            done = page.textCommand(*c, cx, &answer);
+        });
+    answer.insert(u"done"_s, done);
+#else
+    Q_UNUSED(command)
 #endif
     return answer;
 }

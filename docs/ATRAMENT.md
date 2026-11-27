@@ -915,9 +915,27 @@ scrolling, `tst_atrament_editor`) before the next:
      the highlighted text selected again (`selectInEdited`).
    Tested by `tst_atrament_spell`, `tst_atrament_chips` and `tst_atrament_vim` (tst_editor_vim's
    key rows typed into the Atrament window), TextInput's carets, read-only state and objects by
-   `tests/atrament/ui/tst_atrament_textinput`. **Not yet**: the edited text's own context menu (Cut /
-   Copy / Paste / Highlight… / the AI; a right-click there is the block menu, a misspelled word's
-   the spelling's), the highlight menu from that text menu.
+   `tests/atrament/ui/tst_atrament_textinput`.
+   * **The edited text's menu** (`pagetextmenu.cpp`; InlineEditor's right-click): a right-click
+     inside the edited field (beside it — the bullet, the margin — the block menu as before) commits
+     the input method's word, moves the caret to the pointer unless it is inside the selection, and
+     asks for the text menu (`onTextMenu(row, misspelling, at)` → `AtramentView.textMenuRequested`
+     → `BlockEditor.openAtramentTextMenu`): BlockEditor's own menu, its items acting on the field
+     (`textMenuAtrament`) — Cut, Copy, Paste and Select all through `AtramentView.textCommand`
+     (`PageView::textCommand`: what the keys do, the controller's exact copy and paste, a paste's
+     pictures from the internet offered as after Ctrl+V), "Highlight…" and "Block…" under the
+     caret once it closed (`EditorAtramentPage.openMenuAtCaret`; the colours through
+     `applyHighlight`), the AI's items and "Encrypt selection…" on the field's selection
+     (`BlockEditor.pointedAt()` "atrament"), a misspelled word's corrections at its top
+     (`replaceRange`); the keyboard back in the field when it closes. On touch UIs the platform's
+     long press selects a word through the input method and its handles and floating toolbar ask
+     the item what is selected (`ImCurrentSelection`, `ImReadOnly`); the toolbar's Cut / Copy /
+     Paste / Select all reach the field as Ctrl+X / C / V / A without text
+     (`QAndroidInputContext::sendShortcut`) — the editor's keys, the controller's copy and paste. A
+     tap on a misspelled word still opens only its corrections. Tested by `tst_atrament_editing`
+     (`textMenuOnARightClick`, `textCommandsActOnTheSelection`), `tst_atrament_spell` and the
+     self-test (`atramenttest`: the menu's items with real clicks, the highlight, a correction; on
+     a phone the input method's selection and the toolbar's shortcuts).
 3. **Selection.** Block selection (Shift+click, Shift+arrows, a mouse's drag across rows), its band,
    copy / cut / paste through `PageController`'s selection; on a phone the long press and the
    handles. **Built** (2026-11-27; `src/app/editor/atrament/pageselection.cpp`, `pagedrag.cpp`):
@@ -1126,9 +1144,19 @@ scrolling, `tst_atrament_editor`) before the next:
    yet** (the QML delegate's rows): drawings (their previews come from an image provider), sounds
    and videos, Obsidian bases and database views (`view:`, ```base), a picture from the internet
    not shown yet ("Show", "Save to notebook"), a PDF's thumbnail being drawn or failed. Nor: an
-   animation, the spinner while a picture loads, the menus of embedded blocks' and results' tokens
-   and links (a right-click opens the block's menu), link previews on hover, "…" after a result's
-   fourth line, a selected block's band under its pictures drawn as a second piece, BIcon's icons.
+   animation, the spinner while a picture loads, link previews on hover, BIcon's icons.
+   * **Menus inside embedded blocks and results** (2026-11-27): a right-click or a finger held on
+     a chip or a link of an embedded block's text or of a query result's opens its own menu, not the
+     block's (`onEmbeddedLinkMenu`, `onQueryLinkMenu` → `AtramentView.embeddedLinkMenuRequested` /
+     `queryLinkMenuRequested` → `EditorAtramentPage.openPartLinkMenu`): the token's menu in the
+     block's own file (`BlockEditor.openTokenMenuIn`), else the link menu, whose "Open" follows the
+     link as TransclusionView and QueryBlockView do (`linkMenuOpenRequested` with the page as its
+     requester; a result's link through `activateQueryLink(…, newPane)`). A result's quiet page
+     link ("open:") has none. A result's item ends with "…" after its fourth line
+     (`Text::maxLines`). A selected block with pictures or embedded blocks lies on one band
+     (`selectionBand()` under the whole block, its grips at its ends). The embedded blocks' and the
+     results' texts are kept per frame (`PageView::partTexts()`), so `linkPoint()` — what the
+     self-tests click — finds their links too. Tested by `tst_atrament_media` and the self-test.
 
 ### Tests
 

@@ -91,6 +91,10 @@ public:
     /// An input-method event to `item`: composing text `preedit` (caret at its end) and/or the
     /// committed text `commit`.
     Q_INVOKABLE void sendInputMethod(QQuickItem *item, const QString &preedit, const QString &commit = QString()) const;
+    /// An input method's selection to `item` (Qt's Android input context after a long press, or
+    /// its handles dragged: QAndroidInputContext::longPress): a Selection attribute from `start`,
+    /// `length` long (negative: back from it — the caret before the anchor).
+    Q_INVOKABLE void sendInputMethodSelection(QQuickItem *item, int start, int length) const;
     /// What `item` tells an input method (Qt::InputMethodQuery `query`): the self-tests' look at
     /// what the keyboard sees of an item that is no TextEdit (the page drawn by Atrament).
     Q_INVOKABLE QVariant inputMethodQuery(QQuickItem *item, int query) const;
