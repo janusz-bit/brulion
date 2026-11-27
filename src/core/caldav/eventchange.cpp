@@ -638,38 +638,29 @@ std::optional<EventIntent> EventIntent::fromJson(const QJsonObject &json)
 namespace {
 
 struct ProblemWords {
-    EventProblem problem;
     const char16_t *code;
     const char16_t *text;
 };
 
+/// One row per EventProblem, in its order.
 constexpr ProblemWords Problems[] = {
-        {EventProblem::None, u"", u""},
-        {EventProblem::NoCalendar, u"no_calendar", u"No calendar of that id on this device"},
-        {EventProblem::Subscription, u"subscription",
-         u"An ICS subscription is a read-only copy of a feed another program publishes"},
-        {EventProblem::ReadOnly, u"read_only", u"The server does not let this account change the calendar"},
-        {EventProblem::NoEvents, u"no_events", u"The calendar holds tasks only"},
-        {EventProblem::EventsHidden, u"events_hidden", u"The calendar's events are not shown"},
-        {EventProblem::NotFound, u"not_found", u"No event of that UID in the calendar"},
-        {EventProblem::NoOccurrence, u"no_occurrence", u"The series has no occurrence that started then"},
-        {EventProblem::NoTitle, u"no_title", u"An event needs a title"},
-        {EventProblem::NoStart, u"no_start", u"A new event needs its day"},
-        {EventProblem::EndBeforeStart, u"end_before_start", u"The end is before the start"},
-        {EventProblem::AllDayWithTime, u"all_day_with_time", u"An all-day event has no times"},
-        {EventProblem::UnknownRule, u"unknown_rule", u"The recurrence is not understood"},
-        {EventProblem::OccurrenceRule, u"occurrence_rule", u"One occurrence has no recurrence of its own"},
+        {u"", u""},
+        {u"no_calendar", u"No calendar of that id on this device"},
+        {u"subscription", u"An ICS subscription is a read-only copy of a feed another program publishes"},
+        {u"read_only", u"The server does not let this account change the calendar"},
+        {u"no_events", u"The calendar holds tasks only"},
+        {u"events_hidden", u"The calendar's events are not shown"},
+        {u"not_found", u"No event of that UID in the calendar"},
+        {u"no_occurrence", u"The series has no occurrence that started then"},
+        {u"no_title", u"An event needs a title"},
+        {u"no_start", u"A new event needs its day"},
+        {u"end_before_start", u"The end is before the start"},
+        {u"all_day_with_time", u"An all-day event has no times"},
+        {u"unknown_rule", u"The recurrence is not understood"},
+        {u"occurrence_rule", u"One occurrence has no recurrence of its own"},
 };
 
-constexpr bool problemsInOrder()
-{
-    for (std::size_t i = 0; i < std::size(Problems); ++i) {
-        if (std::size_t(Problems[i].problem) != i)
-            return false;
-    }
-    return std::size(Problems) == std::size_t(EventProblem::OccurrenceRule) + 1;
-}
-static_assert(problemsInOrder(), "one row per EventProblem, in its order");
+static_assert(std::size(Problems) == std::size_t(EventProblem::OccurrenceRule) + 1, "one row per EventProblem");
 
 const ProblemWords &wordsOf(EventProblem problem)
 {

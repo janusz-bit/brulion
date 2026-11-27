@@ -255,7 +255,8 @@ class TestCliProcess : public QObject {
     /// stand-up with its 28 October moved to 09:00, a meeting), "Tylko zadania" (events not
     /// shown), "Wspólny" (read-only on its server) and the subscription "Święta". Floating times:
     /// the same wall clock in every zone.
-    QString calendarNotebook()
+    /// `calendars`: "" as above, "two" — also "Dom" taking events, "none" — "Praca" read-only too.
+    QString calendarNotebook(const QString &calendars = {})
     {
         const QString dir = vault({{u"Notatka.md"_s, "- x\n"}});
         const QString folder = stateDirOf(dir) + u"/calendars"_s;
@@ -272,15 +273,21 @@ class TestCliProcess : public QObject {
         zadania.insert(u"showEvents"_s, false);
         QJsonObject wspolny = calendar(u"c-3"_s, u"Wspólny"_s, u"wspolny"_s);
         wspolny.insert(u"readOnly"_s, true);
+        QJsonObject praca = calendar(u"c-1"_s, u"Praca"_s, u"praca"_s);
+        QJsonArray list{praca, zadania, wspolny};
+        if (calendars == u"two")
+            list.append(calendar(u"c-4"_s, u"Dom"_s, u"dom"_s));
+        if (calendars == u"none") {
+            praca.insert(u"readOnly"_s, true);
+            list.replace(0, praca);
+        }
         const QJsonObject feed{
                 {u"id"_s, u"s-1"_s}, {u"url"_s, u"https://example.pl/swieta.ics"_s}, {u"name"_s, u"Święta"_s}};
-        writeFile(folder + u"/calendars.json"_s,
-                  QJsonDocument(QJsonObject{{u"version"_s, 1},
-                                            {u"accounts"_s, QJsonArray{account}},
-                                            {u"calendars"_s,
-                                             QJsonArray{calendar(u"c-1"_s, u"Praca"_s, u"praca"_s), zadania, wspolny}},
-                                            {u"subscriptions"_s, QJsonArray{feed}}})
-                          .toJson(QJsonDocument::Compact));
+        writeFile(folder + u"/calendars.json"_s, QJsonDocument(QJsonObject{{u"version"_s, 1},
+                                                                           {u"accounts"_s, QJsonArray{account}},
+                                                                           {u"calendars"_s, list},
+                                                                           {u"subscriptions"_s, QJsonArray{feed}}})
+                                                         .toJson(QJsonDocument::Compact));
         writeFile(folder + u"/s-1.ics"_s,
                   "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:s1\r\nDTSTART;VALUE=DATE:20261111\r\n"
                   "SUMMARY:Święto Niepodległości\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n");
@@ -295,6 +302,9 @@ class TestCliProcess : public QObject {
                  u"DTEND:20261014T081500\r\nRRULE:FREQ=WEEKLY;COUNT=4\r\nSUMMARY:Zażółć gęślą jaźń\r\nEND:VEVENT\r\n"
                  u"BEGIN:VEVENT\r\nUID:stand\r\nRECURRENCE-ID:20261028T080000\r\nDTSTART:20261028T090000\r\n"
                  u"DTEND:20261028T091500\r\nSUMMARY:Zażółć (później)\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"_s);
+        resource(u"dwa.ics"_s, u"dwa"_s,
+                 u"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:dwa\r\nDTSTART:20261215T100000\r\n"
+                 u"RRULE:FREQ=HOURLY;COUNT=2\r\nSUMMARY:Dwa razy\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"_s);
         resource(
                 u"rada.ics"_s, u"rada"_s,
                 u"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:rada\r\nDTSTART:20261016T120000\r\n"
@@ -678,6 +688,21 @@ private Q_SLOTS:
         QCOMPARE(r.result().value(u"instance"_s).toString(), u"20261021T080000"_s);
         QCOMPARE(r.result().value(u"event"_s).toObject().value(u"start"_s).toString(), u"2026-10-21T10:00"_s);
         QCOMPARE(r.result().value(u"event"_s).toObject().value(u"end"_s).toString(), u"2026-10-21T10:15"_s);
+        // A reminder a week before, no recurrence, no place, a description from standard input.
+        r = run(dir,
+                {u"calendar"_s, u"edit"_s, u"rada"_s, u"--reminder"_s, u"1w"_s, u"--every"_s, u"none"_s,
+                 u"--location"_s, u""_s, u"--stdin"_s},
+                "Druga linia\nżółw");
+        QVERIFY2(r.code == 0, qPrintable(r.describe()));
+        event = r.result().value(u"event"_s).toObject();
+        QCOMPARE(event.value(u"reminderMinutes"_s).toInt(), 10080);
+        QCOMPARE(event.value(u"description"_s).toString(), u"Druga linia\nżółw"_s);
+        QVERIFY(!event.contains(u"location"_s));
+        QVERIFY(!event.contains(u"rule"_s));
+        r = run(dir, {u"--dry-run"_s, u"calendar"_s, u"edit"_s, u"rada"_s, u"--reminder"_s, u"2 godz"_s});
+        QCOMPARE(r.result().value(u"event"_s).toObject().value(u"reminderMinutes"_s).toInt(), 120);
+        r = run(dir, {u"--dry-run"_s, u"calendar"_s, u"edit"_s, u"rada"_s, u"--reminder"_s, u"brak"_s});
+        QVERIFY(!r.result().value(u"event"_s).toObject().contains(u"reminderMinutes"_s));
         // Deleting is destructive: one occurrence, then the whole meeting.
         r = run(dir, {u"calendar"_s, u"delete"_s, u"stand"_s, u"--occurrence"_s, u"20261104T080000"_s});
         QCOMPARE(r.code, 7);
@@ -688,7 +713,7 @@ private Q_SLOTS:
         r = run(dir, {u"--allow-destructive"_s, u"calendar"_s, u"delete"_s, u"rada"_s});
         QVERIFY2(r.code == 0, qPrintable(r.describe()));
         inbox = inboxOf(dir);
-        QCOMPARE(inbox.size(), 6);
+        QCOMPARE(inbox.size(), 7);
         QCOMPARE(inbox.last().value(u"kind"_s).toString(), u"delete"_s);
         QVERIFY(!inbox.last().contains(u"instance"_s));
         r = run(dir, {u"calendar"_s, u"events"_s, u"--from"_s, u"2026-10-14"_s, u"--to"_s, u"2026-11-30"_s});
@@ -706,14 +731,74 @@ private Q_SLOTS:
         QVERIFY2(r.code == 0, qPrintable(r.describe()));
         QCOMPARE(r.result().value(u"queued"_s).toBool(true), false);
         QCOMPARE(r.result().value(u"event"_s).toObject().value(u"start"_s).toString(), u"2026-10-15T09:00"_s);
-        QCOMPARE(inboxOf(dir).size(), 6);
+        QCOMPARE(inboxOf(dir).size(), 7);
         r = run(dir, {u"--read-only"_s, u"calendar"_s, u"add"_s, u"Próba"_s, u"--start"_s, u"jutro"_s});
         QCOMPARE(r.code, 7);
         // Text for people.
         r = run(dir, {u"--format"_s, u"text"_s, u"--dry-run"_s, u"calendar"_s, u"add"_s, u"Zebranie"_s, u"--start"_s,
                       u"2026-10-22 10:00"_s});
         QVERIFY2(r.out.contains("Praca: “Zebranie” 2026-10-22 10:00–11:00"), r.out.constData());
-        QCOMPARE(inboxOf(dir).size(), 6);
+        r = run(dir, {u"--format"_s, u"text"_s, u"--dry-run"_s, u"calendar"_s, u"add"_s, u"Urlop"_s, u"--start"_s,
+                      u"2026-12-21"_s, u"--end"_s, u"2026-12-23"_s});
+        QVERIFY2(r.out.contains("Praca: “Urlop” 2026-12-21 – 2026-12-23\n"), r.out.constData());
+        r = run(dir, {u"--format"_s, u"text"_s, u"--dry-run"_s, u"calendar"_s, u"add"_s, u"Wigilia"_s, u"--start"_s,
+                      u"2026-12-24"_s});
+        QVERIFY2(r.out.contains("Praca: “Wigilia” 2026-12-24\n"), r.out.constData());
+        QCOMPARE(inboxOf(dir).size(), 7);
+        // The app's notebook (no app running): it takes the change when it opens it.
+        {
+            QSettings settings(settingsFile(), QSettings::IniFormat);
+            settings.setValue(u"vaults/current"_s, dir);
+        }
+        r = run(dir, {u"--dry-run"_s, u"calendar"_s, u"add"_s, u"Koniec"_s, u"--start"_s, u"2026-12-30"_s});
+        QCOMPARE(r.result().value(u"app"_s).toObject(),
+                 (QJsonObject{{u"running"_s, false}, {u"sameNotebook"_s, true}}));
+        r = run(dir, {u"--format"_s, u"text"_s, u"calendar"_s, u"add"_s, u"Koniec"_s, u"--start"_s, u"2026-12-30"_s});
+        QVERIFY2(r.out.contains("Brulion takes it when it has this notebook open"), r.out.constData());
+        {
+            QSettings settings(settingsFile(), QSettings::IniFormat);
+            settings.remove(u"vaults/current"_s);
+        }
+    }
+
+    void calendarEventsLimit()
+    {
+        // A daily event: at most 200 occurrences by default, said; --limit more.
+        const QString dir = calendarNotebook();
+        Run r = run(dir, {u"calendar"_s, u"add"_s, u"Codziennie"_s, u"--start"_s, u"2026-10-14 07:00"_s, u"--every"_s,
+                          u"co dzień"_s});
+        QVERIFY2(r.code == 0, qPrintable(r.describe()));
+        r = run(dir, {u"calendar"_s, u"events"_s, u"--from"_s, u"2026-10-14"_s, u"--to"_s, u"2027-12-31"_s});
+        QCOMPARE(r.result().value(u"events"_s).toArray().size(), 200);
+        QCOMPARE(r.result().value(u"truncated"_s).toBool(), true);
+        r = run(dir, {u"calendar"_s, u"events"_s, u"--from"_s, u"2026-10-14"_s, u"--to"_s, u"2026-10-20"_s});
+        QCOMPARE(r.result().value(u"truncated"_s).toBool(true), false);
+    }
+
+    void calendarChoice()
+    {
+        // Two calendars take events: --calendar names one.
+        QString dir = calendarNotebook(u"two"_s);
+        Run r = run(dir, {u"calendar"_s, u"add"_s, u"Spotkanie"_s, u"--start"_s, u"jutro 10:00"_s});
+        QCOMPARE(r.code, 4);
+        QCOMPARE(r.errorCode(), u"calendar_required"_s);
+        QCOMPARE(r.json.value(u"error"_s).toObject().value(u"details"_s).toObject().value(u"calendars"_s).toArray(),
+                 (QJsonArray{u"Praca"_s, u"Dom"_s}));
+        r = run(dir,
+                {u"calendar"_s, u"add"_s, u"Spotkanie"_s, u"--start"_s, u"jutro 10:00"_s, u"--calendar"_s, u"dom"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(r.result().value(u"calendarId"_s).toString(), u"c-4"_s);
+        // None does: said where to add one.
+        dir = calendarNotebook(u"none"_s);
+        r = run(dir, {u"calendar"_s, u"add"_s, u"Spotkanie"_s, u"--start"_s, u"jutro 10:00"_s});
+        QCOMPARE(r.code, 7);
+        QCOMPARE(r.errorCode(), u"calendar_read_only"_s);
+        // The inbox cannot be written: an error, nothing claimed.
+        dir = calendarNotebook();
+        writeFile(stateDirOf(dir) + u"/calendars/inbox"_s, "nie folder");
+        r = run(dir, {u"calendar"_s, u"add"_s, u"Spotkanie"_s, u"--start"_s, u"jutro 10:00"_s});
+        QCOMPARE(r.code, 1);
+        QCOMPARE(r.errorCode(), u"io_error"_s);
     }
 
     void calendarChangesRefused_data()
@@ -756,6 +841,20 @@ private Q_SLOTS:
                 << (add + QStringList{u"--reminder"_s, u"kwadrans"_s}) << 6 << "reminder_not_understood" << "";
         QTest::newRow("a recurrence that is none")
                 << (add + QStringList{u"--every"_s, u"raz na ruski rok"_s}) << 6 << "recurrence_not_understood" << "";
+        QTest::newRow("events: a day that is none")
+                << QStringList{u"calendar"_s, u"events"_s, u"--from"_s, u"żółw"_s} << 6 << "date_not_understood" << "";
+        QTest::newRow("events: too many days")
+                << QStringList{u"calendar"_s, u"events"_s, u"--from"_s, u"2026-01-01"_s, u"--to"_s, u"2028-12-31"_s}
+                << 2 << "bad_range" << "";
+        QTest::newRow("a reminder of more than a year")
+                << (add + QStringList{u"--reminder"_s, u"367d"_s}) << 6 << "reminder_not_understood" << "";
+        QTest::newRow("an occurrence that is no day")
+                << QStringList{u"calendar"_s, u"edit"_s, u"stand"_s, u"--occurrence"_s, u"żółw"_s, u"--title"_s, u"x"_s}
+                << 6 << "date_not_understood" << "";
+        QTest::newRow("two occurrences that day")
+                << QStringList{u"calendar"_s,   u"edit"_s,    u"dwa"_s, u"--occurrence"_s,
+                               u"2026-12-15"_s, u"--title"_s, u"x"_s}
+                << 4 << "ambiguous_occurrence" << "";
         QTest::newRow("a title of spaces") << QStringList{u"calendar"_s, u"edit"_s, u"rada"_s, u"--title"_s, u"   "_s}
                                            << 2 << "no_title" << "no_title";
     }

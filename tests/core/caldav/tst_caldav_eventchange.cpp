@@ -101,8 +101,8 @@ CalendarState praca()
                u"DTSTART;TZID=America/New_York:20261120T090000\r\n"
                u"DTEND;TZID=America/New_York:20261120T100000\r\nSUMMARY:Rozmowa z Nowym Jorkiem\r\n"_s));
     add(u"urlop.ics"_s, u"urlop"_s,
-        vevent(u"urlop"_s,
-               u"DTSTART;VALUE=DATE:20261123\r\nDTEND;VALUE=DATE:20261126\r\nSUMMARY:Urlop w Zakopanem\r\n"_s));
+        vevent(u"urlop"_s, u"DTSTART;VALUE=DATE:20261123\r\nDTEND;VALUE=DATE:20261126\r\nSUMMARY:Urlop w Zakopanem\r\n"
+                           u"BEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER:-P1D\r\nEND:VALARM\r\n"_s));
     add(u"dziwny.ics"_s, u"dziwny"_s,
         vevent(u"dziwny"_s, u"DTSTART:20261001T080000Z\r\nDTEND:20261001T090000Z\r\nRRULE:FREQ=WEEKLY;COUNT=4\r\n"
                             u"SUMMARY:Cztery razy\r\n"_s));
@@ -371,7 +371,7 @@ void TestCalDavEventChange::fields_data()
     QTest::newRow("New York's time on Warsaw's clock") << "nowy-jork" << "" << "2026-11-20 15:00/2026-11-20 16:00"
                                                        << "Rozmowa z Nowym Jorkiem" << "" << -1 << false;
     QTest::newRow("all-day: its last day")
-            << "urlop" << "" << "2026-11-23/2026-11-25" << "Urlop w Zakopanem" << "" << -1 << false;
+            << "urlop" << "" << "2026-11-23/2026-11-25" << "Urlop w Zakopanem" << "" << 1440 << false;
     QTest::newRow("an occurrence of no series") << "urlop" << "20261123" << "no_occurrence" << "" << "" << -1 << false;
     QTest::newRow("a rule Brulion cannot show")
             << "dziwny" << "" << "2026-10-01 10:00/2026-10-01 11:00" << "Cztery razy"
@@ -427,10 +427,11 @@ void TestCalDavEventChange::created()
     i.patch.times.end = EventMoment(QTime(14, 30));
     i.patch.rule = u"co tydzień"_s;
     i.patch.reminderMinutes = 15;
-    EventProblem problem = EventProblem::None;
+    EventProblem problem = EventProblem::NoTitle; // (from an earlier call: reset)
     EventEdit result;
     const auto change = plannedChange(pracaEntry(), praca(), i, context(), &problem, &result);
     QVERIFY2(change, qPrintable(problemCode(problem)));
+    QCOMPARE(problem, EventProblem::None);
     QCOMPARE(change->kind, EventChange::Kind::Create);
     QCOMPARE(change->uid, u"brulion-event-obiad"_s);
     QCOMPARE(change->path, Home + u"brulion-event-obiad.ics"_s);
@@ -452,6 +453,16 @@ void TestCalDavEventChange::created()
     QVERIFY(day);
     QVERIFY(day->data.contains("DTSTART;VALUE=DATE:20261224"));
     QVERIFY(day->data.contains("DTEND;VALUE=DATE:20261225"));
+    // A device on UTC writes UTC; one without a zone the wall clock as it is (floating).
+    i.patch.times.start = EventMoment(DateSpec{QDate(2026, 12, 1), QTime(13, 0)});
+    TodoContext utc = context();
+    utc.zone = QTimeZone::UTC;
+    const auto inUtc = plannedChange(pracaEntry(), praca(), i, utc);
+    QVERIFY(inUtc && inUtc->data.contains("DTSTART:20261201T130000Z"));
+    TodoContext floating = context();
+    floating.zone = QTimeZone();
+    const auto inNoZone = plannedChange(pracaEntry(), praca(), i, floating);
+    QVERIFY(inNoZone && inNoZone->data.contains("DTSTART:20261201T130000\r\n"));
 }
 
 void TestCalDavEventChange::createdTwiceIsOnce()
@@ -788,7 +799,25 @@ void TestCalDavEventChange::writable()
     QCOMPARE(writableProblem(s, u"c-5"_s), EventProblem::None);
     QCOMPARE(writableProblem(s, u"s-1"_s), EventProblem::Subscription);
     QCOMPARE(writableProblem(s, u"c-9"_s), EventProblem::NoCalendar);
-    QCOMPARE(problemCode(EventProblem::Subscription), u"subscription"_s);
+    // One code and one text for every problem, in the enum's order.
+    const QStringList codes{u""_s,
+                            u"no_calendar"_s,
+                            u"subscription"_s,
+                            u"read_only"_s,
+                            u"no_events"_s,
+                            u"events_hidden"_s,
+                            u"not_found"_s,
+                            u"no_occurrence"_s,
+                            u"no_title"_s,
+                            u"no_start"_s,
+                            u"end_before_start"_s,
+                            u"all_day_with_time"_s,
+                            u"unknown_rule"_s,
+                            u"occurrence_rule"_s};
+    for (int p = 0; p < codes.size(); ++p) {
+        QCOMPARE(problemCode(EventProblem(p)), codes.at(p));
+        QCOMPARE(problemText(EventProblem(p)).isEmpty(), p == 0);
+    }
 }
 
 void TestCalDavEventChange::outbox()
@@ -831,6 +860,14 @@ void TestCalDavEventChange::outbox()
     QCOMPARE(state.outbox.size(), 1);
     QCOMPARE(state.outbox.first().ifMatch, u"\"7\""_s);
     QCOMPARE(state.resources.value(a.path).etag, u"\"7\""_s);
+    // An If-Match given is kept (the ETag the change was made from).
+    CalendarState other;
+    other.resources.insert(Home + u"o.ics"_s, Resource{u"\"7\""_s, u"o"_s, u"VEVENT"_s, create.data});
+    EventChange preset = a;
+    preset.path = Home + u"o.ics"_s;
+    preset.ifMatch = u"\"9\""_s;
+    addToOutbox(other, preset);
+    QCOMPARE(other.outbox.first().ifMatch, u"\"9\""_s);
     // Then deleted: the deletion waits, with that ETag.
     EventChange gone = a;
     gone.kind = EventChange::Kind::Delete;

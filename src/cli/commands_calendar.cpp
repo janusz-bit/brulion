@@ -309,53 +309,54 @@ Result calendarEvents(Call &call)
 
 /// How a problem reaches the caller: its exit code, error code and words (%1: the calendar's name).
 struct Refusal {
-    EventProblem problem;
     int exit;
     const char16_t *code;
     const char *message;
 };
 
+/// One row per EventProblem but None, in its order.
 constexpr Refusal Refusals[] = {
-        {EventProblem::NoCalendar, ExitNotFound, u"calendar_not_found",
+        {ExitNotFound, u"calendar_not_found",
          QT_TRANSLATE_NOOP("brulion::cli", "No calendar “%1” (calendar list shows them)")},
-        {EventProblem::Subscription, ExitRefused, u"calendar_read_only",
+        {ExitRefused, u"calendar_read_only",
          QT_TRANSLATE_NOOP("brulion::cli",
                            "“%1” is an ICS subscription: Brulion only reads the copy it fetches from the calendar's "
                            "address, so its events are changed where the calendar is published. Add the event to a "
                            "CalDAV calendar instead (calendar list: kind caldav)")},
-        {EventProblem::ReadOnly, ExitRefused, u"calendar_read_only",
+        {ExitRefused, u"calendar_read_only",
          QT_TRANSLATE_NOOP("brulion::cli", "“%1” is read-only on its server: this account may not change it")},
-        {EventProblem::NoEvents, ExitRefused, u"calendar_read_only",
+        {ExitRefused, u"calendar_read_only",
          QT_TRANSLATE_NOOP("brulion::cli", "“%1” holds tasks only (they are task lines of the notes)")},
-        {EventProblem::EventsHidden, ExitRefused, u"calendar_read_only",
+        {ExitRefused, u"calendar_read_only",
          QT_TRANSLATE_NOOP("brulion::cli",
                            "The app does not show the events of “%1” (its “Events in the calendar” is off in the Sync "
                            "center)")},
-        {EventProblem::NotFound, ExitNotFound, u"event_not_found",
+        {ExitNotFound, u"event_not_found",
          QT_TRANSLATE_NOOP("brulion::cli", "No such event in “%1” (calendar events shows each one's uid)")},
-        {EventProblem::NoOccurrence, ExitNotFound, u"occurrence_not_found",
+        {ExitNotFound, u"occurrence_not_found",
          QT_TRANSLATE_NOOP("brulion::cli",
                            "The event has no occurrence there in “%1” (calendar events shows each one's instance)")},
-        {EventProblem::NoTitle, ExitUsage, u"no_title", QT_TRANSLATE_NOOP("brulion::cli", "An event needs a title")},
-        {EventProblem::NoStart, ExitUsage, u"no_start",
+        {ExitUsage, u"no_title", QT_TRANSLATE_NOOP("brulion::cli", "An event needs a title")},
+        {ExitUsage, u"no_start",
          QT_TRANSLATE_NOOP("brulion::cli", "A new event needs its day: --start (jutro 10:00, 2026-12-01)")},
-        {EventProblem::EndBeforeStart, ExitUsage, u"end_before_start",
-         QT_TRANSLATE_NOOP("brulion::cli", "The end is before the start")},
-        {EventProblem::AllDayWithTime, ExitUsage, u"all_day_with_time",
+        {ExitUsage, u"end_before_start", QT_TRANSLATE_NOOP("brulion::cli", "The end is before the start")},
+        {ExitUsage, u"all_day_with_time",
          QT_TRANSLATE_NOOP("brulion::cli",
                            "An all-day event has no times: give its days alone, or leave out --all-day")},
-        {EventProblem::UnknownRule, ExitParse, u"recurrence_not_understood",
+        {ExitParse, u"recurrence_not_understood",
          QT_TRANSLATE_NOOP("brulion::cli", "The recurrence is not understood")},
-        {EventProblem::OccurrenceRule, ExitUsage, u"occurrence_rule",
+        {ExitUsage, u"occurrence_rule",
          QT_TRANSLATE_NOOP("brulion::cli",
                            "One occurrence has no recurrence of its own: leave out --occurrence to change the series")},
 };
 
+static_assert(std::size(Refusals) == std::size_t(EventProblem::OccurrenceRule), "one row per EventProblem but None");
+
+/// The error of a change that cannot be made (`problem` is never None).
 Result refusal(Call &call, EventProblem problem, const QString &calendar, const QString &uid)
 {
-    const auto it = std::ranges::find(Refusals, problem, &Refusal::problem);
-    if (it == std::end(Refusals))
-        return call.fail(ExitInternal, u"internal"_s, caldav::problemText(problem));
+    Q_ASSERT(problem != EventProblem::None);
+    const Refusal *it = &Refusals[std::size_t(problem) - 1];
     QString message = tr(it->message);
     if (message.contains(u"%1"_s))
         message = message.arg(calendar);

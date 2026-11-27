@@ -372,8 +372,7 @@ void WorkspaceCalendars::watchInbox()
     if (m_inboxWatcher)
         return;
     const QString inbox = caldav::inboxFolder(m_store->folder());
-    if (!QDir().mkpath(inbox))
-        return;
+    QDir().mkpath(inbox); // (if it cannot be made, nothing is watched: a run still takes the inbox)
     QFile::setPermissions(inbox, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
     m_inboxWatcher = std::make_unique<QFileSystemWatcher>(QStringList{inbox});
     connect(m_inboxWatcher.get(), &QFileSystemWatcher::directoryChanged, &m_inboxTimer, qOverload<>(&QTimer::start));

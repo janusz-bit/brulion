@@ -169,6 +169,7 @@ private Q_SLOTS:
     void movedSubtaskUpdatesRelatedTo();
     void eventsChangedHere();
     void eventsFromTheInbox();
+    void eventChangedOnBothSidesKeepBoth();
     void brokenMembersAndOffline();
 };
 
@@ -777,6 +778,76 @@ void TestCalDavTasks::eventsFromTheInbox()
     QCOMPARE(dev.sync->takeInbox(), 1);
     dev.run();
     QVERIFY(memberText(server, made).contains(u"SUMMARY:Spotkanie z Łucją i Kubą"_s));
+    // Asked while a run runs: taken once it is over.
+    std::optional<CalendarRunReport> report;
+    dev.sync->run(true, false, [&report](const CalendarRunReport &r) { report = r; });
+    QVERIFY(dev.sync->isRunning());
+    rename.patch.title = u"Spotkanie przy kawie"_s;
+    QVERIFY(post(rename));
+    QCOMPARE(dev.sync->takeInbox(), 0);
+    QTRY_VERIFY(report.has_value());
+    QTRY_VERIFY(pendingIntents(folder).isEmpty());
+    QVERIFY(dev.state().resources.value(server.homePath() + u"praca/"_s + made).data.contains("Spotkanie przy kawie"));
+    // The calendar's state cannot be saved (a folder where its file goes): the new event stays in
+    // the inbox and is taken once it can be.
+    const QString stateFile = folder + u"/c-1.state.json"_s;
+    const QByteArray saved = [&stateFile] {
+        QFile f(stateFile);
+        return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
+    }();
+    QVERIFY(!saved.isEmpty());
+    QVERIFY(QFile::remove(stateFile));
+    QVERIFY(QDir().mkpath(stateFile));
+    EventIntent later = create;
+    later.uid = u"brulion-event-pozniej"_s;
+    later.patch.title = u"Później"_s;
+    QVERIFY(post(later));
+    QCOMPARE(dev.sync->takeInbox(), 0);
+    QCOMPARE(pendingIntents(folder).size(), 1);
+    QVERIFY(QDir(stateFile).removeRecursively());
+    {
+        QFile f(stateFile);
+        QVERIFY(f.open(QIODevice::WriteOnly));
+        f.write(saved);
+    }
+    QCOMPARE(dev.sync->takeInbox(), 1);
+    QVERIFY(pendingIntents(folder).isEmpty());
+    QVERIFY(dev.state().resources.contains(server.homePath() + u"praca/brulion-event-pozniej.ics"_s));
+    // A store without a folder has no inbox.
+    CalendarStore memory{QString()};
+    CalendarSync none(&memory);
+    QCOMPARE(none.takeInbox(), 0);
+}
+
+void TestCalDavTasks::eventChangedOnBothSidesKeepBoth()
+{
+    // Keep both: the server's version stays, this device's edit becomes a copy of its own.
+    FakeCalDav server;
+    server.addCalendar(u"praca"_s, praca());
+    server.putMember(u"praca"_s, u"zebranie.ics"_s,
+                     vevent(u"zebranie"_s, u"DTSTART:20261121T090000Z\r\nSUMMARY:Zebranie\r\n"
+                                           u"LAST-MODIFIED:20261101T000000Z\r\n"_s));
+    Device dev(&server, {}, ConflictPolicy::KeepBoth);
+    dev.run();
+    EventChange edit;
+    edit.kind = EventChange::Kind::Update;
+    edit.uid = u"zebranie"_s;
+    edit.path = server.homePath() + u"praca/zebranie.ics"_s;
+    edit.data = vevent(u"zebranie"_s, u"DTSTART:20261121T110000Z\r\nSUMMARY:Zebranie (moje)\r\n"_s);
+    QVERIFY(dev.sync->queueEvent(u"c-1"_s, edit));
+    server.putMember(u"praca"_s, u"zebranie.ics"_s,
+                     vevent(u"zebranie"_s, u"DTSTART:20261121T120000Z\r\nSUMMARY:Zebranie (serwer)\r\n"
+                                           u"LAST-MODIFIED:20261120T100000Z\r\n"_s));
+    dev.run();
+    dev.run();
+    QVERIFY(memberText(server, u"zebranie.ics"_s).contains(u"(serwer)"_s));
+    QString copy;
+    for (const QString &name : server.memberNames(u"praca"_s)) {
+        if (name != u"zebranie.ics" && memberText(server, name).contains(u"(moje)"_s))
+            copy = name;
+    }
+    QVERIFY2(copy.startsWith(u"zebranie-"_s) && copy.endsWith(u".ics"_s), qPrintable(copy));
+    QVERIFY(memberText(server, copy).contains(u"UID:"_s + copy.chopped(4)));
 }
 
 void TestCalDavTasks::brokenMembersAndOffline()
