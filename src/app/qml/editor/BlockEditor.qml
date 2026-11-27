@@ -2437,7 +2437,12 @@ FocusScope {
             edit.moveCursorSelection(edit.length, TextEdit.SelectCharacters)
             return true
         }
-        const row = edit.row
+        return extendBlocksFrom(edit.row, step)
+    }
+    /// Shift+↑ / Shift+↓ past the edited block's text (row `row`, `step` -1 / 1): editing stops and
+    /// the block and the previous / next one are selected (extendFromEdit(); the page drawn by
+    /// Atrament once its field's text is selected to the block's edge).
+    function extendBlocksFrom(row: int, step: int): bool {
         closeSuggestions()
         // From the edited block (the controller stops editing); at the day's edge into the next /
         // previous day of the journal stream.

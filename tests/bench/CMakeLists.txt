@@ -58,3 +58,8 @@ brulion_add_bench(bench_io SOURCES bench_io.cpp LIBS brulion_core_io)
 if(TARGET brulion_editor)
     brulion_add_bench(bench_rowheights SOURCES bench_rowheights.cpp LIBS brulion_editor)
 endif()
+# The block editor drawn by Atrament against M2's gate (docs/ATRAMENT.md "Roadmap"): memory per
+# block, the frames of a scroll through 1 000 blocks, a keystroke.
+if(TARGET brulion_editor_atrament)
+    brulion_add_bench(bench_atrament_page SOURCES bench_atrament_page.cpp LIBS brulion_editor_atrament)
+endif()

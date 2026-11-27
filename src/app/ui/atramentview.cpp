@@ -199,6 +199,14 @@ void AtramentView::connectController()
             if (guard)
                 Q_EMIT guard->followLinkRequested(row, cursor, newPane);
         };
+        page.onExtendSelection = [guard](int row, int step) {
+            if (guard)
+                Q_EMIT guard->selectionExtendRequested(row, step);
+        };
+        page.onSelectAllBlocks = [guard] {
+            if (guard)
+                Q_EMIT guard->selectAllBlocksRequested();
+        };
         page.onEditStateChanged = [guard] {
             if (guard)
                 Q_EMIT guard->editStateChanged();

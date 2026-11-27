@@ -158,6 +158,10 @@ public:
     std::function<void(bool redo)> onUndo;
     // Alt+Enter: the link at the caret (default: onLink with PageController::linkAtCursor).
     std::function<void(int row, int cursor, bool newPane)> onFollowLink;
+    // Shift+↑ / Shift+↓ past the block's text: the blocks are selected from row `row` (default:
+    // PageController::extendSelection); Ctrl+A on a block's whole text: every block (selectAll).
+    std::function<void(int row, int step)> onExtendSelection;
+    std::function<void()> onSelectAllBlocks;
     // The field's text, caret or composition changed (the editor's suggestions follow them).
     std::function<void()> onEditStateChanged;
     // A key the suggestion list takes while it is open ("up", "down", "enter", "tab", "escape";

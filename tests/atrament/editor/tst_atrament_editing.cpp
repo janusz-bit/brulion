@@ -115,6 +115,7 @@ private Q_SLOTS:
     void readOnlyPageDoesNotEdit();
     void foldArrowFolds();
     void selectedBlocksOnABand();
+    void shiftArrowsSelectBlocks();
 };
 
 void TestAtramentEditing::clickEditsAtTheCharacter()
@@ -466,6 +467,27 @@ void TestAtramentEditing::selectedBlocksOnABand()
     QVERIFY(third);
     const at::Pixel free = h.tw.pixel(590, int(third->bounds().top() + 4));
     QCOMPARE(free.r, before.r);
+}
+
+void TestAtramentEditing::shiftArrowsSelectBlocks()
+{
+    Harness h(u"- jeden\n- dwa trzy\n- cztery\n"_s);
+    h.clickInto(1, 4);
+    // Shift+↑ on the first line: the text to the block's start first…
+    h.tw.simulateKeystrokes(u"shift-up");
+    QCOMPARE(h.view().input()->read(h.app).selection().focus, 0);
+    QCOMPARE(h.controller.editingRow(), 1);
+    // … then the blocks: this one and the one above.
+    h.tw.simulateKeystrokes(u"shift-up");
+    QCOMPARE(h.controller.editingRow(), -1);
+    QCOMPARE(h.controller.selectionCount(), 2);
+    // Ctrl+A twice: the block's text, then every block.
+    h.clickInto(2, 2);
+    h.tw.simulateKeystrokes(u"ctrl-a");
+    QCOMPARE(h.controller.editingRow(), 2);
+    QCOMPARE(h.view().input()->read(h.app).selection().range().end, 6);
+    h.tw.simulateKeystrokes(u"ctrl-a");
+    QCOMPARE(h.controller.selectionCount(), 3);
 }
 
 QTEST_MAIN(TestAtramentEditing)

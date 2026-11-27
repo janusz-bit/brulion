@@ -73,6 +73,14 @@ AtramentView {
         if (root.editor && root.editRow >= 0)
             root.editor.updateCompletionAt(root, root.editRow, root.editText, root.editCursor, root.editCaretRect)
     }
+    onSelectionExtendRequested: (row, step) => {
+        if (root.editor)
+            root.editor.extendBlocksFrom(row, step)
+    }
+    onSelectAllBlocksRequested: {
+        if (root.editor)
+            root.editor.selectAllBlocks()
+    }
     onSuggestionKeyPressed: key => {
         if (root.editor)
             root.editor.suggestionKey(key)

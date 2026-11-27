@@ -365,6 +365,18 @@ bool PageView::editorKey(const at::Keystroke &k, at::Window &window, at::Context
             const QVariantMap r = ctl->pasteClipboard(row, selected.start, selected.end);
             return r.value(QStringLiteral("row"), -1).toInt() >= 0;
         }
+        if (k.key == u"a" && !m.shift) {
+            // Notion's second Ctrl+A: the whole block's text selected already (or none): every
+            // block of the page.
+            if (length == 0 || (selected.start == 0 && selected.end == length)) {
+                if (onSelectAllBlocks)
+                    onSelectAllBlocks();
+                else
+                    ctl->selectAll();
+                return true;
+            }
+            return false; // the field selects its text
+        }
         return false;
     }
     if (m.alt && !ctrl) {
@@ -452,6 +464,27 @@ bool PageView::editorKey(const at::Keystroke &k, at::Window &window, at::Context
                 ctl->outdent(row);
             else
                 ctl->indent(row);
+        }
+        return true;
+    }
+    if ((k.key == u"up" || k.key == u"down") && m.shift && !ctrl && !m.alt) {
+        // Shift+↑ on the first line / Shift+↓ on the last: the text selection to the block's
+        // start / end first, then the blocks (BlockEditor.extendFromEdit).
+        const bool up = k.key == u"up";
+        if (up ? lineOf(caret) > 0 : lineOf(caret) < lineCount() - 1)
+            return false;
+        commitWord();
+        if (up ? caret > 0 : caret < length) {
+            m_input->update(app, [&](at::TextInput &t, at::Context<at::TextInput> &c) {
+                t.setSelection(selection.anchor, up ? 0 : length, c);
+            });
+            return true;
+        }
+        if (onExtendSelection) {
+            onExtendSelection(row, up ? -1 : 1);
+        } else {
+            if (!ctl->extendSelection(up ? -1 : 1))
+                ctl->selectRange(row, row);
         }
         return true;
     }

@@ -107,6 +107,10 @@ Q_SIGNALS:
     // A key for the open suggestion list: "up", "down", "enter", "tab", "escape" (the editor's
     // suggestionKey()).
     void suggestionKeyPressed(const QString &key);
+    // Shift+↑ / Shift+↓ past the edited block's text (BlockEditor.extendBlocksFrom), Ctrl+A on its
+    // whole text (selectAllBlocks).
+    void selectionExtendRequested(int row, int step);
+    void selectAllBlocksRequested();
 
 protected:
     void componentComplete() override;
