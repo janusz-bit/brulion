@@ -2237,6 +2237,58 @@ FocusScope {
         }
         return handleEditorKeyCode(event.key, event.modifiers, edit)
     }
+    /// handleEditorKeyCode()'s Ctrl+key (without Alt) in the edited block `edit` (row `row`): undo,
+    /// source mode, a fold, the task's status, exact copies, Ctrl+A twice. (Its own function: one
+    /// as long as handleEditorKeyCode took qmlcachegen over its 30 s on a loaded machine.)
+    function handleEditorCtrlKey(key: int, shift: bool, edit: InlineEditor, row: int): bool {
+        switch (key) {
+        case Qt.Key_Z: undoStep(shift); return true
+        case Qt.Key_Y: undoStep(true); return true
+        case Qt.Key_E:
+            if (editor.sourceModeShortcut !== "Ctrl+E")
+                return false
+            toggleSourceMode()
+            return true
+        case Qt.Key_Period: controller.toggleFold(row); return true
+        case Qt.Key_Return:
+        case Qt.Key_Enter:
+            // Ctrl+Shift+Enter: the status menu; Ctrl+Enter: the next status.
+            if (shift)
+                openTaskStatusMenuFor(row, false)
+            else
+                controller.cycleTask(row)
+            return true
+        case Qt.Key_C:
+            // Ctrl+Shift+C: the block's reference ((id)); Ctrl+C copies the selected text
+            // exactly (TextEdit's own copy turns no-break spaces into spaces).
+            if (shift) {
+                if (editor.copyRefShortcut !== "Ctrl+Shift+C")
+                    return false
+                copyCurrentLink("blockRef")
+                return true
+            }
+            if (!differs(edit.selectionStart, edit.selectionEnd))
+                return false
+            copyEditSelection(edit, false)
+            return true
+        case Qt.Key_X:
+            if (shift || !differs(edit.selectionStart, edit.selectionEnd))
+                return false
+            copyEditSelection(edit, true)
+            return true
+        case Qt.Key_A:
+            // Notion's second Ctrl+A: the whole block's text is selected already (or there is
+            // none): every block of the page.
+            if (shift)
+                return false
+            if (edit.length === 0 || (edit.selectionStart === 0 && !differs(edit.selectionEnd, edit.length)))
+                selectAllBlocks()
+            else
+                edit.selectAll()
+            return true
+        }
+        return false
+    }
     /// handleEditorKey() for key `key` with `modifiers` (also the self-tests' keys).
     function handleEditorKeyCode(key: int, modifiers: int, edit: InlineEditor): bool {
         if (edit.preeditText !== "" && isCommandKey(key, modifiers))
@@ -2281,55 +2333,8 @@ FocusScope {
             copyEditSelection(edit, key === Qt.Key_Delete)
             return true
         }
-        if (ctrl && !alt) {
-            switch (key) {
-            case Qt.Key_Z: undoStep(shift); return true
-            case Qt.Key_Y: undoStep(true); return true
-            case Qt.Key_E:
-                if (editor.sourceModeShortcut !== "Ctrl+E")
-                    return false
-                toggleSourceMode()
-                return true
-            case Qt.Key_Period: controller.toggleFold(row); return true
-            case Qt.Key_Return:
-            case Qt.Key_Enter:
-                // Ctrl+Shift+Enter: the status menu; Ctrl+Enter: the next status.
-                if (shift)
-                    openTaskStatusMenuFor(row, false)
-                else
-                    controller.cycleTask(row)
-                return true
-            case Qt.Key_C:
-                // Ctrl+Shift+C: the block's reference ((id)); Ctrl+C copies the selected text
-                // exactly (TextEdit's own copy turns no-break spaces into spaces).
-                if (shift) {
-                    if (editor.copyRefShortcut !== "Ctrl+Shift+C")
-                        return false
-                    copyCurrentLink("blockRef")
-                    return true
-                }
-                if (!differs(edit.selectionStart, edit.selectionEnd))
-                    return false
-                copyEditSelection(edit, false)
-                return true
-            case Qt.Key_X:
-                if (shift || !differs(edit.selectionStart, edit.selectionEnd))
-                    return false
-                copyEditSelection(edit, true)
-                return true
-            case Qt.Key_A:
-                // Notion's second Ctrl+A: the whole block's text is selected already (or there is
-                // none): every block of the page.
-                if (shift)
-                    return false
-                if (edit.length === 0 || (edit.selectionStart === 0 && !differs(edit.selectionEnd, edit.length)))
-                    selectAllBlocks()
-                else
-                    edit.selectAll()
-                return true
-            }
-            return false
-        }
+        if (ctrl && !alt)
+            return handleEditorCtrlKey(key, shift, edit, row)
         if (alt && !ctrl) {
             if (key === Qt.Key_Up) { controller.moveUp(row); ensureRowVisible(controller.editingRow); return true }
             if (key === Qt.Key_Down) { controller.moveDown(row); ensureRowVisible(controller.editingRow); return true }
@@ -2510,6 +2515,63 @@ FocusScope {
     function handleSelectionKey(event: KeyEvent): bool {
         return handleSelectionKeyCode(event.key, event.modifiers)
     }
+    /// handleSelectionKeyCode()'s Ctrl+key on the selected blocks (`row`: the selection's focus,
+    /// −1 none; `range`: several blocks): undo, source mode, a fold, the status, copies and the
+    /// paste, Ctrl+A. (Its own function: qmlcachegen's time for one long function grows faster
+    /// than its length — over its 30 s on a loaded machine.)
+    function handleSelectionCtrlKey(key: int, shift: bool, row: int, range: bool): bool {
+        switch (key) {
+        case Qt.Key_Z: undoStep(shift); return true
+        case Qt.Key_Y: undoStep(true); return true
+        case Qt.Key_E:
+            if (editor.sourceModeShortcut !== "Ctrl+E")
+                return false
+            toggleSourceMode()
+            return true
+        case Qt.Key_Period: if (row >= 0) controller.toggleFold(row); return true
+        case Qt.Key_Return:
+        case Qt.Key_Enter:
+            if (row >= 0 && shift)
+                openTaskStatusMenuFor(row, range)
+            else if (row >= 0 && range)
+                controller.cycleSelectionTasks()
+            else if (row >= 0)
+                controller.cycleTask(row)
+            return true
+        case Qt.Key_C:
+            if (shift) {
+                if (editor.copyRefShortcut !== "Ctrl+Shift+C")
+                    return false
+                copyCurrentLink("blockRef") // nothing selected: says what to do
+                return true
+            }
+            if (row < 0)
+                return false
+            copySelection(false)
+            return true
+        case Qt.Key_Insert:
+            if (row < 0 || shift)
+                return false
+            copySelection(false)
+            return true
+        case Qt.Key_X:
+            if (row < 0 || shift)
+                return false
+            cutSelection()
+            return true
+        case Qt.Key_V:
+            if (row < 0 || shift)
+                return false
+            pasteOverSelection()
+            return true
+        case Qt.Key_A:
+            if (shift)
+                return false
+            selectAllBlocks()
+            return true
+        }
+        return false
+    }
     /// handleSelectionKey() for key `key` with `modifiers` (also the self-tests' keys).
     function handleSelectionKeyCode(key: int, modifiers: int): bool {
         if (!controller)
@@ -2530,59 +2592,8 @@ FocusScope {
             spanRefuses()
             return true
         }
-        if (ctrl) {
-            switch (key) {
-            case Qt.Key_Z: undoStep(shift); return true
-            case Qt.Key_Y: undoStep(true); return true
-            case Qt.Key_E:
-                if (editor.sourceModeShortcut !== "Ctrl+E")
-                    return false
-                toggleSourceMode()
-                return true
-            case Qt.Key_Period: if (row >= 0) controller.toggleFold(row); return true
-            case Qt.Key_Return:
-            case Qt.Key_Enter:
-                if (row >= 0 && shift)
-                    openTaskStatusMenuFor(row, range)
-                else if (row >= 0 && range)
-                    controller.cycleSelectionTasks()
-                else if (row >= 0)
-                    controller.cycleTask(row)
-                return true
-            case Qt.Key_C:
-                if (shift) {
-                    if (editor.copyRefShortcut !== "Ctrl+Shift+C")
-                        return false
-                    copyCurrentLink("blockRef") // nothing selected: says what to do
-                    return true
-                }
-                if (row < 0)
-                    return false
-                copySelection(false)
-                return true
-            case Qt.Key_Insert:
-                if (row < 0 || shift)
-                    return false
-                copySelection(false)
-                return true
-            case Qt.Key_X:
-                if (row < 0 || shift)
-                    return false
-                cutSelection()
-                return true
-            case Qt.Key_V:
-                if (row < 0 || shift)
-                    return false
-                pasteOverSelection()
-                return true
-            case Qt.Key_A:
-                if (shift)
-                    return false
-                selectAllBlocks()
-                return true
-            }
-            return false
-        }
+        if (ctrl)
+            return handleSelectionCtrlKey(key, shift, row, range)
         if (row < 0) {
             if (key === Qt.Key_Down || key === Qt.Key_Up) {
                 const first = key === Qt.Key_Down ? visualNext(-1) : controller.lastVisibleRow() + 0
