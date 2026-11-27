@@ -2,7 +2,8 @@
 // and a feed: a subscription (webcal://) fetched, its events in eventsBetween() with its colour,
 // hidden and removed; an account found by discovery and added with its password in an owner-only
 // file, its tasks on the calendar's page, its events shown; an event created, one occurrence of a
-// series left out, the journal's line about an event; errors said in words.
+// series left out or changed alone, the journal's line about an event; errors said in words; the
+// changes brulion-cli leaves in the inbox taken at once (shown, sent; a refused one in the log).
 #include "workspace.h"
 
 #include "caldav/caldav.h"
@@ -68,9 +69,13 @@ private Q_SLOTS:
     void cleanup();
     void subscription();
     void accountTasksAndEvents();
+    void changesFromTheCommandLine();
 
 private:
     void waitIdle();
+    /// An account with the server's "praca" holding `member` as stand.ics (its events shown): the
+    /// calendar's id.
+    QString addPraca(const QByteArray &member);
     std::unique_ptr<QTemporaryDir> m_dir;
     std::unique_ptr<Workspace> m_ws;
     FakeCalDav m_server;
@@ -293,6 +298,81 @@ void TestWorkspaceCalendars::accountTasksAndEvents()
     QVERIFY(cal->eventsBetween(QDate(2026, 11, 16), QDate(2026, 11, 22)).isEmpty());
     // The notes stay.
     QVERIFY(m_ws->read(u"Kalendarze/Zakupy.md"_s).contains(u"Mleko"_s));
+}
+
+QString TestWorkspaceCalendars::addPraca(const QByteArray &member)
+{
+    WorkspaceCalendars *cal = m_ws->calendars();
+    FakeCalDav::Calendar praca;
+    praca.name = u"Praca"_s;
+    m_server.addCalendar(u"praca"_s, praca);
+    m_server.putMember(u"praca"_s, u"stand.ics"_s, member);
+    QSignalSpy found(cal, &WorkspaceCalendars::discovered);
+    cal->discover(m_server.url(u"/"_s), u"jan"_s, m_server.options().password);
+    [&found] { QTRY_COMPARE(found.size(), 1); }();
+    const QString url = found.last().at(2).toList().value(0).toMap().value(u"url"_s).toString();
+    const QString account = cal->addAccount(m_server.url(u"/"_s), u"jan"_s, m_server.options().password, {url}, {});
+    waitIdle();
+    return cal->writableCalendars().value(0).toMap().value(u"id"_s).toString();
+}
+
+void TestWorkspaceCalendars::changesFromTheCommandLine()
+{
+    WorkspaceCalendars *cal = m_ws->calendars();
+    const QString calendarId = addPraca(vevent(u"stand"_s, u"DTSTART;TZID=Europe/Warsaw:20261116T093000\r\n"
+                                                           u"DTEND;TZID=Europe/Warsaw:20261116T094500\r\n"
+                                                           u"RRULE:FREQ=DAILY;COUNT=10\r\nSUMMARY:Stand-up\r\n"_s));
+    QVERIFY(!calendarId.isEmpty());
+    // The dialog: one occurrence changed alone — an exception of its own, the others as they were.
+    QList<planning::ExternalEvent> week = cal->eventsBetween(QDate(2026, 11, 16), QDate(2026, 11, 22));
+    QCOMPARE(week.size(), 7);
+    QVariantMap edit = cal->eventDetails(week.at(1).key);
+    QCOMPARE(edit.value(u"startTime"_s).toString(), u"09:30"_s);
+    edit.insert(u"startTime"_s, u"11:00"_s);
+    edit.insert(u"endTime"_s, u"11:30"_s);
+    edit.insert(u"title"_s, u"Stand-up — później"_s);
+    edit.insert(u"scope"_s, u"this"_s);
+    QVERIFY(cal->saveEvent(edit));
+    week = cal->eventsBetween(QDate(2026, 11, 16), QDate(2026, 11, 18));
+    QCOMPARE(week.size(), 3);
+    QCOMPARE(week.at(1).title, u"Stand-up — później"_s);
+    QCOMPARE(week.at(1).start, QTime(11, 0));
+    QCOMPARE(week.at(2).start, QTime(9, 30));
+    waitIdle();
+    QVERIFY(m_server.member(u"praca"_s, u"stand.ics"_s)->data.contains("RECURRENCE-ID;TZID=Europe/Warsaw:20261117T093000"));
+    // brulion-cli left a meeting and a change that cannot be made: the app takes them at once,
+    // shows the meeting, sends it, and says in the log what was refused.
+    caldav::EventIntent create;
+    create.kind = caldav::EventIntent::Kind::Create;
+    create.calendarId = calendarId;
+    create.uid = caldav::newEventUid();
+    create.at = QDateTime(QDate(2026, 11, 20), QTime(9, 0), QTimeZone::UTC);
+    create.id = caldav::newIntentId(create.at);
+    create.patch.title = u"Obiad z Zosią"_s;
+    create.patch.times.start = caldav::EventMoment(DateSpec{QDate(2026, 11, 21), QTime(13, 0)});
+    caldav::EventIntent missing = create;
+    missing.kind = caldav::EventIntent::Kind::Change;
+    missing.uid = u"brak"_s;
+    missing.id = caldav::newIntentId(create.at.addSecs(1));
+    const QString folder = m_dir->filePath(u"state/calendars"_s);
+    QSignalSpy logged(cal, &WorkspaceCalendars::logChanged);
+    QVERIFY(caldav::postIntent(folder, create));
+    QVERIFY(caldav::postIntent(folder, missing));
+    QTRY_COMPARE(cal->eventsBetween(QDate(2026, 11, 21), QDate(2026, 11, 21)).size(), 2);
+    QTRY_VERIFY(caldav::pendingIntents(folder).isEmpty());
+    QTRY_VERIFY(!logged.isEmpty());
+    QVariantMap refused;
+    for (const QVariant &row : cal->log()) {
+        if (row.toMap().value(u"kind"_s) == u"error"_s)
+            refused = row.toMap();
+    }
+    QVERIFY(!refused.isEmpty());
+    QCOMPARE(refused.value(u"name"_s).toString(), u"Praca"_s);
+    QVERIFY(!refused.value(u"text"_s).toString().contains(u"cli-change"_s)); // said in words
+    QVERIFY(refused.value(u"detail"_s).toString().contains(u"brak"_s));
+    waitIdle();
+    QVERIFY(m_server.member(u"praca"_s, create.uid + u".ics"_s));
+    QVERIFY(m_server.member(u"praca"_s, create.uid + u".ics"_s)->data.contains("SUMMARY:Obiad z Zosią"));
 }
 
 QTEST_MAIN(TestWorkspaceCalendars)

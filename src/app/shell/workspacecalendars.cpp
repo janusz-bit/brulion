@@ -14,7 +14,6 @@
 
 #include <QDir>
 #include <QFileInfo>
-#include <QRandomGenerator>
 #include <QUrl>
 
 #include <algorithm>
@@ -51,38 +50,55 @@ dates::UiLocale localeOf(const QString &language)
     return language == u"pl" ? dates::UiLocale::Polish : dates::UiLocale::English;
 }
 
-QString instanceText(const std::optional<io::ical::DateTimeValue> &v)
+QString keyInstance(const std::optional<io::ical::DateTimeValue> &v)
 {
-    if (!v)
-        return {};
-    QString text = caldav::formatDateTimeValue(*v);
-    if (!v->tzid.isEmpty())
-        text += u'@' + v->tzid;
-    return text;
+    return v ? caldav::instanceText(*v) : QString();
 }
 
-std::optional<io::ical::DateTimeValue> instanceFrom(const QString &text)
+/// The times the event dialog shows, as an edit gives them: its days and (timed) its times.
+caldav::EventTimes dialogTimes(const QVariantMap &values)
 {
-    if (text.isEmpty())
-        return std::nullopt;
-    const qsizetype at = text.indexOf(u'@');
-    io::ical::Property p;
-    p.name = u"RECURRENCE-ID"_s;
-    p.value = at < 0 ? text : text.first(at);
-    if (at >= 0)
-        p.params.insert(u"TZID"_s, text.sliced(at + 1));
-    if (p.value.size() == 8)
-        p.params.insert(u"VALUE"_s, u"DATE"_s);
-    return io::ical::parseDateTime(p);
+    caldav::EventTimes t;
+    const bool allDay = values.value(u"allDay"_s).toBool();
+    t.allDay = allDay;
+    DateSpec start{parseDate(values.value(u"startDate"_s).toString()), std::nullopt};
+    DateSpec end{parseDate(values.value(u"endDate"_s).toString()), std::nullopt};
+    if (!allDay) {
+        start.time = parseTime(values.value(u"startTime"_s).toString()).value_or(QTime(9, 0));
+        end.time = parseTime(values.value(u"endTime"_s).toString());
+    }
+    if (start.isValid())
+        t.start = start;
+    if (end.isValid() && end.date >= start.date) // (else its length: an hour, its one day)
+        t.end = end;
+    return t;
 }
 
-QString newUid()
+/// What the event dialog changed: each field that differs from what it showed (`before`; empty for
+/// a new event: all of them). One occurrence has no rule of its own.
+caldav::EventPatch dialogPatch(const QVariantMap &values, const QVariantMap &before, bool oneOccurrence)
 {
-    static constexpr char Alphabet[] = "abcdefghijklmnopqrstuvwxyz0123456789";
-    QString id = u"brulion-event-"_s;
-    for (int i = 0; i < 16; ++i)
-        id += QChar(QLatin1Char(Alphabet[QRandomGenerator::global()->bounded(36)]));
-    return id;
+    caldav::EventPatch p;
+    const auto changed = [&values, &before](const QString &key) {
+        return before.isEmpty() || values.value(key).toString() != before.value(key).toString();
+    };
+    if (changed(u"title"_s))
+        p.title = values.value(u"title"_s).toString().simplified();
+    if (changed(u"location"_s))
+        p.location = values.value(u"location"_s).toString();
+    if (changed(u"description"_s))
+        p.description = values.value(u"description"_s).toString();
+    const bool allDay = values.value(u"allDay"_s).toBool();
+    const bool timesChanged = changed(u"startDate"_s) || changed(u"endDate"_s) || allDay != before.value(u"allDay"_s).toBool()
+                              || (!allDay && (changed(u"startTime"_s) || changed(u"endTime"_s)));
+    if (timesChanged)
+        p.times = dialogTimes(values);
+    if (changed(u"rule"_s) && !oneOccurrence)
+        p.rule = dates::canonicalRecurrence(values.value(u"rule"_s).toString());
+    const int reminder = values.contains(u"reminderMinutes"_s) ? values.value(u"reminderMinutes"_s).toInt() : -1;
+    if (before.isEmpty() || reminder != before.value(u"reminderMinutes"_s).toInt())
+        p.reminderMinutes = reminder;
+    return p;
 }
 
 } // namespace
@@ -106,6 +122,9 @@ WorkspaceCalendars::WorkspaceCalendars(QObject *parent) : planning::EventSource(
         ++m_revision;
         Q_EMIT eventsChanged();
     });
+    m_inboxTimer.setSingleShot(true);
+    m_inboxTimer.setInterval(100);
+    connect(&m_inboxTimer, &QTimer::timeout, this, &WorkspaceCalendars::takeInbox);
     m_startTimer.setSingleShot(true);
     m_startTimer.setInterval(1500);
     connect(&m_startTimer, &QTimer::timeout, this, [this] {
@@ -228,6 +247,8 @@ void WorkspaceCalendars::detach()
 void WorkspaceCalendars::teardown()
 {
     m_startTimer.stop();
+    m_inboxTimer.stop();
+    m_inboxWatcher.reset();
     m_scheduler.reset();
     m_sync.reset();
     m_store.reset();
@@ -304,6 +325,31 @@ void WorkspaceCalendars::configure()
     } else if (m_automatic && !m_scheduler->isActive()) {
         m_startTimer.start();
     }
+    watchInbox();
+}
+
+void WorkspaceCalendars::watchInbox()
+{
+    const caldav::CalendarSettings s = m_store ? m_store->settings() : caldav::CalendarSettings();
+    if (!m_store || m_store->folder().isEmpty() || m_browser || s.calendars.isEmpty()) {
+        m_inboxWatcher.reset();
+        return;
+    }
+    if (m_inboxWatcher)
+        return;
+    const QString inbox = caldav::inboxFolder(m_store->folder());
+    if (!QDir().mkpath(inbox))
+        return;
+    QFile::setPermissions(inbox, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+    m_inboxWatcher = std::make_unique<QFileSystemWatcher>(QStringList{inbox});
+    connect(m_inboxWatcher.get(), &QFileSystemWatcher::directoryChanged, &m_inboxTimer, qOverload<>(&QTimer::start));
+    m_inboxTimer.start(); // what was left while the app was not watching
+}
+
+void WorkspaceCalendars::takeInbox()
+{
+    if (m_sync && m_sync->takeInbox() > 0 && m_scheduler)
+        m_scheduler->syncNow();
 }
 
 void WorkspaceCalendars::setAppActive(bool active)
@@ -398,11 +444,7 @@ std::shared_ptr<const caldav::CalendarData> WorkspaceCalendars::dataOf(const QSt
     if (s.subscription(id)) {
         caldav::appendCalendarData(*data, m_store->feedData(id));
     } else if (s.calendar(id)) {
-        const caldav::CalendarState state = m_store->state(id);
-        for (auto it = state.resources.constBegin(); it != state.resources.constEnd(); ++it) {
-            if (it->kind == u"VEVENT")
-                caldav::appendCalendarData(*data, it->data, it.key());
-        }
+        *data = caldav::eventsOf(m_store->state(id));
     }
     m_data.insert(id, data);
     return data;
@@ -483,7 +525,7 @@ QList<planning::ExternalEvent> WorkspaceCalendars::eventsBetween(QDate from, QDa
         for (const caldav::Occurrence &o : list) {
             const caldav::Event &e = data->events.at(o.event);
             planning::ExternalEvent x;
-            x.key = src.id + KeySep + e.uid + KeySep + instanceText(o.instance);
+            x.key = src.id + KeySep + e.uid + KeySep + keyInstance(o.instance);
             x.calendarId = src.id;
             x.calendarName = src.name;
             x.color = !e.color.isEmpty() ? e.color : !src.color.isEmpty() ? src.color : palette().first();
@@ -528,66 +570,24 @@ QVariantMap WorkspaceCalendars::eventDetails(const QString &key) const
     const auto data = dataOf(id);
     if (!data)
         return {};
-    const auto instance = instanceFrom(parts.at(2));
+    // The occurrence on the device's clock: the override of that instance, else the series'.
+    const auto fields = caldav::eventFields(*data, parts.at(1), caldav::instanceFromText(parts.at(2)), m_zone);
+    if (!fields)
+        return {};
+    const caldav::Event &e = data->events.at(fields->event);
+    const caldav::EventEdit &f = fields->edit;
     const caldav::CalendarSettings s = m_store->settings();
     const caldav::Subscription *sub = s.subscription(id);
     const caldav::CalendarEntry *cal = s.calendar(id);
-    // The occurrence: the override of that instance, else the series.
-    qsizetype index = -1;
-    for (qsizetype i = 0; i < data->events.size(); ++i) {
-        const caldav::Event &e = data->events.at(i);
-        if (e.uid != parts.at(1))
-            continue;
-        if (instance && e.recurrenceId && e.recurrenceId->date == instance->date && e.recurrenceId->time == instance->time) {
-            index = i;
-            break;
-        }
-        if (!e.recurrenceId && index < 0)
-            index = i;
-    }
-    if (index < 0)
-        return {};
-    const caldav::Event &e = data->events.at(index);
-    // Its times on the device's clock: the occurrence's own.
-    caldav::NaiveDateTime start;
-    caldav::NaiveDateTime end;
-    bool allDay = e.allDay();
-    const QDate around = instance ? instance->date : e.start.date;
-    for (const caldav::Occurrence &o : caldav::occurrences(*data, around.addDays(-2), around.addDays(2), m_zone)) {
-        if (data->events.at(o.event).uid == e.uid && instanceText(o.instance) == parts.at(2)) {
-            start = o.start;
-            end = o.end;
-            allDay = o.allDay;
-            break;
-        }
-    }
-    if (!start.isValid()) {
-        start = data->zones.toTarget(e.start, m_zone);
-        end = start;
-    }
-    QDate lastDay = allDay ? std::max(start.date, end.date.addDays(-1)) : end.date;
-    QString rule;
-    if (e.rrule && !e.rruleText.isEmpty()) {
-        QStringList dropped;
-        if (const auto r = io::ical::parseRRule(e.rruleText, &dropped); r && dropped.isEmpty())
-            rule = dates::formatRecurrence(*r, dates::UiLocale::English);
-    }
-    int reminder = -1;
-    for (const caldav::EventAlarm &a : e.alarms) {
-        if (a.relative && !a.fromEnd && !a.audio) {
-            reminder = int(-(a.relative->days * 1440 + a.relative->seconds / 60));
-            break;
-        }
-    }
     const dates::UiLocale loc = localeOf(m_language);
-    QString when = dates::formatDateShort(start.date, loc, now().date().year());
-    if (!allDay) {
-        when += u", "_s + start.time.toString(u"HH:mm"_s) + u"–"_s;
-        if (lastDay != start.date)
-            when += dates::formatDateShort(lastDay, loc, now().date().year()) + u' ';
-        when += end.time.toString(u"HH:mm"_s);
-    } else if (lastDay != start.date) {
-        when += u" – "_s + dates::formatDateShort(lastDay, loc, now().date().year());
+    QString when = dates::formatDateShort(f.startDate, loc, now().date().year());
+    if (!f.allDay()) {
+        when += u", "_s + f.startTime->toString(u"HH:mm"_s) + u"–"_s;
+        if (f.endDate != f.startDate)
+            when += dates::formatDateShort(f.endDate, loc, now().date().year()) + u' ';
+        when += f.endTime.value_or(*f.startTime).toString(u"HH:mm"_s);
+    } else if (f.endDate != f.startDate) {
+        when += u" – "_s + dates::formatDateShort(f.endDate, loc, now().date().year());
     }
     const bool readOnly = sub || !cal || cal->readOnly;
     return QVariantMap{
@@ -595,22 +595,22 @@ QVariantMap WorkspaceCalendars::eventDetails(const QString &key) const
             {u"calendarId"_s, id},
             {u"calendarName"_s, sub ? sub->name : cal ? cal->name : QString()},
             {u"color"_s, !e.color.isEmpty() ? e.color : sub ? sub->color : cal ? cal->color : QString()},
-            {u"title"_s, e.summary},
-            {u"location"_s, e.location},
-            {u"description"_s, e.description},
+            {u"title"_s, f.title},
+            {u"location"_s, f.location},
+            {u"description"_s, f.description},
             {u"url"_s, e.url},
-            {u"startDate"_s, isoDate(start.date)},
-            {u"startTime"_s, allDay ? QString() : start.time.toString(u"HH:mm"_s)},
-            {u"endDate"_s, isoDate(lastDay)},
-            {u"endTime"_s, allDay ? QString() : end.time.toString(u"HH:mm"_s)},
-            {u"allDay"_s, allDay},
-            {u"recurring"_s, e.rrule.has_value() || !e.rdates.isEmpty() || e.recurrenceId.has_value()},
-            {u"rule"_s, rule},
-            {u"ruleText"_s, e.rruleText},
+            {u"startDate"_s, isoDate(f.startDate)},
+            {u"startTime"_s, f.allDay() ? QString() : f.startTime->toString(u"HH:mm"_s)},
+            {u"endDate"_s, isoDate(f.endDate)},
+            {u"endTime"_s, f.allDay() ? QString() : f.endTime.value_or(*f.startTime).toString(u"HH:mm"_s)},
+            {u"allDay"_s, f.allDay()},
+            {u"recurring"_s, fields->recurring},
+            {u"rule"_s, f.rule},
+            {u"ruleText"_s, fields->ruleText},
             {u"readOnly"_s, readOnly},
             {u"canEdit"_s, !readOnly && !e.href.isEmpty()},
             {u"whenText"_s, when},
-            {u"reminderMinutes"_s, reminder},
+            {u"reminderMinutes"_s, f.reminderMinutes},
             {u"instance"_s, parts.at(2)},
     };
 }
@@ -619,78 +619,22 @@ bool WorkspaceCalendars::saveEvent(const QVariantMap &values)
 {
     if (!m_sync || !m_store)
         return false;
-    caldav::EventEdit edit;
-    edit.title = values.value(u"title"_s).toString().simplified();
-    edit.location = values.value(u"location"_s).toString();
-    edit.description = values.value(u"description"_s).toString();
-    edit.startDate = parseDate(values.value(u"startDate"_s).toString());
-    edit.endDate = parseDate(values.value(u"endDate"_s).toString());
-    const bool allDay = values.value(u"allDay"_s).toBool();
-    if (!allDay) {
-        edit.startTime = parseTime(values.value(u"startTime"_s).toString());
-        edit.endTime = parseTime(values.value(u"endTime"_s).toString());
-        if (!edit.startTime)
-            edit.startTime = QTime(9, 0);
-    }
-    edit.rule = dates::canonicalRecurrence(values.value(u"rule"_s).toString());
-    edit.reminderMinutes = values.contains(u"reminderMinutes"_s) ? values.value(u"reminderMinutes"_s).toInt() : -1;
-    if (edit.title.isEmpty() || !edit.startDate.isValid()) {
-        Q_EMIT errorOccurred(tr("An event needs a title and a date."));
-        return false;
-    }
-    if (!edit.endDate.isValid() || edit.endDate < edit.startDate)
-        edit.endDate = edit.startDate;
-    caldav::TodoContext ctx;
-    ctx.now = now();
-    ctx.zone = m_zone;
     const QString key = values.value(u"key"_s).toString();
-    caldav::EventChange change;
-    QString calendarId = values.value(u"calendarId"_s).toString();
-    if (key.isEmpty()) {
-        change.kind = caldav::EventChange::Kind::Create;
-        change.uid = newUid();
-        change.data = caldav::newEvent(change.uid, edit, ctx);
-    } else {
-        const QStringList parts = key.split(KeySep);
-        if (parts.size() != 3)
-            return false;
-        calendarId = parts.at(0);
-        const QVariantMap before = eventDetails(key);
+    const QStringList parts = key.split(KeySep);
+    QVariantMap before;
+    if (!key.isEmpty()) {
+        before = parts.size() == 3 ? eventDetails(key) : QVariantMap();
         if (before.isEmpty() || !before.value(u"canEdit"_s).toBool())
             return false;
-        edit.ruleChanged = edit.rule != before.value(u"rule"_s).toString()
-                           || (before.value(u"rule"_s).toString().isEmpty() && !before.value(u"ruleText"_s).toString().isEmpty()
-                               && !edit.rule.isEmpty());
-        edit.reminderChanged = edit.reminderMinutes != before.value(u"reminderMinutes"_s).toInt();
-        const auto data = dataOf(calendarId);
-        QString path;
-        for (const caldav::Event &e : data->events) {
-            if (e.uid == parts.at(1)) {
-                path = e.href;
-                break;
-            }
-        }
-        const caldav::CalendarState state = m_store->state(calendarId);
-        const QByteArray ics = state.resources.value(path).data;
-        if (path.isEmpty() || ics.isEmpty())
-            return false;
-        change.kind = caldav::EventChange::Kind::Update;
-        change.uid = parts.at(1);
-        change.path = path;
-        const auto instance = instanceFrom(parts.at(2));
-        const bool one = values.value(u"scope"_s).toString() == u"this" && instance;
-        change.data = one ? caldav::patchOccurrence(ics, change.uid, *instance, edit, ctx)
-                          : caldav::patchEvent(ics, change.uid, edit, ctx);
-        if (change.data.isEmpty())
-            return false;
     }
-    if (!m_sync->queueEvent(calendarId, change)) {
-        Q_EMIT errorOccurred(tr("The event could not be saved."));
-        return false;
-    }
-    if (m_scheduler)
-        m_scheduler->syncNow();
-    return true;
+    caldav::EventIntent intent;
+    intent.kind = key.isEmpty() ? caldav::EventIntent::Kind::Create : caldav::EventIntent::Kind::Change;
+    intent.calendarId = key.isEmpty() ? values.value(u"calendarId"_s).toString() : parts.at(0);
+    intent.uid = key.isEmpty() ? caldav::newEventUid() : parts.at(1);
+    if (values.value(u"scope"_s).toString() == u"this" && !key.isEmpty())
+        intent.instance = caldav::instanceFromText(parts.at(2));
+    intent.patch = dialogPatch(values, before, intent.instance.has_value());
+    return queueIntent(intent, true);
 }
 
 bool WorkspaceCalendars::deleteEvent(const QString &key, bool thisOccurrenceOnly)
@@ -698,36 +642,37 @@ bool WorkspaceCalendars::deleteEvent(const QString &key, bool thisOccurrenceOnly
     const QStringList parts = key.split(KeySep);
     if (parts.size() != 3 || !m_sync)
         return false;
-    const QString calendarId = parts.at(0);
     const QVariantMap before = eventDetails(key);
     if (before.isEmpty() || !before.value(u"canEdit"_s).toBool())
         return false;
-    const auto data = dataOf(calendarId);
-    QString path;
-    for (const caldav::Event &e : data->events) {
-        if (e.uid == parts.at(1)) {
-            path = e.href;
-            break;
-        }
-    }
-    caldav::EventChange change;
-    change.uid = parts.at(1);
-    change.path = path;
-    const auto instance = instanceFrom(parts.at(2));
-    if (thisOccurrenceOnly && instance) {
-        const QByteArray ics = m_store->state(calendarId).resources.value(path).data;
-        caldav::TodoContext ctx;
-        ctx.now = now();
-        ctx.zone = m_zone;
-        change.kind = caldav::EventChange::Kind::Update;
-        change.data = caldav::excludeOccurrence(ics, change.uid, *instance, ctx);
-        if (change.data.isEmpty())
-            return false;
-    } else {
-        change.kind = caldav::EventChange::Kind::Delete;
-    }
-    if (!m_sync->queueEvent(calendarId, change))
+    caldav::EventIntent intent;
+    intent.kind = caldav::EventIntent::Kind::Delete;
+    intent.calendarId = parts.at(0);
+    intent.uid = parts.at(1);
+    if (thisOccurrenceOnly)
+        intent.instance = caldav::instanceFromText(parts.at(2));
+    return queueIntent(intent, false);
+}
+
+bool WorkspaceCalendars::queueIntent(caldav::EventIntent intent, bool sayWhy)
+{
+    intent.at = now().toUTC();
+    caldav::TodoContext context;
+    context.now = now();
+    context.zone = m_zone;
+    const caldav::CalendarSettings s = m_store->settings();
+    const caldav::CalendarEntry *entry = s.calendar(intent.calendarId);
+    caldav::EventProblem why = caldav::EventProblem::NoCalendar;
+    std::optional<caldav::EventChange> change;
+    if (entry)
+        change = caldav::plannedChange(*entry, m_store->state(entry->id), intent, context, &why);
+    if (!change || !m_sync->queueEvent(entry->id, *change)) {
+        if (sayWhy)
+            Q_EMIT errorOccurred(why == caldav::EventProblem::NoTitle || why == caldav::EventProblem::NoStart
+                                         ? tr("An event needs a title and a date.")
+                                         : tr("The event could not be saved."));
         return false;
+    }
     if (m_scheduler)
         m_scheduler->syncNow();
     return true;
@@ -1231,6 +1176,8 @@ QString WorkspaceCalendars::errorText(const QString &code) const
         return tr("The server does not let other websites read the calendar (CORS). The apps for Linux, Windows and Android can.");
     if (code == u"not-ready")
         return tr("Calendars are not ready.");
+    if (code == u"cli-change")
+        return tr("A change of an event asked for from the command line or by an AI agent could not be made.");
     return tr("The calendar could not be updated (%1).").arg(code);
 }
 
@@ -1356,9 +1303,9 @@ QVariantList WorkspaceCalendars::writableCalendars() const
     QVariantList out;
     if (!m_store)
         return out;
-    for (const caldav::CalendarEntry &c : m_store->settings().calendars) {
-        const bool events = c.components.isEmpty() || c.components.contains(u"VEVENT"_s);
-        if (!c.readOnly && events && c.showEvents)
+    const caldav::CalendarSettings s = m_store->settings();
+    for (const caldav::CalendarEntry &c : s.calendars) {
+        if (caldav::writableProblem(s, c.id) == caldav::EventProblem::None)
             out.append(QVariantMap{{u"id"_s, c.id}, {u"name"_s, c.name}, {u"color"_s, c.color}});
     }
     return out;

@@ -7,7 +7,10 @@
 // ~20 s after an edit of a synced task, when the network comes back and in the foreground — and
 // the sync center's "Calendars" tab shows its log.
 //
-// Kept on the device (never in the notebook): `<device state>/calendars/` (caldav/store.h); the
+// brulion-cli and its MCP tools ask for changes of events through `<device state>/calendars/inbox`
+// (caldav/eventchange.h): watched while the notebook has calendars, taken at once (shown, sent
+// with a run that starts then); this object's CalendarSync is the one writer of the calendars'
+// state. Kept on the device (never in the notebook): `<device state>/calendars/` (caldav/store.h); the
 // passwords in owner-only files `<secrets>/caldav-<account id>` like the Nextcloud app password,
 // masked in every log line while in memory. In the browser the requests are subject to CORS
 // (docs/WEB.md "Calendars in the browser").
@@ -30,6 +33,7 @@
 #include "eventsource.h"
 #include "types.h"
 
+#include <QFileSystemWatcher>
 #include <QDateTime>
 #include <QHash>
 #include <QPointer>
@@ -57,6 +61,7 @@ namespace brulion::caldav {
 class CalendarStore;
 class CalendarSync;
 struct CalendarData;
+struct EventIntent;
 struct CalendarRunReport;
 struct Discovery;
 } // namespace brulion::caldav
@@ -214,6 +219,11 @@ Q_SIGNALS:
 
 private:
     struct Shown;
+    /// The change made (its problem said in words when `sayWhy`), sent with a run that starts now.
+    bool queueIntent(caldav::EventIntent intent, bool sayWhy);
+    /// The inbox of brulion-cli's changes watched while the notebook has calendars.
+    void watchInbox();
+    void takeInbox();
     void rebuild();
     void teardown();
     void configure();
@@ -252,6 +262,8 @@ private:
     int m_revision = 0;
     QTimer m_eventsTimer;
     QTimer m_startTimer;
+    QTimer m_inboxTimer; ///< a burst of files in the inbox taken once
+    std::unique_ptr<QFileSystemWatcher> m_inboxWatcher;
     mutable QHash<QString, std::shared_ptr<const caldav::CalendarData>> m_data;
     /// The last range asked for and its entries (the calendar asks for the same range again and
     /// again: its days, its day panel); dropped with every change of the events.
