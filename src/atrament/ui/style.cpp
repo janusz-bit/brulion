@@ -34,6 +34,10 @@ void TextStyleRefinement::applyTo(TextStyle &s) const
         s.background = *background;
     if (fontFeatures)
         s.fontFeatures = *fontFeatures;
+    if (overline)
+        s.overline = *overline;
+    if (baselineShift)
+        s.baselineShift = *baselineShift;
 }
 
 } // namespace brulion::atrament

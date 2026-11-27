@@ -30,6 +30,7 @@ struct ResolvedRun {
     std::uint32_t styleIndex = 0;
     const FontRun *source = nullptr; // features and language; null for text past the runs
     std::optional<InlineBox> box;    // an inline box (sizes finite and ≥ 0)
+    float shift = 0;                 // FontRun::baselineShift (finite)
 };
 
 float usableSize(float size)
@@ -63,6 +64,7 @@ std::vector<ResolvedRun> resolveRuns(const FontCollection &fonts, int length, st
         r.styleIndex = run.styleIndex;
         r.source = &run;
         r.box = usableBox(run.inlineBox);
+        r.shift = std::isfinite(run.baselineShift) ? run.baselineShift : 0.0f;
         out.push_back(r);
         pos = r.end;
     }
@@ -382,7 +384,7 @@ void TextLayout::Builder::shape(const FontCollection &fonts, std::u16string_view
                 glyph.fontSize = run.fontSize;
                 glyph.glyph = info[j].codepoint;
                 glyph.position = {pen + advance + float(positions[j].x_offset) * scale,
-                                  -float(positions[j].y_offset) * scale};
+                                  -float(positions[j].y_offset) * scale - run.shift};
                 glyph.styleIndex = run.styleIndex;
                 glyph.cluster = cluster;
                 glyphs.push_back(glyph);
@@ -520,10 +522,16 @@ void TextLayout::Builder::wrap(TextLayout &layout, const FontCollection &fonts, 
         const FontMetrics m = fonts.metrics(runs[r].face);
         const float size = runs[r].fontSize;
         metrics[r] = {m.ascent * size, m.descent * size, m.lineGap * size, 0};
-        if (const std::optional<InlineBox> &box = runs[r].box)
+        if (const std::optional<InlineBox> &box = runs[r].box) {
             metrics[r] = {box->ascent, box->descent, 0, 0}; // the box in place of its text's font
+        } else if (const float shift = runs[r].shift; shift != 0) {
+            // A raised or lowered run reaches that much higher and less low (or the other way).
+            metrics[r].ascent = std::max(0.0f, metrics[r].ascent + shift);
+            metrics[r].descent = std::max(0.0f, metrics[r].descent - shift);
+        }
         layout.m_runs.push_back(LaidOutRun{runs[r].start, runs[r].end, runs[r].styleIndex, metrics[r].ascent,
-                                           metrics[r].descent, runs[r].box.has_value()});
+                                           metrics[r].descent, runs[r].box.has_value(),
+                                           runs[r].box ? 0.0f : runs[r].shift});
         if (hb_font_t *font = fonts.hbFont(runs[r].face)) {
             hb_codepoint_t space = 0;
             if (hb_font_get_nominal_glyph(font, ' ', &space))

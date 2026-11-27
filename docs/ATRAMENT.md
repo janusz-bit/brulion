@@ -190,10 +190,52 @@ public:
   cluster (`nextCaretStop` / `previousCaretStop`, `offsetAt` never inside it); `inlineBoxes()`
   says where each ended up. `Text` calls the object's painter in paint, after the text, with its
   box in window coordinates, the baseline, the text's colour and size there.
+* **Baseline shifts and overlines** (a formula's scripts and radicands): `FontRun::baselineShift`
+  raises a run's glyphs above the line's baseline (negative: lowers them) and moves its ascent and
+  descent with them — the line grows to hold a raised or lowered run (CSS's `vertical-align` by a
+  length), `glyphRects` and decorations follow it, x and carets do not move (`LaidOutRun::
+  baselineShift`; part of the layout cache's key, kept by rewrapping). In `ui`, a span's
+  `style.baselineShift` (px) and `style.overline` (a line at the font's ascent over its glyphs,
+  `TextPaintStyle::overline`). Tested by `tests/atrament/text/tst_atrament_text_shift` and
+  `tests/atrament/ui/tst_atrament_vectorpaint`.
 * Glyphs are rasterized once per (face, glyph, size, subpixel x offset) into an A8 atlas; the
   renderers read the same atlas.
 * Caches are generational: what was used in the last frame stays, the rest is dropped at the end
   of the next.
+
+### Vector paths and icons
+
+`scene/vectorpath.h`, `scene/vectoricon.h` (Qt-free): what diagrams, charts and icons are drawn with.
+
+* **`VectorPath`**: moveTo / lineTo / quadTo / cubicTo / close, SVG's elliptical `arcTo` (endpoint
+  parameters, radii grown to join the points, zero radii a line), `addRect` with rounded corners,
+  `addEllipse`; `flatten(PathTransform, tolerance)` cuts curves into lines (Wang's formula) under a
+  uniform scale and a translation into contours that know whether they were closed.
+* **Strokes are paths**: `strokeContours(contours, StrokeStyle, PathBuilder&)` makes the outline of
+  a line of a width — a rectangle per segment, a join per corner (`LineJoin::Round`: a disc, or a
+  wedge where the turn is flatter than the tolerance; `Miter` up to `miterLimit`, else `Bevel`), a
+  cap per open end (`Butt`, `Round`, `Square`; a contour of one point is a dot) — as polygons of
+  one orientation, so the non-zero fill of the rasterizer (min(|winding|, 1)) is their union; discs
+  are polygons of the circle's area. Dashes (`dashes`, `dashOffset`, SVG's rules: an odd list
+  repeats, a negative length or a pattern too fine for the line's length is solid) cut the
+  flattened line first (`dashContours`). Decision: no stroke primitive — the result is the scene's
+  `PathPrimitive`, which the CPU raster fills and the QRhi renderer rasterizes into its path atlas
+  as before; one shader less, the same pixels in both.
+* **`Window::fillPath(path, transform, colour)`, `strokePath(path, transform, style, colour)`**
+  (logical px, the stroke's width and dashes in the path's units scaled by the transform) and
+  **`paintIcon(icon, bounds, colour)`**.
+* **`VectorIcon::parseSvg(text)`**: a monochrome icon from SVG's subset — `<svg viewBox>`, `<g>`,
+  `<path d>` (every command of SVG 1.1, implicit repeats, compact numbers and flags), `<rect rx
+  ry>`, `<circle>`, `<ellipse>`, `<line>`, `<polyline>`, `<polygon>`; fill, stroke, stroke-width,
+  stroke-linecap, stroke-linejoin, stroke-miterlimit inherited (any paint but `none` paints: one
+  colour, the caller's); `<defs>`, `<clipPath>`, text, styles skipped; malformed input gives what
+  was read before the mistake, oversized input nothing. Every icon of `assets/icons` (Lucide's,
+  BIcon's) reads. `outline(side)` — the filled and the stroked outline fitted into a square of
+  `side` device px — is kept for the icon's last four sizes; `paintIcon` snaps the square to whole
+  device px and copies the outline's points into the frame.
+* Tested by `tests/atrament/scene/tst_atrament_vector` (coverage of strokes, caps, joins, holes,
+  dashes, path data, the subset, malformed input) and `tests/atrament/ui/tst_atrament_vectorpaint`
+  (pixels at scale 1 and 2, masks, an icon's outline reused).
 
 ### Input methods
 
