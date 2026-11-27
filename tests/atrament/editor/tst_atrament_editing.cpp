@@ -567,6 +567,9 @@ void TestAtramentEditing::calloutDrawnAndEdited()
     QVERIFY(t);
     const at::Pixel fill = h.tw.pixel(int(t->bounds().right()) + 4, int(t->bounds().top()) + 2);
     QVERIFY2(fill.g > fill.r && fill.g > fill.b, qPrintable(u"%1 %2 %3"_s.arg(fill.r).arg(fill.g).arg(fill.b)));
+    // The frame spans the text column (BlockPartCallout's width), not just its short text.
+    const at::Pixel far = h.tw.pixel(560, int(t->bounds().top()) + 2);
+    QVERIFY2(far.g > far.r && far.g > far.b, qPrintable(u"%1 %2 %3"_s.arg(far.r).arg(far.g).arg(far.b)));
     // Edited: Enter is a line break carrying its "> ".
     h.clickInto(0, 3);
     QCOMPARE(h.controller.editingRow(), 0);

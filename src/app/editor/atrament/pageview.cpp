@@ -652,7 +652,8 @@ at::AnyElement PageView::renderRow(std::size_t row)
         i = j;
     }
 
-    at::Div content = at::div().flexRow().itemsStart().pl(textX - marker);
+    // (As wide as the line: a callout's frame and a selected row's band span the text column.)
+    at::Div content = at::div().flex1().minW(0).flexRow().itemsStart().pl(textX - marker);
     float firstLine = m.lineHeight;
     if (view == u"heading") {
         const int level = std::clamp(index.data(BlockListModel::HeadingLevelRole).toInt(), 0, 6);
