@@ -36,8 +36,13 @@ Read before changing code:
   `tests/screenshots`) back. Use a distinct `-n` per agent/task so builds never interfere. If another agent's
   unfinished directory breaks CMake configure, leave it out with `-x <dir>` (repeatable)
   instead of copying the script.
-* Fallback when the laptop is off (`ssh -o BatchMode=yes laptop true` fails), inside
-  `nix develop` on this Pi:
+* Fallback when the laptop is off (`ssh -o BatchMode=yes laptop true` fails), in the flake's dev
+  shell on this Pi — entered with `scripts/dev-shell.sh <command…>`, which keeps the shell as a
+  saved profile (0.5 s a call; `nix develop -c …` evaluates the flake and copies a changed tree
+  into the store every time, 15–30 s here). `scripts/dev-shell.sh -s cli <command…>` is the light
+  shell for the core, `brulion-cli` and their tests (Qt's base only: nothing to compile first; it
+  builds with `BRULION_BUILD_APP=OFF` into `./build-cli`) — use it here unless the work needs the
+  app, whose shell first compiles Qt Multimedia on this machine:
 * `scripts/dev-build.sh` — configure + build `./build` (Ninja, ccache, Debug, -Werror).
   `scripts/dev-build.sh -t tst_dates` builds and runs tests matching a regex.
   `BUILD_DIR=build-foo scripts/dev-build.sh` uses another build dir.

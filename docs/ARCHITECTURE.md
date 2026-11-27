@@ -947,7 +947,10 @@ What protects what (docs/UI.md "Encrypted notes", "App lock"; docs/SYNTAX.md §1
   worker that must be busy while the test looks waits for a gate the test opens, not for a delay.
   A fresh build directory starts the longest tests first (`tests/ctest-costs.txt` becomes
   ctest's cost data until ctest has its own timings).
-* Nix: `nix develop` (Qt 6.12 from nixpkgs, CMake, Ninja, ccache, clang-tools, gdb);
+* Nix: `nix develop` (Qt 6.12 from nixpkgs, CMake, Ninja, ccache, clang-tools, gdb; `scripts/dev-shell.sh`
+  enters it from a saved profile, `-s cli` the light shell of the core and `brulion-cli`); the compiler of the dev
+  shells, packages and checks is the LLVM project's release of nixpkgs' Clang inside nixpkgs' wrapper
+  (`nix/clang-release.nix`: the same objects in 60 % of the time — docs/PERFORMANCE.md "What Nix costs");
   `nix build .#brulion` (builds without the tests — doCheck = false —, validates the desktop file and AppStream
   metainfo, runs `brulion-cli`); `nix build .#brulion-cli` (the command line alone, `nix/cli.nix`); NixOS module `programs.brulion` (+ autostart hidden in the tray) and
   `services.brulion-web` (the browser version behind nginx) — docs/NIXOS.md; `nix flake check` (also the whole ctest suite: `checks.<system>.tests`).
@@ -1051,7 +1054,8 @@ What protects what (docs/UI.md "Encrypted notes", "App lock"; docs/SYNTAX.md §1
   use; the AppImage, Windows and the Linux CI job: aqt's `qtmultimedia`; Android: Qt's Android
   backend without the FFmpeg one — `BRULION_ANDROID_FFMPEG`; the browser: none, "Open in a new
   tab"). The sizes: docs/PERFORMANCE.md "Audio and video: what Qt Multimedia costs".
-* CI (`.github/workflows`): `ci.yml` (Nix build + flake checks on x86_64/aarch64, aqt build
+* CI (`.github/workflows`): `ci.yml` (Nix build + flake checks on x86_64/aarch64 — the package and the
+  test suite as two jobs per architecture —, aqt build
   with ASan/UBSan and `-Werror`, actionlint/shellcheck/clang-format), `android.yml`,
   `appimage.yml`, `windows.yml`, `wasm.yml` (the site and the single file, the smoke test and the
   Playwright tests — job `browsers`; the Android emulator's browsers — job `keyboard-android`),

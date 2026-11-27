@@ -73,11 +73,13 @@ fi
 EOS
 )
 
-# 'path:.' makes the flake include untracked files (there is no .git on the remote copy anyway).
+# The dev shell from its saved profile (scripts/dev-shell.sh): `nix develop path:.` copied the whole
+# tree into the laptop's Nix store and evaluated the flake for every build. (The remote copy has no
+# .git: when the profile is made, the flake is the directory as it is, untracked files included.)
 # `|| status=$?`: with `set -e` a failed build would otherwise end this script here, before
 # the --pull copies (e.g. screenshots of a failing run) and without the build's status.
 status=0
-ssh -o BatchMode=yes "${host}" "cd ${remote_root}/src && nix develop path:. -c bash -c $(printf '%q' "${remote_script}")" ||
+ssh -o BatchMode=yes "${host}" "cd ${remote_root}/src && scripts/dev-shell.sh bash -c $(printf '%q' "${remote_script}")" ||
   status=$?
 
 for p in "${pulls[@]}"; do

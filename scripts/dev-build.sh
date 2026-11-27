@@ -8,9 +8,12 @@
 #   JOBS=4 scripts/dev-build.sh                # more parallel jobs (only on bigger machines)
 #   BRULION_CLANG=1 BUILD_DIR=build-clang scripts/dev-build.sh   # Clang even outside the dev shell
 #
-# Must be run inside `nix develop` (provides Qt, cmake, ninja, ccache and Clang: its `cc` / `c++`
-# are nixpkgs' Clang over GCC's libstdc++ linking with lld, the compiler of the Nix package and of
-# every other build — docs/PERFORMANCE.md "GCC or Clang", "Build times"). A Debug build is -O0 with
+# Must be run inside the flake's dev shell — `scripts/dev-shell.sh scripts/dev-build.sh …` enters it
+# from a saved profile, without the evaluation `nix develop` does on every call; `-s cli` is the
+# light shell for the core and brulion-cli alone (BRULION_BUILD_APP=OFF, ./build-cli). The shell
+# provides Qt, cmake, ninja, ccache and Clang: its `cc` / `c++` are Clang over GCC's libstdc++
+# linking with lld, the compiler of the Nix package and of every other build —
+# docs/PERFORMANCE.md "GCC or Clang", "Build times", "What Nix costs". A Debug build is -O0 with
 # precompiled headers (cmake/BrulionPch.cmake).
 #
 # BRULION_CLANG=1 configures a new build directory with Clang whatever `c++` is: the dev shell's,
@@ -50,8 +53,11 @@ if [[ ! -f "${build_dir}/build.ninja" ]]; then
       export CC="${clang_dir}/bin/clang" CXX="${clang_dir}/bin/clang++"
     fi
   fi
+  # devShells.cli (flake.nix) sets BRULION_BUILD_APP=OFF: the core, brulion-cli and their tests.
+  app=()
+  [[ "${BRULION_BUILD_APP:-}" == OFF ]] && app=(-DBRULION_BUILD_APP=OFF)
   cmake -S . -B "${build_dir}" -G Ninja -DCMAKE_BUILD_TYPE=Debug \
-    -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DBRULION_WERROR=ON
+    -DCMAKE_CXX_COMPILER_LAUNCHER=ccache -DBRULION_WERROR=ON ${app[@]+"${app[@]}"}
 elif [[ -n "${BRULION_CLANG:-}" ]] && ! grep -q '^CMAKE_CXX_COMPILER:.*clang++' "${build_dir}/CMakeCache.txt"; then
   echo "dev-build: ${build_dir} was configured with another compiler; BRULION_CLANG=1 needs a new BUILD_DIR" >&2
   exit 2

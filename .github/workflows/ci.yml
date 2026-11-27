@@ -3,7 +3,11 @@
 # release.yml calls this workflow and publishes the release only when it passes. A push to main
 # without the marker runs nothing (its run shows up with every job skipped):
 #  * nix     — `nix flake check` (with the whole ctest suite: checks.<system>.tests) + `nix build .#brulion` on
-#              x86_64 and aarch64 (the Raspberry Pi / NixOS targets);
+#              x86_64 and aarch64 (the Raspberry Pi / NixOS targets), as two jobs per architecture:
+#              "package" (every check but the test suite, and the package) and "tests" (the test
+#              suite) — the package and the package with its tests are two builds of the app, which
+#              shared one runner's four cores for 50 minutes; Qt Multimedia, which cache.nixos.org
+#              does not have, is kept between runs;
 #  * linux   — plain CMake build with Qt 6.12.0 from aqt, -Werror, AddressSanitizer +
 #              UndefinedBehaviorSanitizer at -O1 (asserts on), ccache kept between runs, ctest
 #              with the GUI tests side by side (fast feedback, independent of nixpkgs); Qt PDF
@@ -50,44 +54,99 @@ env:
 
 jobs:
   nix:
-    name: Nix (${{ matrix.system }})
+    name: Nix (${{ matrix.system }}, ${{ matrix.part }})
     if: github.event_name != 'push' || github.ref_type == 'tag' || contains(join(github.event.commits.*.message, ' '), '[ci]')
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 150
     strategy:
       fail-fast: false
       matrix:
+        system: [x86_64-linux, aarch64-linux]
+        # package: every check of the flake but the test suite, then the package itself.
+        # tests: checks.<system>.tests — the package built with its tests, which then run.
+        part: [package, tests]
         include:
           - system: x86_64-linux
             runner: ubuntu-latest
           - system: aarch64-linux
             runner: ubuntu-24.04-arm
+    env:
+      SYSTEM: ${{ matrix.system }}
     steps:
       - uses: actions/checkout@v7
 
       - uses: DeterminateSystems/nix-installer-action@v23
 
+      # Qt Multimedia over its own FFmpeg (nix/multimedia.nix) is what every build here needs first
+      # and cache.nixos.org does not have: ten minutes of compiling. Its store paths are kept
+      # between runs (nix-store --export), for one nixpkgs revision and one recipe; without them,
+      # or when they cannot be imported, it is built as before. (The compiler, nix/clang-release.nix,
+      # is not kept: a download of two minutes against 0.4 GB of the repository's cache.)
+      - name: Restore Qt Multimedia
+        id: own
+        uses: actions/cache/restore@v6
+        with:
+          path: ~/nix-own
+          key: nix-qtmultimedia-${{ matrix.system }}-${{ hashFiles('flake.lock', 'nix/multimedia.nix') }}
+
+      - name: Qt Multimedia
+        env:
+          RESTORED: ${{ steps.own.outputs.cache-hit }}
+        run: |
+          own=('.#brulion.qtmultimedia^*' '.#brulion.qtmultimedia.ffmpeg^*')
+          if [ "$RESTORED" = true ]; then
+            # What the paths refer to comes from cache.nixos.org, as it would for a build of them.
+            if ! { xargs nix-store --realise <"$HOME/nix-own/references" >/dev/null &&
+              nix-store --import <"$HOME/nix-own/paths" >/dev/null; }; then
+              echo "::warning title=Qt Multimedia::the kept store paths could not be imported: built here"
+            fi
+          fi
+          nix build -L --no-link "${own[@]}"
+          if [ "$RESTORED" != true ]; then
+            mkdir -p "$HOME/nix-own"
+            mapfile -t paths < <(nix build --no-link --print-out-paths "${own[@]}" | sort -u)
+            # An import takes a path after the ones it refers to (FFmpeg, then Qt Multimedia).
+            mapfile -t sorted < <(nix-store --query --requisites "${paths[@]}" | grep -xFf <(printf '%s\n' "${paths[@]}"))
+            nix-store --query --references "${paths[@]}" | sort -u |
+              { grep -vxFf <(printf '%s\n' "${paths[@]}") || true; } >"$HOME/nix-own/references"
+            nix-store --export "${sorted[@]}" >"$HOME/nix-own/paths"
+          fi
+
+      - name: Save Qt Multimedia
+        if: steps.own.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v6
+        with:
+          path: ~/nix-own
+          key: ${{ steps.own.outputs.cache-primary-key }}
+
       # checks.x86_64-linux.web-vm is a NixOS VM test and needs KVM, which not every runner
       # has (e.g. some private-repository runners): without /dev/kvm every other check is
       # built and the VM test is skipped with a warning.
-      - name: nix flake check
-        env:
-          SYSTEM: ${{ matrix.system }}
+      - name: nix flake check (every check but the test suite)
+        if: matrix.part == 'package'
         run: |
-          if [ -e /dev/kvm ] || [ "$SYSTEM" != x86_64-linux ]; then
-            nix flake check -L
-          else
+          nix flake check -L --no-build
+          skip=" tests "
+          if [ ! -e /dev/kvm ] && [ "$SYSTEM" = x86_64-linux ]; then
             echo "::warning title=web-vm skipped::no /dev/kvm on this runner: the NixOS VM test checks.$SYSTEM.web-vm was not run"
-            nix flake check -L --no-build
-            for check in $(nix eval --json ".#checks.$SYSTEM" --apply builtins.attrNames | jq -r '.[]'); do
-              if [ "$check" != web-vm ]; then
-                nix build -L --no-link ".#checks.$SYSTEM.$check"
-              fi
-            done
+            skip=" tests web-vm "
           fi
+          checks=()
+          for check in $(nix eval --json ".#checks.$SYSTEM" --apply builtins.attrNames | jq -r '.[]'); do
+            case "$skip" in
+              *" $check "*) ;;
+              *) checks+=(".#checks.$SYSTEM.$check") ;;
+            esac
+          done
+          nix build -L --no-link "${checks[@]}"
 
       - name: nix build .#brulion
+        if: matrix.part == 'package'
         run: nix build .#brulion -L --print-out-paths
+
+      - name: The test suite (checks.<system>.tests)
+        if: matrix.part == 'tests'
+        run: nix build -L --no-link ".#checks.$SYSTEM.tests"
 
   linux:
     name: Linux (Qt 6.12.0 from aqt, Clang 18, -Werror, sanitizers)

@@ -15,14 +15,29 @@
       ];
       forAllSystems = f: lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
 
-      # The compiler of the Linux builds here: nixpkgs' Clang over GCC's libstdc++ (clangStdenv; the
-      # C++ library Qt uses), linking with LLVM's lld instead of GNU ld — three times faster links,
+      # The LLVM project's own release of nixpkgs' Clang version (nix/clang-release.nix; null where
+      # nix/clang-release.json has none: an overlay over another nixpkgs).
+      clangRelease =
+        pkgs: pkgs.callPackage ./nix/clang-release.nix { nixpkgsClang = pkgs.clangStdenv.cc.cc; };
+
+      # The compiler of the Linux builds here: Clang over GCC's libstdc++ (clangStdenv; the C++
+      # library Qt uses), linking with LLVM's lld instead of GNU ld — three times faster links,
       # and identical code folded (cmake/BrulionSize.cmake: --icf=safe; docs/PERFORMANCE.md "Build
-      # times").
+      # times"). Inside nixpkgs' wrapper the compiler itself is the LLVM project's release where
+      # there is one: the same objects as nixpkgs' build of that version makes, in 60 % of the time
+      # (docs/PERFORMANCE.md "What Nix costs").
       brulionStdenv =
         pkgs:
+        let
+          release = clangRelease pkgs;
+        in
         pkgs.overrideCC pkgs.clangStdenv (
-          pkgs.clangStdenv.cc.override { bintools = pkgs.llvmPackages.bintools; }
+          pkgs.clangStdenv.cc.override (
+            {
+              bintools = pkgs.llvmPackages.bintools;
+            }
+            // lib.optionalAttrs (release != null) { cc = release; }
+          )
         );
 
       # The Android SDK and NDK are unfree: a nixpkgs that allows them (and accepts the Android
@@ -86,6 +101,9 @@
           };
           brulion-android-sign = pkgs.callPackage ./nix/android/sign.nix { };
         }
+        # The compiler of these builds by itself (nix/clang-release.nix): `nix build
+        # .#clang-llvm-release` fetches it once, e.g. to push it to a binary cache.
+        // lib.optionalAttrs (clangRelease pkgs != null) { clang-llvm-release = clangRelease pkgs; }
         // lib.optionalAttrs (pkgs.stdenv.hostPlatform.system == "x86_64-linux") (
           androidPackages pkgs.stdenv.hostPlatform.system
         )
@@ -113,52 +131,18 @@
         brulion = self.nixosModules.default;
       };
 
-      devShells = forAllSystems (pkgs: {
-        # The packages' compiler: `cc` / `c++` are Clang, linking with lld (scripts/dev-build.sh).
-        default = pkgs.mkShell.override { stdenv = brulionStdenv pkgs; } {
-          inputsFrom = [ self.packages.${pkgs.stdenv.hostPlatform.system}.brulion ];
-          packages = with pkgs; [
+      devShells = forAllSystems (
+        pkgs:
+        let
+          inherit (self.packages.${pkgs.stdenv.hostPlatform.system}) brulion brulion-cli;
+          # The packages' compiler: `cc` / `c++` are Clang, linking with lld (scripts/dev-build.sh).
+          mkShell = pkgs.mkShell.override { stdenv = brulionStdenv pkgs; };
+          tools = with pkgs; [
             ccache
             clang-tools
             gdb
-            llama-cpp-vulkan # embedbench on the GPU (scripts/semantic/embedbench, docs/SEMANTIC.md); the app builds its own (3rdparty/llama)
-            qt6.qttools
             nixfmt
           ];
-          # Run the unwrapped binaries from ./build: point Qt at the plugins/QML modules.
-          QT_PLUGIN_PATH = lib.makeSearchPath pkgs.qt6.qtbase.qtPluginPrefix (
-            with pkgs.qt6;
-            [
-              qtbase
-              qtdeclarative
-              qtsvg
-              qtwayland
-              # (the package's own, nix/multimedia.nix: its FFmpeg plugin)
-              self.packages.${pkgs.stdenv.hostPlatform.system}.brulion.qtmultimedia
-            ]
-          );
-          QML_IMPORT_PATH = lib.makeSearchPath pkgs.qt6.qtbase.qtQmlPrefix [
-            pkgs.qt6.qtdeclarative
-            self.packages.${pkgs.stdenv.hostPlatform.system}.brulion.qtmultimedia
-          ];
-          # Hunspell's dictionaries for the spell checking of ./build (the package compiles their
-          # store paths in instead: nix/package.nix).
-          DICPATH = lib.concatMapStringsSep ":" (
-            d: "${d}/share/hunspell"
-          ) self.packages.${pkgs.stdenv.hostPlatform.system}.brulion.spellDictionaries;
-          # Tesseract and its English and Polish models for the OCR of ./build (the package compiles
-          # these store paths in instead: nix/package.nix; src/platform/ocr_tesseract.cpp loads the
-          # library at run time).
-          BRULION_TESSERACT_LIBRARY = "${
-            self.packages.${pkgs.stdenv.hostPlatform.system}.brulion.tesseract
-          }/lib/libtesseract.so.5";
-          BRULION_TESSDATA_DIR = self.packages.${pkgs.stdenv.hostPlatform.system}.brulion.tessdata;
-          # llama.cpp's sources for the model on the device (cmake/BrulionLocalAi.cmake: a build
-          # configured in this shell compiles them in; 3rdparty/llama/pin.json names the release).
-          BRULION_LLAMA_SOURCE_DIR = self.packages.${pkgs.stdenv.hostPlatform.system}.brulion.llamaSrc;
-          # whisper.cpp's sources for speech recognition (cmake/BrulionSpeech.cmake: over that
-          # llama.cpp's ggml; 3rdparty/whisper/pin.json names the release).
-          BRULION_WHISPER_SOURCE_DIR = self.packages.${pkgs.stdenv.hostPlatform.system}.brulion.whisperSrc;
           # With the fortify hardening nixpkgs' compiler wrapper puts -O2 (and _FORTIFY_SOURCE=2) in
           # front of every compile, so a Debug build of this shell was an -O2 one: twice the compile
           # time, five times for the C++ of the QML, and code a debugger cannot follow. Without it the
@@ -168,12 +152,77 @@
             "fortify"
             "fortify3"
           ];
+          # ccache tells one compiler from another by its file's size and time, and the compiler here
+          # is nixpkgs' wrapper script: every wrapper in the store has the time 1 and, for store
+          # paths of one length, one size — and what it adds to a compile (the hardening list above)
+          # comes from the environment, which ccache never sees. So the cache answered with objects
+          # of another compiler or of other flags (docs/PERFORMANCE.md "What Nix costs"): it is told
+          # the wrapper's store path and that list instead.
           shellHook = ''
             export CMAKE_GENERATOR=Ninja
             export CMAKE_CXX_COMPILER_LAUNCHER=ccache
+            export CCACHE_COMPILERCHECK="string:$NIX_CC $NIX_HARDENING_ENABLE"
           '';
-        };
-      });
+        in
+        {
+          # scripts/dev-shell.sh enters it from a saved profile: no evaluation on every call.
+          default = mkShell {
+            inputsFrom = [ brulion ];
+            packages =
+              tools
+              ++ (with pkgs; [
+                llama-cpp-vulkan # embedbench on the GPU (scripts/semantic/embedbench, docs/SEMANTIC.md); the app builds its own (3rdparty/llama)
+                qt6.qttools
+              ]);
+            # Run the unwrapped binaries from ./build: point Qt at the plugins/QML modules.
+            QT_PLUGIN_PATH = lib.makeSearchPath pkgs.qt6.qtbase.qtPluginPrefix (
+              with pkgs.qt6;
+              [
+                qtbase
+                qtdeclarative
+                qtsvg
+                qtwayland
+                # (the package's own, nix/multimedia.nix: its FFmpeg plugin)
+                brulion.qtmultimedia
+              ]
+            );
+            QML_IMPORT_PATH = lib.makeSearchPath pkgs.qt6.qtbase.qtQmlPrefix [
+              pkgs.qt6.qtdeclarative
+              brulion.qtmultimedia
+            ];
+            # Hunspell's dictionaries for the spell checking of ./build (the package compiles their
+            # store paths in instead: nix/package.nix).
+            DICPATH = lib.concatMapStringsSep ":" (d: "${d}/share/hunspell") brulion.spellDictionaries;
+            # Tesseract and its English and Polish models for the OCR of ./build (the package compiles
+            # these store paths in instead: nix/package.nix; src/platform/ocr_tesseract.cpp loads the
+            # library at run time).
+            BRULION_TESSERACT_LIBRARY = "${brulion.tesseract}/lib/libtesseract.so.5";
+            BRULION_TESSDATA_DIR = brulion.tessdata;
+            # llama.cpp's sources for the model on the device (cmake/BrulionLocalAi.cmake: a build
+            # configured in this shell compiles them in; 3rdparty/llama/pin.json names the release).
+            BRULION_LLAMA_SOURCE_DIR = brulion.llamaSrc;
+            # whisper.cpp's sources for speech recognition (cmake/BrulionSpeech.cmake: over that
+            # llama.cpp's ggml; 3rdparty/whisper/pin.json names the release).
+            BRULION_WHISPER_SOURCE_DIR = brulion.whisperSrc;
+            inherit hardeningDisable shellHook;
+          };
+
+          # The core, brulion-cli and their tests alone (`scripts/dev-shell.sh -s cli …`): the inputs
+          # of packages.brulion-cli — Qt's base; no Qt Quick, and no Qt Multimedia over its own FFmpeg
+          # to compile first (nix/multimedia.nix: cache.nixos.org does not have it). The shell for the
+          # Raspberry Pi. scripts/dev-build.sh configures such a build (BRULION_BUILD_APP=OFF) in a
+          # directory of its own, ./build-cli.
+          cli = mkShell {
+            inputsFrom = [ brulion-cli ];
+            packages = tools;
+            inherit hardeningDisable;
+            shellHook = shellHook + ''
+              export BRULION_BUILD_APP=OFF
+              export BUILD_DIR="''${BUILD_DIR:-build-cli}"
+            '';
+          };
+        }
+      );
 
       # `nix fmt`: every .nix file of the repository.
       formatter = forAllSystems (pkgs: pkgs.nixfmt-tree);
@@ -190,6 +239,24 @@
 
           # The whole ctest suite, in the build sandbox (`nix build .#checks.<system>.tests -L`).
           tests = self.packages.${system}.brulion.overrideAttrs { doCheck = true; };
+
+          # The builds compile with the LLVM project's release of nixpkgs' Clang version
+          # (nix/clang-release.nix), which runs here. Fails when flake.lock has moved to a nixpkgs
+          # whose Clang nix/clang-release.json does not know: without it every build would quietly
+          # go back to nixpkgs' slower Clang.
+          clang-release =
+            let
+              release = clangRelease pkgs;
+              inherit (pkgs.clangStdenv.cc.cc) version;
+            in
+            if release != null then
+              release
+            else
+              pkgs.runCommand "brulion-clang-release-missing" { } ''
+                echo "nix/clang-release.json has no release of Clang ${version} for ${system}:" >&2
+                echo "run scripts/clang-release-pin.sh ${version}" >&2
+                exit 1
+              '';
 
           # The NixOS module evaluates; its nginx config and autostart entry build.
           nixos-module = import ./nix/tests/module-eval.nix {

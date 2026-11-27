@@ -123,7 +123,8 @@ if(NOT EXISTS "${CMAKE_BINARY_DIR}/Testing/Temporary/CTestCostData.txt")
     configure_file(ctest-costs.txt "${CMAKE_BINARY_DIR}/Testing/Temporary/CTestCostData.txt" COPYONLY)
 endif()
 # QBENCHMARK suites (tests/bench, run with scripts/bench.sh); off by default so CI and Nix stay fast.
+# The core's suites build without the app too (BRULION_BUILD_APP=OFF: Qt's base alone).
 option(BRULION_BUILD_BENCHMARKS "Build the benchmark suites in tests/bench (scripts/bench.sh)" OFF)
-if(BRULION_BUILD_BENCHMARKS AND BRULION_BUILD_APP)
+if(BRULION_BUILD_BENCHMARKS)
     add_subdirectory(bench)
 endif()

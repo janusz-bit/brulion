@@ -51,6 +51,14 @@ if(BRULION_BASH)
                      ${PROJECT_SOURCE_DIR}/scripts/bench.sh)
     set_tests_properties(tst_scripts_bench_budget PROPERTIES SKIP_RETURN_CODE 77)
 endif()
+# scripts/dev-shell.sh (the flake's dev shell from a saved profile) with a stand-in `nix`: one
+# evaluation for a set of the files that make the shell, the command's arguments as they are,
+# unused profiles removed.
+if(BRULION_BASH)
+    add_test(NAME tst_scripts_dev_shell
+             COMMAND ${BRULION_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/tst_dev_shell.sh
+                     ${PROJECT_SOURCE_DIR}/scripts/dev-shell.sh)
+endif()
 # The store texts and pictures of F-Droid and IzzyOnDroid (fastlane/metadata/android, docs/ANDROID.md):
 # scripts/check-fastlane-metadata.sh on small metadata folders, then on the repository's, which must
 # have the changelog of the version in CMakeLists.txt.

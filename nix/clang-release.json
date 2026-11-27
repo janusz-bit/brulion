@@ -1,0 +1,17 @@
+{
+  "!comment": "Clang as the LLVM project releases it, the compiler of the Nix builds (nix/clang-release.nix): per Clang version of nixpkgs and per system, the release archive (github.com/llvm/llvm-project/releases), its SHA-256 as GitHub publishes it and Nix's hash of the one file kept from it, bin/clang-<major>. Update: scripts/clang-release-pin.sh <version>.",
+  "releases": {
+    "21.1.8": {
+      "aarch64-linux": {
+        "archive": "LLVM-21.1.8-Linux-ARM64",
+        "sha256": "65ce0b329514e5643407db2d02a5bd34bf33d159055dafa82825c8385bd01993",
+        "hash": "sha256-Yk4llfYb+jtvG27mIKzfr2X7RCZxlz0yjq4Bq3Y6djo="
+      },
+      "x86_64-linux": {
+        "archive": "LLVM-21.1.8-Linux-X64",
+        "sha256": "b3b7f2801d15d50736acea3c73982994d025b01c2f035b91ae3b49d1b575732b",
+        "hash": "sha256-sGTQtdYj+wocgR/gpvUKJVweqew6UpvCxH6cTUCH9Xw="
+      }
+    }
+  }
+}

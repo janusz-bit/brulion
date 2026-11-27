@@ -658,6 +658,33 @@ scripts/dev-build.sh -t tst_dates tst_dates   # just one test (target + regex)
 `./build` finds the Qt plugins and QML modules. Details and rules: `CLAUDE.md`,
 [ARCHITECTURE.md](ARCHITECTURE.md).
 
+For one command after another — scripts, AI agents — enter the shell through its saved profile:
+
+```sh
+scripts/dev-shell.sh scripts/dev-build.sh -t tst_dates tst_dates   # a command in the dev shell
+scripts/dev-shell.sh                                               # or an interactive shell
+scripts/dev-shell.sh -s cli scripts/dev-build.sh -t tst_dates tst_dates   # the light shell
+```
+
+`nix develop` evaluates the flake on every call and, from a tree with uncommitted changes, copies
+the tree into the Nix store first; `scripts/dev-shell.sh` does that once for a `flake.nix`,
+`flake.lock` and `nix/`, keeps the result as a Nix profile under `~/.cache/brulion/dev-shell` (a
+garbage collector root, so a collection leaves the compiler and Qt Multimedia where they are;
+shared by every checkout and worktree) and enters it in half a second. `-s cli` is
+`devShells.cli`: the core, `brulion-cli` and their tests alone, with Qt's base — no Qt Quick, and
+no Qt Multimedia to compile first, which makes it the shell for a Raspberry Pi; there
+`scripts/dev-build.sh` builds with `BRULION_BUILD_APP=OFF` into `./build-cli`.
+
+**The compiler** of the dev shells, the packages and the checks is Clang inside nixpkgs' compiler
+wrapper, and the Clang itself is the LLVM project's own release of nixpkgs' version
+(`nix/clang-release.nix`): it makes the same objects as nixpkgs' build of that version in 60 % of
+the time ([PERFORMANCE.md](PERFORMANCE.md), "What Nix costs"). Its first use downloads the release
+archive (1.9 GB, of which the compiler is kept); `nix build .#clang-llvm-release` fetches it by
+itself, e.g. to push it to a binary cache of one's own. When `flake.lock` moves to a nixpkgs with
+another Clang, `scripts/clang-release-pin.sh <version>` pins that release
+(`nix/clang-release.json`) — the check `clang-release` fails until then. With the overlay over a
+nixpkgs whose Clang has no pin, the builds use nixpkgs' Clang.
+
 Nix commands:
 
 ```sh
@@ -677,6 +704,7 @@ What `nix flake check` checks:
 | `tests` | the package with `doCheck = true`: the whole `ctest` — unit tests, QML self-tests and script tests. Left out are the tests that need browsers (`tests/web`), the Android emulator, the internet or real devices, and the benchmarks |
 | `nixos-module` | a minimal NixOS system with `programs.brulion` (+ autostart) and `services.brulion-web` (+ Nextcloud proxy) evaluates (`toplevel.drvPath`, without building the system); the nginx configuration passes `gixy`, the autostart entry `desktop-file-validate`; a variant with `release` and `basePath`; an assertion when the package is missing |
 | `nixfmt` | all `.nix` files are formatted (`nix fmt`) |
+| `clang-release` | the LLVM project's release of nixpkgs' Clang version is pinned (`nix/clang-release.json`) and runs; fails after a nixpkgs update with another Clang until `scripts/clang-release-pin.sh` pins it |
 | `web-vm` (x86_64 only, needs KVM) | a virtual machine with the module: MIME types, gzip/brotli, cache headers and ETag, the `basePath` redirect, the WebDAV proxy (a fake Nextcloud: paths with Polish characters, cookies, a large `PUT`), the autostart entry and a headless app start |
 
 **The Raspberry Pi (dev machine) does not do heavy builds** — run `nix flake check` and
@@ -695,6 +723,7 @@ flock <lock> laptop-run bash -c 'nix flake check -L && nix build .#brulion -L'
 | `flake.nix`, `flake.lock` | flake outputs, pinned nixpkgs |
 | `nix/package.nix` | the package (`version` is changed by `scripts/release.sh` together with `CMakeLists.txt`) |
 | `nix/cli.nix` | `brulion-cli` alone (`packages.<system>.brulion-cli`, `apps.brulion-cli`) |
+| `nix/clang-release.nix`, `nix/clang-release.json` | the compiler: the LLVM project's release of Clang inside nixpkgs' wrapper (`packages.<system>.clang-llvm-release`) and its pins |
 | `nix/module.nix` | NixOS module (`programs.brulion`, `services.brulion-web`) |
 | `nix/web-release.nix` | downloading `brulion-web-<version>.zip` from a release |
 | `nix/web-site.nix` | a copy of the browser version with `.gz`/`.br` files |
