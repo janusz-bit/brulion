@@ -423,6 +423,7 @@ PageView::EditState PageView::editState() const
     st.anchor = input.selection().anchor;
     st.composition = input.markedRange();
     st.caret = input.boundsForRange(at::Range{st.cursor, st.cursor}).value_or(at::Rect{});
+    st.prose = !(isCode(row) || isCalc(row) || editsSource(row));
     return st;
 }
 

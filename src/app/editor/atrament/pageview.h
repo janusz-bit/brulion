@@ -293,6 +293,9 @@ public:
         int anchor = 0;
         std::optional<atrament::Range> composition;
         atrament::Rect caret;
+        // The field holds a block's prose (suggestions, input rules, the toolbar's formatting);
+        // false for code, a calculation, a diagram's or a formula's source.
+        bool prose = true;
     };
     EditState editState() const;
     // Ends the input method's composition (the word becomes text the controller has).

@@ -135,6 +135,7 @@ private Q_SLOTS:
     void pointsOfLinksAndTaskBoxes();
     void chipAndTagMenus();
     void revealPastEstimatedRows();
+    void sourcesAreNoProse();
 };
 
 void TestAtramentEditing::clickEditsAtTheCharacter()
@@ -1048,6 +1049,29 @@ void TestAtramentEditing::revealPastEstimatedRows()
     const std::optional<at::Rect> last = h.view().rowBounds(23);
     QVERIFY(last);
     QVERIFY2(last->top() >= 0 && last->bottom() <= 400.5f, qPrintable(u"%1 + %2"_s.arg(last->top()).arg(last->height())));
+}
+
+// The edited field holds prose (the suggestions follow it) only in a text block: not in code, a
+// calculation, a diagram's or a formula's source (CodeBlockView's InlineEditor offers none).
+void TestAtramentEditing::sourcesAreNoProse()
+{
+    Harness h(u"Akapit z [[linkiem]].\n\n```luau\nlocal x = 1\n```\n\n```calc\na = 2\n```\n"_s);
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &cx) {
+        v.setDrawsCode(true, PageView::CodeLook{}, cx);
+        v.setDrawsCalc(true, PageView::CalcLook{}, cx);
+    });
+    h.tw.settle();
+    h.controller.startEditing(0, -1);
+    h.tw.settle();
+    QVERIFY(h.view().editState().prose);
+    h.controller.startEditing(1, -1);
+    h.tw.settle();
+    QCOMPARE(h.view().editState().row, 1);
+    QVERIFY(!h.view().editState().prose);
+    h.controller.startEditing(2, -1);
+    h.tw.settle();
+    QCOMPARE(h.view().editState().row, 2);
+    QVERIFY(!h.view().editState().prose);
 }
 
 QTEST_MAIN(TestAtramentEditing)

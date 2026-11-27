@@ -145,6 +145,7 @@ QtObject {
         test.readingMode()
         test.slashCommands()
         test.chips()
+        test.sources()
     }
     function reading(): void {
         if (window.at()) {
@@ -259,9 +260,10 @@ QtObject {
         if (window.at()) test.key(Qt.Key_Escape, Qt.NoModifier)
         if (window.at()) window.waitStep(page.editingRow === -1 && page.selectedRow === test.r && test.editRow() === -1,
                                          "Esc stops editing and selects the block")
-        if (window.at()) editor.handleSelectionKeyCode(Qt.Key_Down, Qt.NoModifier)
-        if (window.at()) test.check(page.selectedRow === page.nextVisibleRow(test.r), "Down moves the selection")
-        if (window.at()) editor.handleSelectionKeyCode(Qt.Key_Return, Qt.NoModifier)
+        // The selection's keys are the Atrament page's (pageselection.cpp), real keys through the window.
+        if (window.at()) test.key(Qt.Key_Down, Qt.NoModifier)
+        if (window.at()) window.waitStep(page.selectedRow === page.nextVisibleRow(test.r), "Down moves the selection")
+        if (window.at()) test.key(Qt.Key_Return, Qt.NoModifier)
         if (window.at()) window.waitStep(test.editing(page.nextVisibleRow(test.r)), "Enter edits the selected block")
         if (window.at()) { page.stopEditing(); page.toggleFold(test.rowOf("Przygotowanie")) }
         if (window.at()) window.waitStep(!test.info(test.r).visible && test.rowTop(test.r) < 0, "folding hides the children: " + test.rowTop(test.r))
@@ -766,6 +768,33 @@ QtObject {
         }
         if (window.at()) window.waitStep(test.navigations > test.navigationsBefore, "and a link still opens")
         if (window.at()) page.readOnly = false
+    }
+
+    // Code, a calculation: their sources take "[[" and "#" as text — no suggestions (their QML
+    // views offer none); Enter is a line break there.
+    function sources(): void {
+        if (window.at()) {
+            page.stopEditing()
+            page.save()
+            host.setFile("Źródła.md", "```luau\nlocal gęś = 1\n```\n\n```calc\ncena = 89\n```\n")
+            page.path = "Źródła.md"
+        }
+        if (window.at()) window.waitStep(page.loaded && page.blocks.count === 2, "the page of sources opens")
+        if (window.at()) editor.startEditing(0, -1)
+        if (window.at()) window.waitStep(test.editing(0), "a code block is edited in the Atrament field")
+        if (window.at()) { test.key(Qt.Key_End, Qt.NoModifier); test.typeKeys(" -- [[Rem #tag") }
+        if (window.at()) window.waitStep(Js.indexOf(test.editText(), "[[Rem #tag") > 0, "the code takes the text")
+        if (window.at()) test.check(test.suggestionsClosed() && !(test.popup() !== null && test.popup().visible),
+                                    "and opens no suggestions")
+        if (window.at()) test.key(Qt.Key_Return, Qt.NoModifier)
+        if (window.at()) window.waitStep(page.blocks.count === 2 && Js.indexOf(test.editText(), "\n") > 0,
+                                         "Enter is a line break in the code block")
+        if (window.at()) editor.startEditing(1, -1)
+        if (window.at()) window.waitStep(test.editing(1), "a calculation is edited")
+        if (window.at()) test.typeKeys(" [[x")
+        if (window.at()) test.check(test.suggestionsClosed() && !(test.popup() !== null && test.popup().visible),
+                                    "a calculation opens no suggestions either")
+        if (window.at()) page.stopEditing()
     }
 
     Component.onCompleted: window.runSteps("atramenttest")

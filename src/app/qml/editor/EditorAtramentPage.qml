@@ -278,7 +278,11 @@ AtramentView {
     onEditStateChanged: {
         if (!root.editor || root.editRow < 0)
             return
-        root.editor.updateCompletionAt(root, root.editRow, root.editText, root.editCursor, root.editCaretRect)
+        // (Code, a calculation, a diagram's or a formula's source: no suggestions, as their QML views.)
+        if (root.editProse)
+            root.editor.updateCompletionAt(root, root.editRow, root.editText, root.editCursor, root.editCaretRect)
+        else
+            root.editor.closeSuggestions()
         // A journal day (autoHeight) does not scroll: the journal list keeps the caret in view.
         if (root.editor.autoHeight && root.activeFocus)
             root.editor.ensureVisible(root, root.editCaretRect)

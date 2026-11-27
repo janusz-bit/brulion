@@ -162,6 +162,15 @@ int AtramentView::editCursor() const
     return 0;
 }
 
+bool AtramentView::editProse() const
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_page)
+        return m_page->entity.read(runtime().app).editState().prose;
+#endif
+    return true;
+}
+
 QRectF AtramentView::editCaretRect() const
 {
 #ifdef BRULION_HAS_ATRAMENT_EDITOR

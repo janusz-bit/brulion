@@ -119,6 +119,9 @@ class AtramentView : public brulion::atrament::AtramentItem {
     Q_PROPERTY(int editRow READ editRow NOTIFY editStateChanged FINAL)
     Q_PROPERTY(QString editText READ editText NOTIFY editStateChanged FINAL)
     Q_PROPERTY(int editCursor READ editCursor NOTIFY editStateChanged FINAL)
+    // The edited field holds a block's prose (the suggestions follow it); false for code, a
+    // calculation, a diagram's or a formula's source.
+    Q_PROPERTY(bool editProse READ editProse NOTIFY editStateChanged FINAL)
     Q_PROPERTY(QRectF editCaretRect READ editCaretRect NOTIFY editStateChanged FINAL)
 
     // "page": the rows Atrament does not draw yet (foreign rows: code, tables, math, pictures,
@@ -172,6 +175,7 @@ public:
     int editRow() const;
     QString editText() const;
     int editCursor() const;
+    bool editProse() const;
     QRectF editCaretRect() const;
     // Ends the input method's composition in the edited block (the word becomes text).
     Q_INVOKABLE void commitComposition();
