@@ -15,17 +15,18 @@ compared with `ef90077`) and a smooth graph (L16, compared with `64d0380` on a G
 
 * **Brulion from Nix** (2026-11-27). Does Nix slow Brulion down? It slowed the building of it far
   more than the program. The compiler in Nix's package collection is the Clang its authors
-  publish, but built without the optimisations they give their own releases: every file took two
-  thirds longer to compile. The Nix builds now use the authors' release, and compiling takes
-  60–65 % of the processor time it did — on a Raspberry Pi, a computer and GitHub's servers alike
-  — with the same result. The development environment opens in a tenth of a second instead of two
+  publish, but built without the optimisations they give their own releases: every file took over
+  half as long again to compile. The Nix builds now use the authors' release: a file compiles in
+  60–65 % of the processor time it took — on a Raspberry Pi and on GitHub's servers alike — with
+  the same result, and a whole build with its tests is a fifth less work (the rest of a build is
+  not the compiler). The development environment opens in a tenth of a second instead of two
   seconds on a computer, in a third of a second instead of twelve on a Raspberry Pi, and the
   checks of the Nix package before a release take 38–43 minutes instead of 77–87. The program
   itself: Nix adds its own compiler options to everything it builds, and with them Brulion from
   the Nix package did 6 % more work than the AppImage to start with a notebook of 10,000 notes.
-  Brulion's own code is no longer built with the ones that cost it: the same start takes 2 %
-  less work than before, calculations and Markdown parsing about 1 % less time on a computer, and
-  the package is 2 MB smaller (154 instead of 156 MB). What is left of the difference is the Qt
+  Brulion's own code is no longer built with the ones that cost it: the same start takes 2 % less
+  work than before, calculations and Markdown parsing about 1 % less time on a computer, and the
+  package is 2 MB smaller (154 instead of 156 MB). What is left of the difference is the Qt
   library as Nix builds it, which the program runs on. On a Raspberry Pi the difference in time
   was too small to measure.
 
@@ -3678,16 +3679,16 @@ notes), the shell self-test's "0b" and "0d".
 ### What Nix costs (2026-11-27)
 
 Does Nix slow the build down, and the program it builds? The build: yes, by the compiler nixpkgs
-builds — two fifths of every compile. The program: yes, a little — the app from the Nix package
-executed 6 % more instructions than the AppImage for the same start, a third of them in Brulion's
-own code, from compiler flags nixpkgs adds to every package (2–3 % of the parsers' time on
-x86-64). That compiler and those flags are gone from the Nix builds; what is left is the Qt
-nixpkgs builds. Measured on the Raspberry Pi 4 (aarch64, four cores, nothing else running), on
-the x86-64 desktop (i5-13450HX; other sessions compiled beside most of it, so its numbers are
-instructions, and cycles and CPU time of pinned runs, with the load named where it matters) and
-on GitHub's runners (4 vCPU, x86-64 and arm64); nixpkgs `d4f25a3e`, Clang 21.1.8. A compile's
-time is CPU time (user + system), the best of three runs; a benchmark's instructions and cycles
-are QtTest's `-perf -perfcounter instructions:u` / `cycles:u`.
+builds — over a third of every compile, a fifth of a whole build. The program: yes, a little — the
+app from the Nix package executed 6 % more instructions than the AppImage for the same start, a
+third of them in Brulion's own code, from compiler flags nixpkgs adds to every package (2–3 % of
+the parsers' time on x86-64). That compiler and those flags are gone from the Nix builds; what is
+left is the Qt nixpkgs builds. Measured on the Raspberry Pi 4 (aarch64, four cores, nothing else
+running), on the x86-64 desktop (i5-13450HX; other sessions compiled beside most of it, so its
+numbers are instructions, and cycles and CPU time of pinned runs, with the load named where it
+matters) and on GitHub's runners (4 vCPU, x86-64 and arm64); nixpkgs `d4f25a3e`, Clang 21.1.8. A
+compile's time is CPU time (user + system), the best of three runs; a benchmark's instructions and
+cycles are QtTest's `-perf -perfcounter instructions:u` / `cycles:u`.
 
 **The compiler was the cost — not the wrapper, not the flags.** One source file compiled with
 exactly what the build passes (Raspberry Pi; seconds):
@@ -3710,7 +3711,18 @@ exactly what the build passes (Raspberry Pi; seconds):
   project builds its releases as one static program with ThinLTO, PGO and BOLT
   (`clang/cmake/caches/Release.cmake` in llvm-project). The same version, the same flags:
   **60–64 % of the time** on the Pi; on GitHub's runners 61–67 % on x86-64 (five files at both
-  levels, mean 63 %) and 62–69 % on arm64 (mean 65 %).
+  levels, mean 63 %) and 62–69 % on arm64 (mean 65 %). On the desktop, where other sessions'
+  builds made times useless, a compile takes 64–67 % of nixpkgs' instructions and 69–74 % of its
+  cycles (the same five files and levels).
+* **A whole build** is not only compiles: Qt's moc and QML compiler and the links are a third of
+  a Debug build's job time, and the compiler does not change them. A clean Debug build with the
+  tests (`scripts/dev-build.sh`'s configuration, 4 617 steps, no ccache) on the desktop executes
+  **20.14 T user-space instructions with nixpkgs' Clang and 16.10 T with the release (−20 %)**,
+  19.2 T and 14.7 T cycles (−23 %); each build made twice, its instructions within 0.1 %. Their
+  times there say nothing: 17.7 and 17.8 min of wall clock, 4.3 and 4.1 hours of CPU — a
+  CPU-second was 1.0–1.25 G cycles, a third of the processor's clock, on a machine other
+  sessions' builds and tests had kept busy all night (a quiet one built 2 894 steps in 4.4 min,
+  "Build times").
 * **The same output.** The objects of three files at `-O0` and at `-O3` are identical once
   `.comment` is taken out — the compiler's name, which in the release carries its repository and
   commit.
@@ -3774,16 +3786,17 @@ and "tests" — and Qt Multimedia's store paths are kept between runs (`nix-stor
 in the repository's cache, restored and imported in a quarter of a minute; the compiler is
 fetched every time: a minute against 0.3 GB of that cache):
 
-| | before (v0.32.0) | first run: Qt Multimedia built (5–8 min) | later runs: Qt Multimedia kept |
+| | before (v0.32.0) | first run: Qt Multimedia built (5–8 min) | two later runs: Qt Multimedia kept |
 |---|---:|---:|---:|
-| arm64, "package" | 77 min (one job) | 25 min | 19 min |
-| arm64, "tests" | | 40 min | 38 min |
-| x86-64, "package" | 87 min (one job) | 44 min | 23 min |
-| x86-64, "tests" | | 49 min | 43 min |
+| arm64, "package" | 77 min (one job) | 25 min | 19, 20 min |
+| arm64, "tests" | | 40 min | 38, 38 min |
+| x86-64, "package" | 87 min (one job) | 44 min | 23, 36 min |
+| x86-64, "tests" | | 49 min | 43, 42 min |
 
-Alone on its runner, the build of the package with its tests takes 20 min (arm64) and 26 min
-(x86-64) of a "tests" job, the tests the same 15 min; the package's 2 612 steps take 17 and 20
-min beside `brulion-cli`'s 947 (32 min in the first run on x86-64: GitHub's runners differ).
+Alone on its runner, the build of the package with its tests takes 20 min (arm64) and 25 min
+(x86-64) of a "tests" job, the tests the same 15 min. The package's 2 612 steps take 17 min on
+arm64 beside `brulion-cli`'s 947; on x86-64 20 min in one run and 32 min in the two others —
+GitHub's x86-64 runners differ that much.
 
 **The program.** nixpkgs' wrapper adds its own flags in front of every compile, whatever the
 build asks for. cmake/BrulionHardening.cmake already gives every build of Brulion the mitigations
