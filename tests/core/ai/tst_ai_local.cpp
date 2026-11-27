@@ -1518,7 +1518,7 @@ private Q_SLOTS:
         QVERIFY(lfm.contains(
                 uR"(t1-param ::= <[@4]> ( "ref>\n" free | "status>\n" ( "todo" | "done" ) "\n" ) <[@5]> "\n"?)"_s));
         QVERIFY(lfm.contains(uR"(t2-param ::= <[@4]> ( [a-zA-Z0-9_-]{1,64} ">\n" free ) <[@5]> "\n"?)"_s));
-        QVERIFY(lfm.contains(uR"(free ::= ( !<[@5]> )*)"_s));
+        QVERIFY(lfm.contains(uR"(free ::= [^\x00]*)"_s)); // (letters: tst_ai_llama_formats, every one let through)
         definesEveryRule(lfm);
         // A request with tools carries it; one without none.
         ai::Request request = ask(u"?"_s);

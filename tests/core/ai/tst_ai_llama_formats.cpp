@@ -23,6 +23,8 @@
 
 #include <llama.h>
 
+#include <algorithm>
+#include <cmath>
 #include <string>
 #include <vector>
 
@@ -191,6 +193,66 @@ private Q_SLOTS:
         QVERIFY(rules.contains("todo") && rules.contains("cancelled")); // (the enum's values)
         // Without tools: no grammar.
         QVERIFY(ai::local::toolGrammar(format, {}).isEmpty());
+    }
+
+    void lfm3sGrammarLetsEveryLetterThrough()
+    {
+        // LFM3's call under the grammar the runner keeps it to (lfm3Grammar): every token of a
+        // parameter's text is let through — a letter the vocabulary writes in pieces too, an
+        // emoji's first bytes a token with no whole letter. (Under `free ::= ( !<[@5]> )*` llama.cpp
+        // refused such a token, and the model wrote "⭐" for "⏰": a reminder that never rang.) The
+        // model's vocabulary only (BRULION_LOCAL_MODEL, LFM3-1.7B-QAD-Q4_0.gguf).
+        const QString path = qEnvironmentVariable("BRULION_LOCAL_MODEL");
+        if (path.isEmpty())
+            QSKIP("BRULION_LOCAL_MODEL is not set: no LFM3 vocabulary to try the grammar on");
+        QString error;
+        QVERIFY2(ai::probeLlamaModel(path, QStringLiteral(BRULION_LOCAL_AI_OUTPUT_DIR), &error), qPrintable(error));
+        llama_model_params params = llama_model_default_params();
+        params.vocab_only = true;
+        llama_model *model = llama_model_load_from_file(path.toUtf8().constData(), params);
+        QVERIFY(model);
+        const llama_vocab *vocab = llama_model_get_vocab(model);
+        const auto tokens = [vocab](const QString &text, bool special) {
+            const QByteArray utf8 = text.toUtf8();
+            std::vector<llama_token> out(size_t(utf8.size()) + 8);
+            const int32_t n = llama_tokenize(vocab, utf8.constData(), int32_t(utf8.size()), out.data(),
+                                             int32_t(out.size()), false, special);
+            out.resize(size_t(std::max(n, 0)));
+            return out;
+        };
+        const ai::Tool journal = tool(u"append_to_journal"_s, u"Adds Markdown to a day's journal."_s,
+                                      R"({"type": "object", "properties": {"markdown": {"type": "string"}}})");
+        const ai::local::Grammar grammar = ai::local::toolGrammar(u"lfm3"_s, {journal});
+        QString rules = grammar.rules;
+        for (qsizetype i = 0; i < grammar.tags.size(); ++i) {
+            const std::vector<llama_token> tag = tokens(grammar.tags.at(i).text, true);
+            QCOMPARE(tag.size(), size_t(1));
+            rules.replace(u"<[@%1]>"_s.arg(i), u"<[%1]>"_s.arg(tag.front()));
+        }
+        const QByteArray utf8 = rules.toUtf8();
+        llama_sampler *sampler = llama_sampler_init_grammar(vocab, utf8.constData(), "root");
+        QVERIFY2(sampler, utf8.constData());
+        // The call as the model writes it: tags as their tokens, texts as the vocabulary splits them.
+        const QList<std::pair<QString, bool>> call{
+                {u"<tool_call>"_s, true}, {u"\n"_s, false}, {u"<function="_s, true}, {u"append_to_journal>\n"_s, false},
+                {u"<parameter="_s, true},
+                {u"markdown>\n- [ ] Zadzwonić do mamy ⏰ 2026-11-17 18:00 ✅ 📅 ⏳ żółć\n"_s, false},
+                {u"</parameter>"_s, true}, {u"\n"_s, false}, {u"</function>"_s, true}, {u"\n"_s, false},
+                {u"</tool_call>"_s, true}};
+        for (const auto &[text, special] : call) {
+            for (const llama_token t : tokens(text, special)) {
+                llama_token_data data{t, 0.0f, 0.0f};
+                llama_token_data_array candidates{&data, 1, -1, false};
+                llama_sampler_apply(sampler, &candidates);
+                char piece[64] = {};
+                llama_token_to_piece(vocab, t, piece, sizeof piece - 1, 0, true);
+                QVERIFY2(!std::isinf(data.logit), qPrintable(u"token %1 (%2) of “%3” refused"_s.arg(t).arg(
+                                                          QString::fromUtf8(QByteArray(piece).toHex(' ')), text)));
+                llama_sampler_accept(sampler, t);
+            }
+        }
+        llama_sampler_free(sampler);
+        llama_model_free(model);
     }
 
     void anOwnModelCallsATool()

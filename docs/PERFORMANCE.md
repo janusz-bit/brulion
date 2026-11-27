@@ -1744,7 +1744,13 @@ checked against it alone, and only a token it refuses makes the candidates go th
 the grammar at 9.6 a second, the 42 of the answer after it at 7.6; `tst_ai_llama_formats` with
 `BRULION_OWN_MODEL`). With 6 threads on that busy machine the same answer took 3.7 s a token —
 threads that wait for one another at every step lose their cores to other programs (the app's
-choice of threads is for a machine that is not that busy).
+choice of threads is for a machine that is not that busy). Until 2026-11-27 LFM3's grammar wrote a
+parameter's text as "any token but `</parameter>`" (`!<[@5]>`), and llama.cpp refuses, where its
+grammar asks for a token, every token that holds no whole letter: LFM3's vocabulary writes "⏰" in
+pieces, one of them its middle byte alone (token 246), refused — and the model wrote "⭐" instead — `- [ ] Call Tom ⭐
+2026-11-20 09:00`, a reminder that never rings (Brulion Assistant 1.7B on the bench's four
+reminders: 0 of 16 with that grammar, 12 of 16 with the text as letters, `[^\x00]*`, as without a
+grammar; `tst_ai_llama_formats` lets every token of such a call through, with BRULION_LOCAL_MODEL).
 
 Measured with `brulion-assistantbench --as-app` (LFM3 1.7B Q4_0 on the laptop, one attempt a task,
 the app's sampling): the eight tools, the shorter system text and results of 4 000 characters did

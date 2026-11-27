@@ -729,7 +729,10 @@ Grammar lfm3Grammar(const QList<Tool> &tools)
     rules << u"root ::= call ( \"\\n\"{0,2} call )*"_s;
     rules << u"call ::= <[@0]> \"\\n\"? <[@1]> ( %1 ) <[@2]> \"\\n\"? <[@3]>"_s.arg(names.join(u" | "_s));
     rules << toolRules;
-    rules << u"free ::= ( !<[@5]> )*"_s;
+    // A text's letters, not "any token but </parameter>": llama.cpp refuses, where a token is
+    // asked for, a token that holds no whole letter (the middle bytes of "⏰" in LFM3's vocabulary),
+    // and the model wrote "⭐" for a reminder's "⏰". The parameter's end still ends it.
+    rules << uR"(free ::= [^\x00]*)"_s;
     rules << uR"(lfm-integer ::= "-"? [0-9]{1,15} "\n")"_s;
     rules << uR"(lfm-number ::= "-"? [0-9]{1,15} ( "." [0-9]{1,15} )? "\n")"_s;
     rules << uR"(lfm-boolean ::= ( "true" | "false" ) "\n")"_s;
