@@ -73,6 +73,14 @@ AtramentView {
         if (root.editor && root.editRow >= 0)
             root.editor.updateCompletionAt(root, root.editRow, root.editText, root.editCursor, root.editCaretRect)
     }
+    onBulletClicked: row => {
+        if (root.editor && root.editor.controller && !root.editor.blockTapped(row))
+            root.editor.controller.zoomInto(row)
+    }
+    onBlockMenuRequested: (row, sceneX, sceneY) => {
+        if (root.editor)
+            root.editor.openBlockMenuAt(row, Qt.point(sceneX, sceneY))
+    }
     onSelectionExtendRequested: (row, step) => {
         if (root.editor)
             root.editor.extendBlocksFrom(row, step)

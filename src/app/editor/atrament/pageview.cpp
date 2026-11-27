@@ -280,8 +280,19 @@ at::AnyElement PageView::renderRow(std::size_t row)
     // A selected block is drawn on a band (BlockPartSelectionBand: one band over a range of
     // blocks, rounded at its ends, a line down its left edge; a block alone framed).
     const QString edge = index.data(BlockListModel::SelectionEdgeRole).toString();
+    const at::EntityId menuSelf = m_selfId;
     auto line = [&] {
         at::Div d = at::div().id(id).pl(m.contentX).py(m.rowPad);
+        if (onBlockMenu)
+            // A right-click on a block: its menu (BlockEditor.openBlockMenuAt).
+            std::move(d).onMouseDown(at::MouseButton::Right,
+                                     [menuSelf, row](const at::MouseDownEvent &e, at::Window &w, at::App &a) {
+                                         a.updateEntity<PageView>(menuSelf, [&](PageView &v, at::Context<PageView> &) {
+                                             if (v.onBlockMenu)
+                                                 v.onBlockMenu(int(row), e.position);
+                                         });
+                                         w.stopPropagation();
+                                     });
         if (m.contentWidth > 0)
             std::move(d).maxW(m.contentX + m.contentWidth);
         if (!edge.isEmpty()) {
@@ -438,6 +449,17 @@ at::AnyElement PageView::renderRow(std::size_t row)
             std::move(bullet).child(at::text(u16View(number)));
         else
             std::move(bullet).child(at::div().size(6).rounded(3).bg(m_palette.muted));
+        if (!m.documentMode && onBulletClick) {
+            // The outline's bullet zooms into the block (BlockPartBullet; a document's is text).
+            const at::EntityId bulletSelf = m_selfId;
+            std::move(bullet).id(u"bullet").cursorPointer().onClick(
+                    [bulletSelf, row](const at::ClickEvent &, at::Window &, at::App &a) {
+                        a.updateEntity<PageView>(bulletSelf, [row](PageView &v, at::Context<PageView> &) {
+                            if (v.onBulletClick)
+                                v.onBulletClick(int(row));
+                        });
+                    });
+        }
         std::move(content).child(std::move(bullet));
     }
     at::Div column = at::div().flex1().minW(0);

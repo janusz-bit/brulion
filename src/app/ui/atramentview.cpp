@@ -316,6 +316,16 @@ void AtramentView::attachView()
                         if (guard)
                             Q_EMIT guard->taskToggled(row);
                     };
+                    page.onBulletClick = [guard](int row) {
+                        if (guard)
+                            Q_EMIT guard->bulletClicked(row);
+                    };
+                    page.onBlockMenu = [guard](int row, at::Point p) {
+                        if (!guard)
+                            return;
+                        const QPointF scene = guard->mapToScene(QPointF(p.x, p.y));
+                        Q_EMIT guard->blockMenuRequested(row, scene.x(), scene.y());
+                    };
                 });
         applyStyle();
         connectController();

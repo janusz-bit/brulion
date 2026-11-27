@@ -113,6 +113,10 @@ public:
     // activated, a task's box toggled.
     std::function<void(int row, const QString &href)> onLink;
     std::function<void(int row)> onToggleTask;
+    // The outline's bullet clicked (zoom into the block); a right-click on a row at a window point
+    // (the block menu). Unset: no bullet click, no menu.
+    std::function<void(int row)> onBulletClick;
+    std::function<void(int row, atrament::Point at)> onBlockMenu;
     const PageRows &rows() const { return *m_rows; }
     atrament::ListHandle &handle() { return m_handle; }
     const atrament::ListHandle &handle() const { return m_handle; }

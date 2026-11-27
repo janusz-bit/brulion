@@ -116,6 +116,7 @@ private Q_SLOTS:
     void foldArrowFolds();
     void selectedBlocksOnABand();
     void shiftArrowsSelectBlocks();
+    void bulletAndMenu();
 };
 
 void TestAtramentEditing::clickEditsAtTheCharacter()
@@ -488,6 +489,39 @@ void TestAtramentEditing::shiftArrowsSelectBlocks()
     QCOMPARE(h.view().input()->read(h.app).selection().range().end, 6);
     h.tw.simulateKeystrokes(u"ctrl-a");
     QCOMPARE(h.controller.selectionCount(), 3);
+}
+
+void TestAtramentEditing::bulletAndMenu()
+{
+    Harness h(u"- rodzic\n  - dziecko\n- sąsiad\n"_s);
+    int zoomed = -1;
+    int menuRow = -1;
+    at::Point menuAt;
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &cx) {
+        PageMetrics m = v.metrics();
+        m.gutter = m.arrowColumn + m.bulletColumn;
+        v.setStyle(m, v.palette());
+        v.onBulletClick = [&](int row) { zoomed = row; };
+        v.onBlockMenu = [&](int row, at::Point p) {
+            menuRow = row;
+            menuAt = p;
+        };
+        cx.notify();
+    });
+    h.tw.settle();
+    // The bullet's middle: its column right of the arrow's, on the first line.
+    const float bulletX = 16 + 20 / 2.0f;
+    h.tw.simulateClick({bulletX, 15});
+    QCOMPARE(zoomed, 0);
+    QCOMPARE(h.controller.editingRow(), -1);
+    // A right-click on the third row: its menu there, no editing.
+    const auto *third = h.view().rowText(2);
+    QVERIFY(third);
+    const at::Point p{third->bounds().left() + 10, third->bounds().top() + 5};
+    h.tw.simulateClick(p, at::MouseButton::Right);
+    QCOMPARE(menuRow, 2);
+    QCOMPARE(menuAt.x, p.x);
+    QCOMPARE(h.controller.editingRow(), -1);
 }
 
 QTEST_MAIN(TestAtramentEditing)

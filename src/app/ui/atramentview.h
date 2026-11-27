@@ -111,6 +111,10 @@ Q_SIGNALS:
     // whole text (selectAllBlocks).
     void selectionExtendRequested(int row, int step);
     void selectAllBlocksRequested();
+    // "page": the outline's bullet of `row` clicked (zoom into it); a right-click on `row` at a
+    // point of the scene (the block menu).
+    void bulletClicked(int row);
+    void blockMenuRequested(int row, qreal sceneX, qreal sceneY);
 
 protected:
     void componentComplete() override;
