@@ -18,8 +18,8 @@
 // token refused); quit, after which nothing listens any more. The settings switch turns it off, in a
 // window where the page fits and in a low one (a finger scrolling over the switch never taps
 // it). An AI agent let change the app (a stand-in that answers `initialize`, started by Settings →
-// AI agents → Check): its tools get the grant's token in session/new's env, the socket stays for it
-// when the setting goes off — the command line without the token is refused, with it served as
+// AI agents → Check): its tools get the grant's token and the app's instance in session/new's env,
+// the socket stays for it when the setting goes off — the command line without the token is refused, with it served as
 // the agent — and closes once the agent stops. The AI chat through `brulion-cli app chat …` with a
 // real ACP agent (fakeacpagent.cpp): its partners, a conversation started and waited for, listed
 // and read, busy while its turn runs, a wait that runs out, Stop, a sub-conversation shown as a
@@ -1117,6 +1117,7 @@ private Q_SLOTS:
         r = app({u"click"_s, u"--object-name"_s, u"acpAgentCheck"_s});
         QVERIFY2(r.code == 0, qPrintable(r.describe()));
         QString token;
+        QString instance;
         qint64 pid = 0;
         QJsonObject server;
         const auto readLog = [&] {
@@ -1130,12 +1131,16 @@ private Q_SLOTS:
                 for (const QJsonValue &v : server.value(u"env"_s).toArray()) {
                     if (v.toObject().value(u"name"_s).toString() == u"BRULION_APP_TOKEN")
                         token = v.toObject().value(u"value"_s).toString();
+                    if (v.toObject().value(u"name"_s).toString() == u"BRULION_APP_INSTANCE")
+                        instance = v.toObject().value(u"value"_s).toString();
                 }
             }
             return !token.isEmpty() && pid > 0;
         };
         QTRY_VERIFY_WITH_TIMEOUT(readLog(), 30000 * kSlowdown);
         QVERIFY(server.value(u"args"_s).toArray().contains(u"--app-control"_s));
+        // The app names itself to the tools (an agent may not pass its environment on: Codex).
+        QCOMPARE(instance, singleInstanceKey());
         QVERIFY(!QJsonDocument(server.value(u"args"_s).toArray()).toJson().contains(token.toUtf8()));
         QCOMPARE(QFileInfo(server.value(u"command"_s).toString()).fileName(), u"brulion-cli"_s);
         QCOMPARE(token.size(), 64);
