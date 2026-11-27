@@ -15,6 +15,7 @@ brulion_add_core_module(caldav
         zones.h zones.cpp
         events.h events.cpp
         messages_p.h
+        ids_p.h
         feed.h feed.cpp
         davxml_p.h davxml.cpp
         client.h client.cpp

@@ -1,12 +1,12 @@
 #include "caldav/eventchange.h"
 
+#include "caldav/ids_p.h"
 #include "caldav/taskmap.h"
 #include "dates/recurrence.h"
 
 #include <QDir>
 #include <QFile>
 #include <QJsonDocument>
-#include <QRandomGenerator>
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QUrl>
@@ -26,15 +26,6 @@ constexpr qsizetype MaxDescription = 20'000;
 constexpr qsizetype MaxUid = 1000;
 constexpr int MaxReminderMinutes = 366 * 1440;
 constexpr qint64 MaxIntentBytes = 1 << 20;
-
-QString randomText(int length)
-{
-    static constexpr char Alphabet[] = "abcdefghijklmnopqrstuvwxyz0123456789";
-    QString out;
-    for (int i = 0; i < length; ++i)
-        out += QChar(QLatin1Char(Alphabet[QRandomGenerator::global()->bounded(36)]));
-    return out;
-}
 
 /// Wall-clock arithmetic: a date and time carried in UTC, which has no gaps — never a zone's.
 QDateTime naive(QDate date, QTime time)
@@ -219,12 +210,16 @@ qint64 lengthOf(const EventEdit *cur)
     return std::max<qint64>(0, naive(cur->startDate, *cur->startTime).secsTo(naive(cur->endDate, end)));
 }
 
-/// The end time an end's day alone keeps: the event's own, else an hour after `start`.
+/// The time given, else the event's own, else `fallback`.
+QTime timeOr(const std::optional<QTime> &given, const std::optional<QTime> &own, QTime fallback)
+{
+    return given.value_or(own.value_or(fallback));
+}
+
+/// The end time of an end given as a day: its own, else the event's, else an hour after `start`.
 QTime endTimeFor(const EventEdit *cur, const DateSpec &end, QTime start)
 {
-    if (end.time)
-        return *end.time;
-    return timed(cur) && cur->endTime ? *cur->endTime : start.addSecs(3600);
+    return timeOr(end.time, timed(cur) ? cur->endTime : std::nullopt, start.addSecs(3600));
 }
 
 /// A timed event's end as `end` gives it — a time alone on the start's day (the next one when it
@@ -287,9 +282,7 @@ bool allDayOf(const EventEdit *cur, const EventTimes &given, const GivenStart &s
 
 QTime startTimeOf(const EventEdit *cur, const GivenStart &start)
 {
-    if (start.time)
-        return *start.time;
-    return timed(cur) ? *cur->startTime : QTime(9, 0);
+    return timeOr(start.time, timed(cur) ? cur->startTime : std::nullopt, QTime(9, 0));
 }
 
 std::optional<Times> resolveTimes(const EventEdit *cur, const EventTimes &given, EventProblem *problem)
@@ -465,11 +458,8 @@ bool replaceEarlier(CalendarState &state, EventChange &change)
 
 QString pathOf(const CalendarData &data, const QString &uid)
 {
-    for (const Event &e : data.events) {
-        if (e.uid == uid)
-            return e.href;
-    }
-    return {};
+    const auto it = std::ranges::find(data.events, uid, &Event::uid);
+    return it != data.events.end() ? it->href : QString();
 }
 
 // ---- JSON ------------------------------------------------------------------------------------------
@@ -815,7 +805,7 @@ QString newEventPath(const CalendarEntry &calendar, const QString &uid)
 
 QString newEventUid()
 {
-    return u"brulion-event-"_s + randomText(16);
+    return u"brulion-event-"_s + detail::randomId(16);
 }
 
 QString instanceText(const io::ical::DateTimeValue &instance)
@@ -854,7 +844,7 @@ QString inboxFolder(const QString &calendarsFolder)
 
 QString newIntentId(const QDateTime &at)
 {
-    return at.toUTC().toString(u"yyyyMMdd'T'HHmmsszzz"_s) + u'-' + randomText(8);
+    return at.toUTC().toString(u"yyyyMMdd'T'HHmmsszzz"_s) + u'-' + detail::randomId(8);
 }
 
 bool postIntent(const QString &calendarsFolder, const EventIntent &intent)

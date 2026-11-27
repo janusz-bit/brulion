@@ -1,5 +1,7 @@
 #include "caldav/taskmap.h"
 
+#include "caldav/ids_p.h"
+
 #include "caldav/eventedit.h"
 
 #include "dates/recurrence.h"
@@ -566,13 +568,18 @@ QString uidForBlockId(const QString &id)
     return u"brulion-"_s + id;
 }
 
-QString newTaskBlockId()
+QString detail::randomId(int length)
 {
     static constexpr char Alphabet[] = "abcdefghijklmnopqrstuvwxyz0123456789";
     QString id;
-    for (int i = 0; i < 12; ++i)
+    for (int i = 0; i < length; ++i)
         id += QChar(QLatin1Char(Alphabet[QRandomGenerator::global()->bounded(36)]));
     return id;
+}
+
+QString newTaskBlockId()
+{
+    return detail::randomId(12);
 }
 
 QString lineSafeText(const QString &text)
