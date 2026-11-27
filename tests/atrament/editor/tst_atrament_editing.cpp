@@ -427,6 +427,19 @@ void TestAtramentEditing::readOnlyPageDoesNotEdit()
     h.tw.settle();
     QCOMPARE(h.controller.editingRow(), -1);
     QCOMPARE(h.view().editedRow(), -1);
+    // The editor around is asked (BlockEditor.startEditing refuses with the reading mode's toast
+    // and its "Edit"); whatever it answers, the page edits nothing by itself.
+    int asked = -1;
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &) {
+        v.onEditRequest = [&](int row, int, at::Modifiers) {
+            asked = row;
+            return false;
+        };
+    });
+    h.tw.simulateClick(p);
+    h.tw.settle();
+    QCOMPARE(asked, 0);
+    QCOMPARE(h.controller.editingRow(), -1);
 }
 
 void TestAtramentEditing::foldArrowFolds()

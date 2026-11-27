@@ -542,13 +542,16 @@ at::AnyElement PageView::renderRow(std::size_t row)
                 if (handled)
                     w.stopPropagation();
             });
-        if (m_controller && !m_controller->readOnly())
-            std::move(codeRow).role(at::Role::None).cursorText().onClick(
+        if (m_controller) {
+            if (!m_controller->readOnly())
+                std::move(codeRow).cursorText();
+            std::move(codeRow).role(at::Role::None).onClick(
                     [codeSelf, row](const at::ClickEvent &click, at::Window &w, at::App &a) {
                         a.updateEntity<PageView>(codeSelf, [&](PageView &v, at::Context<PageView> &c) {
                             v.rowClicked(row, click, w, c);
                         });
                     });
+        }
         return codeRow;
     }
     if (!rendered.drawable() || !drawable(view)) {
@@ -758,12 +761,14 @@ at::AnyElement PageView::renderRow(std::size_t row)
                     v.onLongPressRow(int(row));
             });
         });
-    if (m_controller && !m_controller->readOnly()) {
+    if (m_controller) {
         // A click or a tap edits the block at the character under it (links and the task's box
-        // take their own clicks first). No node of its own for screen readers: the row's text is.
+        // take their own clicks first; in reading mode the editor around says why it does not).
+        // No node of its own for screen readers: the row's text is.
+        if (!m_controller->readOnly())
+            std::move(drawn).cursorText();
         std::move(drawn)
                 .role(at::Role::None)
-                .cursorText()
                 .onClick([selfId, row](const at::ClickEvent &click, at::Window &w, at::App &a) {
                     a.updateEntity<PageView>(selfId, [&](PageView &v, at::Context<PageView> &c) {
                         v.rowClicked(row, click, w, c);

@@ -19,7 +19,8 @@ import Brulion
 // pasted list becoming blocks, no-break spaces kept, a composed word kept out of the page until
 // it is committed (Backspace and Enter while composing, completions after a composed word), typing
 // into a block scrolled far away, a zoom's end keeping the edited block in view; document mode's
-// keys (Enter leaving a list, Backspace removing a marker, Tab only for list items) and its toggle.
+// keys (Enter leaving a list, Backspace removing a marker, Tab only for list items) and its toggle;
+// reading mode's taps (the toast and its "Edit").
 // Steps run on the playground's step runner (EditorPlayground.runSteps).
 QtObject {
     id: test
@@ -140,6 +141,7 @@ QtObject {
         test.composition()
         test.farAway()
         test.document()
+        test.readingMode()
     }
     function reading(): void {
         if (window.at()) {
@@ -485,6 +487,65 @@ QtObject {
         if (window.at()) window.waitStep(page.mode === "document" && Js.indexOf(host.file(page.path), "brulion: document") > 0
                                          && Js.indexOf(host.file(page.path), "Akapit po liście") > 0,
                                          "and back to a document")
+    }
+
+    // Reading mode (ReadingSelfTest's taps): a tap on a block's text edits nothing and the toast
+    // says why, its "Edit" leaving the mode; off again a tap edits; on again while editing, the
+    // editing ends with the text kept and no toast.
+    function tapRow(row: int): void {
+        const at = row
+        const v = test.view()
+        const x = QmlCall.number(QmlCall.get(v, "contentX")) + QmlCall.number(QmlCall.get(v, "contentWidth")) * 0.3
+        const y = test.rowTop(at) + Math.min(test.rowHeight(at) / 2, 14)
+        window.tapPoint(v, x, y)
+    }
+    property EditorToastAction leave: null
+    // The playground's host part: "Edit" in the toast leaves reading mode (the app: AppSettings).
+    property Connections leaveWatch: Connections {
+        target: test.editor
+        function onReadOnlyLeaveRequested() { test.page.readOnly = false }
+    }
+    readonly property string readingContent: "- [ ] Zadanie źdźbło\n- Zwykły akapit do czytania, żółw i łódź\n- Ostatni blok\n"
+    function readingMode(): void {
+        if (window.at()) {
+            page.stopEditing()
+            page.save()
+            host.setFile("Do czytania.md", test.readingContent)
+            page.path = "Do czytania.md"
+        }
+        if (window.at()) window.waitStep(page.loaded && test.rowOf("Zwykły") >= 0 && test.rowInView(test.rowOf("Zwykły")),
+                                         "the page to read is drawn")
+        if (window.at()) {
+            page.readOnly = true
+            window.lastNotice = ""
+            test.check(editor.readOnly, "the editor reads the controller's reading mode")
+        }
+        if (window.at()) test.tapRow(test.rowOf("Zwykły"))
+        if (window.at()) window.waitStep(window.lastNotice === editor.readOnlyReason && window.lastNotice !== "",
+                                         "a tap on text says reading mode is on: " + window.lastNotice)
+        if (window.at()) {
+            test.check(page.editingRow < 0 && test.editRow() < 0, "and no block is edited")
+            test.leave = window.lastNoticeAction
+            test.check(test.leave !== null && test.leave.kind === "leaveReadOnly", "the toast's button leaves reading mode")
+        }
+        if (window.at()) {
+            if (test.leave)
+                test.leave.run()
+            test.check(!page.readOnly && !editor.readOnly, "“Edit” in the toast leaves reading mode")
+        }
+        if (window.at()) test.tapRow(test.rowOf("Zwykły"))
+        if (window.at()) window.waitStep(test.editing(test.rowOf("Zwykły")), "a tap edits the block again")
+        if (window.at()) {
+            window.lastNotice = ""
+            page.readOnly = true
+            test.check(page.editingRow < 0, "reading mode ends the editing")
+        }
+        if (window.at()) window.waitStep(test.editRow() < 0, "the field goes")
+        if (window.at()) {
+            test.check(window.lastNotice === "", "and no toast says an edit was refused: " + window.lastNotice)
+            test.check(host.file("Do czytania.md") === test.readingContent, "the file is still as written")
+            page.readOnly = false
+        }
     }
 
     Component.onCompleted: window.runSteps("atramenttest")

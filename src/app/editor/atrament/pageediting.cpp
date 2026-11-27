@@ -669,8 +669,15 @@ int PageView::editCursorOnLine(int row, float x, bool lastLine) const
 
 void PageView::rowClicked(std::size_t row, const at::ClickEvent &click, at::Window &, at::Context<PageView> &)
 {
-    if (!m_controller || m_controller->readOnly() || click.isKeyboard || click.fromAccessibility)
+    if (!m_controller || click.isKeyboard || click.fromAccessibility)
         return;
+    if (m_controller->readOnly()) {
+        // Reading mode: the editor around refuses and says why (BlockEditor.startEditing's toast
+        // with "Edit"); the page itself edits nothing.
+        if (onEditRequest)
+            onEditRequest(int(row), -1, click.up.modifiers);
+        return;
+    }
     // The release of a press that selected blocks by dragging edits nothing.
     if (m_dragSelected) {
         m_dragSelected = false;
