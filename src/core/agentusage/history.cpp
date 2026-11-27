@@ -31,7 +31,6 @@ constexpr qint64 ChunkBytes = 256 * 1024;
 constexpr qint64 HeadBytes = 4096;
 constexpr qint64 MaxCacheBytes = 256LL * 1024 * 1024;
 constexpr int CacheVersion = 3; // 2: Codex's token_usage_record lines; 3: rollouts by name, compressed ones
-constexpr int MaxDepth = 6;
 
 bool cancelled(const ReadOptions &options)
 {
@@ -447,9 +446,6 @@ public:
         const qint64 mtime = found.info.lastModified(QTimeZone::UTC).toMSecsSinceEpoch();
         if (readAlready(found, state, size, mtime))
             return true;
-        // Gone and back, or shorter than what was read: read again from its start.
-        if (state.gone || (!found.compressed && size < state.offset))
-            forget(state, m_cache);
         std::optional<Resumed> text = resume(found, state);
         if (!text)
             return true; // (another time)
@@ -477,33 +473,32 @@ private:
     };
 
     /// The text of `found` from where `state` stopped reading it — the same first bytes as before,
-    /// or (other ones, or a text shorter than what was read) from its start again —, `state`'s head
-    /// set anew; nullopt when it cannot be opened now.
+    /// or (other ones, or a text shorter than what was read: a file rewritten) from its start
+    /// again —, `state`'s head set anew; nullopt when it cannot be opened now.
     std::optional<Resumed> resume(const Found &found, FileState &state)
     {
-        for (int attempt = 0; attempt < 2; ++attempt) {
-            auto stream = std::make_unique<LogStream>(found.path, found.compressed, m_options.maxUnpackedBytes);
-            if (!stream->open())
-                return std::nullopt;
-            const QByteArray head = stream->read(HeadBytes);
-            if (state.headLength > 0
-                && (head.size() < state.headLength || headHash(head.first(state.headLength)) != state.head))
-                forget(state, m_cache);
-            state.headLength = head.size();
-            state.head = headHash(head);
-            if (state.offset <= head.size())
-                return Resumed{std::move(stream), head.mid(state.offset)};
-            if (stream->skipTo(state.offset))
-                return Resumed{std::move(stream), {}};
+        auto stream = std::make_unique<LogStream>(found.path, found.compressed, m_options.maxUnpackedBytes);
+        if (!stream->open())
+            return std::nullopt;
+        const QByteArray head = stream->read(HeadBytes);
+        if (state.headLength > 0
+            && (head.size() < state.headLength || headHash(head.first(state.headLength)) != state.head))
             forget(state, m_cache);
-        }
-        return std::nullopt;
+        state.headLength = head.size();
+        state.head = headHash(head);
+        if (state.offset <= head.size())
+            return Resumed{std::move(stream), head.mid(state.offset)};
+        if (stream->skipTo(state.offset))
+            return Resumed{std::move(stream), {}};
+        forget(state, m_cache);
+        return resume(found, state); // (from the start: within the head now)
     }
 
     /// The text from where `text` stands into `state`, the line not ended yet left for the next
     /// time; false when cancelled.
     bool readRest(Resumed &text, FileState &state)
     {
+        m_next = state.offset;
         m_consumed = state.offset;
         m_skipping = state.skipping;
         m_pending.clear();
@@ -526,7 +521,8 @@ private:
     void feed(const QByteArray &chunk, FileState &state)
     {
         m_stats.bytesRead += chunk.size();
-        const qint64 position = m_consumed + m_pending.size(); // (of the chunk's first byte)
+        const qint64 position = m_next; // (of the chunk's first byte)
+        m_next += chunk.size();
         qsizetype start = 0;
         while (start < chunk.size()) {
             const qsizetype end = chunk.indexOf('\n', start);
@@ -560,32 +556,45 @@ private:
     }
 
 private:
-    void line(QByteArray &text, FileState &state)
+    /// `e` the first time a file of the source has it (its key, kept in `state`); an event without a
+    /// key always.
+    bool countsOnce(const Event &e, FileState &state)
     {
-        if (text.endsWith('\r'))
-            text.chop(1);
+        if (e.key.isEmpty())
+            return true;
+        const quint64 h = keyHash(e.key);
+        if (m_cache.keys.contains(h)) {
+            ++m_stats.duplicates;
+            return false;
+        }
+        m_cache.keys.insert(h);
+        state.keys.insert(h);
+        return true;
+    }
+
+    /// The event of one whole line (nullopt: none; a malformed line counted in `state`). A Windows
+    /// line end's "\r" is JSON's white space.
+    std::optional<Event> eventOf(const QByteArray &text, FileState &state) const
+    {
         if (text.trimmed().isEmpty() || !mayCarryUsage(m_provider, text))
-            return;
+            return std::nullopt;
         bool malformed = false;
         std::optional<Event> e = m_provider == Provider::Claude ? claudeEvent(text, state.project, &malformed)
                                                                 : codexEvent(text, state.codex, &malformed);
-        if (malformed)
-            ++state.skipped;
+        state.skipped += malformed ? 1 : 0;
+        return e;
+    }
+
+    /// One whole line into `state`: its use, once.
+    void line(const QByteArray &text, FileState &state)
+    {
+        const std::optional<Event> e = eventOf(text, state);
         if (!e)
             return;
         if (m_provider == Provider::Claude && !e->project.isEmpty())
             state.project = e->project;
-        if (e->msecs < m_since)
+        if (e->msecs < m_since || !countsOnce(*e, state))
             return;
-        if (!e->key.isEmpty()) {
-            const quint64 h = keyHash(e->key);
-            if (m_cache.keys.contains(h)) {
-                ++m_stats.duplicates;
-                return;
-            }
-            m_cache.keys.insert(h);
-            state.keys.insert(h);
-        }
         Bucket &b = state.buckets[BucketKey{slotOf(e->msecs), e->model, e->project, e->flags}];
         b.tokens += e->tokens;
         b.loggedCost += e->loggedCost;
@@ -597,8 +606,9 @@ private:
     const ReadOptions &m_options;
     qint64 m_since;
     ReadStats &m_stats;
-    // The file being read: after its last line that ended (or was skipped), whether a line too long
-    // is being skipped, the start of a line not ended yet.
+    // The file being read: where its next piece starts, after its last line that ended (or was
+    // skipped), whether a line too long is being skipped, the start of a line not ended yet.
+    qint64 m_next = 0;
     qint64 m_consumed = 0;
     bool m_skipping = false;
     QByteArray m_pending;
@@ -699,14 +709,11 @@ void collectDays(const Cache &cache, const QTimeZone &zone, History &out)
 }
 
 /// The files `found` read into `cache` (a new one only when it changed since `since`); the keys of
-/// those found. Stops when cancelled.
-QSet<QString> readFiles(const QList<Found> &found, Cache &cache, FileReader &reader, qint64 since,
-                        const ReadOptions &options)
+/// those found. Stops when a reading was cancelled.
+QSet<QString> readFiles(const QList<Found> &found, Cache &cache, FileReader &reader, qint64 since)
 {
     QSet<QString> present;
     for (const Found &f : found) {
-        if (cancelled(options))
-            break;
         present.insert(f.key);
         auto it = cache.files.find(f.key);
         // (Untouched for longer than the history is kept: nothing in it counts.)
@@ -748,7 +755,7 @@ History readHistory(const Source &source, const ReadOptions &options, ReadStats 
     const qint64 since = now.toMSecsSinceEpoch() - qint64(RetentionDays) * DayMs;
     Cache cache = cacheOf(source, options, stats);
     FileReader reader(source.provider, cache, options, since, stats);
-    const QSet<QString> present = readFiles(discover(source, options, &out.found), cache, reader, since, options);
+    const QSet<QString> present = readFiles(discover(source, options, &out.found), cache, reader, since);
     if (cancelled(options)) {
         stats.cancelled = true;
         out.error = u"cancelled"_s;

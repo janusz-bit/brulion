@@ -36,7 +36,8 @@ public:
 
     /// False when the file cannot be opened (or no decoder made).
     bool open();
-    /// Up to `max` bytes of the text from where it stands — fewer only at its end; empty there.
+    /// Up to `max` bytes of the text from where it stands — fewer only at its end; empty there (and
+    /// after it ended early: failed()).
     QByteArray read(qint64 max);
     /// On to `position` bytes from the text's start (never back); false when the text ends before.
     bool skipTo(qint64 position);

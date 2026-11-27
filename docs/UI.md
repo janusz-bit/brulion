@@ -2247,7 +2247,9 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   automatic review's real lines, anonymised; compressed rollouts made by `zstd` 1.5.7 —
   `tests/core/agentusage/fixtures/make-fixtures.sh`: as Codex writes them, with a checksum, two
   frames, cut, broken, a window too large, a line too long —, one compressed, archived or made plain
-  again later, both files at once, the text's limit),
+  again later, both files at once, the text's limit; each way a cache entry cannot be trusted, an
+  unreadable log, one gone for longer than the history, a line exactly at the limit, what the cache
+  keeps coming back as it was),
   `tst_shell_agentusage`, `tst_cli_acp_usage`, the shell self-test's `checkAgentUsage` (Claude
   Code's preset with synthetic logs: the row's line, Usage…, 30 and 7 bars, this notebook only).
 * **Slash commands**: while the field holds "/" and a name being typed, the agent's commands that

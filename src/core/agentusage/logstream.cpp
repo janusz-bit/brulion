@@ -11,7 +11,6 @@ struct LogStream::Decoder {
     QByteArray in;                       ///< compressed bytes read from the file
     ZSTD_inBuffer buffer{nullptr, 0, 0}; ///< what of them is not decoded yet
     size_t hint = 1;                     ///< the decoder's last answer: 0 once a frame ended and all of it is out
-    bool fileEnded = false;
 
     Decoder() = default;
     Decoder(const Decoder &) = delete;
@@ -38,12 +37,9 @@ struct LogStream::Decoder {
     /// More compressed bytes when those read are used up; false at the file's end.
     bool refill(QFile &file)
     {
-        if (fileEnded)
-            return false;
         in = file.read(qint64(ZSTD_DStreamInSize()));
         buffer = ZSTD_inBuffer{in.constData(), size_t(in.size()), 0};
-        fileEnded = in.isEmpty();
-        return !fileEnded;
+        return !in.isEmpty();
     }
 };
 
@@ -71,8 +67,6 @@ QByteArray LogStream::read(qint64 max)
         return {};
     QByteArray out = m_compressed ? readFrames(max) : m_file.read(max);
     m_position += out.size();
-    if (out.isEmpty())
-        m_ended = true;
     return out;
 }
 

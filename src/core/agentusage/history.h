@@ -50,6 +50,8 @@ Source sourceOf(Provider provider, const QStringList &command, const QHash<QStri
 inline constexpr int RetentionDays = 400;
 inline constexpr qint64 MaxLineBytes = 4 * 1024 * 1024;
 inline constexpr int MaxFiles = 50000;
+/// Folders below a log folder at most (a session's subagents' files are two down).
+inline constexpr int MaxDepth = 6;
 /// A compressed rollout's text at most (the largest plain one seen was 58 MB): beyond it, the rest
 /// of the file is left unread as one skipped line.
 inline constexpr qint64 MaxUnpackedBytes = 1024LL * 1024 * 1024;
