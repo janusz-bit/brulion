@@ -90,6 +90,41 @@ struct Rows {
     }
 };
 
+// Rows of 50 px in a scroll view; every third row takes a long press.
+struct HeldRows {
+    int clicks = 0;
+    int longPressed = -1;
+    Point at;
+    ScrollHandle scroll;
+    AnyElement render(Window &, Context<HeldRows> &cx)
+    {
+        ArenaVector<AnyElement> rows;
+        for (int i = 0; i < 60; ++i) {
+            Div row = div().id(ElementId(u"row", std::uint64_t(i)))
+                              .h(50)
+                              .flexShrink0()
+                              .bg(i % 2 ? kRed : kBlue)
+                              .onClick(cx.listener([](HeldRows &r, const ClickEvent &, Window &, Context<HeldRows> &) {
+                                  ++r.clicks;
+                              }));
+            if (i % 3 == 0)
+                std::move(row).onLongPress(cx.listener([i](HeldRows &r, Point p, Window &, Context<HeldRows> &) {
+                    r.longPressed = i;
+                    r.at = p;
+                }));
+            rows.push_back(std::move(row));
+        }
+        return div()
+                .id(u"scroller")
+                .sizeFull()
+                .flexCol()
+                .overflowYScroll()
+                .hideScrollbar()
+                .trackScroll(scroll)
+                .children(rows);
+    }
+};
+
 // A page (scrolling) with a header, an inner list (scrolling) and a footer: 100 + 200 + 400 px.
 struct Nested {
     ScrollHandle page;
@@ -177,6 +212,7 @@ private Q_SLOTS:
     void edgeStopsAFling();
     void scrollIsNoClick();
     void tapsClick();
+    void elementsLongPress();
     void sidewaysDragIsTheElements();
     void nestedContainers();
     void longPressInFieldSelects();
@@ -454,6 +490,39 @@ void TestAtramentTouch::tapsClick()
     QCOMPARE(rows.read(h.app).lastClicked, 4);
     QVERIFY(!h.anyGreen());
     QCOMPARE(rows.read(h.app).scroll.offset().y, 0.0f);
+}
+
+void TestAtramentTouch::elementsLongPress()
+{
+    Harness h;
+    Entity<HeldRows> rows = h.app.newEntity<HeldRows>();
+    h.open(rows);
+    // Held still on a row that takes it: its long press, at the finger; the release clicks nothing,
+    // the finger moving on scrolls nothing.
+    h.tw.simulateTouchDown({100, 160}); // row 3
+    h.tw.advance(500ms);
+    QCOMPARE(rows.read(h.app).longPressed, 3);
+    QCOMPARE(rows.read(h.app).at.y, 160.0f);
+    h.tw.simulateTouchMove({100, 60});
+    h.tw.simulateTouchUp({100, 60});
+    h.tw.advance(100ms);
+    QCOMPARE(rows.read(h.app).clicks, 0);
+    QCOMPARE(rows.read(h.app).scroll.offset().y, 0.0f);
+    // A row without one: held, then lifted, is a click (as before).
+    h.tw.simulateTouchDown({100, 75}); // row 1
+    h.tw.advance(500ms);
+    h.tw.simulateTouchUp({100, 75});
+    QCOMPARE(rows.read(h.app).clicks, 1);
+    QCOMPARE(rows.read(h.app).longPressed, 3);
+    // A quick tap on a row that takes long presses clicks.
+    h.tw.simulateTap({100, 10}); // row 0
+    QCOMPARE(rows.read(h.app).clicks, 2);
+    QCOMPARE(rows.read(h.app).longPressed, 3);
+    // A drag before the time scrolls, no long press.
+    h.tw.simulateTouchDrag({100, 250}, {100, 100}, 80ms);
+    h.tw.advance(600ms);
+    QCOMPARE(rows.read(h.app).longPressed, 3);
+    QVERIFY(rows.read(h.app).scroll.offset().y > 50);
 }
 
 void TestAtramentTouch::sidewaysDragIsTheElements()

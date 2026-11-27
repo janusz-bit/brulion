@@ -296,7 +296,10 @@ dragging; the wheel does as before.
   press-and-hold interval) on the focused field scrolls nothing more: Android's input context
   selects the word under it then (`QAndroidInputContext::longPress`, from its own
   `GestureDetector`), and the finger moving on must not carry the selection and its handles away.
-  Held anywhere else, the finger still scrolls when it moves, as native lists do.
+  Held anywhere else, the finger still scrolls when it moves, as native lists do — unless an
+  element under it takes long presses (`div().onLongPress(f)`, `Window::onLongPress`): the topmost
+  such listener runs at the finger's place, the elements' press is cancelled (the release clicks
+  nothing) and the finger scrolls nothing until it lifts (a block's touch selection mode).
 * **Through Qt** (`qt/qthost.h`) the item takes `QTouchEvent`s itself (`setAcceptTouchEvents`):
   the first finger down is the pointer until it lifts, with the events' times; `TouchCancel`, or
   the grab taken away (a Drawer's edge, a Flickable around: `touchUngrabEvent`, and
@@ -687,7 +690,9 @@ scrolling, `tst_atrament_editor`) before the next:
    commands". Also built with it: callouts drawn and edited by Atrament (BlockPartCallout's tinted
    frame and bar; Enter a line break with its "> "), the outline's fold arrows (under the mouse,
    while folded, always on touch; a click folds), the bullet's click zooming into its block, a
-   right-click opening the block menu, Shift+↑/↓ past a block's text selecting blocks
+   right-click opening the block menu, a finger held on a block's text its touch selection mode
+   (`BlockEditor.longPressText`, through Atrament's new long press), Shift+↑/↓ past a block's
+   text selecting blocks
    (`BlockEditor.extendBlocksFrom`), Ctrl+A on a block's whole text selecting every block.
    The find bar's matches are tinted in the drawn rows and in the edited one
    (`PageView::setFind`, `AtramentView.findQuery` …) and its current match is selected in the

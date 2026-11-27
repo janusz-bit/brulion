@@ -19,6 +19,7 @@ void Window::Frame::clear()
     mouseListeners.clear();
     dispatchNodes.clear();
     keyListeners.clear();
+    longPressListeners.clear();
     actionListeners.clear();
     scrollTargets.clear();
     inputFocus = 0;
@@ -623,6 +624,12 @@ void Window::onKeyEvent(KeyListener listener)
 {
     if (m_building)
         m_building->keyListeners.push_back(KeyListenerEntry { m_dispatchStack.back(), listener });
+}
+
+void Window::onLongPress(HitboxId hitbox, LongPressListener listener)
+{
+    if (m_building && hitbox)
+        m_building->longPressListeners.push_back(Frame::LongPressEntry{hitbox, listener});
 }
 
 void Window::onAction(std::u16string_view action, ActionListener listener)

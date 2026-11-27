@@ -115,6 +115,10 @@ public:
     Div &&onMouseMove(MouseMoveListener f) &&;
     Div &&onScrollWheel(ScrollListener f) &&;
     Div &&onHover(HoverListener f) &&;
+    // A finger or a pen held still on it for the long-press time (Window::onLongPress): its press is
+    // cancelled, no click follows.
+    using LongPressListener = Fn<void(Point position, Window &, App &)>;
+    Div &&onLongPress(LongPressListener f) &&;
     Div &&onKeyDown(KeyDownListener f) &&;
     // A key down seen on its way to the focused element, before anything inside handles it (the
     // capture phase): an editor's keys around a text field (stopPropagation() keeps it from the
@@ -216,6 +220,7 @@ private:
     ArenaVector<MouseMoveListener> m_mouseMove;
     ArenaVector<ScrollListener> m_scroll;
     ArenaVector<HoverListener> m_hoverListeners;
+    ArenaVector<LongPressListener> m_longPress;
     ArenaVector<KeyDownListener> m_keyDown;
     ArenaVector<KeyDownListener> m_captureKeyDown;
     ArenaVector<KeyUpListener> m_keyUp;

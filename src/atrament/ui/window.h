@@ -230,6 +230,11 @@ public:
     bool focusPaintedSince(std::size_t mark) const;
     using KeyListener = Fn<void(const PlatformInput &, DispatchPhase, Window &, App &)>;
     void onKeyEvent(KeyListener listener);
+    // A finger (or a pen) held still on `hitbox` for the long-press time (docs/ATRAMENT.md
+    // "Touch", Long press): the topmost listener under it runs, its press is cancelled (the
+    // release clicks nothing) and the finger scrolls nothing until it lifts.
+    using LongPressListener = Fn<void(Point position, Window &, App &)>;
+    void onLongPress(HitboxId hitbox, LongPressListener listener);
     using ActionListener = Fn<void(Window &, App &)>;
     void onAction(std::u16string_view action, ActionListener listener);
     // The focused element takes text through `handler` (an arena object of this frame).
@@ -334,6 +339,11 @@ private:
         std::vector<DispatchNode> dispatchNodes;
         std::vector<KeyListenerEntry> keyListeners;
         std::vector<ActionListenerEntry> actionListeners;
+        struct LongPressEntry {
+            HitboxId hitbox;
+            LongPressListener listener;
+        };
+        std::vector<LongPressEntry> longPressListeners; // in paint order
         std::vector<ScrollTarget> scrollTargets; // in prepaint order: outer containers first
         std::uint64_t inputFocus = 0;
         InputHandler *inputHandler = nullptr;
@@ -415,6 +425,7 @@ private:
         Pressed,   // the elements have the press; a drag past the slop may still scroll
         Scrolling, // the drag scrolls `target`; the elements' press was cancelled (or never given)
         Held,      // a long press in the focused field: it selects, the finger scrolls nothing
+        LongPressed, // an element took the long press: its press was cancelled, nothing scrolls
     };
     struct TouchGesture {
         TouchPhaseState phase = TouchPhaseState::None;

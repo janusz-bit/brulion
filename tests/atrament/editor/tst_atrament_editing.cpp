@@ -120,6 +120,7 @@ private Q_SLOTS:
     void calloutDrawnAndEdited();
     void editedBlockForScreenReaders();
     void findMatchesTintedAndSelected();
+    void longPressSelects();
 };
 
 void TestAtramentEditing::clickEditsAtTheCharacter()
@@ -599,6 +600,31 @@ void TestAtramentEditing::findMatchesTintedAndSelected()
     QCOMPARE(h.view().input()->read(h.app).selection().range().start, 5);
     QCOMPARE(h.view().input()->read(h.app).selection().range().end, 10);
     h.page.update(h.app, [](PageView &v, at::Context<PageView> &cx) { QVERIFY(!v.selectInEdited(1, 0, 2, cx)); });
+}
+
+void TestAtramentEditing::longPressSelects()
+{
+    Harness h(u"- jeden\n- dwa\n"_s);
+    int pressed = -1;
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &cx) {
+        v.onLongPressRow = [&](int row) { pressed = row; };
+        cx.notify();
+    });
+    h.tw.settle();
+    // A finger held still: the row's long press, no editing when it lifts.
+    const at::Point p = h.pointOf(1, 1);
+    h.tw.simulateTouchDown(p);
+    h.tw.advance(std::chrono::milliseconds(600));
+    QCOMPARE(pressed, 1);
+    h.tw.simulateTouchUp(p);
+    h.tw.settle();
+    QCOMPARE(h.controller.editingRow(), -1);
+    // A quick tap edits.
+    pressed = -1;
+    h.tw.simulateTap(p);
+    h.tw.settle();
+    QCOMPARE(pressed, -1);
+    QCOMPARE(h.controller.editingRow(), 1);
 }
 
 QTEST_MAIN(TestAtramentEditing)

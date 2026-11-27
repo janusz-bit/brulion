@@ -574,6 +574,13 @@ at::AnyElement PageView::renderRow(std::size_t row)
                 }
             });
         });
+    if (onLongPressRow)
+        std::move(drawn).onLongPress([selfId, row](at::Point, at::Window &, at::App &a) {
+            a.updateEntity<PageView>(selfId, [row](PageView &v, at::Context<PageView> &) {
+                if (v.onLongPressRow)
+                    v.onLongPressRow(int(row));
+            });
+        });
     if (m_controller && !m_controller->readOnly()) {
         // A click or a tap edits the block at the character under it (links and the task's box
         // take their own clicks first). No node of its own for screen readers: the row's text is.

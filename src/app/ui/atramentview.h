@@ -141,6 +141,8 @@ Q_SIGNALS:
     // point of the scene (the block menu).
     void bulletClicked(int row);
     void blockMenuRequested(int row, qreal sceneX, qreal sceneY);
+    // A finger held on a block's text: the touch selection mode (BlockEditor.longPressText).
+    void rowLongPressed(int row);
 
 protected:
     void componentComplete() override;

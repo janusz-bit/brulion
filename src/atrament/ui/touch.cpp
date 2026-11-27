@@ -320,6 +320,20 @@ void Window::touchLongPressed()
     if (field && field->contains(m_touch.down.position)) {
         m_touch.phase = TouchPhaseState::Held;
         m_touch.decided = true;
+        return;
+    }
+    // An element's own long press (a block's menu, a selection mode): the topmost under the finger.
+    const Frame &f = rendered();
+    for (std::size_t i = f.longPressListeners.size(); i-- > 0;) {
+        const Frame::LongPressEntry &e = f.longPressListeners[i];
+        if (!isHovered(e.hitbox))
+            continue;
+        cancelTouchPress();
+        m_touch.phase = TouchPhaseState::LongPressed;
+        m_touch.decided = true;
+        m_touch.pressTimer = {};
+        e.listener(m_touch.down.position, *this, m_app);
+        return;
     }
 }
 
@@ -345,6 +359,8 @@ bool Window::touchMove(const MouseMoveEvent &move)
     }
     if (m_touch.phase == TouchPhaseState::Held)
         return dispatchMouse(move);
+    if (m_touch.phase == TouchPhaseState::LongPressed)
+        return true; // taken by the long press: no scroll, no drag
     if (!m_touch.decided) {
         const Point dragged = move.position - m_touch.down.position;
         if (std::max(std::abs(dragged.x), std::abs(dragged.y)) > m_app.platform().touchSlop()) {
@@ -437,6 +453,8 @@ bool Window::touchUp(const MouseUpEvent &up)
     m_touch.last = up.position;
     if (up.cancelled) {
         cancelTouchPress();
+    } else if (m_touch.phase == TouchPhaseState::LongPressed) {
+        // The long press was the gesture: its release clicks nothing (the press was cancelled).
     } else if (m_touch.phase == TouchPhaseState::Scrolling) {
         if (ScrollState *st = liveScrollTarget(m_touch.target)) {
             Point d = previous - up.position;

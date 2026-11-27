@@ -371,6 +371,10 @@ void AtramentView::attachView()
                                 },
                                 Qt::QueuedConnection);
                     };
+                    page.onLongPressRow = [guard](int row) {
+                        if (guard)
+                            Q_EMIT guard->rowLongPressed(row);
+                    };
                     page.onBulletClick = [guard](int row) {
                         if (guard)
                             Q_EMIT guard->bulletClicked(row);

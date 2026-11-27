@@ -94,6 +94,10 @@ AtramentView {
         if (root.editor && root.editor.controller && !root.editor.blockTapped(row))
             root.editor.controller.zoomInto(row)
     }
+    onRowLongPressed: row => {
+        if (root.editor)
+            root.editor.longPressText(row)
+    }
     onBlockMenuRequested: (row, sceneX, sceneY) => {
         if (root.editor)
             root.editor.openBlockMenuAt(row, Qt.point(sceneX, sceneY))

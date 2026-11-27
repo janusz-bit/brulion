@@ -136,6 +136,9 @@ public:
     // (the block menu). Unset: no bullet click, no menu.
     std::function<void(int row)> onBulletClick;
     std::function<void(int row, atrament::Point at)> onBlockMenu;
+    // A finger held on a drawn row's text (not the edited one): the touch selection mode
+    // (BlockEditor.longPressText). Unset: a long press is a press.
+    std::function<void(int row)> onLongPressRow;
     const PageRows &rows() const { return *m_rows; }
     atrament::ListHandle &handle() { return m_handle; }
     const atrament::ListHandle &handle() const { return m_handle; }

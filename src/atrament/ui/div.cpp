@@ -79,6 +79,12 @@ Div &&Div::onHover(HoverListener f) &&
     return std::move(*this);
 }
 
+Div &&Div::onLongPress(LongPressListener f) &&
+{
+    m_longPress.push_back(f);
+    return std::move(*this);
+}
+
 Div &&Div::onKeyDown(KeyDownListener f) &&
 {
     m_keyDown.push_back(f);
@@ -365,7 +371,7 @@ bool Div::needsHitbox() const
 {
     return m_blockMouse || m_focus || isScrollable() || m_style.cursor || m_hoverStyle || m_activeStyle
             || !m_click.empty() || !m_mouseDown.empty() || !m_mouseUp.empty() || !m_mouseMove.empty()
-            || !m_scroll.empty() || !m_hoverListeners.empty();
+            || !m_scroll.empty() || !m_hoverListeners.empty() || !m_longPress.empty();
 }
 
 NodeId Div::requestLayout(Window &window, App &app)
@@ -538,6 +544,9 @@ void Div::registerMouseListeners(Window &window)
                 l(now, w, app);
         });
     }
+
+    for (const LongPressListener &l : m_longPress)
+        window.onLongPress(hitbox, l);
 
     if (!m_mouseDown.empty() || m_focus || m_state) {
         window.onMouseEvent([self, hitbox](const PlatformInput &input, DispatchPhase phase, Window &w, App &app) {
