@@ -71,6 +71,7 @@ private Q_SLOTS:
     void clipboardRoundTrip();
     void undoCoalescesTyping();
     void composition();
+    void keyWhileComposingCommitsFirst();
     void enterSubmitsOrBreaksLines();
     void mouseSelectsWords();
     void caretBlinksOnlyWhenFocused();
@@ -191,6 +192,26 @@ void TestAtramentTextInput::composition()
     // The whole composition is one undo step.
     h.tw.simulateKeystrokes(u"ctrl-z");
     QCOMPARE(h.text(), std::u16string(u"za"));
+}
+
+// A key the field handles while an input method composes (Backspace, Delete, an arrow, Enter)
+// ends the composition first: the composed word is text and the key acts on it, as in Qt's text
+// fields — the next composition starts anew instead of replacing the word.
+void TestAtramentTextInput::keyWhileComposingCommitsFirst()
+{
+    Harness h;
+    h.tw.simulateTyping(u"za ");
+    h.tw.simulateComposition(u"kot");
+    QCOMPARE(h.input().markedRange(), std::optional<Range>(Range { 3, 6 }));
+    h.tw.simulateKeystrokes(u"backspace");
+    QCOMPARE(h.text(), std::u16string(u"za ko"));
+    QVERIFY(!h.input().markedRange());
+    h.tw.simulateComposition(u"pies");
+    QCOMPARE(h.text(), std::u16string(u"za kopies"));
+    h.tw.simulateKeystrokes(u"left");
+    QVERIFY(!h.input().markedRange());
+    QCOMPARE(h.text(), std::u16string(u"za kopies"));
+    QCOMPARE(h.input().selection().focus, 8);
 }
 
 void TestAtramentTextInput::enterSubmitsOrBreaksLines()

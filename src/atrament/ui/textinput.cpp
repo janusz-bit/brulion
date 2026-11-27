@@ -665,6 +665,13 @@ void TextInput::unmark(Context<TextInput> &cx)
 bool TextInput::handleKey(const Keystroke &k, Window &window, Context<TextInput> &cx)
 {
     const Modifiers &m = k.modifiers;
+    // A key the field acts on while an input method composes ends the composition first: the
+    // composed word becomes text and the key acts on it (Qt's text fields do the same), so the
+    // next composition starts anew instead of replacing the word.
+    static constexpr std::u16string_view endsComposition[] = { u"left", u"right", u"home", u"end", u"up",
+                                                               u"down", u"backspace", u"delete", u"enter" };
+    if (m_marked && (m.secondary() || std::ranges::find(endsComposition, k.key) != std::end(endsComposition)))
+        m_marked.reset();
     const bool word = m.control || m.alt;
     const int focus = m_selection.focus;
     const Range sel = m_selection.range();
