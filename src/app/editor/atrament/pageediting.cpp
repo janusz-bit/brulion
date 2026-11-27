@@ -117,7 +117,8 @@ void PageView::setController(PageController *controller, at::Context<PageView> &
     // Another page opens at its top, wherever the last one was scrolled.
     m_controllerConnections.push_back(QObject::connect(controller, &PageController::pathChanged, controller, [app, self] {
         app->updateEntity<PageView>(self, [](PageView &v, at::Context<PageView> &c) {
-            v.m_handle.scrollToTop();
+            if (!v.m_embedding)
+                v.m_handle.scrollToTop();
             c.notify();
         });
     }));
@@ -651,10 +652,15 @@ bool PageView::editorKey(const at::Keystroke &k, at::Window &window, at::Context
             return false; // the field moves between its own lines
         commitWord();
         const int target = up ? ctl->previousVisibleRow(row) : ctl->nextVisibleRow(row);
-        if (target < 0)
-            return false; // the page's first / last block: the caret goes to its start / end
         const at::Rect bounds = input.bounds().value_or(at::Rect{});
         const float x = bounds.left() + (layout ? layout->caretX(caret) : 0);
+        if (target < 0) {
+            // The page's first / last block: the view around may go on (the journal's next day),
+            // else the caret goes to its start / end.
+            if (m_embedding && m_embedding->pastEdge && m_embedding->pastEdge(up, x))
+                return true;
+            return false;
+        }
         int cursor = -1;
         if (editsRow(target))
             cursor = editCursorOnLine(target, x, up);

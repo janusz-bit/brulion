@@ -54,6 +54,24 @@ if(TARGET brulion AND NOT ANDROID AND NOT EMSCRIPTEN AND EXISTS "${_brulion_qt_q
             ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${BRULION_TEST_QML_IMPORT_PATH};XDG_DATA_HOME=${_journals_home}/data;XDG_CONFIG_HOME=${_journals_home}/config;XDG_CACHE_HOME=${_journals_home}/cache;XDG_STATE_HOME=${_journals_home}/state${_profile}"
             FIXTURES_REQUIRED content_journals_home TIMEOUT 300 PROCESSORS 2
             FAIL_REGULAR_EXPRESSION "SELFTEST FAIL;TypeError;ReferenceError;Binding loop detected")
+        # The journal stream drawn by Atrament as one list (`--atrament-editor`, docs/ATRAMENT.md "The
+        # journal stream as one list"; qml/content/ContentJournalsAtramentSelfTest.qml): today begun
+        # and saved, ↑/↓ across days, Enter and Backspace at a day's edges, a selection over two days,
+        # the find bar over the days, Back zooming out, the view's state, only the days near the view.
+        if(TARGET brulion_editor_atrament)
+            set(_journals_atrament_home ${CMAKE_CURRENT_BINARY_DIR}/journals-atrament-selftest-home)
+            brulion_test_profile(_atrament_profile content-journals-atrament)
+            add_test(NAME tst_content_journals_atrament_qml_home
+                COMMAND ${CMAKE_COMMAND} -E rm -rf ${_journals_atrament_home} ${_atrament_profile_DIRS})
+            set_tests_properties(tst_content_journals_atrament_qml_home PROPERTIES FIXTURES_SETUP content_journals_atrament_home)
+            add_test(NAME tst_content_journals_atrament_qml
+                COMMAND brulion --demo --route journals --editor-script journals-selftest --atrament-editor
+                    --no-single-instance --size 412x915 --touch --now "2026-10-14 10:00" --locale pl)
+            set_tests_properties(tst_content_journals_atrament_qml PROPERTIES
+                ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${BRULION_TEST_QML_IMPORT_PATH};XDG_DATA_HOME=${_journals_atrament_home}/data;XDG_CONFIG_HOME=${_journals_atrament_home}/config;XDG_CACHE_HOME=${_journals_atrament_home}/cache;XDG_STATE_HOME=${_journals_atrament_home}/state${_atrament_profile}"
+                FIXTURES_REQUIRED content_journals_atrament_home TIMEOUT 300 PROCESSORS 2
+                FAIL_REGULAR_EXPRESSION "SELFTEST FAIL;TypeError;ReferenceError;Binding loop detected")
+        endif()
         # The same with the days that are not edited drawn as one item each (BRULION_JOURNAL_DAY_ITEM=1,
         # docs/UI.md "A journal day as one item"): every step above, and the drawn rows checked
         # against the editor's (an outline and a document day), a tap's caret, a task box, a fold.

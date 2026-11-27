@@ -17,7 +17,11 @@
 #include "editstyles.h"
 #include "pagecontroller.h"
 #include "foreignhost.h"
+#include "journalview.h"
 #include "pageview.h"
+#include "streamfind.h"
+#include "streamselection.h"
+#include "dates/names.h"
 #include "tablelayout.h"
 #include "queryresultmodel.h"
 #include "spellcheck.h"
@@ -26,9 +30,13 @@
 #include "drawingimageprovider.h"
 #endif
 
+#include <QDate>
 #include <QKeyEvent>
+#include <QQmlEngine>
 
 #include <algorithm>
+#include <unordered_map>
+#include <unordered_set>
 
 using namespace Qt::StringLiterals;
 namespace at = brulion::atrament;
@@ -58,6 +66,28 @@ struct AtramentView::Page {
 #endif
 };
 
+// A page the looks and callbacks go to: the "page" view's, or a day of the journal stream.
+struct AtramentView::PageHandle {
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    at::Entity<brulion::editor::atr::PageView> entity;
+    QPointer<brulion::editor::BlockListModel> model;
+    bool day = false; // a day of the journal: its signals make it the active one first
+#endif
+};
+
+struct AtramentView::Journal {
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    at::Entity<brulion::editor::atr::JournalView> entity;
+    // Each day made: its page and the QML items over its foreign rows.
+    struct Day {
+        at::Entity<brulion::editor::atr::PageView> page;
+        std::unique_ptr<brulion::editor::atr::ForeignRowHost> host;
+        bool foldsRestored = false;
+    };
+    std::unordered_map<QObject *, Day> days; // by controller
+#endif
+};
+
 AtramentView::AtramentView(QQuickItem *parent)
     : AtramentItem(parent)
 {
@@ -66,6 +96,9 @@ AtramentView::AtramentView(QQuickItem *parent)
     connect(this, &AtramentView::spellCheckChanged, this, &AtramentView::applyExtras);
     connect(this, &AtramentView::vimSessionChanged, this, &AtramentView::applyExtras);
     connect(this, &AtramentView::touchSelectionChanged, this, &AtramentView::applyTouchSelection);
+    connect(this, &AtramentView::journalChanged, this, &AtramentView::applyJournal);
+    connect(this, &AtramentView::journalLookChanged, this, &AtramentView::applyJournalLook);
+    connect(this, &AtramentView::dayOptionsChanged, this, &AtramentView::applyDayOptions);
 }
 
 AtramentView::~AtramentView()
@@ -74,17 +107,57 @@ AtramentView::~AtramentView()
     // The delegates go with the item (they name the editor around it).
     if (m_page)
         m_page->host.reset();
+    if (m_journal)
+        for (auto &[controller, day] : m_journal->days)
+            day.host.reset();
 #endif
     // The window (closed by ~AtramentItem, after this) still names the page's entity: it goes
     // once the window has.
     if (m_page)
         QTimer::singleShot(0, QCoreApplication::instance(), [page = std::shared_ptr<Page>(std::move(m_page))] { });
+    // (The stream's days save as they go, with it.)
+    if (m_journal)
+        QTimer::singleShot(0, QCoreApplication::instance(),
+                           [journal = std::shared_ptr<Journal>(std::move(m_journal))] { });
+}
+
+bool AtramentView::hasPage() const
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    return m_page && m_page->entity;
+#else
+    return false;
+#endif
+}
+
+template<class F>
+void AtramentView::forEachPage(F &&f)
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_journal) {
+        for (auto &[controller, day] : m_journal->days) {
+            auto *c = qobject_cast<brulion::editor::PageController *>(controller);
+            f(PageHandle{day.page, c ? c->blocks() : nullptr, true});
+        }
+        return;
+    }
+    if (hasPage())
+        f(PageHandle{m_page->entity, qobject_cast<brulion::editor::BlockListModel *>(m_pageModel.data()), false});
+#else
+    Q_UNUSED(f)
+#endif
 }
 
 void AtramentView::setPageModel(QObject *model)
 {
     if (model == m_pageModel)
         return;
+    if (m_view == u"journal") {
+        // (The stream's days have their own models: the editor's, which follows the active day, is
+        // none of the view's.)
+        m_pageModel = model;
+        return;
+    }
     if (m_attached) {
         qWarning() << "AtramentView: the page model is set before the view; ignoring";
         return;
@@ -125,6 +198,8 @@ void AtramentView::setPageController(QObject *controller)
     m_pageController = controller;
     Q_EMIT pageControllerChanged();
 #ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_view == u"journal")
+        return;
     if (!m_pageModel) {
         if (auto *c = qobject_cast<brulion::editor::PageController *>(controller)) {
             if (!m_attached)
@@ -138,7 +213,7 @@ void AtramentView::setPageController(QObject *controller)
 int AtramentView::editRow() const
 {
 #ifdef BRULION_HAS_ATRAMENT_EDITOR
-    if (m_page)
+    if (hasPage())
         return m_page->entity.read(runtime().app).editState().row;
 #endif
     return -1;
@@ -147,7 +222,7 @@ int AtramentView::editRow() const
 QString AtramentView::editText() const
 {
 #ifdef BRULION_HAS_ATRAMENT_EDITOR
-    if (m_page) {
+    if (hasPage()) {
         const std::u16string text = m_page->entity.read(runtime().app).editState().text;
         return QString(reinterpret_cast<const QChar *>(text.data()), qsizetype(text.size()));
     }
@@ -158,7 +233,7 @@ QString AtramentView::editText() const
 int AtramentView::editCursor() const
 {
 #ifdef BRULION_HAS_ATRAMENT_EDITOR
-    if (m_page)
+    if (hasPage())
         return m_page->entity.read(runtime().app).editState().cursor;
 #endif
     return 0;
@@ -176,7 +251,7 @@ bool AtramentView::editProse() const
 QRectF AtramentView::editCaretRect() const
 {
 #ifdef BRULION_HAS_ATRAMENT_EDITOR
-    if (m_page) {
+    if (hasPage()) {
         const at::Rect r = m_page->entity.read(runtime().app).editState().caret;
         return {r.left(), r.top(), r.width(), r.height()};
     }
@@ -188,7 +263,7 @@ bool AtramentView::revealRow(int row)
 {
     bool moved = false;
 #ifdef BRULION_HAS_ATRAMENT_EDITOR
-    if (m_page)
+    if (hasPage())
         m_page->entity.update(runtime().app, [&](brulion::editor::atr::PageView &page,
                                                  at::Context<brulion::editor::atr::PageView> &cx) {
             moved = page.revealRow(row, cx);
@@ -202,7 +277,7 @@ bool AtramentView::revealRow(int row)
 qreal AtramentView::rowTop(int row) const
 {
 #ifdef BRULION_HAS_ATRAMENT_EDITOR
-    if (m_page)
+    if (hasPage())
         if (const auto r = m_page->entity.read(runtime().app).rowBounds(row))
             return r->top();
 #endif
@@ -213,7 +288,7 @@ qreal AtramentView::rowTop(int row) const
 qreal AtramentView::rowHeight(int row) const
 {
 #ifdef BRULION_HAS_ATRAMENT_EDITOR
-    if (m_page)
+    if (hasPage())
         if (const auto r = m_page->entity.read(runtime().app).rowBounds(row))
             return r->height();
 #endif
@@ -224,7 +299,7 @@ qreal AtramentView::rowHeight(int row) const
 QPointF AtramentView::linkPoint(int row, const QString &hrefPart) const
 {
 #ifdef BRULION_HAS_ATRAMENT_EDITOR
-    if (m_page)
+    if (hasPage())
         if (const auto p = m_page->entity.read(runtime().app).linkPoint(row, hrefPart))
             return {p->x, p->y};
 #endif
@@ -263,7 +338,7 @@ QString AtramentView::misspelledWordAt(qreal x, qreal y) const
 QPointF AtramentView::taskBoxPoint(int row) const
 {
 #ifdef BRULION_HAS_ATRAMENT_EDITOR
-    if (m_page)
+    if (hasPage())
         if (const auto p = m_page->entity.read(runtime().app).taskBoxPoint(row))
             return {p->x, p->y};
 #endif
@@ -276,7 +351,7 @@ void AtramentView::commitComposition()
     // The input method's own word first (it keeps it outside the text), then the field's.
     QGuiApplication::inputMethod()->commit();
 #ifdef BRULION_HAS_ATRAMENT_EDITOR
-    if (m_page)
+    if (hasPage())
         m_page->entity.update(runtime().app, [](brulion::editor::atr::PageView &page,
                                                 at::Context<brulion::editor::atr::PageView> &cx) {
             page.commitComposition(cx);
@@ -288,7 +363,7 @@ bool AtramentView::insertAtCaret(const QString &text, bool separate)
 {
     bool done = false;
 #ifdef BRULION_HAS_ATRAMENT_EDITOR
-    if (m_page)
+    if (hasPage())
         m_page->entity.update(runtime().app, [&](brulion::editor::atr::PageView &page,
                                                  at::Context<brulion::editor::atr::PageView> &cx) {
             done = page.insertAtCaret(std::u16string(brulion::editor::atr::u16View(text)), separate, cx);
@@ -304,7 +379,7 @@ bool AtramentView::revealArea(qreal x, qreal y, qreal w, qreal h, qreal margin)
 {
     bool moved = false;
 #ifdef BRULION_HAS_ATRAMENT_EDITOR
-    if (m_page)
+    if (hasPage())
         m_page->entity.update(runtime().app, [&](brulion::editor::atr::PageView &page,
                                                  at::Context<brulion::editor::atr::PageView> &cx) {
             moved = page.reveal(at::Rect::fromXYWH(float(x), float(y), float(w), float(h)), float(margin),
@@ -324,7 +399,7 @@ bool AtramentView::selectInEdited(int row, int from, int to)
 {
     bool done = false;
 #ifdef BRULION_HAS_ATRAMENT_EDITOR
-    if (m_page)
+    if (hasPage())
         m_page->entity.update(runtime().app, [&](brulion::editor::atr::PageView &page,
                                                  at::Context<brulion::editor::atr::PageView> &cx) {
             done = page.selectInEdited(row, from, to, cx);
@@ -340,7 +415,15 @@ bool AtramentView::selectInEdited(int row, int from, int to)
 void AtramentView::applyFind()
 {
 #ifdef BRULION_HAS_ATRAMENT_EDITOR
-    if (!m_page)
+    if (m_journal) {
+        // (Every day, also those made later.)
+        m_journal->entity.update(runtime().app, [this](brulion::editor::atr::JournalView &journal,
+                                                       at::Context<brulion::editor::atr::JournalView> &cx) {
+            journal.setFind(m_findQuery, m_findMatchCase, m_findMatchDiacritics, m_findWholeWord, atColor(m_findColor), cx);
+        });
+        return;
+    }
+    if (!hasPage())
         return;
     m_page->entity.update(runtime().app, [this](brulion::editor::atr::PageView &page,
                                                 at::Context<brulion::editor::atr::PageView> &cx) {
@@ -352,44 +435,67 @@ void AtramentView::applyFind()
 void AtramentView::connectController()
 {
 #ifdef BRULION_HAS_ATRAMENT_EDITOR
-    if (!m_page)
+    if (!hasPage() || m_journal)
         return;
     using namespace brulion::editor::atr;
     auto *controller = qobject_cast<brulion::editor::PageController *>(m_pageController.data());
     // (A controller of another model than the page's is none.)
     if (controller && controller->blocks() != m_pageModel.data())
         controller = nullptr;
+    connectEditing(PageHandle{m_page->entity, qobject_cast<brulion::editor::BlockListModel *>(m_pageModel.data()), false});
+    m_page->entity.update(runtime().app,
+                          [controller](PageView &page, at::Context<PageView> &cx) { page.setController(controller, cx); });
+#endif
+}
+
+void AtramentView::connectEditing(const PageHandle &handle)
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    using namespace brulion::editor::atr;
     QPointer<AtramentView> guard = this;
-    m_page->entity.update(runtime().app, [guard, controller](PageView &page, at::Context<PageView> &cx) {
-        page.onEditRequest = [guard](int row, int cursor, const at::Modifiers &modifiers) {
+    // (A day of the journal: the day written in first.)
+    const std::uint64_t pid = handle.day ? handle.entity.id() : 0;
+    auto act = [guard, pid] {
+        if (guard && pid)
+            guard->activatePage(pid);
+    };
+    handle.entity.update(runtime().app, [guard, act](PageView &page, at::Context<PageView> &) {
+        page.onEditRequest = [guard, act](int row, int cursor, const at::Modifiers &modifiers) {
             if (!guard)
                 return false;
+            act();
             Q_EMIT guard->editRequested(row, cursor, qtModifiers(modifiers));
             return true;
         };
-        page.onEditingStarted = [guard] {
+        page.onEditingStarted = [guard, act] {
+            act();
             // The keyboard comes here when a block Atrament edits is edited (a new block, Enter,
             // ↑/↓ from the QML around) — the QML around decides (the find bar keeps it).
             if (guard)
                 Q_EMIT guard->editingStarted();
         };
-        page.onEscape = [guard] {
+        page.onEscape = [guard, act] {
+            act();
             if (guard)
                 Q_EMIT guard->escapePressed();
         };
-        page.onUndo = [guard](bool redo) {
+        page.onUndo = [guard, act](bool redo) {
+            act();
             if (guard)
                 Q_EMIT guard->undoRequested(redo);
         };
-        page.onFollowLink = [guard](int row, int cursor, bool newPane) {
+        page.onFollowLink = [guard, act](int row, int cursor, bool newPane) {
+            act();
             if (guard)
                 Q_EMIT guard->followLinkRequested(row, cursor, newPane);
         };
-        page.onExtendSelection = [guard](int row, int step) {
+        page.onExtendSelection = [guard, act](int row, int step) {
+            act();
             if (guard)
                 Q_EMIT guard->selectionExtendRequested(row, step);
         };
-        page.onSelectAllBlocks = [guard] {
+        page.onSelectAllBlocks = [guard, act] {
+            act();
             if (guard)
                 Q_EMIT guard->selectAllBlocksRequested();
         };
@@ -397,9 +503,10 @@ void AtramentView::connectController()
             if (guard)
                 Q_EMIT guard->editStateChanged();
         };
-        page.onSelectionCommand = [guard](PageView::SelectionCommand command, int row) {
+        page.onSelectionCommand = [guard, act](PageView::SelectionCommand command, int row) {
             if (!guard)
                 return false;
+            act();
             const std::u16string_view name = PageView::commandName(command);
             guard->m_commandTaken = false;
             Q_EMIT guard->selectionCommand(QString(reinterpret_cast<const QChar *>(name.data()), qsizetype(name.size())),
@@ -412,18 +519,55 @@ void AtramentView::connectController()
             Q_EMIT guard->suggestionKeyPressed(QString(reinterpret_cast<const QChar *>(key.data()), qsizetype(key.size())));
             return true;
         };
-        page.setController(controller, cx);
     });
+#else
+    Q_UNUSED(handle)
 #endif
 }
 
 void AtramentView::applyStyle()
 {
 #ifdef BRULION_HAS_ATRAMENT_EDITOR
-    if (!m_page)
-        return;
+    if (m_journal) {
+        // The days' geometry is the stream's (each day's note mode its own gutter).
+        using namespace brulion::editor::atr;
+        PageMetrics m;
+        m.fontSize = float(m_fontSize);
+        m.lineHeight = float(m_lineHeight);
+        m.indentStep = float(m_indentStep);
+        m.gutter = float(m_gutter);
+        m.bulletColumn = float(m_bulletColumn);
+        m.documentMode = false;
+        m.listIndent = float(m_listIndent);
+        m.contentX = float(m_contentX);
+        m.contentWidth = float(m_contentWidth);
+        m.arrowColumn = float(m_arrowColumn);
+        m.touch = m_touchUi;
+        m.headingSizes[0] = m.fontSize;
+        PagePalette p;
+        p.text = atColor(m_textColor);
+        p.code = p.text;
+        p.muted = atColor(m_mutedColor);
+        p.link = atColor(m_linkColor);
+        p.guide = atColor(m_guideColor);
+        if (m_ruleColor.isValid())
+            p.rule = atColor(m_ruleColor);
+        p.background = atColor(m_backgroundColor);
+        m_journal->entity.update(runtime().app, [&](JournalView &journal, at::Context<JournalView> &cx) {
+            journal.setPageStyle(m, p, float(m_documentGutter), cx);
+        });
+    }
+    forEachPage([this](const PageHandle &page) { styleOne(page); });
+    applyTableStyle();
+#endif
+}
+
+void AtramentView::styleOne(const PageHandle &handle)
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
     using namespace brulion::editor::atr;
-    m_page->entity.update(runtime().app, [this](PageView &page, at::Context<PageView> &cx) {
+    const bool day = handle.day;
+    handle.entity.update(runtime().app, [this, day](PageView &page, at::Context<PageView> &cx) {
         PageMetrics m = page.metrics();
         m.fontSize = float(m_fontSize);
         m.lineHeight = float(m_lineHeight);
@@ -446,7 +590,8 @@ void AtramentView::applyStyle()
         if (m_ruleColor.isValid())
             p.rule = atColor(m_ruleColor);
         p.background = atColor(m_backgroundColor);
-        page.setStyle(m, p);
+        if (!day)
+            page.setStyle(m, p);
         page.setSelectionLook({atColor(m_bandColor), atColor(m_ringColor), float(m_bandRadius)});
         PageView::CalloutLook callouts;
         callouts.info = atColor(m_calloutInfo);
@@ -584,20 +729,30 @@ void AtramentView::applyStyle()
         page.setDragLook(atColor(m_linkColor), atColor(m_backgroundColor), atColor(m_ringColor), cx);
         cx.notify();
     });
-    applyTableStyle();
+#else
+    Q_UNUSED(handle)
 #endif
 }
 
 void AtramentView::applyTouchSelection()
 {
 #ifdef BRULION_HAS_ATRAMENT_EDITOR
-    if (!m_page)
-        return;
+    forEachPage([this](const PageHandle &page) { touchSelectionOf(page); });
+#endif
+}
+
+void AtramentView::touchSelectionOf(const PageHandle &handle)
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
     using namespace brulion::editor::atr;
-    m_page->entity.update(runtime().app, [this](PageView &page, at::Context<PageView> &cx) {
-        page.setTouchSelection(m_selectionGrips, m_selectionPicking, cx);
+    // (A day of the journal: the touch selection mode is the active day's.)
+    const bool grips = !handle.day || (hasPage() && m_page->entity.id() == handle.entity.id());
+    handle.entity.update(runtime().app, [this, grips](PageView &page, at::Context<PageView> &cx) {
+        page.setTouchSelection(m_selectionGrips && grips, m_selectionPicking && grips, cx);
         page.setDragBottomInset(float(m_dragBottomInset));
     });
+#else
+    Q_UNUSED(handle)
 #endif
 }
 
@@ -615,6 +770,15 @@ void AtramentView::setView(const QString &view)
         return;
     }
     m_view = view;
+    // ("journal": the page's header and footer, set before, are none of the stream's.)
+    if (m_view == u"journal") {
+        for (QQuickItem *item : {m_header.data(), m_footer.data()}) {
+            if (item) {
+                item->setVisible(false);
+                item->setEnabled(false);
+            }
+        }
+    }
     Q_EMIT viewChanged();
     if (isComponentComplete())
         attachView();
@@ -659,30 +823,69 @@ void AtramentView::attachView()
         Q_UNUSED(drawings)
         m_page = std::make_unique<Page>();
         m_page->entity = r.app.newEntity<brulion::editor::atr::PageView>(model);
-        QPointer<AtramentView> guard = this;
-        m_page->entity.update(
-                r.app, [guard](brulion::editor::atr::PageView &page, at::Context<brulion::editor::atr::PageView> &) {
-                    page.onLink = [guard](int row, const QString &href) {
+        connectPageSignals(PageHandle{m_page->entity, model, false});
+        applyStyle();
+        connectTables();
+        applyExtras();
+        applyTouchSelection();
+        m_page->host = std::make_unique<brulion::editor::atr::ForeignRowHost>(this, r.app, m_page->entity, model);
+        m_page->host->setDelegate(m_delegate);
+        m_page->host->setHeader(m_header);
+        m_page->host->setFooter(m_footer);
+        applyFind();
+        connectController();
+        attach(r.app, at::AnyView{m_page->entity.id(), &at::renderView<brulion::editor::atr::PageView>});
+        m_attached = true;
+        return;
+    }
+    if (m_view == u"journal") {
+        attachJournal();
+        return;
+    }
+#endif
+    qWarning() << "AtramentView: no view named" << m_view;
+}
+
+void AtramentView::connectPageSignals(const PageHandle &handle)
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    QPointer<AtramentView> guard = this;
+    const std::uint64_t pid = handle.day ? handle.entity.id() : 0;
+    // (A day of the journal: the day written in first, so the editor acts on it.)
+    auto act = [guard, pid] {
+        if (guard && pid)
+            guard->activatePage(pid);
+    };
+    {
+        handle.entity.update(
+                runtime().app, [guard, act](brulion::editor::atr::PageView &page, at::Context<brulion::editor::atr::PageView> &) {
+                    page.onLink = [guard, act](int row, const QString &href) {
+                        act();
                         if (guard)
                             Q_EMIT guard->linkActivated(row, href);
                     };
-                    page.onLinkAt = [guard](int row, const QString &href, at::Point p) {
+                    page.onLinkAt = [guard, act](int row, const QString &href, at::Point p) {
+                        act();
                         if (guard)
                             Q_EMIT guard->linkClicked(row, href, p.x, p.y);
                     };
-                    page.onLinkMenu = [guard](int row, const QString &href, at::Point p) {
+                    page.onLinkMenu = [guard, act](int row, const QString &href, at::Point p) {
+                        act();
                         if (guard)
                             Q_EMIT guard->linkMenuRequested(row, href, p.x, p.y);
                     };
-                    page.onToggleTask = [guard](int row) {
+                    page.onToggleTask = [guard, act](int row) {
+                        act();
                         if (guard)
                             Q_EMIT guard->taskToggled(row);
                     };
-                    page.onTaskMenu = [guard](int row, at::Point p) {
+                    page.onTaskMenu = [guard, act](int row, at::Point p) {
+                        act();
                         if (guard)
                             Q_EMIT guard->taskMenuRequested(row, p.x, p.y);
                     };
-                    page.onTaskMenuAtCaret = [guard](int row, at::Point p) {
+                    page.onTaskMenuAtCaret = [guard, act](int row, at::Point p) {
+                        act();
                         if (guard)
                             Q_EMIT guard->taskMenuAtCaretRequested(row, p.x, p.y);
                     };
@@ -700,60 +903,72 @@ void AtramentView::attachView()
                                 },
                                 Qt::QueuedConnection);
                     };
-                    page.onDragSelect = [guard](int anchor, int focus) {
+                    page.onDragSelect = [guard, act](int anchor, int focus) {
+                        act();
                         if (guard)
                             Q_EMIT guard->dragSelectRequested(anchor, focus);
                     };
-                    page.onLongPressRow = [guard](int row) {
+                    page.onLongPressRow = [guard, act](int row) {
+                        act();
                         if (guard)
                             Q_EMIT guard->rowLongPressed(row);
                     };
-                    page.onBulletClick = [guard](int row) {
+                    page.onBulletClick = [guard, act](int row) {
+                        act();
                         if (guard)
                             Q_EMIT guard->bulletClicked(row);
                     };
-                    page.onBlockMenu = [guard](int row, at::Point p) {
+                    page.onBlockMenu = [guard, act](int row, at::Point p) {
+                        act();
                         if (!guard)
                             return;
                         const QPointF scene = guard->mapToScene(QPointF(p.x, p.y));
                         Q_EMIT guard->blockMenuRequested(row, scene.x(), scene.y());
                     };
                     // Pictures, files, embedded blocks, queries (docs/ATRAMENT.md M2 step 5).
-                    page.onEmbedClick = [guard](int row, const QVariantMap &embed) {
+                    page.onEmbedClick = [guard, act](int row, const QVariantMap &embed) {
+                        act();
                         if (guard)
                             Q_EMIT guard->embedClicked(row, embed);
                     };
-                    page.onEmbedMenu = [guard](int row, const QVariantMap &embed, at::Point p) {
+                    page.onEmbedMenu = [guard, act](int row, const QVariantMap &embed, at::Point p) {
+                        act();
                         if (guard)
                             Q_EMIT guard->embedMenuRequested(row, embed, p.x, p.y);
                     };
-                    page.onWebPicture = [guard](int row, const QVariantMap &embed, bool save) {
+                    page.onWebPicture = [guard, act](int row, const QVariantMap &embed, bool save) {
+                        act();
                         if (guard)
                             Q_EMIT guard->webPictureRequested(row, embed.value(u"target"_s).toString(), save);
                     };
-                    page.onEmbeddedLink = [guard](int row, const QString &link, const QString &path, int line,
+                    page.onEmbeddedLink = [guard, act](int row, const QString &link, const QString &path, int line,
                                                   const QString &raw) {
+                        act();
                         if (guard)
                             Q_EMIT guard->embeddedLinkActivated(row, link, path, line, raw);
                     };
-                    page.onQueryLink = [guard](int row, int item, const QString &link, const QString &path, int line,
+                    page.onQueryLink = [guard, act](int row, int item, const QString &link, const QString &path, int line,
                                                const QString &raw) {
+                        act();
                         if (guard)
                             Q_EMIT guard->queryLinkActivated(row, item, link, path, line, raw);
                     };
-                    page.onQueryAnswer = [guard](int row, const QVariantMap &answer) {
+                    page.onQueryAnswer = [guard, act](int row, const QVariantMap &answer) {
+                        act();
                         if (guard)
                             Q_EMIT guard->queryAnswered(row, answer);
                     };
-                    page.onSpellingMenu = [guard](const brulion::editor::atr::PageView::Misspelling &m, at::Point p) {
+                    page.onSpellingMenu = [guard, act](const brulion::editor::atr::PageView::Misspelling &m, at::Point p) {
+                        act();
                         if (!guard)
                             return;
                         const QVariantMap spelling{{u"from"_s, m.from}, {u"to"_s, m.to}, {u"word"_s, m.word},
                                                    {u"text"_s, m.text}};
                         Q_EMIT guard->spellingMenuRequested(m.row, m.edited, spelling, p.x, p.y);
                     };
-                    page.onTextMenu = [guard](int row, const std::optional<brulion::editor::atr::PageView::Misspelling> &m,
-                                              at::Point p) {
+                    page.onTextMenu = [guard, act](int row, const std::optional<brulion::editor::atr::PageView::Misspelling> &m,
+                                                   at::Point p) {
+                        act();
                         if (!guard)
                             return;
                         QVariantMap spelling;
@@ -762,17 +977,20 @@ void AtramentView::attachView()
                                                    {u"text"_s, m->text}};
                         Q_EMIT guard->textMenuRequested(row, spelling, p.x, p.y);
                     };
-                    page.onEmbeddedLinkMenu = [guard](int row, const QString &link, const QString &path, int line,
-                                                      const QString &raw, at::Point p) {
+                    page.onEmbeddedLinkMenu = [guard, act](int row, const QString &link, const QString &path, int line,
+                                                           const QString &raw, at::Point p) {
+                        act();
                         if (guard)
                             Q_EMIT guard->embeddedLinkMenuRequested(row, link, path, line, raw, p.x, p.y);
                     };
-                    page.onQueryLinkMenu = [guard](int row, int item, const QString &link, const QString &path, int line,
-                                                   const QString &raw, at::Point p) {
+                    page.onQueryLinkMenu = [guard, act](int row, int item, const QString &link, const QString &path, int line,
+                                                        const QString &raw, at::Point p) {
+                        act();
                         if (guard)
                             Q_EMIT guard->queryLinkMenuRequested(row, item, link, path, line, raw, p.x, p.y);
                     };
-                    page.onReminderChip = [guard](int row, int from, int to, bool menu, at::Point p) {
+                    page.onReminderChip = [guard, act](int row, int from, int to, bool menu, at::Point p) {
+                        act();
                         if (guard)
                             Q_EMIT guard->reminderChipActivated(row, from, to, menu, p.x, p.y);
                     };
@@ -781,22 +999,10 @@ void AtramentView::attachView()
                             Q_EMIT guard->vimKeyHandled();
                     };
                 });
-        applyStyle();
-        connectTables();
-        applyExtras();
-        applyTouchSelection();
-        m_page->host = std::make_unique<brulion::editor::atr::ForeignRowHost>(this, r.app, m_page->entity, model);
-        m_page->host->setDelegate(m_delegate);
-        m_page->host->setHeader(m_header);
-        m_page->host->setFooter(m_footer);
-        applyFind();
-        connectController();
-        attach(r.app, at::AnyView{m_page->entity.id(), &at::renderView<brulion::editor::atr::PageView>});
-        m_attached = true;
-        return;
     }
+#else
+    Q_UNUSED(handle)
 #endif
-    qWarning() << "AtramentView: no view named" << m_view;
 }
 
 // --- "page": the QML items over the rows Atrament does not draw (editor/atrament/foreignhost.h)
@@ -809,6 +1015,10 @@ void AtramentView::setDelegate(QQmlComponent *delegate)
 #ifdef BRULION_HAS_ATRAMENT_EDITOR
     if (m_page && m_page->host)
         m_page->host->setDelegate(delegate);
+    if (m_journal)
+        for (auto &[controller, day] : m_journal->days)
+            if (day.host)
+                day.host->setDelegate(delegate);
 #endif
     Q_EMIT delegateChanged();
 }
@@ -818,6 +1028,13 @@ void AtramentView::setHeader(QQuickItem *item)
     if (item == m_header)
         return;
     m_header = item;
+    // ("journal": the page's header is none of the stream's — its own is streamHeader.)
+    if (item && m_view == u"journal") {
+        item->setVisible(false);
+        item->setEnabled(false);
+        Q_EMIT headerChanged();
+        return;
+    }
     if (item)
         item->setParentItem(this);
 #ifdef BRULION_HAS_ATRAMENT_EDITOR
@@ -832,6 +1049,12 @@ void AtramentView::setFooter(QQuickItem *item)
     if (item == m_footer)
         return;
     m_footer = item;
+    if (item && m_view == u"journal") {
+        item->setVisible(false);
+        item->setEnabled(false);
+        Q_EMIT footerChanged();
+        return;
+    }
     if (item)
         item->setParentItem(this);
 #ifdef BRULION_HAS_ATRAMENT_EDITOR
@@ -846,6 +1069,10 @@ QQuickItem *AtramentView::rowItem(int row) const
 #ifdef BRULION_HAS_ATRAMENT_EDITOR
     if (m_page && m_page->host)
         return m_page->host->rowItem(row);
+    if (m_journal && hasPage())
+        for (const auto &[controller, day] : m_journal->days)
+            if (day.page.id() == m_page->entity.id() && day.host)
+                return day.host->rowItem(row);
 #endif
     Q_UNUSED(row);
     return nullptr;
@@ -857,7 +1084,7 @@ QVariantMap AtramentView::activateQueryLink(int row, int item, const QString &li
 #ifdef BRULION_HAS_ATRAMENT_EDITOR
     // (Outside of an update of the page: following the link may open another page.)
     brulion::editor::QueryResultModel *results =
-            m_page ? m_page->entity.read(runtime().app).queryResults(row) : nullptr;
+            hasPage() ? m_page->entity.read(runtime().app).queryResults(row) : nullptr;
     if (results)
         answer = link == u"open:"_s ? results->open(item, newPane) : results->activateLink(item, link, newPane);
 #else
@@ -902,8 +1129,18 @@ void AtramentView::placeHostedChildren()
 #ifdef BRULION_HAS_ATRAMENT_EDITOR
     if (m_page && m_page->host)
         m_page->host->place();
+    if (m_journal) {
+        // (Copied first: placing may make or release delegates, not days.)
+        std::vector<brulion::editor::atr::ForeignRowHost *> hosts;
+        for (auto &[controller, day] : m_journal->days)
+            if (day.host)
+                hosts.push_back(day.host.get());
+        for (brulion::editor::atr::ForeignRowHost *host : hosts)
+            host->place();
+        placeStreamEdges();
+    }
     // Where the frame put the selection's band (the selection's tools may follow it).
-    if (m_page) {
+    if (hasPage()) {
         const std::optional<at::Rect> band = m_page->entity.read(runtime().app).selectionBounds();
         const QRectF rect = band ? QRectF(band->left(), band->top(), band->width(), band->height()) : QRectF();
         if (rect != m_selectionRect) {
@@ -914,15 +1151,642 @@ void AtramentView::placeHostedChildren()
 #endif
 }
 
+// --- "journal": the journal stream as one list (editor/atrament/journalview.h) ------------------
+
+void AtramentView::setDaysModel(QObject *model)
+{
+    if (model == m_daysModel)
+        return;
+    if (m_attached) {
+        qWarning() << "AtramentView: the days' model is set before the view; ignoring";
+        return;
+    }
+    m_daysModel = model;
+    Q_EMIT journalChanged();
+    if (isComponentComplete())
+        attachView();
+}
+
+void AtramentView::setStreamHeader(QQuickItem *item)
+{
+    if (item == m_streamHeader)
+        return;
+    if (m_streamHeader)
+        disconnect(m_streamHeader, nullptr, this, nullptr);
+    m_streamHeader = item;
+    if (item) {
+        item->setParentItem(this);
+        connect(item, &QQuickItem::heightChanged, this, &AtramentView::tellStreamEdges);
+    }
+    Q_EMIT journalChanged();
+}
+
+void AtramentView::setStreamFooter(QQuickItem *item)
+{
+    if (item == m_streamFooter)
+        return;
+    if (m_streamFooter)
+        disconnect(m_streamFooter, nullptr, this, nullptr);
+    m_streamFooter = item;
+    if (item) {
+        item->setParentItem(this);
+        connect(item, &QQuickItem::heightChanged, this, &AtramentView::tellStreamEdges);
+    }
+    Q_EMIT journalChanged();
+}
+
+void AtramentView::attachJournal()
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    using namespace brulion::editor;
+    using namespace brulion::editor::atr;
+    auto *days = qobject_cast<QAbstractItemModel *>(m_daysModel.data());
+    if (!days)
+        return; // (attached once the days are set)
+    Runtime &r = runtime();
+    m_page = std::make_unique<Page>(); // the active day's page, once there is one
+    m_journal = std::make_unique<Journal>();
+    m_journal->entity = r.app.newEntity<JournalView>(days);
+    QPointer<AtramentView> guard = this;
+    m_journal->entity.update(r.app, [guard](JournalView &j, at::Context<JournalView> &) {
+        // A day's controller as ContentJournalDay makes it.
+        j.makeController = [guard](const JournalView::DayInfo &info) -> std::unique_ptr<PageController> {
+            if (!guard)
+                return nullptr;
+            auto c = std::make_unique<PageController>();
+            QQmlEngine::setObjectOwnership(c.get(), QQmlEngine::CppOwnership);
+            c->setObjectName(u"journalDayController"_s);
+            c->setHost(qobject_cast<brulion::EditorHost *>(guard->m_editorHost.data()));
+            c->setActive(guard->m_daysActive);
+            c->setAllowNewBlockIds(guard->m_dayAllowNewBlockIds);
+            c->setReadOnly(guard->m_dayReadOnly);
+            if (!guard->m_dayPalette.isEmpty())
+                c->setPalette(guard->m_dayPalette);
+            if (!guard->m_dayLocale.isEmpty())
+                c->setLocale(guard->m_dayLocale);
+            c->setNow(guard->m_dayNow);
+            PageController *page = c.get();
+            QObject::connect(page, &PageController::foldStateChanged, guard.data(), [guard, page] {
+                if (!guard || !guard->m_journal)
+                    return;
+                const auto it = guard->m_journal->days.find(page);
+                if (it != guard->m_journal->days.end() && it->second.foldsRestored && page->loaded() && !page->loading())
+                    Q_EMIT guard->dayFoldStateChanged(page);
+            });
+            QObject::connect(page, &PageController::externallyChanged, guard.data(), [guard, page](bool merged) {
+                if (guard)
+                    Q_EMIT guard->dayExternallyChanged(page, merged);
+            });
+            QObject::connect(page, &PageController::loadingChanged, guard.data(), [guard, page] {
+                if (guard && page->loaded() && !page->loading())
+                    Q_EMIT guard->dayLoaded(page);
+            });
+            c->setPath(info.path);
+            return c;
+        };
+        // Its page: the page's signals (through the day written in), looks and hosted rows.
+        j.setUpPage = [guard](int, const at::Entity<PageView> &page, PageController *controller) {
+            if (!guard || !guard->m_journal)
+                return;
+            Journal::Day &day = guard->m_journal->days[controller];
+            day.page = page;
+            const PageHandle handle{page, controller->blocks(), true};
+            guard->connectPageSignals(handle);
+            guard->connectEditing(handle);
+            guard->connectTablesOf(handle);
+            guard->styleOne(handle);
+            guard->styleTablesOf(handle);
+            guard->extrasOf(handle);
+            guard->touchSelectionOf(handle);
+            day.host = std::make_unique<ForeignRowHost>(guard.data(), runtime().app, page, controller->blocks());
+            day.host->setDelegate(guard->m_delegate);
+            Q_EMIT guard->dayMade(controller);
+        };
+        j.onDayReleased = [guard](int, PageController *controller) {
+            if (!guard || !guard->m_journal)
+                return;
+            const auto it = guard->m_journal->days.find(controller);
+            if (it == guard->m_journal->days.end())
+                return;
+            it->second.host.reset();
+            guard->m_journal->days.erase(it);
+            Q_EMIT guard->dayReleased(controller);
+        };
+        j.formatDate = [guard](const QString &date) {
+            const bool english = guard && guard->m_dayLocale == u"en";
+            return brulion::dates::longDate(QDate::fromString(date, Qt::ISODate),
+                                            english ? brulion::dates::UiLocale::English
+                                                    : brulion::dates::UiLocale::Polish);
+        };
+        j.onOpenAsPage = [guard](const QString &date, bool source) {
+            if (guard)
+                Q_EMIT guard->openAsPageRequested(date, source);
+        };
+        j.onBeginRequested = [guard](int day) {
+            if (!guard)
+                return false;
+            Q_EMIT guard->beginRequested(day);
+            return true;
+        };
+        j.onActiveDayChanged = [guard](int day) {
+            if (guard)
+                guard->journalActiveChanged(day);
+        };
+    });
+    applyJournal();
+    applyJournalLook();
+    applyDayOptions();
+    applyStyle();
+    applyFind();
+    attach(r.app, at::AnyView{m_journal->entity.id(), &at::renderView<JournalView>});
+    m_attached = true;
+#endif
+}
+
+void AtramentView::applyJournal()
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (!m_journal)
+        return;
+    using namespace brulion::editor;
+    auto *selection = qobject_cast<StreamSelection *>(m_streamSelection.data());
+    auto *find = qobject_cast<StreamFind *>(m_streamFind.data());
+    m_journal->entity.update(runtime().app, [&](atr::JournalView &j, at::Context<atr::JournalView> &cx) {
+        j.setStreamSelection(selection);
+        j.setStreamFind(find);
+        cx.notify();
+    });
+    tellStreamEdges();
+#endif
+}
+
+void AtramentView::applyJournalLook()
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (!m_journal)
+        return;
+    using namespace brulion::editor::atr;
+    const QVariantMap &l = m_journalLook;
+    auto colour = [&l](const char *key, at::Color fallback) {
+        const QVariant v = l.value(QString::fromLatin1(key));
+        const QColor c = v.metaType() == QMetaType::fromType<QColor>() ? v.value<QColor>() : QColor::fromString(v.toString());
+        return c.isValid() ? atColor(c) : fallback;
+    };
+    auto number = [&l](const char *key, float fallback) {
+        bool ok = false;
+        const double d = l.value(QString::fromLatin1(key)).toDouble(&ok);
+        return ok && d > 0 ? float(d) : fallback;
+    };
+    auto word = [&l](const char *key, const QString &fallback) {
+        const QString w = l.value(QString::fromLatin1(key)).toString();
+        return w.isEmpty() ? fallback : w;
+    };
+    JournalView::Look look;
+    look.text = colour("text", look.text);
+    look.muted = colour("muted", look.muted);
+    look.faint = colour("faint", look.faint);
+    look.accentText = colour("accentText", look.accentText);
+    look.accent = colour("accent", look.accent);
+    look.onAccent = colour("onAccent", look.onAccent);
+    look.neutralBadge = colour("neutralBadge", look.neutralBadge);
+    look.separator = colour("separator", look.separator);
+    look.hover = colour("hover", look.hover);
+    look.pressed = colour("pressed", look.pressed);
+    look.background = colour("background", look.background);
+    look.dateFamily = std::u16string(u16View(l.value(u"dateFamily"_s).toString()));
+    look.uiFamily = std::u16string(u16View(l.value(u"uiFamily"_s).toString()));
+    look.dateSize = number("dateSize", look.dateSize);
+    look.todaySize = number("todaySize", look.todaySize);
+    look.compactDateSize = number("compactDateSize", look.compactDateSize);
+    look.captionSize = number("captionSize", look.captionSize);
+    look.buttonSize = number("buttonSize", look.buttonSize);
+    look.badgeSize = number("badgeSize", look.badgeSize);
+    look.lineHeightTight = number("lineHeightTight", look.lineHeightTight);
+    look.gap = number("gap", look.gap);
+    look.space2 = number("space2", look.space2);
+    look.space3 = number("space3", look.space3);
+    look.touchTarget = number("touchTarget", look.touchTarget);
+    look.radius = number("radius", look.radius);
+    look.iconSize = number("iconSize", look.iconSize);
+    look.compact = l.value(u"compact"_s).toBool();
+    look.touch = l.value(u"touch"_s).toBool();
+    look.readOnly = l.value(u"readOnly"_s).toBool();
+    look.todayWord = word("today", look.todayWord);
+    look.yesterdayWord = word("yesterday", look.yesterdayWord);
+    look.openAsPage = word("openAsPage", look.openAsPage);
+    look.promptToday = word("promptToday", look.promptToday);
+    look.promptDay = word("promptDay", look.promptDay);
+    look.readOnlyToday = word("readOnlyToday", look.readOnlyToday);
+    look.readOnlyDay = word("readOnlyDay", look.readOnlyDay);
+    m_journal->entity.update(runtime().app,
+                             [&](JournalView &j, at::Context<JournalView> &cx) { j.setLook(look, cx); });
+#endif
+}
+
+void AtramentView::applyDayOptions()
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (!m_journal)
+        return;
+    using namespace brulion::editor;
+    // Every day made follows the options (ContentJournalDay's bindings).
+    for (auto &[object, day] : m_journal->days) {
+        auto *c = qobject_cast<PageController *>(object);
+        if (!c)
+            continue;
+        c->setActive(m_daysActive);
+        c->setAllowNewBlockIds(m_dayAllowNewBlockIds);
+        c->setReadOnly(m_dayReadOnly);
+        if (!m_dayPalette.isEmpty())
+            c->setPalette(m_dayPalette);
+        if (!m_dayLocale.isEmpty())
+            c->setLocale(m_dayLocale);
+        c->setNow(m_dayNow);
+    }
+    m_journal->entity.update(runtime().app, [this](atr::JournalView &j, at::Context<atr::JournalView> &cx) {
+        j.setJournalTemplate(m_journalTemplate);
+        j.setBottomInset(float(m_bottomInset));
+        cx.notify();
+    });
+#endif
+}
+
+void AtramentView::activatePage(std::uint64_t pageId)
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (!m_journal || (hasPage() && m_page->entity.id() == pageId))
+        return;
+    m_journal->entity.update(runtime().app, [pageId](brulion::editor::atr::JournalView &j,
+                                                     at::Context<brulion::editor::atr::JournalView> &cx) {
+        j.activateDay(j.dayOfPage(pageId), cx);
+    });
+#else
+    Q_UNUSED(pageId)
+#endif
+}
+
+void AtramentView::journalActiveChanged(int day)
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (!m_journal || !m_page)
+        return;
+    const brulion::editor::atr::JournalView &j = m_journal->entity.read(runtime().app);
+    const at::Entity<brulion::editor::atr::PageView> *page = j.page(day);
+    m_page->entity = page ? *page : at::Entity<brulion::editor::atr::PageView>{};
+    // The touch selection mode and Vim are the active day's.
+    applyTouchSelection();
+    applyExtras();
+    Q_EMIT activeControllerChanged();
+    Q_EMIT editStateChanged();
+#else
+    Q_UNUSED(day)
+#endif
+}
+
+QObject *AtramentView::activeController() const
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_journal)
+        return m_journal->entity.read(runtime().app).controller(m_journal->entity.read(runtime().app).activeDay());
+#endif
+    return nullptr;
+}
+
+int AtramentView::activeDay() const
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_journal)
+        return m_journal->entity.read(runtime().app).activeDay();
+#endif
+    return -1;
+}
+
+int AtramentView::dayCount() const
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_journal)
+        return m_journal->entity.read(runtime().app).dayCount();
+#endif
+    return 0;
+}
+
+int AtramentView::madeDayCount() const
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_journal)
+        return int(m_journal->entity.read(runtime().app).madeDays().size());
+#endif
+    return 0;
+}
+
+QObject *AtramentView::dayController(int row) const
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_journal)
+        return m_journal->entity.read(runtime().app).controller(row);
+#endif
+    Q_UNUSED(row)
+    return nullptr;
+}
+
+int AtramentView::dayOfController(QObject *controller) const
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_journal)
+        return m_journal->entity.read(runtime().app).dayOfController(
+                qobject_cast<brulion::editor::PageController *>(controller));
+#endif
+    Q_UNUSED(controller)
+    return -1;
+}
+
+void AtramentView::scrollToDay(int row, bool contain)
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_journal)
+        m_journal->entity.update(runtime().app, [&](brulion::editor::atr::JournalView &j,
+                                                    at::Context<brulion::editor::atr::JournalView> &cx) {
+            j.scrollToDay(row, contain ? at::ListPosition::Nearest : at::ListPosition::Start, cx);
+        });
+#else
+    Q_UNUSED(row)
+    Q_UNUSED(contain)
+#endif
+}
+
+bool AtramentView::scrollToDate(const QString &date)
+{
+    bool done = false;
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_journal)
+        m_journal->entity.update(runtime().app, [&](brulion::editor::atr::JournalView &j,
+                                                    at::Context<brulion::editor::atr::JournalView> &cx) {
+            done = j.scrollToDate(date, cx);
+        });
+#else
+    Q_UNUSED(date)
+#endif
+    return done;
+}
+
+void AtramentView::scrollBy(qreal dy)
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_journal)
+        m_journal->entity.update(runtime().app, [dy](brulion::editor::atr::JournalView &j,
+                                                     at::Context<brulion::editor::atr::JournalView> &cx) {
+            if (j.handle().scrollBy(float(dy)))
+                cx.notify();
+        });
+#else
+    Q_UNUSED(dy)
+#endif
+}
+
+void AtramentView::activateDay(int row)
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_journal)
+        m_journal->entity.update(runtime().app, [row](brulion::editor::atr::JournalView &j,
+                                                      at::Context<brulion::editor::atr::JournalView> &cx) {
+            j.scrollToDay(row, at::ListPosition::Nearest, cx);
+            j.activateDay(row, cx);
+        });
+#else
+    Q_UNUSED(row)
+#endif
+}
+
+void AtramentView::activateController(QObject *controller)
+{
+    const int day = dayOfController(controller);
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_journal && day >= 0)
+        m_journal->entity.update(runtime().app, [day](brulion::editor::atr::JournalView &j,
+                                                      at::Context<brulion::editor::atr::JournalView> &cx) {
+            j.activateDay(day, cx);
+        });
+#else
+    Q_UNUSED(day)
+#endif
+}
+
+bool AtramentView::beginDay(int row)
+{
+    bool done = false;
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_journal)
+        m_journal->entity.update(runtime().app, [&](brulion::editor::atr::JournalView &j,
+                                                    at::Context<brulion::editor::atr::JournalView> &cx) {
+            done = j.beginDay(row, cx);
+        });
+#else
+    Q_UNUSED(row)
+#endif
+    return done;
+}
+
+QVariantMap AtramentView::viewState() const
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_journal) {
+        const auto st = m_journal->entity.read(runtime().app).viewState();
+        if (st.date.isEmpty())
+            return {};
+        return {{u"date"_s, st.date}, {u"offset"_s, int(std::lround(st.offset))}};
+    }
+#endif
+    return {};
+}
+
+void AtramentView::restoreViewState(const QVariantMap &state)
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (!m_journal)
+        return;
+    brulion::editor::atr::JournalView::ViewState st;
+    st.date = state.value(u"date"_s).toString();
+    st.offset = float(state.value(u"offset"_s).toDouble());
+    m_journal->entity.update(runtime().app, [&](brulion::editor::atr::JournalView &j,
+                                                at::Context<brulion::editor::atr::JournalView> &cx) {
+        j.restoreViewState(st, cx);
+    });
+#else
+    Q_UNUSED(state)
+#endif
+}
+
+qreal AtramentView::dayTop(int row) const
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_journal)
+        if (const auto b = m_journal->entity.read(runtime().app).dayBounds(row))
+            return b->top();
+#endif
+    Q_UNUSED(row)
+    return -1;
+}
+
+qreal AtramentView::dayHeight(int row) const
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_journal)
+        if (const auto b = m_journal->entity.read(runtime().app).dayBounds(row))
+            return b->height();
+#endif
+    Q_UNUSED(row)
+    return -1;
+}
+
+qreal AtramentView::dayRowTop(int row, int block) const
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_journal)
+        if (const auto b = m_journal->entity.read(runtime().app).rowBounds(row, block))
+            return b->top();
+#endif
+    Q_UNUSED(row)
+    Q_UNUSED(block)
+    return -1;
+}
+
+qreal AtramentView::dayRowHeight(int row, int block) const
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_journal)
+        if (const auto b = m_journal->entity.read(runtime().app).rowBounds(row, block))
+            return b->height();
+#endif
+    Q_UNUSED(row)
+    Q_UNUSED(block)
+    return -1;
+}
+
+QPointF AtramentView::dayPoint(int row, const QString &part) const
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_journal) {
+        const brulion::editor::atr::JournalView &j = m_journal->entity.read(runtime().app);
+        const std::optional<at::Point> p = part == u"date"   ? j.datePoint(row)
+                                           : part == u"open" ? j.openAsPagePoint(row)
+                                                             : j.promptPoint(row);
+        if (p)
+            return {p->x, p->y};
+    }
+#endif
+    Q_UNUSED(row)
+    Q_UNUSED(part)
+    return {-1, -1};
+}
+
+void AtramentView::followRename(const QString &oldPath, const QString &newPath)
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (!m_journal)
+        return;
+    for (auto &[object, day] : m_journal->days)
+        if (auto *c = qobject_cast<brulion::editor::PageController *>(object); c && c->path() == oldPath)
+            c->followRename(oldPath, newPath);
+#else
+    Q_UNUSED(oldPath)
+    Q_UNUSED(newPath)
+#endif
+}
+
+void AtramentView::refreshModes()
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (!m_journal)
+        return;
+    for (auto &[object, day] : m_journal->days)
+        if (auto *c = qobject_cast<brulion::editor::PageController *>(object))
+            c->refreshMode();
+#endif
+}
+
+void AtramentView::markFoldsRestored(QObject *controller)
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (!m_journal)
+        return;
+    const auto it = m_journal->days.find(controller);
+    if (it != m_journal->days.end())
+        it->second.foldsRestored = true;
+#else
+    Q_UNUSED(controller)
+#endif
+}
+
+void AtramentView::placeStreamEdges()
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (!m_journal)
+        return;
+    using brulion::editor::atr::ForeignFrame;
+    const std::vector<ForeignFrame> frames = m_journal->entity.read(runtime().app).edgeFrames();
+    for (const ForeignFrame &f : frames) {
+        QQuickItem *item = f.kind == ForeignFrame::Kind::Header   ? m_streamHeader.data()
+                           : f.kind == ForeignFrame::Kind::Footer ? m_streamFooter.data()
+                                                                  : nullptr;
+        if (!item)
+            continue;
+        item->setPosition(QPointF(f.bounds.left(), f.bounds.top()));
+        item->setVisible(true);
+    }
+    tellStreamEdges();
+#endif
+}
+
+void AtramentView::tellStreamEdges()
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (!m_journal)
+        return;
+    const float header = m_streamHeader ? float(m_streamHeader->height()) : 0.0f;
+    const float footer = m_streamFooter ? float(m_streamFooter->height()) : 0.0f;
+    m_journal->entity.update(runtime().app, [&](brulion::editor::atr::JournalView &j,
+                                                at::Context<brulion::editor::atr::JournalView> &cx) {
+        bool changed = j.setHeaderHeight(header);
+        changed = j.setFooterHeight(footer) || changed;
+        if (changed)
+            cx.notify();
+    });
+#endif
+}
+
+bool AtramentView::childMouseEventFilter(QQuickItem *child, QEvent *event)
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    // A press on a day's hosted row (its properties, a row Atrament does not draw): that day is the
+    // one written in before the delegate, which acts through the stream's editor, sees it.
+    if (m_journal
+        && (event->type() == QEvent::MouseButtonPress || event->type() == QEvent::TouchBegin
+            || event->type() == QEvent::KeyPress)) {
+        for (auto &[controller, day] : m_journal->days) {
+            if (day.host && day.host->hosts(child)) {
+                activatePage(day.page.id());
+                break;
+            }
+        }
+    }
+#endif
+    return AtramentItem::childMouseEventFilter(child, event);
+}
+
 // --- "page": tables drawn and edited by Atrament (editor/atrament/tablerows.cpp) -----------------
 
 void AtramentView::applyTableStyle()
 {
 #ifdef BRULION_HAS_ATRAMENT_EDITOR
-    if (!m_page)
-        return;
+    forEachPage([this](const PageHandle &page) { styleTablesOf(page); });
+#endif
+}
+
+void AtramentView::styleTablesOf(const PageHandle &handle)
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
     using namespace brulion::editor::atr;
-    m_page->entity.update(runtime().app, [this](PageView &page, at::Context<PageView> &cx) {
+    handle.entity.update(runtime().app, [this](PageView &page, at::Context<PageView> &cx) {
         PageView::TableLook look;
         auto colour = [this](const char *key, at::Color fallback) {
             const QVariant v = m_tableLook.value(QString::fromLatin1(key));
@@ -965,32 +1829,48 @@ void AtramentView::applyTableStyle()
         look.buttonTextSize = number("buttonTextSize", look.buttonTextSize);
         page.setDrawsTables(m_drawsTables, look, cx);
     });
+#else
+    Q_UNUSED(handle)
 #endif
 }
 
 void AtramentView::connectTables()
 {
 #ifdef BRULION_HAS_ATRAMENT_EDITOR
-    if (!m_page)
-        return;
+    forEachPage([this](const PageHandle &page) { connectTablesOf(page); });
+#endif
+}
+
+void AtramentView::connectTablesOf(const PageHandle &handle)
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
     using namespace brulion::editor::atr;
     QPointer<AtramentView> guard = this;
-    m_page->entity.update(runtime().app, [guard](PageView &page, at::Context<PageView> &) {
-        page.onCellEditRequest = [guard](int row, int tableRow, int column, int cursor, const at::Modifiers &modifiers) {
+    const std::uint64_t pid = handle.day ? handle.entity.id() : 0;
+    auto act = [guard, pid] {
+        if (guard && pid)
+            guard->activatePage(pid);
+    };
+    QPointer<brulion::editor::BlockListModel> pageModel = handle.model;
+    handle.entity.update(runtime().app, [guard, act, pageModel](PageView &page, at::Context<PageView> &) {
+        page.onCellEditRequest = [guard, act](int row, int tableRow, int column, int cursor, const at::Modifiers &modifiers) {
             if (!guard)
                 return false;
+            act();
             Q_EMIT guard->tableCellTapped(row, tableRow, column, cursor, qtModifiers(modifiers));
             return true;
         };
-        page.onCellLink = [guard](int row, int tableRow, int column, const QString &href, at::Point p) {
+        page.onCellLink = [guard, act](int row, int tableRow, int column, const QString &href, at::Point p) {
+            act();
             if (guard)
                 Q_EMIT guard->tableLinkClicked(row, tableRow, column, href, p.x, p.y);
         };
-        page.onCellMenu = [guard](int row, int tableRow, int column, at::Point p) {
+        page.onCellMenu = [guard, act, pageModel](int row, int tableRow, int column, at::Point p) {
             if (!guard)
                 return;
+            act();
             // The table's size and the column's alignment, for the menu's Row and Column items.
-            auto *model = qobject_cast<brulion::editor::BlockListModel *>(guard->m_pageModel.data());
+            brulion::editor::BlockListModel *model = pageModel.data();
             const TableGrid grid = model ? readTableGrid(model->index(row, 0)
                                                                  .data(brulion::editor::BlockListModel::TableDataRole)
                                                                  .toMap())
@@ -1028,11 +1908,14 @@ void AtramentView::connectTables()
                 if (kv.second)
                     Q_EMIT kv.second->changed();
         };
-        page.onCellLinkMenu = [guard](int row, int tableRow, int column, const QString &href, at::Point p) {
+        page.onCellLinkMenu = [guard, act](int row, int tableRow, int column, const QString &href, at::Point p) {
+            act();
             if (guard)
                 Q_EMIT guard->tableLinkMenuRequested(row, tableRow, column, href, p.x, p.y);
         };
     });
+#else
+    Q_UNUSED(handle)
 #endif
 }
 
@@ -1095,7 +1978,7 @@ bool AtramentView::editTableCell(int row, int tableRow, int column, int cursor)
 {
     bool done = false;
 #ifdef BRULION_HAS_ATRAMENT_EDITOR
-    if (m_page)
+    if (hasPage())
         m_page->entity.update(runtime().app, [&](brulion::editor::atr::PageView &page,
                                                  at::Context<brulion::editor::atr::PageView> &cx) {
             done = page.editCell(row, tableRow, column, cursor, cx);
@@ -1130,22 +2013,31 @@ void AtramentView::setVimSession(QObject *vim)
 void AtramentView::applyExtras()
 {
 #ifdef BRULION_HAS_ATRAMENT_EDITOR
-    if (!m_page)
-        return;
+    forEachPage([this](const PageHandle &page) { extrasOf(page); });
+#endif
+}
+
+void AtramentView::extrasOf(const PageHandle &handle)
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
     using namespace brulion::editor;
     auto *spell = qobject_cast<SpellCheck *>(m_spellCheck.data());
     auto *vim = qobject_cast<VimSession *>(m_vimSession.data());
-    m_page->entity.update(runtime().app, [&](atr::PageView &page, at::Context<atr::PageView> &cx) {
+    // (A day of the journal: Vim is the editor's, which follows the active day.)
+    const bool withVim = !handle.day || (hasPage() && m_page->entity.id() == handle.entity.id());
+    handle.entity.update(runtime().app, [&](atr::PageView &page, at::Context<atr::PageView> &cx) {
         page.setSpellCheck(spell, atColor(m_spellColor), cx);
-        page.setVim(vim, cx);
+        page.setVim(withVim ? vim : nullptr, cx);
     });
+#else
+    Q_UNUSED(handle)
 #endif
 }
 
 int AtramentView::editSelectionStart() const
 {
 #ifdef BRULION_HAS_ATRAMENT_EDITOR
-    if (m_page) {
+    if (hasPage()) {
         const auto st = m_page->entity.read(runtime().app).editState();
         return std::min(st.anchor, st.cursor);
     }
@@ -1156,7 +2048,7 @@ int AtramentView::editSelectionStart() const
 int AtramentView::editSelectionEnd() const
 {
 #ifdef BRULION_HAS_ATRAMENT_EDITOR
-    if (m_page) {
+    if (hasPage()) {
         const auto st = m_page->entity.read(runtime().app).editState();
         return std::max(st.anchor, st.cursor);
     }
@@ -1167,7 +2059,7 @@ int AtramentView::editSelectionEnd() const
 bool AtramentView::event(QEvent *e)
 {
 #ifdef BRULION_HAS_ATRAMENT_EDITOR
-    if (e->type() == QEvent::ShortcutOverride && m_page) {
+    if (e->type() == QEvent::ShortcutOverride && hasPage()) {
         auto *vim = qobject_cast<brulion::editor::VimSession *>(m_vimSession.data());
         auto *key = static_cast<QKeyEvent *>(e);
         const Qt::KeyboardModifiers mods = key->modifiers();

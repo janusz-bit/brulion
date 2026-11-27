@@ -146,7 +146,7 @@ void PageView::setVim(VimSession *vim, at::Context<PageView> &cx)
                         return;
                     app->updateEntity<PageView>(self, [&](PageView &v, at::Context<PageView> &c) {
                         v.m_revealEdited = false; // (the row is where Vim put it)
-                        v.m_handle.scrollToRow(std::size_t(row), where < 0    ? at::ListPosition::Start
+                        v.scrollRowTo(std::size_t(row), where < 0    ? at::ListPosition::Start
                                                                  : where == 0 ? at::ListPosition::Center
                                                                               : at::ListPosition::End);
                         c.notify();

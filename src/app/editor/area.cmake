@@ -82,7 +82,7 @@ qt_target_qml_sources(brulion
 # The page drawn by Atrament (AppSettings.editorAtrament; docs/ATRAMENT.md M2), where Atrament and
 # its AtramentView are built: BlockEditor loads it by its file name.
 if(TARGET brulion_editor_atrament AND TARGET brulion_atrament_gallery)
-    qt_target_qml_sources(brulion QML_FILES qml/editor/EditorAtramentPage.qml)
+    qt_target_qml_sources(brulion QML_FILES qml/editor/EditorAtramentPage.qml qml/editor/EditorAtramentJournal.qml)
 endif()
 # Developer QML (BRULION_DEV_QML, src/app/CMakeLists.txt); PageView loads PageScript from its file
 # when `--editor-script` asks for it.
@@ -91,4 +91,10 @@ if(BRULION_DEV_QML_ENABLED)
         qml/dev/SelectionSelfTest.qml qml/dev/RefreshSelfTest.qml qml/dev/DateChipSelfTest.qml
         qml/dev/PropertiesSelfTest.qml qml/dev/LinkPartsSelfTest.qml qml/dev/ReadingSelfTest.qml qml/dev/TableSelfTest.qml
         qml/dev/SpellingSelfTest.qml qml/dev/AtramentSelfTest.qml qml/dev/AtramentTableSelfTest.qml)
+    # The journal stream drawn by Atrament (JournalsView loads it with `--atrament-editor`): it names
+    # AtramentView, built only where Atrament is (registered here: the editor's library exists from
+    # this area on).
+    if(TARGET brulion_editor_atrament AND TARGET brulion_atrament_gallery)
+        qt_target_qml_sources(brulion QML_FILES qml/content/ContentJournalsAtramentSelfTest.qml)
+    endif()
 endif()

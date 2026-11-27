@@ -2,6 +2,9 @@ brulion_add_test(tst_atrament_editor SOURCES tst_atrament_editor.cpp LIBS brulio
 target_compile_definitions(tst_atrament_editor PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 brulion_add_test(tst_atrament_editing SOURCES tst_atrament_editing.cpp LIBS brulion_editor_atrament)
 target_compile_definitions(tst_atrament_editing PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+# The journal stream as one list (journalview.h): days of a days' model over FakeEditorHost.
+brulion_add_test(tst_atrament_journal SOURCES tst_atrament_journal.cpp LIBS brulion_editor_atrament)
+target_compile_definitions(tst_atrament_journal PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 # Charts, Mermaid diagrams, formulas and page icons drawn by Atrament (diagramrows.cpp, mathrows.cpp).
 brulion_add_test(tst_atrament_diagrams SOURCES tst_atrament_diagrams.cpp LIBS brulion_editor_atrament)
 target_compile_definitions(tst_atrament_diagrams PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")

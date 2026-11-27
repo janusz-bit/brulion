@@ -29,6 +29,8 @@ constexpr float kDragThreshold = 4;
 
 float PageView::scrolledSinceFrame() const
 {
+    if (m_embedding)
+        return m_embedding->scrolledSinceFrame ? m_embedding->scrolledSinceFrame() : 0.0f;
     const std::shared_ptr<at::ListHandle::State> st = m_handle.shared();
     return st->scroll.offset.y - st->lastY;
 }
@@ -154,7 +156,7 @@ void PageView::dragMoved(at::Point p, at::Context<PageView> &cx)
                 v.m_edgeScroll.stop();
                 return;
             }
-            if (v.m_handle.scrollBy(dy)) {
+            if (v.scrollPageBy(dy)) {
                 v.dragUpdate(c); // other rows are under the pointer now
                 c.notify();
             }
