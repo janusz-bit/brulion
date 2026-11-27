@@ -923,6 +923,47 @@ QtObject {
                                          "“No status” removes the box, the text stays a list item")
         if (window.at()) page.undo()
         if (window.at()) window.waitStep(test.info(0).taskStatus === "todo", "undo brings the box back")
+        // Ctrl+Shift+Enter while editing: the menu at the caret, its keys, the caret kept.
+        if (window.at()) editor.startEditing(0, 3)
+        if (window.at()) window.waitStep(test.editing(0) && test.editCursor() === 3, "the task is edited, the caret at 3")
+        if (window.at()) test.key(Qt.Key_Return, Qt.ControlModifier | Qt.ShiftModifier)
+        if (window.at()) window.waitStep(test.statusMenu() !== null && test.statusMenu().opened && test.info(0).taskStatus === "todo",
+                                         "Ctrl+Shift+Enter opens the status menu of the edited block, the status not cycled")
+        if (window.at()) window.realKey(Qt.Key_Escape, Qt.NoModifier, "")
+        if (window.at()) window.waitStep(!test.statusMenuOpen() && test.editing(0) && test.editCursor() === 3,
+                                         "Escape closes the menu, the block keeps its caret: " + test.editCursor())
+        if (window.at()) test.key(Qt.Key_Return, Qt.ControlModifier | Qt.ShiftModifier)
+        if (window.at()) window.waitStep(test.statusMenu() !== null && test.statusMenu().opened, "the menu opens again")
+        if (window.at()) {
+            const doing = test.statusItem("taskStatus_doing")
+            if (doing)
+                window.tapItem(doing)
+        }
+        if (window.at()) window.waitStep(!test.statusMenuOpen() && test.info(0).taskStatus === "doing" && test.editing(0)
+                                         && test.editCursor() === 3 && test.editText() === "Kupić płytki 📅 2026-10-16",
+                                         "a status from the menu: the block edited on, the caret and the text kept: "
+                                         + test.editCursor() + " " + test.editText())
+        if (window.at()) page.undo()
+        // A heading has no status: Ctrl+Shift+Enter opens nothing, changes nothing.
+        if (window.at()) {
+            page.stopEditing()
+            page.insertMarkdown(page.lastVisibleRow(), "## Koszty")
+        }
+        if (window.at()) editor.startEditing(test.rowOf("Koszty"), -1)
+        if (window.at()) window.waitStep(test.editing(test.rowOf("Koszty")), "a heading is edited")
+        if (window.at()) {
+            test.textBefore = page.sourceText
+            test.key(Qt.Key_Return, Qt.ControlModifier | Qt.ShiftModifier)
+        }
+        if (window.at()) window.waitStep(true, "Ctrl+Shift+Enter pressed in the heading")
+        if (window.at()) {
+            const open = test.statusMenuOpen()
+            const same = page.sourceText === test.textBefore
+            const ok = !open && same && test.editing(test.rowOf("Koszty"))
+            test.check(ok, "Ctrl+Shift+Enter in a heading opens no status menu, changes nothing: menu " + open
+                       + ", text kept " + same + ", " + test.editText())
+        }
+        if (window.at()) page.stopEditing()
     }
 
     Component.onCompleted: window.runSteps("atramenttest")

@@ -496,6 +496,15 @@ bool PageView::editorKey(const at::Keystroke &k, at::Window &window, at::Context
             ctl->cycleTask(row);
             return true;
         }
+        if (k.key == u"enter" && m.shift) {
+            // The status menu under the caret (BlockEditor.openTaskStatusMenuFor's keys).
+            commitWord();
+            if (onTaskMenuAtCaret) {
+                const at::Rect c = editState().caret;
+                onTaskMenuAtCaret(row, at::Point{c.left(), c.bottom()});
+            }
+            return true;
+        }
         if ((k.key == u"c" || k.key == u"x") && !m.shift && !selected.isEmpty()) {
             // The exact text (no-break spaces kept) and the copy's HTML: the controller's.
             const QVariantMap r = ctl->copyEditText(row, selected.start, selected.end, k.key == u"x");

@@ -254,6 +254,13 @@ AtramentView {
         if (root.editor)
             root.editor.openTaskStatusMenu(row, root, x, y)
     }
+    onTaskMenuAtCaretRequested: (row, x, y) => {
+        if (!root.editor || !root.editor.canHaveTaskStatus(row))
+            return
+        root.editor.openTaskStatusMenu(row, root, x, y)
+        if (root.editor.taskMenu)
+            QmlCall.call(root.editor.taskMenu, "highlightStatus")
+    }
     onTaskToggled: row => {
         if (root.editor && root.editor.controller)
             root.editor.controller.toggleTask(row)

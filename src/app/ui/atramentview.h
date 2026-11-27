@@ -247,6 +247,9 @@ Q_SIGNALS:
     // A right-click or a finger held on a task's box at (x, y) of this item: its status menu
     // (BlockEditor.openTaskStatusMenu).
     void taskMenuRequested(int row, qreal x, qreal y);
+    // Ctrl+Shift+Enter in the edited block: its status menu under the caret at (x, y) of this item,
+    // when the block can have one (BlockEditor.canHaveTaskStatus).
+    void taskMenuAtCaretRequested(int row, qreal x, qreal y);
     void styleChanged();
     void pageControllerChanged();
     // "page", editing: a click or a tap asks to edit `row` with the caret at `cursor` (−1: not

@@ -138,6 +138,7 @@ private Q_SLOTS:
     void sourcesAreNoProse();
     void pointsInTheEditedText();
     void taskBoxMenu();
+    void taskMenuAtTheCaret();
 };
 
 void TestAtramentEditing::clickEditsAtTheCharacter()
@@ -1131,6 +1132,31 @@ void TestAtramentEditing::taskBoxMenu()
     h.tw.advance(400ms);
     h.tw.simulateClick(*box);
     QCOMPARE(toggled, 1);
+}
+
+// Ctrl+Shift+Enter in the edited block asks for its status menu at the caret (BlockEditor decides
+// whether the block can have one): the status does not cycle, the text and the caret stay.
+void TestAtramentEditing::taskMenuAtTheCaret()
+{
+    Harness h(u"- [ ] Wywieźć gruz\n- zwykły\n"_s);
+    int menuFor = -1;
+    at::Point at;
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &) {
+        v.onTaskMenuAtCaret = [&](int row, at::Point p) {
+            menuFor = row;
+            at = p;
+        };
+    });
+    h.clickInto(0, 3);
+    QCOMPARE(h.controller.editingRow(), 0);
+    const int caret = h.inputCaret();
+    h.tw.simulateKeystrokes(u"ctrl-shift-enter");
+    QCOMPARE(menuFor, 0);
+    QCOMPARE(h.model()->index(0).data(BlockListModel::TaskStatusRole).toString(), u"todo"_s);
+    QCOMPARE(h.inputText(), u"Wywieźć gruz"_s);
+    QCOMPARE(h.inputCaret(), caret);
+    const std::optional<at::Point> p = h.view().editPoint(caret);
+    QVERIFY(p && std::abs(at.x - p->x) < 2 && at.y > p->y);
 }
 
 QTEST_MAIN(TestAtramentEditing)

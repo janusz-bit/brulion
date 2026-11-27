@@ -205,6 +205,9 @@ public:
     // A right-click or a finger held on row `row`'s task box: its status menu at the window point
     // (BlockEditor.openTaskStatusMenu), instead of the block's menu or the selection mode.
     std::function<void(int row, atrament::Point at)> onTaskMenu;
+    // Ctrl+Shift+Enter in the edited block: its status menu under the caret (window point;
+    // BlockEditor decides whether the block can have one).
+    std::function<void(int row, atrament::Point at)> onTaskMenuAtCaret;
     // The outline's bullet clicked (zoom into the block); a right-click on a row at a window point
     // (the block menu). Unset: no bullet click, no menu.
     std::function<void(int row)> onBulletClick;
