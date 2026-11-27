@@ -158,6 +158,7 @@ AtramentView {
         queryItems: Theme.touchUi ? 20 : 50,
         frames: notePictureFrames >= 0 ? notePictureFrames > 0 : AppSettings.pictureFrames,
         lightBacking: Theme.dark && (notePictureBacking >= 0 ? notePictureBacking > 0 : AppSettings.lightPictureBacking),
+        dark: Theme.dark,
         uiFamily: Theme.fontUi
     })
     // The edited text's spell marks (and the drawn rows' with SpellCheck.wholePage), its Vim keys.
@@ -415,6 +416,15 @@ AtramentView {
             root.editor.controller.activateLink(row, "page:" + Js.encodeURIComponent(target), false)
     }
     onEmbedClicked: (row, embed) => root.openEmbed(row, embed)
+    // A picture from the internet not shown yet: EmbedView's "Show" / "Try again", "Save to notebook".
+    onWebPictureRequested: (row, url, save) => {
+        if (!root.editor || !root.editor.controller)
+            return
+        if (save)
+            root.editor.downloadWebPictures(url)
+        else
+            root.editor.controller.showWebPicture(url)
+    }
     // A picture from the internet: its menu (WebPictureMenu) at the pointer.
     onEmbedMenuRequested: (row, embed, x, y) => {
         embedInfo.map = embed

@@ -91,7 +91,9 @@ class AtramentView : public brulion::atrament::AtramentItem {
     // ```dataview results; their look { frame, border, borderStrong, faint, linkMissing, danger,
     // backing, chipBackground, chipText, embedFill, queryBackground, hover, focusRing (colours),
     // radius, radiusSm, spacing, smallSize, tinySize, bodySize, h1Size, h2Size, headerHeight,
-    // indentStep, taskBoxWidth, queryItems (numbers), frames, lightBacking (bools), uiFamily }
+    // indentStep, taskBoxWidth, queryItems (numbers), frames, lightBacking, dark (bools), uiFamily }
+    // — a drawing's preview comes from the app's "drawing" image provider (DrawingImageProvider,
+    // registered with the page's PictureCache), in the dark theme its dark version
     // (EmbedView's, TransclusionView's, QueryBlockView's Theme values; pageview.h MediaLook).
     Q_PROPERTY(bool drawsPictures MEMBER m_drawsPictures NOTIFY styleChanged FINAL)
     Q_PROPERTY(bool drawsFiles MEMBER m_drawsFiles NOTIFY styleChanged FINAL)
@@ -289,6 +291,10 @@ Q_SIGNALS:
     // PDF viewer), a file; a picture from the internet's menu asked for at a point of this item.
     void embedClicked(int row, const QVariantMap &embed);
     void embedMenuRequested(int row, const QVariantMap &embed, qreal x, qreal y);
+    // A picture from the internet not shown yet (EmbedView's placeholder): "Show" / "Try again"
+    // (`save` false: PageController.showWebPicture) or "Save to notebook" (`save`:
+    // BlockEditor.downloadWebPictures) for its address `url`.
+    void webPictureRequested(int row, const QString &url, bool save);
     // A link of an embedded block's text (TransclusionView.activate: its file, line and Markdown).
     void embeddedLinkActivated(int row, const QString &link, const QString &path, int line, const QString &raw);
     // A link of a query result's text (QueryBlockView: a date chip's dialog, else

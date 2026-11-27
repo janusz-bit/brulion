@@ -7,6 +7,7 @@
 // memory held while shown, chips of other files, a PDF's thumbnail, the kinds Atrament does not draw
 // staying the QML delegate's; embedded blocks in their frame with links and a working task box;
 // a query's results with their task boxes, links and items opening.
+#include "animatedgif.h"
 #include "blocklistmodel.h"
 #include "fakeeditorhost.h"
 #include "pagecontroller.h"
@@ -65,8 +66,16 @@ QByteArray png(int w, int h, QColor colour)
 
 constexpr unsigned AllKinds = PageView::Pictures | PageView::Files | PageView::Transclusions | PageView::Queries;
 
+// Drawings' previews from the test's image provider (the app's: image://drawing/…, DrawingImageProvider).
+struct TestHost : FakeEditorHost {
+    QUrl drawingUrl(const QString &path, bool dark) const override
+    {
+        return QUrl(u"image://testdrawing/"_s + path + (dark ? u"?dark=1"_s : u"?dark=0"_s));
+    }
+};
+
 struct Harness {
-    FakeEditorHost host;
+    TestHost host;
     PageController controller;
     std::shared_ptr<at::TestPlatform> platform = std::make_shared<at::TestPlatform>();
     at::App app{platform, loadFonts()};
@@ -151,6 +160,10 @@ private Q_SLOTS:
     void queryResultEndsWithAnEllipsis();
     void selectedBandIsOnePiece();
     void linkMenusInEmbedsAndResults();
+    void animatedPictureAnimatesOnScreen();
+    void spinnerWhileAPictureLoads();
+    void webPictureNotShownYet();
+    void drawingFromItsProvider();
 };
 
 void TestAtramentMedia::pictureKeepsItsSizeAndIsDrawn()
@@ -305,18 +318,18 @@ void TestAtramentMedia::undecodablePictureNamesItsFormat()
 
 void TestAtramentMedia::foreignKindsStayTheDelegates()
 {
-    // A recording (a player), a drawing (its preview from an image provider), a picture from the
-    // internet not shown yet: the QML delegate's rows, text included — and not Atrament's to edit.
+    // A recording (a player): the QML delegate's row, text included — and not Atrament's to edit.
+    // (A picture from the internet not shown yet is Atrament's: webPictureNotShownYet.)
     Harness h(u"- Nagranie ![[Nagranie łąki.m4a]]\n- ![](https://example.com/kot.jpg)\n- Zwykły punkt\n"_s,
               [](FakeEditorHost &host) { host.saveAttachment(u"Nagranie łąki.m4a"_s, QByteArray("ftyp")); });
     QVERIFY(!h.view().drawsRow(0));
-    QVERIFY(!h.view().drawsRow(1));
+    QVERIFY(h.view().drawsRow(1));
     QVERIFY(h.view().drawsRow(2));
     QVERIFY(!h.view().editsRow(0));
-    QVERIFY(!h.view().editsRow(1));
+    QVERIFY(h.view().editsRow(1));
     QVERIFY(h.view().editsRow(2));
     const std::vector<std::size_t> foreign = h.view().foreignRows();
-    QCOMPARE(foreign, (std::vector<std::size_t>{0, 1}));
+    QCOMPARE(foreign, (std::vector<std::size_t>{0}));
     // Switched off: a picture's row is the delegate's as before.
     Harness off(u"![[łąka.png]]\n"_s,
                 [](FakeEditorHost &host) { host.saveAttachment(u"łąka.png"_s, png(40, 40, Qt::red)); }, {600, 400},
@@ -619,6 +632,165 @@ void TestAtramentMedia::linkMenusInEmbedsAndResults()
     h.tw.simulateClick(*page, at::MouseButton::Right);
     QCOMPARE(queried.size(), 1);
     QCOMPARE(blockMenus, 2);
+}
+
+void TestAtramentMedia::animatedPictureAnimatesOnScreen()
+{
+    // An animated GIF plays (each frame as long as it says) while shown, waits where it was while
+    // scrolled away, and goes on from there when it comes back.
+    QString content = u"![[ruch.gif]]\n\n"_s;
+    for (int k = 0; k < 40; ++k)
+        content += u"Akapit numer %1 o łące.\n\n"_s.arg(k);
+    Harness h(content, [](FakeEditorHost &host) {
+        host.saveAttachment(u"ruch.gif"_s, animatedGif(60, 30, {Qt::red, Qt::green, Qt::blue}, 10));
+    });
+    QVERIFY(h.view().drawsRow(0));
+    QVERIFY(h.waitDecoded(0));
+    auto colourAt = [&h]() {
+        const at::Rect b = h.frames(0).front().bounds;
+        const at::Pixel p = h.tw.pixel(int(b.center().x), int(b.center().y));
+        return QColor(p.r, p.g, p.b);
+    };
+    QCOMPARE(h.frames(0).front().frame, 0);
+    QCOMPARE(colourAt(), QColor(Qt::red));
+    h.tw.advance(std::chrono::milliseconds(110));
+    QCOMPARE(h.frames(0).front().frame, 1);
+    QCOMPARE(colourAt(), QColor(Qt::green));
+    h.tw.advance(std::chrono::milliseconds(40));
+    QCOMPARE(h.frames(0).front().frame, 1); // (its 100 ms are not over yet)
+    // Scrolled away for a second: no frame of its own is drawn, and it waits.
+    h.page.update(h.app, [](PageView &v, at::Context<PageView> &c) {
+        v.handle().scrollToRow(40, at::ListPosition::End);
+        c.notify();
+    });
+    h.tw.settle();
+    QVERIFY(h.frames(0).empty());
+    const std::uint64_t drawn = h.window().frameCount();
+    h.tw.advance(std::chrono::milliseconds(1000));
+    QVERIFY2(h.window().frameCount() - drawn < 3, qPrintable(QString::number(h.window().frameCount() - drawn)));
+    h.page.update(h.app, [](PageView &v, at::Context<PageView> &c) {
+        v.handle().scrollToTop();
+        c.notify();
+    });
+    h.tw.settle();
+    QCOMPARE(h.frames(0).front().frame, 1); // where it was
+    h.tw.advance(std::chrono::milliseconds(80));
+    QCOMPARE(h.frames(0).front().frame, 2); // the rest of its time, then the next
+    QCOMPARE(colourAt(), QColor(Qt::blue));
+    h.tw.advance(std::chrono::milliseconds(100));
+    QCOMPARE(h.frames(0).front().frame, 0); // looping
+}
+
+void TestAtramentMedia::spinnerWhileAPictureLoads()
+{
+    // BSpinner over the frame while its picture is decoded (the page drawn again as it turns).
+    Harness h(u"![[łąka.png]]\n"_s,
+              [](FakeEditorHost &host) { host.saveAttachment(u"łąka.png"_s, png(300, 200, Qt::darkGreen)); });
+    auto f = h.frames(0);
+    QCOMPARE(int(f.size()), 1);
+    QVERIFY(!f[0].decoded);
+    QVERIFY(f[0].loading);
+    const std::uint64_t before = h.window().frameCount();
+    h.tw.advance(std::chrono::milliseconds(100));
+    QVERIFY(h.window().frameCount() > before);
+    QVERIFY(h.waitDecoded(0));
+    QVERIFY(!h.frames(0).front().loading);
+    // Nothing turns any more: no frame is asked for (but the one the spinner's last turn asked for).
+    h.tw.advance(std::chrono::milliseconds(100));
+    const std::uint64_t settled = h.window().frameCount();
+    h.tw.advance(std::chrono::milliseconds(200));
+    QCOMPARE(h.window().frameCount(), settled);
+}
+
+void TestAtramentMedia::webPictureNotShownYet()
+{
+    // EmbedView's placeholder for a picture from the internet: its site, "Show" and "Save to
+    // notebook"; shown when asked (a spinner while it loads), then the picture.
+    const QString address = u"https://example.com/kot.png"_s;
+    Harness h(u"- Kot ![Rudy kot na płocie](https://example.com/kot.png)\n"_s,
+              [&address](FakeEditorHost &host) { host.setWebPicture(address, png(200, 100, Qt::red)); });
+    QVERIFY(h.view().drawsRow(0));
+    QList<bool> asked;
+    QString target;
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &) {
+        v.onWebPicture = [&](int, const QVariantMap &embed, bool save) {
+            asked.append(save);
+            target = embed.value(u"target"_s).toString();
+        };
+    });
+    h.window().setAccessibilityEnabled(true);
+    h.tw.settle();
+    const QString tree = str(h.window().accessibilityTree().dump());
+    QVERIFY2(tree.contains(u"Picture from example.com"_s), qPrintable(tree));
+    QVERIFY2(tree.contains(u"Rudy kot na płocie"_s), qPrintable(tree));
+    QCOMPARE(int(h.frames(0).size()), 1);
+    QVERIFY(!h.frames(0).front().loading);
+    QCOMPARE(h.host.webFetches(), 0); // (nothing fetched without asking)
+    const at::AccessibilityNode *show = h.node(at::Role::Button, u"Show");
+    const at::AccessibilityNode *save = h.node(at::Role::Button, u"Save to notebook");
+    QVERIFY2(show && save, qPrintable(tree));
+    h.tw.simulateClick(save->bounds.center());
+    h.tw.simulateClick(show->bounds.center());
+    QCOMPARE(asked, (QList<bool>{true, false}));
+    QCOMPARE(target, address);
+    QCOMPARE(h.controller.editingRow(), -1);
+    // Shown (what the editor does with "Show"): loading, then the picture in its frame.
+    h.controller.showWebPicture(address);
+    h.tw.settle();
+    QVERIFY(h.frames(0).front().loading);
+    QVERIFY(h.waitDecoded(0));
+    const at::Rect b = h.frames(0).front().bounds;
+    const at::Pixel p = h.tw.pixel(int(b.center().x), int(b.center().y));
+    QVERIFY2(p.r > 200 && p.g < 50, qPrintable(u"%1 %2 %3"_s.arg(p.r).arg(p.g).arg(p.b)));
+}
+
+void TestAtramentMedia::drawingFromItsProvider()
+{
+    // A drawing's preview from its image provider (the app's image://drawing/…): in the theme's
+    // version, at its own size (never enlarged), a click opening it.
+    QSize requested;
+    PictureCache::setImageProvider(u"testdrawing"_s, [&requested](const QString &id, QSize *size, const QSize &req) {
+        requested = req;
+        if (size)
+            *size = QSize(400, 200);
+        QImage picture(req.width(), req.width() / 2, QImage::Format_ARGB32);
+        picture.fill(id.endsWith(u"dark=1"_s) ? QColor(20, 30, 120) : QColor(30, 170, 60));
+        return picture;
+    });
+    const QByteArray scene = "{\n  \"type\": \"excalidraw\",\n  \"version\": 2,\n  \"elements\": []\n}\n";
+    Harness h(u"![[szkic.excalidraw]]\n"_s,
+              [&scene](FakeEditorHost &host) { host.saveAttachment(u"szkic.excalidraw"_s, scene); });
+    const QVariantList embeds = h.model()->index(0).data(BlockListModel::EmbedsRole).toList();
+    QCOMPARE(embeds.size(), 1);
+    QVERIFY(embeds.front().toMap().value(u"drawing"_s).toBool());
+    QVERIFY(h.view().drawsRow(0));
+    QVERIFY(h.waitDecoded(0));
+    h.tw.settle();
+    QVERIFY(h.waitDecoded(0));
+    at::Rect b = h.frames(0).front().bounds;
+    QVERIFY2(std::abs(b.width() - 400) < 3 && std::abs(b.height() - 200) < 3,
+             qPrintable(u"%1 × %2"_s.arg(b.width()).arg(b.height())));
+    at::Pixel p = h.tw.pixel(int(b.center().x), int(b.center().y));
+    QVERIFY2(p.g > 150 && p.r < 60, qPrintable(u"%1 %2 %3"_s.arg(p.r).arg(p.g).arg(p.b)));
+    QVERIFY(requested.width() >= 400 && requested.width() == requested.height());
+    QVariantMap clicked;
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &) {
+        v.onEmbedClick = [&](int, const QVariantMap &embed) { clicked = embed; };
+    });
+    h.tw.simulateClick(b.center());
+    QVERIFY(clicked.value(u"drawing"_s).toBool());
+    // The dark theme: its dark version.
+    h.page.update(h.app, [](PageView &v, at::Context<PageView> &cx) {
+        PageView::MediaLook look;
+        look.dark = true;
+        v.setDrawsMedia(AllKinds, look, cx);
+    });
+    h.tw.settle();
+    QVERIFY(h.waitDecoded(0));
+    b = h.frames(0).front().bounds;
+    p = h.tw.pixel(int(b.center().x), int(b.center().y));
+    QVERIFY2(p.b > 100 && p.g < 60, qPrintable(u"%1 %2 %3"_s.arg(p.r).arg(p.g).arg(p.b)));
+    PictureCache::setImageProvider(u"testdrawing"_s, {});
 }
 
 QTEST_MAIN(TestAtramentMedia)

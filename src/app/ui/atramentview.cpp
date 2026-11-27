@@ -22,6 +22,8 @@
 #include "queryresultmodel.h"
 #include "spellcheck.h"
 #include "vimsession.h"
+#include "picturecache.h"
+#include "drawingimageprovider.h"
 #endif
 
 #include <QKeyEvent>
@@ -533,6 +535,7 @@ void AtramentView::applyStyle()
         media.queryItems = int(mediaNumber("queryItems", float(media.queryItems)));
         media.frames = m_mediaLook.value(u"frames"_s).toBool();
         media.lightBacking = m_mediaLook.value(u"lightBacking"_s).toBool();
+        media.dark = m_mediaLook.value(u"dark"_s).toBool();
         media.uiFamily = std::u16string(u16View(m_mediaLook.value(u"uiFamily"_s).toString()));
         media.embeddedName = QCoreApplication::translate("TransclusionView", "Embedded: %1");
         page.setDrawsMedia((m_drawsPictures ? PageView::Pictures : 0u) | (m_drawsFiles ? PageView::Files : 0u)
@@ -607,6 +610,17 @@ void AtramentView::attachView()
                 qWarning() << "AtramentView: the page view needs a BlockListModel as pageModel";
             return; // (attached once the model is set)
         }
+        // Drawings' previews (image://drawing/…, EditorHost::drawingUrl) for the pages' pictures: the
+        // provider QML's EmbedView reads them from (stateless: called on the cache's threads).
+        static const bool drawings = [] {
+            auto provider = std::make_shared<brulion::drawingview::DrawingImageProvider>();
+            brulion::editor::atr::PictureCache::setImageProvider(
+                    u"drawing"_s, [provider](const QString &id, QSize *size, const QSize &requested) {
+                        return provider->requestImage(id, size, requested);
+                    });
+            return true;
+        }();
+        Q_UNUSED(drawings)
         m_page = std::make_unique<Page>();
         m_page->entity = r.app.newEntity<brulion::editor::atr::PageView>(model);
         QPointer<AtramentView> guard = this;
@@ -668,6 +682,10 @@ void AtramentView::attachView()
                     page.onEmbedMenu = [guard](int row, const QVariantMap &embed, at::Point p) {
                         if (guard)
                             Q_EMIT guard->embedMenuRequested(row, embed, p.x, p.y);
+                    };
+                    page.onWebPicture = [guard](int row, const QVariantMap &embed, bool save) {
+                        if (guard)
+                            Q_EMIT guard->webPictureRequested(row, embed.value(u"target"_s).toString(), save);
                     };
                     page.onEmbeddedLink = [guard](int row, const QString &link, const QString &path, int line,
                                                   const QString &raw) {

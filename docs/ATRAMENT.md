@@ -1113,7 +1113,23 @@ scrolling, `tst_atrament_editor`) before the next:
      internet its menu (`embedMenuRequested` → WebPictureMenu), elsewhere the block's menu. A
      PDF's thumbnail is PdfEmbedTile's (white paper of the page's shape, the caption with the page
      count), other files are BChip's chips (an icon of Atrament's own — a page, a picture — and the
-     name). Animated GIFs show their first frame.
+     name). While a picture loads BSpinner turns in its frame (a ring and an arc of 100°, once in
+     850 ms: `paintSpinner`, the page drawn again every 33 ms on Atrament's clock while it does). An
+     **animated picture** (a GIF) plays while it is shown — its frames from the cache, each as long
+     as it says (`Media::animationFrame`: one timer on Atrament's clock for the page, the earliest
+     frame due; `PictureFrame::frame`) — and waits where it was while scrolled away (nothing is drawn
+     for it then: no timer), going on with the time it had left when it comes back; it loops.
+     A **picture from the internet not shown yet** (`web`, its state "ask", "loading" or "failed")
+     is EmbedView's placeholder: a 320 px frame at least 180 high naming its alt text (or why it
+     could not be fetched) and its site ("Picture from …"), "Show" ("Try again" after a failure)
+     and "Save to notebook" (`onWebPicture` → `AtramentView.webPictureRequested` →
+     `PageController.showWebPicture` / `BlockEditor.downloadWebPictures`; nothing is fetched
+     before), only the spinner while it loads (the words keeping their room); then its picture.
+     A **drawing** (`drawing`: its preview from the app's "drawing" image provider,
+     `EditorHost::drawingUrl`, the dark version in the dark theme — `MediaLook::dark`) is drawn at
+     its own size, never enlarged (fitted into 1024 × 420), fitted into its frame as an SVG, without
+     the light backing, a pen in its corner (BIcon's `pen-tool` on a raised square) when the frame
+     is at least 72 × 48; a click opens the drawing editor (`embedClicked`).
    * **PictureCache** (one per process, `PictureCache::shared()`): QImageReader on two worker
      threads, from `file:` and `data:` URLs (a picture from the internet once cached), at the
      frame's longer side in device pixels in PictureDecode's steps (never enlarged; an SVG rendered
@@ -1121,7 +1137,14 @@ scrolling, `tst_atrament_editor`) before the next:
      page keeps the pictures of its last two frames, so a screenful larger than the budget stays
      whole and nothing is decoded twice per frame —, the least recently asked for first; one
      picture per file, decoded again for another side while the old one is shown; a header of more
-     than 50 MP refused, a failure remembered until the file's size changes.
+     than 50 MP refused, a failure remembered until the file's size changes. An animated picture is
+     decoded whole on the worker (every frame, composed by the decoder, with its delay — 0 or 10 ms
+     shown for 100, as browsers do; `Result::animation`, its first frame `image`), at most 32 MB of
+     frames (`MaxAnimationBytes`: a larger one decoded smaller to fit) and 1 000 frames; the budget
+     counts every frame and lets go of none while a page holds the animation. Pictures of image
+     providers (`image://<id>/…`) come from a provider function registered for the process
+     (`PictureCache::setImageProvider`, QQuickImageProvider::requestImage's contract, called on the
+     worker threads: AtramentView registers DrawingImageProvider as "drawing").
    * **Embedded pages, sections and blocks** in TransclusionView's frame: the source's edge line,
      the header (a link: opens the source), the blocks rendered read-only (their HTML read into
      `RenderedText`: headings, quotes, closed tasks, code as plain text in the code face, rules,
@@ -1134,17 +1157,20 @@ scrolling, `tst_atrament_editor`) before the next:
      drawn, run when it is first drawn): the header with the count, the filters as chips, group
      headers, tasks with a working box (`QueryResultModel::toggleTask`), items rendered as text with
      their links and their page as a quiet link (a daily note by its date), Dataview TABLE rows as
-     columns under their headers, at most 4 lines an item (clipped), "Show N more", the messages
+     columns under their headers, at most 4 lines an item ("…" after the fourth), "Show N more", the messages
      (still indexing, nothing found, an error, no notebook). A click on an item opens it
      (`queryAnswered` → BlockEditor.revealRow on this page), a link goes through
      `queryLinkActivated` (a date chip's dialog, else `AtramentView.activateQueryLink`), a click on
      the header or the filters edits the query — while edited the row is the QML delegate's (its
      InlineEditor, the results following the typed query).
-   Tested by `tests/atrament/editor/tst_atrament_media` and `tst_atrament_picturecache`. **Not
-   yet** (the QML delegate's rows): drawings (their previews come from an image provider), sounds
-   and videos, Obsidian bases and database views (`view:`, ```base), a picture from the internet
-   not shown yet ("Show", "Save to notebook"), a PDF's thumbnail being drawn or failed. Nor: an
-   animation, the spinner while a picture loads, link previews on hover, BIcon's icons.
+   Tested by `tests/atrament/editor/tst_atrament_media` (an animation playing, waiting off screen
+   and going on; the spinner; a picture from the internet's placeholder and its buttons; a
+   drawing's preview from a provider, its dark version) and `tst_atrament_picturecache`. **Not
+   yet** (the QML delegate's rows): sounds and videos, Obsidian bases and database views (`view:`,
+   ```base), a PDF's thumbnail being drawn or failed. Nor: link previews on hover, BIcon's icons
+   for files' chips and the transclusions' headers (Atrament's own glyphs there), an animation's
+   loop count (every animation loops), Theme.reducedMotion for the spinner, the pen badge's
+   hover look.
    * **Menus inside embedded blocks and results** (2026-11-27): a right-click or a finger held on
      a chip or a link of an embedded block's text or of a query result's opens its own menu, not the
      block's (`onEmbeddedLinkMenu`, `onQueryLinkMenu` → `AtramentView.embeddedLinkMenuRequested` /

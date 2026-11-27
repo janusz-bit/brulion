@@ -661,6 +661,7 @@ public:
         int queryItems = 50;     // QueryResultModel.maxItems (20 on touch)
         bool frames = false;     // pictures' hairline frames (AppSettings.pictureFrames, `picture-frames`)
         bool lightBacking = false; // a light backing under pictures (a dark theme, `picture-backing`)
+        bool dark = false;       // the app's theme: a drawing's dark preview (its embed's `darkUrl`)
         std::u16string uiFamily; // Theme.fontUi ("": the page's)
         // Words of the views (translated by the host; English by default).
         QString embeddedName = QStringLiteral("Embedded: %1");
@@ -679,6 +680,11 @@ public:
     // A right-click or a finger held on a picture from the internet: its menu at a window point.
     std::function<void(int row, const QVariantMap &embed)> onEmbedClick;
     std::function<void(int row, const QVariantMap &embed, atrament::Point at)> onEmbedMenu;
+    // A picture from the internet not shown yet (EmbedView's placeholder: its site, "Show" — "Try
+    // again" after a failure — and "Save to notebook"): `save` false asks to show it
+    // (PageController::showWebPicture), true to store it in the notebook
+    // (BlockEditor.downloadWebPictures); the embed's `target` is its address.
+    std::function<void(int row, const QVariantMap &embed, bool save)> onWebPicture;
     // A link of an embedded block's text clicked: its file, line and Markdown (a date chip's dialog,
     // a task's place: TransclusionView.activate). Unset: onLink with the link.
     std::function<void(int row, const QString &link, const QString &path, int line, const QString &raw)>
@@ -714,11 +720,15 @@ public:
     // The results of query row `row` drawn in the last frames (nullptr: none).
     QueryResultModel *queryResults(int row) const;
     // Where the last frame drew pictures: row, the embed's index, window bounds, whether decoded.
+    // Its spinner turning (the picture loading: decoded, or fetched from the internet), the frame
+    // of an animation drawn (−1: a still picture).
     struct PictureFrame {
         int row = -1;
         int embed = -1;
         atrament::Rect bounds;
         bool decoded = false;
+        bool loading = false;
+        int frame = -1;
     };
     const std::vector<PictureFrame> &pictureFrames() const { return m_pictureFrames; }
 
@@ -726,6 +736,7 @@ private:
     struct Media; // mediarows.cpp: the frames' state (pictures held, query models, parsed embeds)
     std::optional<atrament::AnyElement> mediaRow(std::size_t row, const QModelIndex &index);
     atrament::AnyElement embedsPart(std::size_t row, const QVariantList &embeds, float width);
+    atrament::AnyElement webPending(std::size_t row, const QVariantMap &embed, int index);
     atrament::AnyElement transclusionsPart(std::size_t row, quint64 uid, const QVariantList &transclusions);
     atrament::AnyElement queryRow(std::size_t row, const QModelIndex &index, float textX);
     void mediaClicked(std::size_t row, const atrament::ClickEvent &click);

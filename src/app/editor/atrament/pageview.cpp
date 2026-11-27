@@ -402,6 +402,7 @@ at::AnyElement PageView::render(at::Window &window, at::Context<PageView> &cx)
         }
     }
     m_frame = frame;
+    mediaFrame(); // (the pictures and texts of the last frame forgotten, whether media rows show or not)
     m_selfId = cx.entityId();
     m_viewWidth = window.viewportSize().width;
     PageView *self = this;

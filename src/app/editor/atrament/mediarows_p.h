@@ -9,10 +9,16 @@
 #include "queryresultmodel.h"
 
 #include "markdown/renderedtext.h"
+#include "scene/vectorpath.h"
 
 #include <QCoreApplication>
+#include <QHash>
 
 #include <algorithm>
+#include <chrono>
+#include <cmath>
+#include <numbers>
+#include <optional>
 #include <memory>
 #include <unordered_map>
 #include <utility>
@@ -102,6 +108,27 @@ inline void paintGlyph(at::Window &w, at::Rect b, at::Color color, Glyph glyph)
     }
 }
 
+// BSpinner: a faint ring and an arc of 100° on it turning once in 850 ms, `size` across, centred
+// at `c`, as it stands at `now`.
+inline void paintSpinner(at::Window &w, at::Point c, float size, at::Color color, std::chrono::steady_clock::time_point now)
+{
+    const float stroke = std::max(1.5f, size / 9);
+    const float r = (size - stroke) / 2;
+    at::StrokeStyle line;
+    line.width = stroke;
+    at::VectorPath ring;
+    ring.addEllipse(c, r, r);
+    w.strokePath(ring, {}, line, color.fadedBy(0.22f));
+    const auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count() % 850;
+    const double from = -std::numbers::pi / 2 + double(ms) / 850.0 * 2 * std::numbers::pi;
+    const double to = from + 100.0 / 180.0 * std::numbers::pi;
+    at::VectorPath arc;
+    arc.moveTo({c.x + r * float(std::cos(from)), c.y + r * float(std::sin(from))});
+    arc.arcTo(r, r, 0, false, true, {c.x + r * float(std::cos(to)), c.y + r * float(std::sin(to))});
+    line.cap = at::LineCap::Round;
+    w.strokePath(arc, {}, line, color);
+}
+
 inline at::AnyElement glyphElement(float size, at::Color color, Glyph glyph)
 {
     return at::canvas([color, glyph](at::Rect b, at::Window &w, at::App &) { paintGlyph(w, b, color, glyph); })
@@ -118,6 +145,29 @@ struct PageView::Media {
     // The pictures the last two frames drew: the cache evicts nothing held.
     std::vector<std::shared_ptr<const at::ImageData>> held;
     std::vector<std::shared_ptr<const at::ImageData>> heldBefore;
+    std::vector<std::shared_ptr<const PictureCache::Animation>> heldAnimations;
+    std::vector<std::shared_ptr<const PictureCache::Animation>> heldAnimationsBefore;
+    // Where each animated picture is, by its cache key: the frame shown, when the next is due, the
+    // page's frame it was last drawn in and when a frame of the page last replaced that one (it
+    // went off screen then, or not: off screen it waits with the time it had left).
+    struct Playback {
+        int frame = 0;
+        std::chrono::steady_clock::time_point due;
+        std::chrono::steady_clock::time_point hiddenAt;
+        std::uint64_t drawn = 0;
+        std::size_t frames = 0;
+    };
+    QHash<QString, Playback> playback;
+    // The frame of animation `a` to draw now in page frame `pageFrame` (a frame not drawn in the
+    // last one was off screen: it goes on from where it waited); asks for the next frame's time.
+    int animationFrame(const QString &key, const PictureCache::Animation &a, std::uint64_t pageFrame,
+                       std::chrono::steady_clock::time_point now);
+    // The page drawn again at `due` (an animation's next frame, a spinner's turn): one timer on
+    // Atrament's clock, the earliest asked for; nothing asks while nothing of it is drawn.
+    at::Subscription wake;
+    std::optional<std::chrono::steady_clock::time_point> wakeAt;
+    void wakeUp(std::chrono::steady_clock::time_point due, std::chrono::steady_clock::time_point now);
+    std::chrono::steady_clock::time_point now() const;
     float scale = 1; // the window's, as the last frame painted
     // Embedded blocks read from their HTML, by the block's uid (read again when the list changes).
     struct Entry {
