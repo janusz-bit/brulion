@@ -2432,7 +2432,11 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
 * Tests: `tst_acp` (the protocol, the agent played), `tst_shell_agents` (a real Workspace and a real
   program that speaks ACP: `tests/app/shell/fakeacpagent.cpp`; `realAgent` and `realAgentThread` —
   a thread in a real git project, tried with Claude Code and Codex — with a real one,
-  `BRULION_REAL_ACP_AGENT`, `BRULION_REAL_ACP_OPTION`), `tst_shell_chattools` (the calls in words,
+  `BRULION_REAL_ACP_AGENT`, `BRULION_REAL_ACP_OPTION`; `realAgentWakesParent` with two —
+  `BRULION_REAL_ACP_CHILD`, `BRULION_REAL_ACP_CHILD_OPTION` —: the parent's agent starts a
+  sub-conversation with wake through the real brulion-cli and a control socket of the test's own, the
+  child answers, the parent is woken and answers with it; tried Claude Code → Codex and Codex →
+  Claude Code on 2026-11-27), `tst_shell_chattools` (the calls in words,
   English and Polish plural forms), the shell self-test's `checkChatDrawings` (the drawings of an
   answer, ChatActivity under each "Tool calls in chat") and `checkCodeMode` (Code mode: a project and
   its thread, the header, the sidebar, the Changes panel, the file picker, find in the thread).
