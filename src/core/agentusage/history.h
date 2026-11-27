@@ -4,12 +4,16 @@
 // quarter of an hour (UTC: every time zone's day is whole quarters of it), so a refresh reads only
 // what was appended. A file that shrank or whose first bytes changed is read again from its start;
 // one that is gone (Claude Code deletes sessions after 30 days) keeps its use in the cache, so the
-// history outlives the agent's own clean-up, for RetentionDays.
+// history outlives the agent's own clean-up, for RetentionDays. A Codex rollout is known by its name
+// wherever it is: archived (moved to archived_sessions/) or compressed by Codex ("….jsonl.zst", its
+// text the same: nothing counted again, only what was appended read), it stays one file of the cache.
 //
 // Reading: line by line in chunks (never a whole file), at most MaxLineBytes per line (a longer
 // one is skipped — a tool result's picture), only lines that may carry usage parsed, a truncated
-// last line (still being written) left for the next time, malformed lines skipped and counted;
-// no symlink is followed out of a log folder, at most MaxFiles files. The cache is JSON, versioned
+// last line (still being written) left for the next time, malformed lines skipped and counted; a
+// compressed rollout decompressed as it is read (logstream_p.h: at most MaxUnpackedBytes of text, a
+// broken frame ends it as one skipped line); no symlink is followed out of a log folder, at most
+// MaxFiles files. The cache is JSON, versioned
 // (with the price table's date: a newer table reads everything again), written atomically and for
 // the owner only, rebuilt when it is malformed. Blocking: run it off the GUI thread (reader.h).
 #pragma once
@@ -46,12 +50,18 @@ Source sourceOf(Provider provider, const QStringList &command, const QHash<QStri
 inline constexpr int RetentionDays = 400;
 inline constexpr qint64 MaxLineBytes = 4 * 1024 * 1024;
 inline constexpr int MaxFiles = 50000;
+/// Folders below a log folder at most (a session's subagents' files are two down).
+inline constexpr int MaxDepth = 6;
+/// A compressed rollout's text at most (the largest plain one seen was 58 MB): beyond it, the rest
+/// of the file is left unread as one skipped line.
+inline constexpr qint64 MaxUnpackedBytes = 1024LL * 1024 * 1024;
 
 struct ReadOptions {
     QString cacheFile;                         ///< "" none: every file read whole each time
     QTimeZone timeZone = QTimeZone::LocalTime; ///< whose days the history has
     QDateTime now;                             ///< default: now
     const std::atomic_bool *cancel = nullptr;  ///< set: stop soon, the cache left as it was
+    qint64 maxUnpackedBytes = MaxUnpackedBytes; ///< a compressed rollout's text at most
 };
 
 /// What a reading did (tests, the log).

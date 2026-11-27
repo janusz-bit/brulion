@@ -684,8 +684,9 @@ int main(int argc, char *argv[])
         if (mainUi) {
             brulion::shell::RemoteControl::Options remote;
 #ifdef BRULION_DESKTOP_INTEGRATION
-            remote.key = brulion::ipc::controlKeyFor(brulion::ipc::SingleInstance::keyFor(
-                    QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)));
+            const QString instanceKey = brulion::ipc::SingleInstance::keyFor(
+                    QStandardPaths::writableLocation(QStandardPaths::AppDataLocation));
+            remote.key = brulion::ipc::controlKeyFor(instanceKey);
             remote.forced = args.contains(u"--remote-control"_s);
 #endif
             remote.language = [&devTools] { return devTools.language(); };
@@ -701,6 +702,9 @@ int main(int argc, char *argv[])
                         if (control)
                             control->revokeGrant(token);
                     });
+            // Their tools are told which app this is (an agent may not pass on the environment its
+            // socket is found from: Codex gives its MCP servers HOME, PATH … only).
+            agents->setAppInstance(instanceKey);
             // Every agent with Brulion's tools may hand other partners of the chat a task (a
             // sub-conversation): a grant of the chat alone for each of its conversations.
             agents->setChatGrants(

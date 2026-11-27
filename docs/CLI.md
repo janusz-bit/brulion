@@ -1279,7 +1279,9 @@ brulion-cli --vault ~/Notatki acp usage --notebook --format text
 
 * **Where**: Claude Code's `${CLAUDE_CONFIG_DIR:-~/.claude}/projects/*/…/*.jsonl` (also
   `~/.config/claude/projects` without the variable), Codex's `${CODEX_HOME:-~/.codex}/sessions` and
-  `archived_sessions` (`rollout-*.jsonl`) — the variables as this command's environment has them.
+  `archived_sessions` (`rollout-*.jsonl`, and `rollout-*.jsonl.zst` where Codex compressed one —
+  a rollout counts once by its name, archived or compressed) — the variables as this command's
+  environment has them.
   `found: false` when an agent has no such folder.
 * **What counts**: a Claude Code message once (it is logged again while it streams and in a resumed
   session: `message.id` + `requestId`), Codex's turns where its cumulative totals moved (a fork's
@@ -1289,7 +1291,9 @@ brulion-cli --vault ~/Notatki acp usage --notebook --format text
 * **The cost** is the API's price of the same tokens (`pricesAsOf`: the date of the price table,
   `src/core/agentusage/prices.cpp`), or the log's own `costUSD`; a subscription pays nothing more for
   them. A model the table does not know: its tokens count, `costKnown: false` with
-  `unpricedRequests` / `unpricedTokens`, and `priced: false` on its row.
+  `unpricedRequests` / `unpricedTokens`, and `priced: false` on its row. Codex's automatic approval
+  review (`codex-auto-review`) is priced as `gpt-5.6-luna`, the model Codex asks for it with an API
+  key.
 * **The cache** is the app's (`<cache>/agent-usage/`, for the owner only): a run reads only what was
   appended to the logs since the last one, the app's or the command line's, and keeps the use of
   logs the agent has since deleted (for 400 days).
@@ -1582,7 +1586,11 @@ brulion-cli app changes && brulion-cli app revert          # what changed, and a
   `unauthorized` (`brulion-cli` without a token reports `remote_control_off`, as before), and a
   token that is no grant is refused also while the remote control is on (exit 5 `unauthorized`).
   The grant's connections close when it ends; once no grant is left and the setting is off, the
-  socket closes.
+  socket closes. The app also names itself there (`BRULION_APP_INSTANCE`: its single-instance key,
+  the control socket's name is that with `-control`), and `brulion-cli` takes it before what it would
+  find itself: an agent may not pass its environment on — Codex starts its MCP servers with `HOME`,
+  `PATH`, `LANG`, `TMPDIR` … only (codex-rs/rmcp-client: `DEFAULT_ENV_VARS`), without
+  `XDG_RUNTIME_DIR`, `XDG_DATA_HOME` or `BRULION_PROFILE`, so its tools would look for another socket.
 * **Security**: a grant is only made for an agent the user marked, only while its program runs,
   and only in the desktop app; the socket keeps its owner-only file and other users' connections
   are refused as before. A granted agent can do what the remote control can — drive the UI, read
@@ -1695,10 +1703,10 @@ brulion-cli app chat notify "Zbudowane, testy przechodzą" --title "Budowanie"  
 
 **Agents delegate.** Every AI agent the app starts with Brulion's tools (docs/UI.md "AI agents
 (ACP)") gets `--app-chat` and a **chat grant** for each of its conversations: a token in its tools'
-environment (`BRULION_APP_CHAT_TOKEN`, next to `BRULION_APP_CLIENT`), which `brulion-cli app chat …`
-shows in its `hello` before a full grant's `BRULION_APP_TOKEN`; the socket serves it also with the
-remote control off, and only the chat's methods (anything else: `unauthorized`). The app knows by it
-whose conversation asks, so:
+environment (`BRULION_APP_CHAT_TOKEN`, next to `BRULION_APP_CLIENT` and `BRULION_APP_INSTANCE`),
+which `brulion-cli app chat …` shows in its `hello` before a full grant's `BRULION_APP_TOKEN`; the
+socket serves it also with the remote control off, and only the chat's methods (anything else:
+`unauthorized`). The app knows by it whose conversation asks, so:
 
 * a conversation it **starts** is a sub-conversation of its own (`parent:` in its page; another
   `--parent` is refused), shown under it in the chat; with `--wake` its answer comes back into the agent's

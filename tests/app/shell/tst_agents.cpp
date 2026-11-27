@@ -65,6 +65,10 @@
 #include "log/redact.h"
 #include "webhook/webhook.h"
 
+#ifdef BRULION_TEST_IPC
+#include "controlserver.h"
+#endif
+
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -359,6 +363,8 @@ private Q_SLOTS:
         AgentConfig agent = fake(true);
         agent.appAccess = true;
         chats->setAgents({agent});
+        const QString instance = m_tmp.filePath(u"run/brulion-0123456789abcdef"_s);
+        chats->agents()->setAppInstance(instance);
         const auto serverOf = [this](qsizetype session) {
             return logged(u"session/new"_s)
                     .at(session)
@@ -380,7 +386,8 @@ private Q_SLOTS:
         QVERIFY(!QJsonDocument(args).toJson().contains("token-1")); // (others can list a program's arguments)
         QCOMPARE(server.value(u"env"_s).toArray(),
                  (QJsonArray{QJsonObject{{u"name"_s, u"BRULION_APP_TOKEN"_s}, {u"value"_s, u"token-1"_s}},
-                             QJsonObject{{u"name"_s, u"BRULION_APP_CLIENT"_s}, {u"value"_s, u"Fałszywy"_s}}}));
+                             QJsonObject{{u"name"_s, u"BRULION_APP_CLIENT"_s}, {u"value"_s, u"Fałszywy"_s}},
+                             QJsonObject{{u"name"_s, u"BRULION_APP_INSTANCE"_s}, {u"value"_s, instance}}}));
         const QString context =
                 promptOf(logged(u"session/prompt"_s).first()).at(0).toObject().value(u"text"_s).toString();
         QVERIFY2(context.contains(u"brulion_app_eval"_s) && context.contains(u"undo"_s), qPrintable(context));
@@ -457,6 +464,10 @@ private Q_SLOTS:
         AgentConfig codex{u"codex"_s, u"Kodeks"_s, command(), true};
         codex.appAccess = true; // (let change the app — never in a sub-conversation)
         chats->setAgents({fake(true), codex});
+        // The app names itself to the tools: an agent may not pass on the environment its socket is
+        // found from (Codex gives its MCP servers HOME, PATH and a few more only).
+        const QString instance = m_tmp.filePath(u"run/brulion-0123456789abcdef"_s);
+        chats->agents()->setAppInstance(instance);
 
         // The user's conversation with an agent: its tools get the chat's grant for it.
         const QString path = chats->send(QString(), u"Zaplanuj wyjazd do Zakopanego"_s, QString(), {}, u"acp:fake"_s);
@@ -465,6 +476,7 @@ private Q_SLOTS:
         QCOMPARE(serverArgs(0).last(), u"--app-chat"_s);
         QCOMPARE(serverEnv(0).value(u"BRULION_APP_CHAT_TOKEN"_s), u"chat-1"_s);
         QCOMPARE(serverEnv(0).value(u"BRULION_APP_CLIENT"_s), u"Fałszywy"_s);
+        QCOMPARE(serverEnv(0).value(u"BRULION_APP_INSTANCE"_s), instance);
         QVERIFY(!serverEnv(0).contains(u"BRULION_APP_TOKEN"_s));
         const QString context =
                 promptOf(logged(u"session/prompt"_s).first()).at(0).toObject().value(u"text"_s).toString();
@@ -500,6 +512,7 @@ private Q_SLOTS:
         QVERIFY(!serverArgs(1).contains(u"--app-control"_s));
         QCOMPARE(serverArgs(1).last(), u"--app-chat"_s);
         QCOMPARE(serverEnv(1).value(u"BRULION_APP_CHAT_TOKEN"_s), u"chat-2"_s);
+        QCOMPARE(serverEnv(1).value(u"BRULION_APP_INSTANCE"_s), instance);
         QVERIFY(!serverEnv(1).contains(u"BRULION_APP_TOKEN"_s));
         QCOMPARE(chats->agents()->grantConversation(u"chat-2"_s), child);
         // The parent's view lists it.
@@ -2153,6 +2166,143 @@ private Q_SLOTS:
         qInfo().noquote() << page;
         QVERIFY(page.section(u"🤖"_s, -1).contains(u"add"_s));
         QCOMPARE(chats->checkpoints(path).size(), 2);
+    }
+
+    // A sub-conversation that wakes its parent with real agents (docs/UI.md "Agents delegate"), when
+    // both are named: BRULION_REAL_ACP_AGENT the parent's agent, BRULION_REAL_ACP_CHILD the one it
+    // gives the task (Claude Code and Codex — "npx -y @agentclientprotocol/claude-agent-acp",
+    // "npx -y @agentclientprotocol/codex-acp" — either way round), BRULION_REAL_ACP_OPTION and
+    // BRULION_REAL_ACP_CHILD_OPTION an option of each ("model=haiku", "model=gpt-6-luna": as the
+    // agent's remembered options). Their tools are the real brulion-cli, reaching this test's control
+    // socket with the chat's grants — answered by ChatControl as the app's remote control answers
+    // them, the app naming itself to them (setAppInstance()): the parent starts a sub-conversation
+    // with wake and ends its turn, the child answers, the parent gets the answer quoted and a turn of
+    // its own, and answers with it.
+    void realAgentWakesParent()
+    {
+#if !defined(BRULION_CLI) || !defined(BRULION_TEST_IPC)
+        QSKIP("brulion-cli or the control socket is not built here");
+#else
+        const QString parentCommand = qEnvironmentVariable("BRULION_REAL_ACP_AGENT");
+        const QString childCommand = qEnvironmentVariable("BRULION_REAL_ACP_CHILD");
+        if (parentCommand.isEmpty() || childCommand.isEmpty())
+            QSKIP("no real agents named (BRULION_REAL_ACP_AGENT and BRULION_REAL_ACP_CHILD)");
+        // The real brulion-cli is the agents' tools (the first on PATH: toolsProgram()).
+        const QByteArray path = qgetenv("PATH");
+        auto restorePath = qScopeGuard([path] { qputenv("PATH", path); });
+        qputenv("PATH", QByteArray(QFileInfo(QStringLiteral(BRULION_CLI)).absolutePath().toLocal8Bit()
+                                   + QDir::listSeparator().toLatin1() + path));
+        const auto optionOf = [](const char *variable) {
+            const QString o = qEnvironmentVariable(variable);
+            return o.contains(u'=') ? QJsonObject{{o.section(u'=', 0, 0), o.section(u'=', 1)}} : QJsonObject{};
+        };
+        AgentConfig parentAgent{u"rodzic"_s, u"Rodzic"_s, parentCommand, true};
+        parentAgent.options = optionOf("BRULION_REAL_ACP_OPTION");
+        AgentConfig childAgent{u"dziecko"_s, u"Dziecko"_s, childCommand, true};
+        childAgent.options = optionOf("BRULION_REAL_ACP_CHILD_OPTION");
+        auto ws = open({parentAgent, childAgent});
+        WorkspaceChats *chats = ws->chats();
+
+        // The app's control socket in a private runtime folder, its chat answered as RemoteControl
+        // answers it — only the grants' connections (the remote control's setting off).
+        const QString runtime = m_tmp.filePath(u"run"_s);
+        QVERIFY(QDir().mkpath(runtime));
+        QFile::setPermissions(runtime, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+        const QString instance = runtime + u"/brulion-prawdziwe"_s;
+        ChatControl chatControl(ws.get());
+        ipc::ControlServer control;
+        control.setHandler([&chatControl, chats](const ipc::ControlRequest &request, const ipc::ControlReply &reply) {
+            if (request.method == u"hello") {
+                reply.ok(QJsonObject{{u"protocol"_s, ipc::ControlProtocolVersion},
+                                     {u"app"_s, u"Brulion"_s},
+                                     {u"granted"_s, request.granted}});
+                return;
+            }
+            if (!ChatControl::handles(request.method)) {
+                reply.fail(u"unknown_method"_s, request.method);
+                return;
+            }
+            const ChatControl::Caller caller{
+                    request.granted,
+                    request.granted ? chats->agents()->grantConversation(request.grant) : QString(), request.client};
+            ChatControl::Reply answer;
+            answer.ok = [reply](const QJsonObject &result) { reply.ok(result); };
+            answer.fail = [reply](const QString &code, const QString &message, const QJsonObject &details) {
+                reply.fail(code, message, details);
+            };
+            answer.connected = [reply] { return reply.connected(); };
+            chatControl.handle(request.method, request.params, caller, answer);
+        });
+        control.setOpen(false);
+        QVERIFY2(control.listen(ipc::controlKeyFor(instance)), qPrintable(control.errorString()));
+        chats->agents()->setChatGrants(
+                [&control](const QString &client) { return control.addGrant(client, ipc::GrantScope::Chat); },
+                [&control](const QString &token) { control.revokeGrant(token); });
+        chats->agents()->setAppInstance(instance);
+        auto unset = qScopeGuard([chats] { chats->agents()->setChatGrants({}, {}); });
+
+        // Their questions (may it use the tool?) allowed as they come, in either conversation.
+        QString parent;
+        QStringList asked;
+        const auto allow = [&](const QString &conversation) {
+            if (!chats->asking(conversation))
+                return;
+            const QStringList options = chats->questionOptions(conversation);
+            asked << conversation + u": "_s + chats->questionText(conversation);
+            QString choice = options.value(0);
+            for (const QString &o : options) {
+                if (o.contains(u"allow"_s, Qt::CaseInsensitive) && !o.contains(u"always"_s, Qt::CaseInsensitive)) {
+                    choice = o;
+                    break;
+                }
+            }
+            chats->answer(conversation, choice);
+        };
+        QTimer answers;
+        answers.setInterval(200);
+        QObject::connect(&answers, &QTimer::timeout, chats, [&] {
+            if (parent.isEmpty())
+                return;
+            allow(parent);
+            for (const QString &child : chats->lineage()->childrenOf(parent))
+                allow(child);
+        });
+        answers.start();
+        parent = chats->send(QString(),
+                             u"Przekaż zadanie partnerowi czatu: wywołaj narzędzie brulion_app_chat_start z partner "
+                             u"\"acp:dziecko\", wake true i tekstem \"Jaka jest stolica Polski? Odpowiedz jednym "
+                             u"słowem.\". Nie czekaj na odpowiedź i nie odpowiadaj sam na to pytanie: zakończ turę "
+                             u"słowem \"Zlecone\". Gdy przyjdzie wiadomość z odpowiedzią podrozmowy, odpowiedz "
+                             u"jednym zdaniem, co odpowiedziała."_s,
+                             QString(), {}, u"acp:rodzic"_s);
+        QVERIFY(!parent.isEmpty());
+
+        // The parent's turn: a sub-conversation of its own, with wake, and no wait for it.
+        QTRY_VERIFY_WITH_TIMEOUT(chats->lineage()->childrenOf(parent).size() == 1, 600000);
+        const QString child = chats->lineage()->childrenOf(parent).first();
+        QCOMPARE(chats->lineage()->children(parent).first().toMap().value(u"partner"_s).toString(), u"Dziecko"_s);
+        // The child answers; the parent is woken with its answer and answers with it.
+        const auto answeredAfterWake = [&] {
+            const QString page = ws->read(parent);
+            const qsizetype wake = page.lastIndexOf(u"↩ Podrozmowa"_s);
+            return wake >= 0 && page.indexOf(u"- 🤖"_s, wake) > wake && !chats->isRunning(parent)
+                   && chats->queued(parent).isEmpty();
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(answeredAfterWake(), 900000);
+        const QString childPage = ws->read(child);
+        const QString parentPage = ws->read(parent);
+        qInfo().noquote() << "child:" << child << '\n' << childPage;
+        qInfo().noquote() << "parent:" << parent << '\n' << parentPage;
+        qInfo() << "asked:" << asked;
+        qInfo() << "usage:" << chats->agentUsage(parent) << chats->agentUsage(child);
+        QCOMPARE(chats->turn(child)->failure(), QString());
+        QCOMPARE(chats->turn(parent)->failure(), QString());
+        QVERIFY2(childPage.section(u"🤖"_s, -1).contains(u"Warszaw"_s), qPrintable(childPage));
+        const QString wake = parentPage.mid(parentPage.lastIndexOf(u"↩ Podrozmowa"_s));
+        QVERIFY2(wake.startsWith(u"↩ Podrozmowa [["_s) && wake.contains(u"odpowiedziała:"_s), qPrintable(wake));
+        QVERIFY2(wake.section(u"- 🤖"_s, -1).contains(u"Warszaw"_s), qPrintable(parentPage));
+        QVERIFY(!chats->wakesParent(child));
+#endif
     }
 
     void realRemoteAgent()
