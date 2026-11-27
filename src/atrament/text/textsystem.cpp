@@ -112,7 +112,13 @@ bool sameRuns(std::span<const FontRun> a, const std::vector<FontRun> &b)
         const FontRun &x = a[i];
         const FontRun &y = b[i];
         if (x.length != y.length || x.face != y.face || x.styleIndex != y.styleIndex || x.features != y.features
-            || x.language != y.language || std::memcmp(&x.fontSize, &y.fontSize, sizeof(float)) != 0)
+            || x.language != y.language || std::memcmp(&x.fontSize, &y.fontSize, sizeof(float)) != 0
+            || x.inlineBox.has_value() != y.inlineBox.has_value())
+            return false;
+        if (x.inlineBox
+            && (std::memcmp(&x.inlineBox->width, &y.inlineBox->width, sizeof(float)) != 0
+                || std::memcmp(&x.inlineBox->ascent, &y.inlineBox->ascent, sizeof(float)) != 0
+                || std::memcmp(&x.inlineBox->descent, &y.inlineBox->descent, sizeof(float)) != 0))
             return false;
     }
     return true;
@@ -129,6 +135,12 @@ std::uint64_t hashRuns(std::u16string_view text, std::span<const FontRun> runs)
         h = hashString(run.features, h);
         h = hashCombine(h, run.features.size());
         h = hashString(run.language, h);
+        h = hashCombine(h, run.inlineBox.has_value());
+        if (run.inlineBox) {
+            h = hashFloat(run.inlineBox->width, h);
+            h = hashFloat(run.inlineBox->ascent, h);
+            h = hashFloat(run.inlineBox->descent, h);
+        }
     }
     return h;
 }

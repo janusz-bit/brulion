@@ -945,32 +945,93 @@ void Window::paintGlyph(FaceId face, std::uint32_t glyph, float fontSize, Point 
     }
 }
 
+namespace {
+
+const TextPaintStyle &paintStyleOf(std::span<const TextPaintStyle> styles, std::uint32_t index)
+{
+    static const TextPaintStyle kDefault;
+    if (styles.empty())
+        return kDefault;
+    return styles[std::min<std::size_t>(index, styles.size() - 1)];
+}
+
+} // namespace
+
+float alignedLineX(const TextLine &line, TextAlign align, float boxWidth)
+{
+    if (align == TextAlign::Center)
+        return std::max(0.0f, (boxWidth - line.width) / 2);
+    if (align == TextAlign::Right)
+        return std::max(0.0f, boxWidth - line.width);
+    return 0;
+}
+
 void Window::paintText(const TextLayout &layout, Point origin, std::span<const TextPaintStyle> styles, TextAlign align,
         float boxWidth)
 {
+    paintTextBackgrounds(layout, origin, styles, align, boxWidth);
+    paintTextGlyphs(layout, origin, styles, align, boxWidth);
+}
+
+void Window::paintTextBackgrounds(const TextLayout &layout, Point origin, std::span<const TextPaintStyle> styles,
+        TextAlign align, float boxWidth)
+{
     if (!m_building)
         return;
-    static const TextPaintStyle kDefault;
-    auto styleOf = [&](std::uint32_t index) -> const TextPaintStyle & {
-        if (styles.empty())
-            return kDefault;
-        return styles[std::min<std::size_t>(index, styles.size() - 1)];
-    };
+    // One shape per line for each run of adjacent runs with equal backgrounds (style.h).
+    const std::vector<LaidOutRun> &runs = layout.runs();
+    const Rect mask = contentMask();
+    for (std::size_t i = 0; i < runs.size();) {
+        const std::optional<TextBackground> &background = paintStyleOf(styles, runs[i].styleIndex).background;
+        std::size_t j = i + 1;
+        if (!background || background->color.isTransparent()) {
+            i = j;
+            continue;
+        }
+        while (j < runs.size() && runs[j].start == runs[j - 1].end
+                && paintStyleOf(styles, runs[j].styleIndex).background == background)
+            ++j;
+        const TextBackground &bg = *background;
+        for (const LineRect &piece : layout.glyphRects(Range { runs[i].start, runs[j - 1].end })) {
+            const TextLine &line = layout.lines()[std::size_t(piece.line)];
+            if (origin.y + line.top > mask.bottom() || origin.y + line.top + line.height < mask.top())
+                continue; // off screen: a long paragraph in a scrolled list
+            float top = bg.extent == TextBackgroundExtent::Line ? line.top : piece.rect.top();
+            float bottom = bg.extent == TextBackgroundExtent::Line ? line.top + line.height : piece.rect.bottom();
+            top += bg.inset;
+            bottom -= bg.inset;
+            if (bottom - top < 1) {
+                // Never thinner than a pixel (an inset as large as the glyphs).
+                const float middle = (top + bottom) / 2;
+                top = middle - 0.5f;
+                bottom = middle + 0.5f;
+            }
+            const float x = origin.x + alignedLineX(line, align, boxWidth);
+            const Rect r = Rect::fromLTRB(x + piece.rect.left() - bg.paddingX, origin.y + top,
+                    x + piece.rect.right() + bg.paddingX, origin.y + bottom);
+            paintQuad(r, Background::solid(bg.color), {}, transparent(), Corners::all(bg.pill ? 1e6f : bg.radius));
+        }
+        i = j;
+    }
+}
+
+void Window::paintTextGlyphs(const TextLayout &layout, Point origin, std::span<const TextPaintStyle> styles,
+        TextAlign align, float boxWidth)
+{
+    if (!m_building)
+        return;
+    auto styleOf = [&](std::uint32_t index) -> const TextPaintStyle & { return paintStyleOf(styles, index); };
     const Rect mask = contentMask();
     const auto &glyphs = layout.glyphs();
     const FontCollection &fonts = m_app.textSystem().fonts();
     for (const TextLine &line : layout.lines()) {
-        float dx = 0;
-        if (align == TextAlign::Center)
-            dx = std::max(0.0f, (boxWidth - line.width) / 2);
-        else if (align == TextAlign::Right)
-            dx = std::max(0.0f, boxWidth - line.width);
+        const float dx = alignedLineX(line, align, boxWidth);
         const float top = origin.y + line.top;
         if (top > mask.bottom() || top + line.height < mask.top())
             continue; // off screen: a long paragraph in a scrolled list
         const std::uint32_t end = line.firstGlyph + line.glyphCount;
 
-        // Runs of one style on this line: backgrounds first, then glyphs, then decorations.
+        // Runs of one style on this line: glyphs, then decorations.
         struct Segment {
             std::uint32_t style;
             float x0;
@@ -990,12 +1051,6 @@ void Window::paintText(const TextLayout &layout, Point origin, std::span<const T
         }
         if (!segments.empty())
             segments.back().x1 = std::max(segments.back().x0, layout.caretX(line.end, CaretAffinity::Upstream));
-        for (const Segment &s : segments) {
-            const TextPaintStyle &style = styleOf(s.style);
-            if (style.background && !style.background->isTransparent())
-                paintQuad(Rect::fromLTRB(origin.x + dx + s.x0, top, origin.x + dx + s.x1, top + line.height),
-                        Background::solid(*style.background), {}, transparent(), {});
-        }
         for (std::uint32_t i = line.firstGlyph; i < end; ++i) {
             const PositionedGlyph &g = glyphs[i];
             paintGlyph(g.face, g.glyph, g.fontSize, { origin.x + dx + g.position.x, origin.y + g.position.y },

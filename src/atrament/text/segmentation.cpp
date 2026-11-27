@@ -412,7 +412,7 @@ enum class LineClass : std::uint8_t {
     B2, // em dash: a break before and after
     SY, // slash
     BA, // soft hyphen: a break after
-    ID, // ideographs, kana, emoji
+    ID, // ideographs, kana, emoji, U+FFFC (an inline object: a break before and after, as LB20's CB)
 };
 
 // The characters outside ASCII whose class is not their general category's, sorted: no-break
@@ -448,7 +448,7 @@ constexpr ExplicitClass kExplicitClasses[] = {
         {0xFF08, LineClass::OP}, {0xFF09, LineClass::CL}, {0xFF0C, LineClass::CL}, {0xFF0E, LineClass::CL},
         {0xFF1A, LineClass::CL}, {0xFF1B, LineClass::CL}, {0xFF1F, LineClass::CL}, {0xFF3B, LineClass::OP},
         {0xFF3D, LineClass::CL}, {0xFF5B, LineClass::OP}, {0xFF5D, LineClass::CL}, {0xFF61, LineClass::CL},
-        {0xFF64, LineClass::CL},
+        {0xFF64, LineClass::CL}, {0xFFFC, LineClass::ID}, // the object replacement character: UAX #14 CB
 };
 static_assert(std::is_sorted(std::begin(kExplicitClasses), std::end(kExplicitClasses),
                              [](const ExplicitClass &a, const ExplicitClass &b) { return a.c < b.c; }));

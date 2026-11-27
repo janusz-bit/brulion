@@ -3,6 +3,13 @@
 // link, a chip, a tag, a highlight — become TextSpans over the same UTF-16 text (QString and
 // Atrament both count UTF-16 code units, so the ranges pass as they are). Colours come from the
 // run itself (a CSS colour the renderer wrote) or from the palette by the run's role.
+//
+// Tinted runs get the QML editor's shapes (RichTextPills, BTintShapes): a chip or a tag a pill, inline
+// code and a highlight a box of `boxRadius`, around the glyphs — the font's ascent above and descent
+// below the baseline, as tall as the run's text whatever the line's height —, the adjacent runs of
+// one tinted element (`tintElement`) one shape. A page's app icon (RenderedObject::Icon over its
+// no-break spaces) is an inline object of their room: Atrament has no icons yet, so a placeholder
+// is drawn there — a rounded square in the link's colour.
 #pragma once
 
 #include "markdown/renderedtext.h"
@@ -26,6 +33,8 @@ struct PagePalette {
     atrament::Color codeBackground = atrament::rgba(0x8c959f26);
     atrament::Color highlightBackground = atrament::rgba(0xffd43b66);
     atrament::Color chipBackground = atrament::rgba(0x7048e81f);
+    atrament::Color tagBackground = atrament::rgba(0x2b8a3e1f);
+    float boxRadius = 4; // Theme.radiusXs: inline code's and highlights' corners
     atrament::Color guide = atrament::rgba(0x8c959f59);
     atrament::Color background = atrament::rgb(0xffffff);
     std::u16string bodyFamily = u"Brulion Inter";
@@ -36,8 +45,13 @@ struct PagePalette {
 // `fallback` when it is empty or not a colour.
 atrament::Color cssColor(const QString &css, atrament::Color fallback);
 
-// The spans of `text`'s runs, in order (a run with the default look gives none).
+// The spans of `text`'s runs, in order (a run with the default look gives none), then one inline
+// object per page icon.
 std::vector<atrament::TextSpan> renderedSpans(const markdown::RenderedText &text, const PagePalette &palette);
+
+// A page icon's room, in ems of the text's size: the three no-break spaces of the body font it
+// replaces (Inter's), its middle where the QML editor centres its icon (RichTextPills' "icon").
+constexpr atrament::InlineObjectSize kPageIconSize{0.84f, 0.784f, 0.056f, true};
 
 // The text as Atrament takes it (a view of the QString's UTF-16 data).
 inline std::u16string_view u16View(const QString &s)

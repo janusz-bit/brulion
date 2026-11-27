@@ -100,6 +100,9 @@ private Q_SLOTS:
     void longPageLaysOutWhatIsShown();
     void foldAboveKeepsTheScreen();
     void narrowerWindowReflows();
+    void spansCarryShapes();
+    void chipsAndCodeDrawnAsShapes();
+    void pageIconAsInlineObject();
 };
 
 void TestAtramentEditor::spansOfRenderedText()
@@ -340,6 +343,128 @@ void TestAtramentEditor::narrowerWindowReflows()
     h.tw.settle();
     const qreal narrow = h.view().rows().heights().height(PageRows::treeRow(0));
     QVERIFY2(narrow > wide * 2, qPrintable(u"%1 → %2"_s.arg(wide).arg(narrow)));
+}
+
+void TestAtramentEditor::spansCarryShapes()
+{
+    // The QML editor's shapes (RichTextPills): a tag a pill, inline code and a highlight boxes of
+    // the palette's radius, around the glyphs; the runs of one tinted element (a highlight with a
+    // bold word in it) one group, two elements two.
+    markdown::RenderContext context;
+    context.today = QDate(2026, 11, 27);
+    const markdown::InlineRenderer renderer(context);
+    const markdown::RenderedText text =
+            renderer.renderRuns(u"Spotkanie #zespół i `kod` oraz ==ważne **bardzo** zdanie=="_s);
+    QVERIFY(text.drawable);
+    PagePalette palette;
+    const std::vector<at::TextSpan> spans = renderedSpans(text, palette);
+    auto shapeOf = [&](const QString &word) -> std::optional<at::TextBackground> {
+        const int from = int(text.text.indexOf(word));
+        for (const at::TextSpan &s : spans)
+            if (s.range.start <= from && s.range.end >= from + int(word.size()) && s.style.background
+                && s.style.background->has_value())
+                return **s.style.background;
+        return std::nullopt;
+    };
+    const std::optional<at::TextBackground> tag = shapeOf(u"zespół"_s);
+    QVERIFY(tag && tag->pill);
+    QCOMPARE(tag->extent, at::TextBackgroundExtent::Glyphs);
+    QVERIFY(tag->group > 0);
+    const std::optional<at::TextBackground> code = shapeOf(u"kod"_s);
+    QVERIFY(code && !code->pill);
+    QCOMPARE(code->radius, palette.boxRadius);
+    const std::optional<at::TextBackground> before = shapeOf(u"ważne"_s);
+    const std::optional<at::TextBackground> bold = shapeOf(u"bardzo"_s);
+    const std::optional<at::TextBackground> after = shapeOf(u"zdanie"_s);
+    QVERIFY(before && bold && after);
+    QVERIFY(*before == *bold && *bold == *after); // one shape
+    QVERIFY(before->group != code->group && before->group != tag->group);
+    QVERIFY(spans.end() == std::find_if(spans.begin(), spans.end(), [](const at::TextSpan &s) { return s.object; }));
+}
+
+void TestAtramentEditor::chipsAndCodeDrawnAsShapes()
+{
+    // On the page: the tag one pill, the code and the highlight one box each (the bold word does
+    // not split the highlight), all lower than the line (the glyphs' extent).
+    Harness h(u"Spotkanie #zespół i `kod` oraz ==ważne **bardzo** zdanie==\n"_s);
+    QCOMPARE(h.view().drawnRows(), 1);
+    int pills = 0;
+    int boxes = 0;
+    for (const at::Primitive &p : h.tw.lastScene()->primitives()) {
+        const at::Quad *q = std::get_if<at::Quad>(&p);
+        if (!q || q->bounds.height() >= h.view().metrics().lineHeight || q->bounds.height() < 10)
+            continue;
+        if (std::abs(q->cornerRadii.topLeft - q->bounds.height() / 2) < 0.01f)
+            ++pills;
+        else if (q->cornerRadii.topLeft == h.view().palette().boxRadius)
+            ++boxes;
+    }
+    QCOMPARE(pills, 1);
+    QCOMPARE(boxes, 2);
+}
+
+void TestAtramentEditor::pageIconAsInlineObject()
+{
+    // A page's app icon: three no-break spaces in front of the link, an inline object of their
+    // room with a placeholder drawn in the link's colour (no icons in Atrament yet).
+    markdown::RenderContext context;
+    context.pageIcon = [](const QString &target) {
+        return target == u"Dom"_s ? markdown::PageIcon{markdown::PageIcon::Kind::App, u"home"_s} : markdown::PageIcon{};
+    };
+    const markdown::InlineRenderer renderer(context);
+    const markdown::RenderedText text = renderer.renderRuns(u"Zobacz [[Dom]] i ogród"_s);
+    QCOMPARE(text.objects.size(), 1);
+    const std::vector<at::TextSpan> spans = renderedSpans(text, PagePalette{});
+    const at::TextSpan *icon = nullptr;
+    for (const at::TextSpan &s : spans)
+        if (s.object)
+            icon = &s;
+    QVERIFY(icon);
+    QCOMPARE(icon->range.start, int(text.objects[0].from));
+    QCOMPARE(icon->range.end, int(text.objects[0].to));
+    QCOMPARE(icon->object->size.width, kPageIconSize.width);
+    QVERIFY(icon->object->size.em);
+
+    struct View {
+        std::u16string text;
+        std::vector<at::TextSpan> spans;
+        at::AnyElement render(at::Window &, at::Context<View> &)
+        {
+            return at::div()
+                    .sizeFull()
+                    .bg(at::white())
+                    .p(10)
+                    .child(at::div()
+                                   .w(400)
+                                   .textSize(16)
+                                   .lineHeight(24)
+                                   .fontFamily(u"Brulion Inter")
+                                   .child(at::text(text).spans(spans)));
+        }
+    };
+    auto platform = std::make_shared<at::TestPlatform>();
+    at::App app(platform, loadFonts());
+    at::TestWindow &tw = platform->newWindow({420, 60}, 1);
+    at::Entity<View> view = app.newEntity<View>();
+    view.update(app, [&](View &v, at::Context<View> &) {
+        v.text = std::u16string(u16View(text.text));
+        v.spans = spans;
+    });
+    app.openWindow(tw, view);
+    tw.settle();
+    const at::Color colour = cssColor(text.objects[0].color, PagePalette{}.link);
+    int placeholders = 0;
+    for (const at::Primitive &p : tw.lastScene()->primitives()) {
+        const at::Quad *q = std::get_if<at::Quad>(&p);
+        if (!q || q->borderColor != colour)
+            continue;
+        ++placeholders;
+        // A square of 9/10 of the room (0.84 em of 16 px), inside the 24 px line.
+        QVERIFY2(std::abs(q->bounds.width() - 12) <= 1 && std::abs(q->bounds.height() - 12) <= 1,
+                 qPrintable(u"%1 × %2"_s.arg(q->bounds.width()).arg(q->bounds.height())));
+        QVERIFY(q->bounds.top() >= 10 && q->bounds.bottom() <= 34);
+    }
+    QCOMPARE(placeholders, 1);
 }
 
 QTEST_MAIN(TestAtramentEditor)

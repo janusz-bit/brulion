@@ -19,6 +19,13 @@
 // Lines are as tall as `lineHeight` (logical px) when it is set, else as the tallest run's
 // ascent + descent + line gap; the baseline sits so that the extra height is shared above and
 // below (CSS's half-leading).
+//
+// Inline boxes (an icon, a checkbox in a line): a run with `inlineBox` is laid out as one box of
+// that size instead of glyphs — its text (U+FFFC, or no-break spaces reserved for it) keeps its
+// offsets but is never drawn. The line reserves the box's width, and its ascent and descent count
+// for the line's as a font's do; the box wraps as one unit (no break inside it, a break before or
+// after it where its characters allow one); its offsets inside are no caret stops (carets and hit
+// tests see one cluster). Where it ended up: inlineBoxes().
 
 #include "base/color.h"
 #include "base/geometry.h"
@@ -32,6 +39,14 @@
 #include <vector>
 
 namespace brulion::atrament {
+
+// The size of an inline box (logical px).
+struct InlineBox {
+    float width = 0;
+    float ascent = 0;  // above the baseline
+    float descent = 0; // below it
+    bool operator==(const InlineBox &) const = default;
+};
 
 // A run of one font over the paragraph's text, in order; their lengths add up to the text's.
 struct FontRun {
@@ -47,6 +62,9 @@ struct FontRun {
     // The text's language as a BCP 47 tag ("pl", "en-GB") for language-specific forms; empty for
     // none (never the process's locale, so layouts are the same everywhere).
     std::u16string language;
+    // The run is one inline box of this size (see above); its face and size still give the
+    // metrics of an empty line and the break width.
+    std::optional<InlineBox> inlineBox = {};
 };
 
 struct PositionedGlyph {
@@ -70,6 +88,32 @@ struct TextLine {
     float width = 0; // without hanging spaces
     std::uint32_t firstGlyph = 0; // into glyphs()
     std::uint32_t glyphCount = 0;
+};
+
+// A run as laid out (TextLayout::runs()): its text, the caller's style index, and how far its own
+// font — the run's face, not a fallback's — or its inline box reaches above and below the baseline.
+struct LaidOutRun {
+    int start = 0;
+    int end = 0;
+    std::uint32_t styleIndex = 0;
+    float ascent = 0;
+    float descent = 0;
+    bool inlineBox = false;
+};
+
+// An inline box placed on its line (TextLayout::inlineBoxes()).
+struct PlacedInlineBox {
+    int start = 0; // the run's text
+    int end = 0;
+    int line = 0;
+    Rect bounds; // from the layout's top-left: x from its caret position, y from the line's baseline
+    std::uint32_t styleIndex = 0;
+};
+
+// A piece of a range on one line (TextLayout::glyphRects()).
+struct LineRect {
+    int line = 0;
+    Rect rect;
 };
 
 enum class CaretAffinity : std::uint8_t { Downstream, Upstream };
@@ -99,6 +143,21 @@ public:
     // One rectangle per line the range touches, each as tall as its line; a selection that
     // goes on past a line's end covers its hanging spaces and a space's width for the break.
     std::vector<Rect> selectionRects(Range range) const;
+    // One rectangle per line the range shows something on, around its glyphs: x from the caret at
+    // its start to the caret at its end there (no hanging spaces at a wrap, nothing for a line
+    // break), y from the baseline up by the ascent and down by the descent of the range's runs on
+    // that line (their own fonts' or inline boxes', the tallest). Pieces narrower than half a
+    // pixel are left out. What a background shape is drawn around.
+    std::vector<LineRect> glyphRects(Range range) const;
+    // The runs as laid out, in order (the caller's, clipped to the text, and one for text past
+    // them).
+    const std::vector<LaidOutRun> &runs() const { return m_runs; }
+    // Every inline box, in text order.
+    const std::vector<PlacedInlineBox> &inlineBoxes() const { return m_inlineBoxes; }
+    // Caret stops: the next / previous grapheme boundary, an inline box one cluster (its offsets
+    // inside are skipped). `offset` inside a box moves to its end / start.
+    int nextCaretStop(int offset) const;
+    int previousCaretStop(int offset) const;
     // The offset on the line above / below at the same x (keyboard ↑/↓); -1 when there is none.
     int offsetAbove(int offset, float x) const;
     int offsetBelow(int offset, float x) const;
@@ -119,6 +178,8 @@ private:
     std::vector<float> m_offsetX;
     // Per line: the width a selection past the line's end gives its break (a space of its font).
     std::vector<float> m_breakWidths;
+    std::vector<LaidOutRun> m_runs;
+    std::vector<PlacedInlineBox> m_inlineBoxes;
 };
 
 struct ParagraphStyle {
