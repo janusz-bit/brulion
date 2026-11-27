@@ -39,7 +39,8 @@ BDialog {
                            string prTitle, string prBody, bool draft, string prBase)
     /// T3 Code's AI-written commit message: the owner can ask the AI (GitChangesPanel.aiAvailable)
     /// — "Write with AI" asks git for the checked files' changes (CodeGit.requestPatch), then the
-    /// owner (writeRequested(system, prompt)) for the message, which comes back by aiWritten().
+    /// owner (writeRequested(system, prompt): CodeGit.commitQuestion) for the message, which comes
+    /// back by aiWritten().
     property bool aiAvailable: false
     property bool aiWriting: false
     signal writeRequested(string system, string prompt)
@@ -70,10 +71,12 @@ BDialog {
                 dialog.aiError = qsTr("The changes could not be read.")
                 return
             }
-            dialog.writeRequested("You write git commit messages. Reply with the commit message alone: a subject line of at most 72 characters in the imperative mood, then, when the change needs it, a blank line and a short body explaining what changed and why. Plain text: no quotes, no Markdown, no code fences. Write in the language of the changes' own comments and identifiers, English when unsure.",
-                                  "Branch: " + dialog.git.branch + "\n\nThe changes (git diff):\n\n" + text)
+            dialog.question.map = dialog.git.commitQuestion(text)
+            dialog.writeRequested("" + dialog.question.map.system, "" + dialog.question.map.prompt)
         }
     }
+    /// CodeGit.commitQuestion's {system, prompt} (a map read in compiled QML: MapHolder).
+    readonly property MapHolder question: MapHolder {}
 
     function openFor(): void {
         dialog.aiWriting = false

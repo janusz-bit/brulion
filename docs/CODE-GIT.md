@@ -15,8 +15,9 @@ the turn changed and put the files back. It has two layers:
 | app area `gitpanel` | `src/app/gitpanel/` (library `brulion_gitpanel`), `src/app/qml/gitpanel/` | `CodeGit` (QML type): one folder's git, kept up to date, as properties and signals; `gitdiffrows.h`: the panel's diff rows, file tree and review comments; the changes panel and its dialogs |
 
 Tests: `tests/core/gitcli` (`tst_gitcli`: parsers, no git needed; `tst_gitcli_repo`: `Client` with
-real git in temporary repositories) and `tests/app/gitpanel` (`tst_codegit`: `CodeGit` with real
-git; `tst_gitdiffrows`: the pure rows). The tests with real git skip themselves where `git` is not on PATH; the Nix check build has
+real git in temporary repositories), `tests/core/codeai` (`tst_codeai`: the AI's questions and its
+answers read — core module `codeai`, Code mode's texts written by the AI) and `tests/app/gitpanel`
+(`tst_codegit`: `CodeGit` with real git; `tst_gitdiffrows`: the pure rows). The tests with real git skip themselves where `git` is not on PATH; the Nix check build has
 it (`nix/package.nix`, `nativeCheckInputs`). Pull requests are tested with a fake `gh` (a shell
 script: Unix only).
 
@@ -205,6 +206,14 @@ toasts).
 | `gitAvailable`, `ghAvailable` | bool | `git` / `gh` found on PATH |
 
 **Invokables** — `refresh()`; `requestPatch(paths)` (the checked files' changes as text for the AI: `patchReady(text)`);
+`commitQuestion(patch)` (the AI's question for a commit message of it on this branch: `{system, prompt}`,
+`codeai::commitMessage`); `requestPullRequestQuestion(base)` (the AI's question for a pull request's title
+and description: the branch's commits — `git log base..HEAD`, their bodies too, the newest 200 —, `git diff
+--stat base...HEAD` and `git diff -U2 base...HEAD`, each bounded — `codeai::pullRequest` —, against `base`
+or "" the default branch, a branch the default branch's remote has by that name first:
+`pullRequestQuestionReady(system, prompt, "")`, or `("", "", why)` — no branch, a base that is none or
+looks like an option, nothing the base lacks); `pullRequestText(answer)` (the answer read,
+`codeai::readPullRequest`: `{title, body}`, title "" none);
 `requestDiff(path, checkpoint)` ("" = against HEAD; a renamed row's
 old text from its old path); `commit(message, push, createPr, prTitle, prBody, draft)` (T3 Code's
 "Commit" / "Commit and push" / "Commit, push and create PR"; `prTitle` "" = the message's first
@@ -234,6 +243,7 @@ ignoreWhitespace, context)`, `findRows(rows, query)`, `longestLine(rows)`, `line
 "push", "pull", "createPr", "publish", "init", "stash" cannot run now — a disabled entry's tooltip).
 
 **Signals** — `diffReady(path, oldText, newText, binary, tooLarge)`, `diffFailed(path, message)`,
+`patchReady(text)`, `pullRequestQuestionReady(system, prompt, error)`,
 `actionFinished(action, ok, message, url)` with action "commit", "push", "pull", "createBranch",
 "checkout", "pullRequest", "restore", "dropCheckpoints", "addWorktree" (`url`: the new folder),
 "removeWorktree", "stage", "unstage", "discard", "resolve", "stageHunk", "unstageHunk",
@@ -363,7 +373,13 @@ branch — Cancel, Continue, or `gitGuardBranch` "Create a branch and continue" 
 **`GitPullRequestDialog`** (`gitPullRequestDialog`; property `git`, `openFor()`):
 `gitPullRequestTitle`, `gitPullRequestBody`, `gitPullRequestBase` (`GitBasePicker`: the default
 branch unless another is chosen; a remote-tracking branch as its name on the remote),
-`gitPullRequestDraft`. From a fork (an "upstream" remote that is another repository) the pull request
+`gitPullRequestDraft`. **Write with AI** (`gitPullRequestWriteAi`, while the owner says the AI can:
+`aiAvailable` — T3 Code's AI-written pull request): the question of the branch against the base chosen
+(`CodeGit.requestPullRequestQuestion(base)` → `pullRequestQuestionReady`) to the owner
+(`writeRequested(system, prompt)`, the same `writeWithAi` / `aiWritten(ok, text)` as the commit
+dialog's), whose answer — the title on its first line, then the description in Markdown with "##
+Summary" and "## Testing" — fills both fields (`CodeGit.pullRequestText`), to edit before Create PR; no
+title in it, a base that is none or a branch without commits of its own: `gitPullRequestAiError`. From a fork (an "upstream" remote that is another repository) the pull request
 goes into the upstream repository (`--repo`, `--head owner:branch`).
 
 **`GitPublishDialog`** (`gitPublishDialog`): the name (`gitPublishName`, the folder's by default) and

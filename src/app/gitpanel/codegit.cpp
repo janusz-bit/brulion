@@ -1,5 +1,7 @@
 #include "codegit.h"
 
+#include "codeai/codeai.h"
+
 #include "gitcli/gitcli.h"
 
 #include "gitdiffrows.h"
@@ -11,6 +13,8 @@
 #include <QLocale>
 #include <QSet>
 #include <QVariantMap>
+
+#include <algorithm>
 
 using namespace Qt::StringLiterals;
 
@@ -608,6 +612,136 @@ void CodeGit::requestPatch(const QStringList &paths)
             finish(r.failure.isEmpty() || r.outputCut ? QString::fromUtf8(r.out) : QString());
         });
     });
+}
+
+static_assert(CodeGit::MaxPatchChars == codeai::MaxPatch, "one limit of a diff for the AI");
+
+namespace {
+
+/// A request with one user message as QML gets it: {system, prompt}.
+QVariantMap question(const ai::Request &request)
+{
+    return {{u"system"_s, request.system},
+            {u"prompt"_s, request.messages.isEmpty() ? QString() : request.messages.first().content}};
+}
+
+/// What the AI's questions read: nothing written, a diff's worth of output at most.
+gitcli::RunOptions readOptions()
+{
+    gitcli::RunOptions ro;
+    ro.readOnly = true;
+    ro.maxOutput = 4 * CodeGit::MaxPatchChars;
+    return ro;
+}
+
+/// A run's output as text: "" when it failed (a diff cut where it was too long still says the most).
+QString outputOf(const gitcli::RunResult &r)
+{
+    return r.ok() || r.outputCut ? QString::fromUtf8(r.out) : QString();
+}
+
+/// The refs a pull request's base `named` may be, in the order tried: a base the user `chosen` as
+/// the default branch's remote has it first (what the pull request goes into), then as named.
+QStringList baseCandidates(const QString &named, bool chosen, const QString &defaultRef)
+{
+    const QString remote = defaultRef.section(u'/', 0, 0, QString::SectionSkipEmpty);
+    QStringList out;
+    if (chosen && defaultRef.contains(u'/') && !named.startsWith(remote + u'/'))
+        out << remote + u'/' + named;
+    out << named;
+    return out;
+}
+
+/// `commands` run in `root` one after another: done(their results, in order).
+void runEach(gitcli::Client &client, const QString &root, QList<QStringList> commands, gitcli::RunOptions options,
+             std::function<void(const QList<gitcli::RunResult> &)> done, QList<gitcli::RunResult> results = {})
+{
+    if (commands.isEmpty()) {
+        done(results);
+        return;
+    }
+    const QStringList args = commands.takeFirst();
+    client.git(root, args, options,
+               [&client, root, commands, options, done, results](const gitcli::RunResult &r) mutable {
+                   results << r;
+                   runEach(client, root, std::move(commands), std::move(options), std::move(done), std::move(results));
+               });
+}
+
+} // namespace
+
+QVariantMap CodeGit::commitQuestion(const QString &patch) const
+{
+    return question(codeai::commitMessage(m_branch, patch));
+}
+
+void CodeGit::requestPullRequestQuestion(const QString &base)
+{
+    const int generation = m_generation;
+    withRepo([this, generation, base](bool isRepo) {
+        if (generation != m_generation)
+            return;
+        const QString chosen = base.trimmed();
+        const QString named = chosen.isEmpty() ? m_defaultBranchRef : chosen;
+        if (!isRepo || m_branch.isEmpty() || !m_hasCommits)
+            failPullRequestQuestion(tr("A pull request's text is written for a branch with commits."));
+        else if (named.isEmpty() || !gitcli::isSafeRevision(named))
+            failPullRequestQuestion(tr("“%1” is no branch to compare with.").arg(named));
+        else
+            resolvePullRequestBase(named, baseCandidates(named, !chosen.isEmpty(), m_defaultBranchRef));
+    });
+}
+
+void CodeGit::resolvePullRequestBase(const QString &named, const QStringList &candidates)
+{
+    const int generation = m_generation;
+    QList<QStringList> checks;
+    for (const QString &c : candidates)
+        checks << QStringList{u"rev-parse"_s, u"--verify"_s, u"--quiet"_s, c + u"^{commit}"_s};
+    runEach(m_client, m_info.topLevel, checks, readOptions(),
+            [this, generation, named, candidates](const QList<gitcli::RunResult> &found) {
+                if (generation != m_generation)
+                    return;
+                const qsizetype at = std::ranges::find_if(found, &gitcli::RunResult::ok) - found.begin();
+                if (at < candidates.size())
+                    readPullRequestRange(candidates.at(at));
+                else
+                    failPullRequestQuestion(tr("“%1” is no branch to compare with.").arg(named));
+            });
+}
+
+void CodeGit::readPullRequestRange(const QString &ref)
+{
+    const int generation = m_generation;
+    const QStringList diff{u"diff"_s, u"--no-color"_s, u"--no-ext-diff"_s, u"--no-textconv"_s};
+    const QList<QStringList> reads{{u"log"_s, u"--no-color"_s, u"-n"_s, u"200"_s, u"--format=%h %s%n%w(0,4,4)%b"_s,
+                                    ref + u"..HEAD"_s, u"--"_s},
+                                   diff + QStringList{u"--stat"_s, ref + u"...HEAD"_s, u"--"_s},
+                                   diff + QStringList{u"-U2"_s, ref + u"...HEAD"_s, u"--"_s}};
+    runEach(m_client, m_info.topLevel, reads, readOptions(), [this, generation, ref](const QList<gitcli::RunResult> &r) {
+        if (generation != m_generation)
+            return;
+        const QString commits = outputOf(r.at(0)).trimmed();
+        if (!r.at(0).ok()) {
+            failPullRequestQuestion(r.at(0).message());
+        } else if (commits.isEmpty()) {
+            failPullRequestQuestion(tr("The branch has no commits that %1 does not have.").arg(ref));
+        } else {
+            const QVariantMap q = question(codeai::pullRequest({ref, m_branch, commits, outputOf(r.at(1)), outputOf(r.at(2))}));
+            Q_EMIT pullRequestQuestionReady(q.value(u"system"_s).toString(), q.value(u"prompt"_s).toString(), QString());
+        }
+    });
+}
+
+void CodeGit::failPullRequestQuestion(const QString &why)
+{
+    Q_EMIT pullRequestQuestionReady(QString(), QString(), why);
+}
+
+QVariantMap CodeGit::pullRequestText(const QString &answer) const
+{
+    const codeai::PullRequestText text = codeai::readPullRequest(answer);
+    return {{u"title"_s, text.title}, {u"body"_s, text.body}};
 }
 
 void CodeGit::branches()

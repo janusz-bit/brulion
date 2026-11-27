@@ -1009,7 +1009,7 @@ FocusScope {
                                 AppController.toast(qsTr("Copied: %1").arg(text), "success")
                         }
                         onOpenUrl: (url) => Workspace.openUrl(url)
-                        // (T3 Code's AI-written commit message: the AI of the user's settings.)
+                        // (T3 Code's AI-written commit message and pull request: the AI of the user's settings.)
                         aiAvailable: commitWriter.available
                         onWriteWithAi: (system, prompt) => {
                             if (!commitWriter.ask(system, prompt))
@@ -1061,7 +1061,7 @@ FocusScope {
         id: pageTools
         workspace: Workspace
     }
-    // One question to the AI: the commit dialog's "Write with AI".
+    // One question to the AI: the commit and pull request dialogs' "Write with AI".
     AiAsk {
         id: commitWriter
         workspace: Workspace

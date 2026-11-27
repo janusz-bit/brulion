@@ -127,6 +127,7 @@ private Q_SLOTS:
     void poll();
     void diff();
     void patchForTheAi();
+    void questionsForTheAi();
     void commit();
     void commitAndPush();
     void commitPushAndPullRequest();
@@ -444,6 +445,75 @@ void TestCodeGit::patchForTheAi()
     git.requestPatch({});
     QTRY_COMPARE_WITH_TIMEOUT(ready.count(), 2, Wait);
     QCOMPARE(ready.at(1).at(0).toString(), QString());
+}
+
+// The questions for the AI's texts (codeai): a pull request's — the branch's commits (their bodies
+// too), stat and diff against the base (the default branch, or one chosen), never what the base has
+// alone; a base that is none or looks like an option, and a branch with nothing of its own, say why
+// —, its answer read into title and body; the commit message's — the branch and the changes.
+void TestCodeGit::questionsForTheAi()
+{
+    Repo repo;
+    repo.write(u"koszyk.py"_s, "RABAT = 0\n");
+    repo.commitAll(u"Początek"_s);
+    repo.git({u"switch"_s, u"-q"_s, u"-c"_s, u"rabat"_s});
+    repo.write(u"koszyk.py"_s, "RABAT = 0.05  # zniżka\n");
+    repo.git({u"add"_s, u"-A"_s});
+    repo.git({u"commit"_s, u"-q"_s, u"-m"_s, u"Dodaj rabat dla stałych klientów"_s, u"-m"_s,
+              u"Rabat 5 % od trzeciego zamówienia."_s});
+    repo.git({u"switch"_s, u"-q"_s, u"main"_s});
+    repo.write(u"inne.txt"_s, "tylko na main\n");
+    repo.commitAll(u"Tylko na main"_s);
+    repo.git({u"switch"_s, u"-q"_s, u"rabat"_s});
+
+    CodeGit git;
+    git.setFolder(repo.root);
+    QTRY_COMPARE_WITH_TIMEOUT(git.defaultBranch(), u"main"_s, Wait);
+    QTRY_COMPARE_WITH_TIMEOUT(git.branch(), u"rabat"_s, Wait);
+    QSignalSpy ready(&git, &CodeGit::pullRequestQuestionReady);
+    git.requestPullRequestQuestion(QString());
+    QTRY_COMPARE_WITH_TIMEOUT(ready.count(), 1, Wait);
+    QCOMPARE(ready.at(0).at(2).toString(), QString());
+    QVERIFY(ready.at(0).at(0).toString().contains(u"pull request"_s));
+    const QString prompt = ready.at(0).at(1).toString();
+    QVERIFY2(prompt.contains(u"Base branch: main\nHead branch: rabat\n"_s), qPrintable(prompt));
+    QVERIFY(prompt.contains(u"Dodaj rabat dla stałych klientów"_s));
+    QVERIFY(prompt.contains(u"Rabat 5 % od trzeciego zamówienia."_s));
+    QVERIFY(prompt.contains(u"koszyk.py | "_s));
+    QVERIFY(prompt.contains(u"+RABAT = 0.05  # zniżka"_s));
+    QVERIFY(!prompt.contains(u"Tylko na main"_s) && !prompt.contains(u"inne.txt"_s));
+    // A base chosen by its name.
+    git.requestPullRequestQuestion(u"main"_s);
+    QTRY_COMPARE_WITH_TIMEOUT(ready.count(), 2, Wait);
+    QVERIFY(ready.at(1).at(1).toString().contains(u"Base branch: main\n"_s));
+    // A base that is none, one that looks like an option: said, nothing asked.
+    git.requestPullRequestQuestion(u"nie-ma-takiej"_s);
+    QTRY_COMPARE_WITH_TIMEOUT(ready.count(), 3, Wait);
+    QCOMPARE(ready.at(2).at(1).toString(), QString());
+    QVERIFY(ready.at(2).at(2).toString().contains(u"nie-ma-takiej"_s));
+    git.requestPullRequestQuestion(u"--output=/tmp/wynik"_s);
+    QTRY_COMPARE_WITH_TIMEOUT(ready.count(), 4, Wait);
+    QCOMPARE(ready.at(3).at(1).toString(), QString());
+    QVERIFY(!ready.at(3).at(2).toString().isEmpty());
+    // The default branch itself has nothing of its own: said.
+    repo.git({u"switch"_s, u"-q"_s, u"main"_s});
+    git.refresh();
+    QTRY_COMPARE_WITH_TIMEOUT(git.branch(), u"main"_s, Wait);
+    git.requestPullRequestQuestion(QString());
+    QTRY_COMPARE_WITH_TIMEOUT(ready.count(), 5, Wait);
+    QCOMPARE(ready.at(4).at(1).toString(), QString());
+    QVERIFY(ready.at(4).at(2).toString().contains(u"main"_s));
+
+    // The answer read.
+    const QVariantMap text = git.pullRequestText(u"```\nDodaj rabat.\n\n## Summary\n- 5 %\n```"_s);
+    QCOMPARE(text.value(u"title"_s).toString(), u"Dodaj rabat"_s);
+    QCOMPARE(text.value(u"body"_s).toString(), u"## Summary\n- 5 %"_s);
+    QCOMPARE(git.pullRequestText(QString()).value(u"title"_s).toString(), QString());
+    // The commit message's question.
+    const QVariantMap commit = git.commitQuestion(u"diff --git a/koszyk.py b/koszyk.py\n"_s);
+    QVERIFY(commit.value(u"system"_s).toString().contains(u"commit message"_s));
+    QVERIFY(commit.value(u"prompt"_s).toString().startsWith(u"Branch: main\n"_s));
+    QVERIFY(commit.value(u"prompt"_s).toString().endsWith(u"diff --git a/koszyk.py b/koszyk.py\n"_s));
 }
 
 void TestCodeGit::commit()
