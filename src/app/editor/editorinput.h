@@ -62,6 +62,10 @@ public:
     /// was a composition.
     Q_INVOKABLE bool commitPreedit(QQuickItem *item) const;
 
+    /// `root` or an item inside it that is shown and enabled takes typed text (a text field, an
+    /// editable TextEdit: Qt's ItemAcceptsInputMethod) — a dialog one types in (BDialog.textEntry).
+    Q_INVOKABLE bool takesText(QQuickItem *root) const;
+
     /// `ranges` [{ from, to }] (ascending, not overlapping) of a TextEdit's document replaced by
     /// `replacement` as one step of its undo history (source mode's Replace all).
     Q_INVOKABLE void replaceRanges(QQuickTextDocument *document, const QVariantList &ranges,

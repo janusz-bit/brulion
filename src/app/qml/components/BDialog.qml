@@ -28,7 +28,12 @@ import Brulion
 // text still being typed there (a field keeps the focus with Ctrl+Enter or a touch keyboard);
 // `acceptEnabled` is checked again afterwards (onAcceptRequested: picker.commitPending()).
 // The on-screen keyboard (KeyboardInsets): a sheet sits on it and a centred dialog stays above
-// it, so the field being typed in is never under the keyboard.
+// it, so the field being typed in is never under the keyboard. A dialog one types in
+// (`textEntry`: a text field in it, or the keyboard came up while it is open) does not follow the
+// keyboard on a touch UI: it hangs from the window's top in one place — on narrow windows a card
+// instead of the bottom sheet — and, once the keyboard is expected (its first focus takes text, or
+// the keyboard came), ends above the room the last keyboard took (KeyboardInsets.lastOverlap), so
+// neither the field nor the buttons move while the keyboard comes, changes its height or goes.
 // `title` and `subtitle` are plain text: they quote page and folder names, which come from
 // anywhere (sync, imports) and must never turn into markup.
 T.Dialog {
@@ -56,6 +61,15 @@ T.Dialog {
     readonly property real overlayWidth: parent ? parent.width : Theme.windowWidth
     readonly property real overlayHeight: parent ? parent.height : Theme.windowHeight
     readonly property bool sheet: sheetOnNarrow && overlayWidth < Theme.narrowBreakpoint
+    /// A dialog one types in: a text field shown in it, or the keyboard came up while it is open
+    /// (set as it shows; see above).
+    property bool textEntry: false
+    /// The keyboard is expected while it is open: its first focus takes text, or the keyboard came.
+    property bool keyboardExpected: false
+    /// In one place at the window's top, whatever the keyboard does (a touch UI's `textEntry`).
+    readonly property bool steady: textEntry && Theme.touchUi
+    /// A bottom sheet with its drag handle (narrow windows, not `steady`).
+    readonly property bool bottomSheet: sheet && !steady
     readonly property real safeTop: parent && parent.SafeArea ? parent.SafeArea.margins.top : 0
     /// The on-screen keyboard over the window's bottom (it also covers the navigation bar).
     readonly property real keyboard: KeyboardInsets.overlap
@@ -63,6 +77,11 @@ T.Dialog {
     readonly property real safeBottom: keyboard > 0 ? 0 : parent && parent.SafeArea ? parent.SafeArea.margins.bottom : 0
     /// The height left above the keyboard.
     readonly property real roomAboveKeyboard: overlayHeight - keyboard
+    /// The height the dialog may end at: above the keyboard, for a steady dialog that expects it
+    /// above the last keyboard's room also while it is hidden or still sliding in.
+    readonly property real room: overlayHeight - (steady && keyboardExpected ? Math.max(keyboard, KeyboardInsets.lastOverlap) : keyboard)
+    /// A steady dialog's top.
+    readonly property real steadyTop: safeTop + (sheet ? Theme.space3 : Theme.space12)
     property real dragOffset: 0
 
     signal acceptRequested()
@@ -86,11 +105,16 @@ T.Dialog {
     focus: true
     closePolicy: T.Popup.CloseOnEscape | T.Popup.CloseOnPressOutside
 
-    width: sheet ? overlayWidth : Math.min(preferredWidth, overlayWidth - 2 * Theme.space6)
-    height: Math.max(0, Math.min(implicitHeight, roomAboveKeyboard - (sheet ? safeTop + Theme.space10 : 2 * Theme.space6)))
-    x: sheet ? 0 : Math.round((overlayWidth - width) / 2)
-    y: sheet ? roomAboveKeyboard - height + dragOffset
-             : Math.max(Theme.space6, Math.round((roomAboveKeyboard - height) * 0.42))
+    width: bottomSheet ? overlayWidth
+           : sheet ? overlayWidth - 2 * Theme.space3
+           : Math.min(preferredWidth, overlayWidth - 2 * Theme.space6)
+    height: Math.max(0, Math.min(implicitHeight,
+                                 steady ? room - steadyTop - (sheet ? Theme.space3 : Theme.space6)
+                                        : room - (sheet ? safeTop + Theme.space10 : 2 * Theme.space6)))
+    x: Math.round((overlayWidth - width) / 2)
+    y: steady ? steadyTop
+              : sheet ? room - height + dragOffset
+              : Math.max(Theme.space6, Math.round((room - height) * 0.42))
 
     implicitWidth: Math.max(implicitBackgroundWidth + leftInset + rightInset,
                             implicitContentWidth + leftPadding + rightPadding,
@@ -102,10 +126,13 @@ T.Dialog {
     leftPadding: sheet ? Theme.space4 : Theme.space6
     rightPadding: leftPadding
     topPadding: 0
-    bottomPadding: showFooter ? 0 : Theme.space5 + (sheet ? safeBottom : 0)
+    bottomPadding: showFooter ? 0 : Theme.space5 + (bottomSheet ? safeBottom : 0)
     spacing: Theme.space3
 
     onOpened: {
+        // A field made only once it opened (a Loader).
+        if (!control.textEntry)
+            control.textEntry = EditorInput.takesText(control.contentItem)
         if (focusReject && showReject && showFooter)
             rejectButton.forceActiveFocus(Theme.touchUi ? Qt.OtherFocusReason : Qt.TabFocusReason)
         else if (initialFocusItem)
@@ -114,6 +141,23 @@ T.Dialog {
             control.contentItem.forceActiveFocus(Qt.PopupFocusReason)
     }
     onAboutToShow: flick.contentY = 0
+    // Shown (its items too, which they were not at aboutToShow): a dialog one types in?
+    onVisibleChanged: {
+        if (!visible)
+            return
+        control.textEntry = EditorInput.takesText(control.contentItem)
+        control.keyboardExpected = KeyboardInsets.shown
+                || (control.initialFocusItem !== null && EditorInput.takesText(control.initialFocusItem))
+    }
+    Connections {
+        target: KeyboardInsets
+        function onShownChanged(): void {
+            if (KeyboardInsets.shown && control.visible) {
+                control.textEntry = true
+                control.keyboardExpected = true
+            }
+        }
+    }
 
     Shortcut {
         sequences: ["Ctrl+Return", "Ctrl+Enter"]
@@ -124,7 +168,7 @@ T.Dialog {
     header: Column {
         // Drag the sheet down to dismiss it (a new drag takes the sheet from a settling one).
         DragHandler {
-            enabled: control.sheet
+            enabled: control.bottomSheet
             target: null
             xAxis.enabled: false
             onTranslationChanged: control.dragOffset = Math.max(0, translation.y)
@@ -147,7 +191,7 @@ T.Dialog {
         }
 
         Item {
-            visible: control.sheet
+            visible: control.bottomSheet
             width: parent.width
             height: 20
             Rectangle {
@@ -167,7 +211,7 @@ T.Dialog {
 
             BIcon {
                 Layout.alignment: Qt.AlignTop
-                Layout.topMargin: (control.sheet ? 8 : 20) + Math.max(0, (titleText.lineHeightPx - height) / 2)
+                Layout.topMargin: (control.bottomSheet ? 8 : 20) + Math.max(0, (titleText.lineHeightPx - height) / 2)
                 name: control.iconName
                 size: Theme.iconSizeLg
                 color: control.iconColor
@@ -175,7 +219,7 @@ T.Dialog {
             }
             Column {
                 Layout.fillWidth: true
-                Layout.topMargin: control.sheet ? 8 : 20
+                Layout.topMargin: control.bottomSheet ? 8 : 20
                 Layout.bottomMargin: 2
                 spacing: 2
                 Text {
@@ -203,7 +247,7 @@ T.Dialog {
             }
             BIconButton {
                 Layout.alignment: Qt.AlignTop
-                Layout.topMargin: control.sheet ? 2 : 12
+                Layout.topMargin: control.bottomSheet ? 2 : 12
                 visible: control.showCloseButton
                 iconName: "x"
                 label: qsTr("Close")
@@ -234,7 +278,7 @@ T.Dialog {
 
     footer: Item {
         visible: control.showFooter
-        implicitHeight: control.showFooter ? footerRow.implicitHeight + Theme.space4 + Theme.space5 + (control.sheet ? control.safeBottom : 0) : 0
+        implicitHeight: control.showFooter ? footerRow.implicitHeight + Theme.space4 + Theme.space5 + (control.bottomSheet ? control.safeBottom : 0) : 0
         implicitWidth: footerRow.implicitWidth + 2 * control.leftPadding
 
         RowLayout {
@@ -292,7 +336,7 @@ T.Dialog {
         Rectangle {
             id: panel
             anchors.fill: parent
-            anchors.bottomMargin: control.sheet ? -Theme.radiusXl : 0 // square bottom corners
+            anchors.bottomMargin: control.bottomSheet ? -Theme.radiusXl : 0 // square bottom corners
             radius: control.sheet ? Theme.radiusXl : Theme.radiusXl - 2
             color: Theme.bgElevated
             border.width: Theme.dark ? 1 : 0
@@ -301,21 +345,21 @@ T.Dialog {
         }
     }
 
-    // A bottom sheet dims the page; a centred dialog makes it recede.
+    // A bottom sheet dims the page; a card (centred, or one typed in at the top) makes it recede.
     T.Overlay.modal: Rectangle {
-        color: control.sheet ? Theme.scrim : Theme.scrimModal
+        color: control.bottomSheet ? Theme.scrim : Theme.scrimModal
         Behavior on opacity { NumberAnimation { duration: Theme.duration } }
     }
 
     // (A transition runs its animations in parallel.)
     enter: Transition {
-        NumberAnimation { property: "opacity"; from: 0; to: 1; duration: control.sheet ? Theme.durationFast : Theme.duration; easing.type: Theme.easing }
-        NumberAnimation { property: "scale"; from: control.sheet ? 1 : 0.96; to: 1; duration: Theme.duration; easing.type: Theme.easingEnter }
-        NumberAnimation { property: "dragOffset"; from: control.sheet ? control.height * 0.6 : 0; to: 0; duration: Theme.durationSlow; easing.type: Theme.easingEnter }
+        NumberAnimation { property: "opacity"; from: 0; to: 1; duration: control.bottomSheet ? Theme.durationFast : Theme.duration; easing.type: Theme.easing }
+        NumberAnimation { property: "scale"; from: control.bottomSheet ? 1 : 0.96; to: 1; duration: Theme.duration; easing.type: Theme.easingEnter }
+        NumberAnimation { property: "dragOffset"; from: control.bottomSheet ? control.height * 0.6 : 0; to: 0; duration: Theme.durationSlow; easing.type: Theme.easingEnter }
     }
     exit: Transition {
         NumberAnimation { property: "opacity"; from: 1; to: 0; duration: Theme.durationFast; easing.type: Theme.easingExit }
-        NumberAnimation { property: "scale"; from: 1; to: control.sheet ? 1 : 0.98; duration: Theme.durationFast }
-        NumberAnimation { property: "dragOffset"; to: control.sheet ? control.height * 0.5 : 0; duration: Theme.duration; easing.type: Theme.easingExit }
+        NumberAnimation { property: "scale"; from: 1; to: control.bottomSheet ? 1 : 0.98; duration: Theme.durationFast }
+        NumberAnimation { property: "dragOffset"; to: control.bottomSheet ? control.height * 0.5 : 0; duration: Theme.duration; easing.type: Theme.easingExit }
     }
 }

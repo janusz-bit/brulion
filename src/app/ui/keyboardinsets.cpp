@@ -281,6 +281,11 @@ void KeyboardInsets::update()
         Q_EMIT sourceChanged();
     if (previousSlides != slides)
         Q_EMIT slidesOverChanged();
+    // A keyboard that settled up (not one frame of its slide, nor one going away).
+    if (next.shown && !next.animating && next.overlap > 0 && !qFuzzyCompare(1 + next.overlap, 1 + m_lastOverlap)) {
+        m_lastOverlap = next.overlap;
+        Q_EMIT lastOverlapChanged();
+    }
 
     // The log: settled values only (a slide reports every frame).
     if (!next.animating && (std::abs(next.overlap - m_loggedOverlap) >= 1 || next.shown != m_loggedShown)) {

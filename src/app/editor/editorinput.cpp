@@ -2,6 +2,8 @@
 
 #include "blocktext.h"
 
+#include <algorithm>
+
 #include <QCoreApplication>
 #include <QGuiApplication>
 #include <QInputMethod>
@@ -107,6 +109,16 @@ bool EditorInput::commitPreedit(QQuickItem *item) const
         QGuiApplication::inputMethod()->reset();
     }
     return true;
+}
+
+bool EditorInput::takesText(QQuickItem *root) const
+{
+    if (!root || !root->isVisible() || !root->isEnabled())
+        return false;
+    if (root->flags().testFlag(QQuickItem::ItemAcceptsInputMethod))
+        return true;
+    const QList<QQuickItem *> children = root->childItems();
+    return std::any_of(children.begin(), children.end(), [this](QQuickItem *child) { return takesText(child); });
 }
 
 void EditorInput::sendKey(QQuickItem *item, int key, int modifiers, const QString &text) const

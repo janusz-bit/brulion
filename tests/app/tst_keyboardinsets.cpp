@@ -93,6 +93,7 @@ private Q_SLOTS:
     void simulatedWinsOverEverything();
     void slideFrameByFrame();
     void simulatedSlideDown();
+    void lastOverlapKeepsTheSettledKeyboard();
     void slidesOverBySource_data();
     void slidesOverBySource();
     void slidesOverFollowsTheSource();
@@ -762,6 +763,36 @@ void TestKeyboardInsets::slideFrameByFrame()
     QVERIFY(!platform.shown());
     platform.setPlatformState(0, false, false);
     QCOMPARE(platform.overlap(), 0.0);
+}
+
+void TestKeyboardInsets::lastOverlapKeepsTheSettledKeyboard()
+{
+    // The last keyboard that settled up is kept once it went: not the frames of a slide, not one
+    // going away, not a hidden one.
+    KeyboardInsets insets;
+    QSignalSpy last(&insets, &KeyboardInsets::lastOverlapChanged);
+    QCOMPARE(insets.lastOverlap(), 0.0);
+    for (const qreal frame : {40.0, 180.0, 300.0})
+        insets.simulate(frame, true);
+    QCOMPARE(insets.lastOverlap(), 0.0);
+    insets.simulate(320, false);
+    QCOMPARE(insets.lastOverlap(), 320.0);
+    for (const qreal frame : {300.0, 100.0})
+        insets.simulate(frame, true, true);
+    insets.simulate(0, false);
+    QCOMPARE(insets.lastOverlap(), 320.0);
+    insets.simulate(320, false); // the same keyboard again: no change
+    QCOMPARE(last.count(), 1);
+    // A taller one (a suggestion strip came), the platform's report, a smaller window.
+    insets.simulate(-1);
+    insets.setPlatformState(356, true, false);
+    QCOMPARE(insets.lastOverlap(), 356.0);
+    insets.setPlatformState(0, false, false);
+    QCOMPARE(insets.lastOverlap(), 356.0);
+    insets.setWindowHeight(200);
+    insets.setPlatformState(356, true, false);
+    QCOMPARE(insets.lastOverlap(), 200.0);
+    QCOMPARE(last.count(), 3);
 }
 
 void TestKeyboardInsets::simulatedSlideDown()
