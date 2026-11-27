@@ -3058,6 +3058,9 @@ FocusScope {
         value: editor
         restoreMode: Binding.RestoreNone
     }
+    /// The page drawn by Atrament (EditorAtramentPage, an AtramentView) while usesAtrament; its
+    /// members are reached by name (the type exists only where Atrament is built).
+    readonly property Item atramentPage: atramentLoader.item as Item
 
     // ---- Selecting blocks by dragging -------------------------------------------------------------
     /// The list's scroll bar (a press on it selects nothing).

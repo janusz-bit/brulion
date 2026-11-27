@@ -123,6 +123,7 @@ private Q_SLOTS:
     void longPressSelects();
     void mouseDragSelectsBlocks();
     void linkClickWithItsPlace();
+    void toolbarInsertsAtTheCaret();
 };
 
 void TestAtramentEditing::clickEditsAtTheCharacter()
@@ -675,6 +676,24 @@ void TestAtramentEditing::linkClickWithItsPlace()
     QVERIFY2(href.startsWith(u"page:"_s), qPrintable(href));
     QCOMPARE(at.x, p.x);
     QCOMPARE(h.controller.editingRow(), -1); // a link's click edits nothing
+}
+
+void TestAtramentEditing::toolbarInsertsAtTheCaret()
+{
+    Harness h(u"- Zażółć gęślą\n"_s);
+    h.clickInto(0, 6);
+    // The touch toolbar's "#": a word of its own (a space before it after a letter).
+    h.page.update(h.app, [](PageView &v, at::Context<PageView> &cx) { QVERIFY(v.insertAtCaret(u"#", true, cx)); });
+    h.tw.settle();
+    QCOMPARE(h.editText(0), u"Zażółć # gęślą"_s);
+    QCOMPARE(h.inputCaret(), 8);
+    // "[[" as it is.
+    h.page.update(h.app, [](PageView &v, at::Context<PageView> &cx) { QVERIFY(v.insertAtCaret(u"[[", false, cx)); });
+    h.tw.settle();
+    QCOMPARE(h.editText(0), u"Zażółć #[[ gęślą"_s);
+    h.controller.stopEditing();
+    h.tw.settle();
+    h.page.update(h.app, [](PageView &v, at::Context<PageView> &cx) { QVERIFY(!v.insertAtCaret(u"x", false, cx)); });
 }
 
 QTEST_MAIN(TestAtramentEditing)

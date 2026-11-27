@@ -126,6 +126,10 @@ public:
     // Selects [from, to) of the edited block's text (the find bar's current match), when `row` is
     // the edited one; returns whether it was.
     bool selectInEdited(int row, int from, int to, atrament::Context<PageView> &cx);
+    // Types `text` at the edited block's caret in place of its selection (a composition committed
+    // first), with a space before it when `separate` and the character before is none; false when
+    // no block is edited.
+    bool insertAtCaret(std::u16string text, bool separate, atrament::Context<PageView> &cx);
     const PageMetrics &metrics() const { return m_metrics; }
     const PagePalette &palette() const { return m_palette; }
     // What a click asks of the editor: a link of row `row` (its href: `page:`, `tag:`, a URL…)

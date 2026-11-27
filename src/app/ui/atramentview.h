@@ -102,6 +102,9 @@ public:
     Q_INVOKABLE void commitComposition();
     // Selects [from, to) of the edited block's text when `row` is edited here (the find bar's match).
     Q_INVOKABLE bool selectInEdited(int row, int from, int to);
+    // Types `text` at the edited block's caret (in place of its selection), a space before it when
+    // `separate` and the character before the caret is no space (the touch toolbar's "#", "/").
+    Q_INVOKABLE bool insertAtCaret(const QString &text, bool separate);
 
     // The process's Atrament App, made on first use.
     static brulion::atrament::App &atramentApp();

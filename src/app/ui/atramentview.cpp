@@ -166,6 +166,22 @@ void AtramentView::commitComposition()
 #endif
 }
 
+bool AtramentView::insertAtCaret(const QString &text, bool separate)
+{
+    bool done = false;
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_page)
+        m_page->entity.update(runtime().app, [&](brulion::editor::atr::PageView &page,
+                                                 at::Context<brulion::editor::atr::PageView> &cx) {
+            done = page.insertAtCaret(std::u16string(brulion::editor::atr::u16View(text)), separate, cx);
+        });
+#else
+    Q_UNUSED(text)
+    Q_UNUSED(separate)
+#endif
+    return done;
+}
+
 bool AtramentView::selectInEdited(int row, int from, int to)
 {
     bool done = false;

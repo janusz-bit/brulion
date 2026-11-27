@@ -44,6 +44,12 @@ Rectangle {
     readonly property PageController controller: editor ? editor.controller : null
     readonly property int row: controller ? controller.editingRow : -1
     readonly property InlineEditor edit: editor ? editor.activeEditor : null
+    /// The page drawn by Atrament (EditorAtramentPage) while it edits the block: no InlineEditor —
+    /// the composition, insertions and the caret go through it.
+    readonly property Item atramentPage: editor && edit === null ? editor.atramentPage : null
+    /// The caret in the edited block (-1: not known).
+    readonly property int caret: edit ? edit.cursorPosition
+                                      : atramentPage && controller ? controller.cursorPosition : -1
     /// Source mode: its text editor (insertions, its own undo).
     readonly property TextEdit sourceEdit: editor && mode === "source" ? editor.sourceTextEdit : null
     /// The table whose cell is being edited.
@@ -52,7 +58,7 @@ Rectangle {
     readonly property Item table: editor && mode === "cell" ? editor.editingTable : null
     readonly property bool documentMode: editor !== null && editor.documentMode
     /// The edited block is a list item (the document mode indents only those).
-    readonly property bool listItem: edit !== null && edit.block !== null && edit.block.listItem
+    readonly property bool listItem: controller !== null && row >= 0 && controller.blocks.kindAt(row) === "listItem"
     readonly property list<var> noRows: []
     /// The extensions' buttons as text: made again only when they change.
     readonly property string extensionsKey: Workspace.extensions !== null
@@ -95,10 +101,17 @@ Rectangle {
     function commitComposition(): void {
         if (edit)
             EditorInput.commitPreedit(edit)
+        else if (atramentPage)
+            QmlCall.call(atramentPage, "commitComposition")
     }
 
     /// Insert `s` at the caret of the block (or of the source in source mode).
     function insertText(s: string): void {
+        if (bar.mode !== "source" && !bar.edit && bar.atramentPage) {
+            // ("#" and "/" a word of their own, as below.)
+            QmlCall.call2(bar.atramentPage, "insertAtCaret", s, s === "#" || s === "/")
+            return
+        }
         const target = bar.mode === "source" ? bar.sourceEdit : bar.edit
         if (!target || target.readOnly)
             return
@@ -315,7 +328,7 @@ Rectangle {
                 label: qsTr("Insert picture")
                 onClicked: {
                     bar.commitComposition()
-                    QmlCall.call2(bar.editor.dialogsNow(), "pickImage", bar.row, bar.edit ? bar.edit.cursorPosition : -1)
+                    QmlCall.call2(bar.editor.dialogsNow(), "pickImage", bar.row, bar.caret)
                 }
             }
             ToolButton {
@@ -332,7 +345,7 @@ Rectangle {
                 label: qsTr("Drawing")
                 onClicked: {
                     bar.commitComposition()
-                    bar.editor.insertDrawing(bar.row, bar.edit ? bar.edit.cursorPosition : -1)
+                    bar.editor.insertDrawing(bar.row, bar.caret)
                 }
             }
             ToolButton {
@@ -342,7 +355,7 @@ Rectangle {
                 label: qsTr("Voice note")
                 onClicked: {
                     bar.commitComposition()
-                    bar.editor.recordVoiceNote(bar.row, bar.edit ? bar.edit.cursorPosition : -1)
+                    bar.editor.recordVoiceNote(bar.row, bar.caret)
                 }
             }
             // The extensions' buttons: their commands on the edited block (ctx.block, ctx.selection).

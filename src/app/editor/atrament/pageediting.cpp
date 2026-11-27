@@ -133,6 +133,22 @@ void PageView::applyEditStyler(at::Context<PageView> &cx)
     m_input->update(cx.app(), [&styler](at::TextInput &t, at::Context<at::TextInput> &c) { t.setStyler(styler, c); });
 }
 
+bool PageView::insertAtCaret(std::u16string text, bool separate, at::Context<PageView> &cx)
+{
+    if (!m_input || editedRow() < 0)
+        return false;
+    commitComposition(cx);
+    const at::TextInput &input = m_input->read(cx.app());
+    const at::Range sel = input.selection().range();
+    if (separate && sel.start > 0) {
+        const char16_t before = input.text()[std::size_t(sel.start - 1)];
+        if (before != u' ' && before != u'\n')
+            text.insert(text.begin(), u' ');
+    }
+    m_input->update(cx.app(), [&](at::TextInput &t, at::Context<at::TextInput> &c) { t.replace(sel, text, c); });
+    return true;
+}
+
 bool PageView::selectInEdited(int row, int from, int to, at::Context<PageView> &cx)
 {
     if (!m_input || row < 0 || editedRow() != row)
