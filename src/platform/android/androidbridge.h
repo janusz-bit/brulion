@@ -211,7 +211,7 @@ public:
      * Opens the file at @p path in the app the system has for @p mimeType (ACTION_VIEW, no
      * chooser: the system asks itself when there is no default) through a content:// URI of
      * Qt's FileProvider "<package>.qtprovider" with a read grant (OpenWith.kt). A file outside
-     * the provider's roots (android/res/xml/qtprovider_paths.xml: the app's files and cache,
+     * the provider's roots (android/res/xml/brulion_provider_paths.xml: the app's files and cache,
      * the shared storage — not a memory card) is copied into the cache first, in the
      * background (Copying; the app opens when the copy is there). NoApp: no app opens the type
      * (the system's toast is not shown). The PDF viewer's "Open in another app"

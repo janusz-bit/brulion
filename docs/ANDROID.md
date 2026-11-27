@@ -952,10 +952,13 @@ notes such a session). It can be sent with:
   system share sheet (`ACTION_SEND`, `EXTRA_STREAM` with a `content://` address from the
   FileProvider `<package>.qtprovider`; the recipient gets a one-time read right) —
   `AndroidBridge::shareFile()`, JNI without Kotlin code. The provider's roots are set by our
-  `android/res/xml/qtprovider_paths.xml` (it replaces Qt's template, which covered only
-  `files-path`): the app's files and cache, and shared storage (`external-path`, where the
-  notebook usually lives — the PDF viewer's "Open in another app"); the provider is not exported,
-  and each address goes to one app, on the user's explicit command;
+  `android/res/xml/brulion_provider_paths.xml` (the manifest's meta-data names it): the app's files
+  and cache (the camera's photo for the AI chat), shared storage (`external-path`, where the
+  notebook usually lives — the PDF viewer's "Open in another app") and Qt's own roots. Not
+  `qtprovider_paths.xml`: Qt 6.12's androiddeployqt leaves a file of that name in the package
+  source directory out ("Qt now bundles its own copy of it"), and Qt's copy has no `cache-path` —
+  up to 0.32.0 the camera app was refused its file ("Failed to find configured root"). The provider is
+  not exported, and each address goes to one app, on the user's explicit command;
 * **Save to Downloads** (`MediaStore`, like the export) or **Save as…** (the system dialog);
 * **Copy** — to the clipboard (the newest 256 KB).
 
