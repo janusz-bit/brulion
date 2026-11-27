@@ -11,6 +11,8 @@
 //     by the CPU renderer; median, p95 and the slowest step. 120 fps leaves 8.3 ms a frame.
 //   * typing — a keystroke in a block in the page's middle: the field, PageController's
 //     setEditText, the model's row, the frame.
+//   * everyKind — a page with code, tables, calculations, diagrams, formulas, rules and callouts
+//     between the text blocks: the rows left foreign, memory per block, the scroll steps.
 //
 // Release builds only (scripts/bench.sh); the numbers go to stdout as `[bench] …` lines.
 #include "blocklistmodel.h"
@@ -84,6 +86,32 @@ QString page(int blocks)
     return lines.join(u'\n') + u'\n';
 }
 
+// The same page with blocks of every kind Atrament draws (M2 step 5): code, tables, calculations,
+// Mermaid diagrams, formulas, rules, callouts between the text blocks.
+QString mixedPage(int blocks)
+{
+    QStringList lines;
+    for (int k = 0; k < blocks; ++k) {
+        if (k % 20 == 7)
+            lines << u"\n```luau\nlocal gęś = %1\nfor i = 1, 10 do print(i * gęś) end\n```\n"_s.arg(k);
+        else if (k % 33 == 11)
+            lines << u"\n| Pozycja | Ilość | Cena |\n| --- | ---: | ---: |\n| **Płytki** %1 | 6,5 | 89 |\n| Klej | 4 | 45 |\n"_s.arg(k);
+        else if (k % 50 == 13)
+            lines << u"\n```calc\npowierzchnia = 6,5\ncena = 89 zł\npowierzchnia * cena\n```\n"_s;
+        else if (k % 71 == 17)
+            lines << u"\n```mermaid\ngraph TD\n  A[Zakupy %1] --> B{Płytki?}\n  B --> C[Kuchnia]\n```\n"_s.arg(k);
+        else if (k % 60 == 19)
+            lines << u"\n```math\nx_%1^2 + \\sqrt{y} = z\n```\n"_s.arg(k % 9);
+        else if (k % 45 == 23)
+            lines << u"\n---\n"_s;
+        else if (k % 40 == 29)
+            lines << u"\n> [!tip] Wskazówka %1\n> Do płytek dolicz **10%** zapasu.\n"_s.arg(k);
+        else
+            lines << u"- punkt %1 o [[Stronie %2]] i #tag%3, *kursywą* oraz ==ważne=="_s.arg(k).arg(k % 17).arg(k % 5);
+    }
+    return lines.join(u'\n') + u'\n';
+}
+
 struct Percentiles {
     double median = 0;
     double p95 = 0;
@@ -115,16 +143,24 @@ struct Harness {
         controller.setHost(&host);
         controller.setPath(u"Strona.md"_s);
     }
-    void open()
+    void open(bool everyKind = false)
     {
         view = app.newEntity<PageView>(controller.blocks());
-        view.update(app, [this](PageView &v, at::Context<PageView> &cx) {
+        view.update(app, [this, everyKind](PageView &v, at::Context<PageView> &cx) {
             PageMetrics m = v.metrics();
             m.contentX = 240;
             m.contentWidth = 760;
             m.gutter = m.arrowColumn + m.bulletColumn;
             v.setStyle(m, v.palette());
             v.setController(&controller, cx);
+            if (everyKind) {
+                v.setDrawsCode(true, PageView::CodeLook{}, cx);
+                v.setDrawsCalc(true, PageView::CalcLook{}, cx);
+                v.setDrawsTables(true, PageView::TableLook{}, cx);
+                v.setViewLook(PageView::ViewLook{}, cx);
+                v.setDrawsDiagrams(true, cx);
+                v.setDrawsMath(true, cx);
+            }
         });
         app.openWindow(tw, view);
         tw.settle();
@@ -157,6 +193,7 @@ private Q_SLOTS:
     void memoryPerBlock();
     void scrollFrames();
     void typing();
+    void everyKind();
 };
 
 void BenchAtramentPage::memoryPerBlock()
@@ -198,6 +235,17 @@ void BenchAtramentPage::memoryPerBlock()
         h2->tw.draw();
     const std::size_t b = heapInUse();
     std::printf("[bench] memory: a second pass through the page (model caches warm): %+.0f B/block\n", perBlock(a, b));
+    // A third: what a pass keeps for good (a warm-up's allocations happen once).
+    h2->view.update(h2->app, [](PageView &v, at::Context<PageView> &cx) {
+        v.handle().scrollToRow(0);
+        cx.notify();
+    });
+    h2->tw.settle();
+    h2->scrollThrough();
+    for (int k = 0; k < 4; ++k)
+        h2->tw.draw();
+    const std::size_t c = heapInUse();
+    std::printf("[bench] memory: a third pass: %+.0f B/block\n", perBlock(b, c));
     QVERIFY(perBlock(m2, m3) < 64 * 1024); // (a sanity bound; the gate is read from the output)
 }
 
@@ -245,6 +293,38 @@ void BenchAtramentPage::typing()
     std::printf("[bench] typing in block 500 of %d: median %.2f ms, p95 %.2f ms, max %.2f ms a keystroke\n", Blocks,
                 p.median, p.p95, p.max);
     QVERIFY(h.controller.blocks()->editTextAt(500).endsWith(u"łódź jeża"_s));
+}
+
+// The page with every kind Atrament draws: how many rows stay foreign (QML delegates), the memory
+// per block after a pass, the scroll steps with the CPU renderer.
+void BenchAtramentPage::everyKind()
+{
+    const QString content = mixedPage(Blocks);
+    const std::size_t m0 = heapInUse();
+    Harness h(content);
+    h.tw.setRasterize(true);
+    h.open(true);
+    std::size_t foreign = 0;
+    std::vector<double> steps = h.scrollThrough();
+    for (int k = 0; k < 4; ++k)
+        h.tw.draw();
+    const std::size_t m1 = heapInUse();
+    // Every row of the page once: which are foreign.
+    for (int r = 0; r < h.controller.blocks()->rowCount(); ++r)
+        foreign += h.view.read(h.app).drawsRow(r) ? 0 : 1;
+    h.view.update(h.app, [](PageView &v, at::Context<PageView> &cx) {
+        v.handle().scrollToRow(0);
+        cx.notify();
+    });
+    h.tw.settle();
+    steps = h.scrollThrough();
+    const Percentiles p = percentiles(steps);
+    std::printf("[bench] every kind (%d rows: code, tables, calculations, diagrams, formulas, rules, callouts): "
+                "%zu foreign; model + view after a pass %.0f B/block; scroll with the CPU renderer at 1280×800 "
+                "(%zu steps): median %.2f ms, p95 %.2f ms, max %.2f ms\n",
+                h.controller.blocks()->rowCount(), foreign, (double(m1) - double(m0)) / h.controller.blocks()->rowCount(),
+                steps.size(), p.median, p.p95, p.max);
+    QVERIFY(!steps.empty());
 }
 
 QTEST_MAIN(BenchAtramentPage)

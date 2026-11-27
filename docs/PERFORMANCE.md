@@ -3686,6 +3686,17 @@ dropped once the runs exist) is the model's next step, not Atrament's. A scroll 
 5 ms with the CPU renderer drawing the full window — inside 120 fps' 8.3 ms with room to spare;
 the GPU renderer draws the same scene in a dozen draw calls.
 
+Again after step 5 (the same day, every kind of block drawn by Atrament: code, tables,
+calculations, rules, charts and Mermaid diagrams, formulas, pictures, embeds and queries; the
+machine at load ~36 from three other builds — upper bounds again): a page of 1 000 rows with code,
+tables, calculations, Mermaid diagrams, formulas, rules and callouts between the text blocks
+(`everyKind`) has **no foreign row** left; a scroll step through it with the CPU renderer at
+1280 × 800: median 1.92 ms, p95 4.92 ms, max 16.1 ms (the max: a diagram laid out the first time
+under the load); the model and the view after a pass 16.8 kB per row (each table's, diagram's and
+formula's layouts are larger than a paragraph's). The text page's view keeps nothing per block
+over passes: +263 B per block in the second pass are a warm-up (a third pass: +2 B), the model's
+caches after a first pass 6.5 kB per block.
+
 ### Budgets
 
 Desktop = the laptop above (the graph: a GitHub runner, see its row), phone = Pi 4 (floor) and the
