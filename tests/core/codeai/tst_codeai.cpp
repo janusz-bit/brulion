@@ -44,6 +44,7 @@ private Q_SLOTS:
         QTest::newRow("cut") << u"Zażółć gęślą jaźń"_s << 6 << u"Zażółć\n[truncated]"_s;
         QTest::newRow("a character's halves kept together") << u"ab😀cd"_s << 3 << u"ab\n[truncated]"_s;
         QTest::newRow("a whole character fits") << u"ab😀cd"_s << 4 << u"ab😀\n[truncated]"_s;
+        QTest::newRow("room for half a character only") << u"😀a"_s << 1 << u"\n[truncated]"_s;
         QTest::newRow("empty") << QString() << 5 << QString();
         QTest::newRow("no room") << u"abc"_s << 0 << u"\n[truncated]"_s;
         QTest::newRow("a negative limit") << u"abc"_s << -3 << u"\n[truncated]"_s;
@@ -56,6 +57,34 @@ private Q_SLOTS:
         QCOMPARE(bounded(text, max), expected);
     }
 
+    // A message's start and end within a budget: half of the room each (the start's the larger),
+    // never half a character; nothing when the mark alone does not fit.
+    void headAndTailOfText_data()
+    {
+        const QString cut = u"\n[Content truncated]\n"_s;
+        QTest::addColumn<QString>("text");
+        QTest::addColumn<int>("max");
+        QTest::addColumn<QString>("expected");
+        const QString thirty(30, u'b');
+        QTest::newRow("fits") << u"Zażółć"_s << 10 << u"Zażółć"_s;
+        QTest::newRow("exactly the limit") << u"Zażółć"_s << 6 << u"Zażółć"_s;
+        QTest::newRow("the mark alone does not fit") << thirty << int(cut.size()) << QString();
+        QTest::newRow("room for one: the start") << u"a"_s + thirty << int(cut.size()) + 1 << u"a"_s + cut;
+        QTest::newRow("room for two") << u"a"_s + thirty + u"z"_s << int(cut.size()) + 2 << u"a"_s + cut + u"z"_s;
+        QTest::newRow("room for three: the start's half larger") << u"ab"_s + thirty + u"z"_s << int(cut.size()) + 3
+                                                                  << u"ab"_s + cut + u"z"_s;
+        QTest::newRow("a character at the start's cut") << u"😀"_s + thirty << int(cut.size()) + 2 << cut + u"b"_s;
+        QTest::newRow("a character at the end's cut") << u"a"_s + thirty + u"😀"_s << int(cut.size()) + 2
+                                                      << u"a"_s + cut;
+    }
+    void headAndTailOfText()
+    {
+        QFETCH(QString, text);
+        QFETCH(int, max);
+        QFETCH(QString, expected);
+        QCOMPARE(headAndTail(text, max), expected);
+    }
+
     void commitQuestion()
     {
         const QString patch = u"diff --git a/calc.py b/calc.py\n-    return a - b\n+    return a + b  # dodawanie, nie odejmowanie\n"_s;
@@ -63,7 +92,7 @@ private Q_SLOTS:
         QVERIFY(r.system.contains(u"commit message"_s));
         QVERIFY(r.system.contains(u"72"_s));
         QCOMPARE(r.effort, u"low"_s);
-        QVERIFY(r.maxTokens > 0);
+        QCOMPARE(r.maxTokens, MaxCommitTokens);
         const QString asked = userText(r);
         QVERIFY2(asked.startsWith(u"Branch: brulion/popraw-dodawanie\n"_s), qPrintable(asked));
         QVERIFY(asked.endsWith(patch));
@@ -85,7 +114,7 @@ private Q_SLOTS:
         QVERIFY(r.system.contains(u"## Summary"_s) && r.system.contains(u"## Testing"_s));
         QVERIFY(r.system.contains(u"first line"_s));
         QCOMPARE(r.effort, u"low"_s);
-        QVERIFY(r.maxTokens > 0);
+        QCOMPARE(r.maxTokens, MaxPullRequestTokens);
         const QString asked = userText(r);
         QVERIFY2(asked.contains(u"Base branch: origin/main\nHead branch: brulion/rabat\n"_s), qPrintable(asked));
         const qsizetype commits = asked.indexOf(u"Commits:\n"_s + range.commits);
@@ -133,8 +162,10 @@ private Q_SLOTS:
         QTest::newRow("empty") << QString() << QString() << QString();
         QTest::newRow("blank") << u"  \n\t\n "_s << QString() << QString();
         QTest::newRow("an empty fence") << u"```\n```"_s << QString() << QString();
+        QTest::newRow("a fence alone") << u"```"_s << QString() << QString();
         QTest::newRow("json without a title") << u"{\"body\": \"Opis.\"}"_s << QString() << u"Opis."_s;
         QTest::newRow("broken json") << u"{\"title\": \"Popraw"_s << QString() << QString();
+        QTest::newRow("a title of marks alone") << u"***\n\nOpis."_s << QString() << QString();
         QTest::newRow("json of another shape") << u"[\"Popraw dodawanie\"]"_s << QString() << QString();
     }
     void readPullRequestAnswer()
@@ -155,7 +186,7 @@ private Q_SLOTS:
         QVERIFY(r.system.contains(u"prefix"_s));
         QVERIFY(r.system.contains(u"Do not answer"_s));
         QCOMPARE(r.effort, u"low"_s);
-        QVERIFY(r.maxTokens > 0);
+        QCOMPARE(r.maxTokens, MaxNameTokens);
         QVERIFY(userText(r).endsWith(first));
         // A long message: its start, bounded.
         const QString cut = userText(branchName(QString(MaxMessage * 2, u'ż')));
@@ -174,6 +205,7 @@ private Q_SLOTS:
         QTest::newRow("a label") << u"Branch: fix-cart-total"_s << u"fix-cart-total"_s;
         QTest::newRow("a longer label") << u"Branch name: `fix-cart-total`"_s << u"fix-cart-total"_s;
         QTest::newRow("a preamble") << u"Here is a branch name for the work: fix-cart-total"_s << u"fix-cart-total"_s;
+        QTest::newRow("a colon first") << u": fix-cart-total"_s << u"fix-cart-total"_s;
         QTest::newRow("a prefix") << u"feature/fix-cart-total"_s << u"fix-cart-total"_s;
         QTest::newRow("the app's prefix") << u"brulion/popraw-koszyk"_s << u"popraw-koszyk"_s;
         QTest::newRow("json") << u"{\"branch\": \"fix-cart-total\"}"_s << u"fix-cart-total"_s;
@@ -210,6 +242,11 @@ private Q_SLOTS:
         QCOMPARE(titleContext(c),
                  u"USER:\nPopraw dodawanie w calc.py\n\nASSISTANT:\nGotowe: add dodaje.\n\nUSER:\nDodaj też test z żółwiem"_s);
         QCOMPARE(titleContext(chat::Conversation{}), QString());
+        // A thread the AI spoke first in: its answer too.
+        chat::Conversation greeted;
+        greeted.messages = {message(chat::Role::Assistant, u"Cześć, w czym pomóc?"_s),
+                            message(chat::Role::User, u"Popraw dodawanie"_s)};
+        QCOMPARE(titleContext(greeted), u"ASSISTANT:\nCześć, w czym pomóc?\n\nUSER:\nPopraw dodawanie"_s);
         chat::Conversation silent;
         silent.messages = {message(chat::Role::User, u"  \n"_s)};
         QCOMPARE(titleContext(silent), QString());
@@ -234,8 +271,30 @@ private Q_SLOTS:
         QVERIFY(context.indexOf(u"Odpowiedź 29 ó"_s) < context.indexOf(u"Pytanie 30 ż"_s));
     }
 
+    // Short of room: the user's newest question before the AI's answers, which fill the rest.
+    void titleContextPrefersTheUser()
+    {
+        chat::Conversation c;
+        c.messages << message(chat::Role::User, u"Popraw dodawanie"_s);
+        for (int i = 1; i <= 6; ++i)
+            c.messages << message(chat::Role::Assistant, u"Odpowiedź %1 "_s.arg(i) + QString(1890, u'a'));
+        c.messages << message(chat::Role::User, u"Ostatnie pytanie "_s + QString(1880, u'u'));
+        const QString context = titleContext(c);
+        QVERIFY2(context.contains(u"USER:\nOstatnie pytanie "_s), qPrintable(context.left(120)));
+        QVERIFY(context.contains(u"USER:\nPopraw dodawanie"_s));
+        QVERIFY(context.contains(u"ASSISTANT:\nOdpowiedź 6 "_s));
+        QVERIFY(!context.contains(u"Odpowiedź 1 "_s));
+        // (Filled to the last character but the separator kept for after the last message.)
+        QCOMPARE(context.size(), MaxTitleContext - 2);
+    }
+
     void titleContextOfALongMessage()
     {
+        // Its start and end within MaxTitleMessage: room 2000 − "USER:\n" − the separator − the mark.
+        chat::Conversation exact;
+        exact.messages = {message(chat::Role::User, QString(1500, u'a') + QString(1500, u'b'))};
+        QCOMPARE(titleContext(exact), u"[Earlier content truncated]\n\nUSER:\n"_s + QString(986, u'a')
+                                              + u"\n[Content truncated]\n"_s + QString(985, u'b'));
         chat::Conversation c;
         c.messages = {message(chat::Role::User, u"Początek. "_s + QString(5000, u'x') + u" Koniec."_s)};
         const QString context = titleContext(c);
@@ -252,7 +311,7 @@ private Q_SLOTS:
         QVERIFY(r.system.contains(u"title"_s));
         QVERIFY(r.system.contains(u"language of the user"_s));
         QCOMPARE(r.effort, u"low"_s);
-        QVERIFY(r.maxTokens > 0);
+        QCOMPARE(r.maxTokens, MaxNameTokens);
         const QString asked = userText(r);
         QVERIFY2(asked.contains(u"The project: kalkulator"_s), qPrintable(asked));
         QVERIFY(asked.contains(u"The title now: Popraw dodawanie w calc"_s));
@@ -272,6 +331,16 @@ private Q_SLOTS:
         QTest::newRow("a heading") << u"## Naprawa dodawania"_s << u"Naprawa dodawania"_s;
         QTest::newRow("a heading with a label") << u"# Title: Naprawa dodawania"_s << u"Naprawa dodawania"_s;
         QTest::newRow("bold") << u"**Naprawa dodawania**"_s << u"Naprawa dodawania"_s;
+        QTest::newRow("quotes in bold") << u"**„Naprawa dodawania”**"_s << u"Naprawa dodawania"_s;
+        QTest::newRow("bold in quotes") << u"\"**Naprawa dodawania**\""_s << u"Naprawa dodawania"_s;
+        QTest::newRow("a quote not closed stays") << u"„Naprawa dodawania"_s << u"„Naprawa dodawania"_s;
+        QTest::newRow("a fence not closed") << u"```\nNaprawa dodawania\n"_s << u"Naprawa dodawania"_s;
+        QTest::newRow("json: its title's first line with words")
+                << u"{\"title\": \"\\nNaprawa dodawania\"}"_s << u"Naprawa dodawania"_s;
+        QTest::newRow("exactly the longest") << QString(40, u'a') + u' ' + QString(19, u'b')
+                                             << QString(40, u'a') + u' ' + QString(19, u'b');
+        QTest::newRow("a quote alone") << u"\""_s << QString();
+        QTest::newRow("marks alone") << u"***"_s << QString();
         QTest::newRow("a period") << u"Naprawa dodawania."_s << u"Naprawa dodawania"_s;
         QTest::newRow("a question") << u"Dlaczego synchronizacja zawodzi?"_s << u"Dlaczego synchronizacja zawodzi?"_s;
         QTest::newRow("brackets of its own") << u"[WIP] Naprawa synchronizacji"_s << u"[WIP] Naprawa synchronizacji"_s;
@@ -286,6 +355,8 @@ private Q_SLOTS:
                 << u"Naprawa dodawania i odejmowania w kalkulatorze oraz testy jednostkowe dla nich"_s
                 << u"Naprawa dodawania i odejmowania w kalkulatorze oraz testy"_s;
         QTest::newRow("one long word") << QString(70, u'ż') << QString(MaxTitleChars, u'ż');
+        QTest::newRow("its only space in the first half: cut where it ends")
+                << QString(30, u'ż') + u' ' + QString(40, u'ó') << QString(30, u'ż') + u' ' + QString(29, u'ó');
         QTest::newRow("empty") << QString() << QString();
         QTest::newRow("blank") << u" \n "_s << QString();
         QTest::newRow("an empty fence") << u"```\n```"_s << QString();

@@ -24,6 +24,15 @@ namespace brulion::codeai {
 /// `text` cut to at most `max` characters (never between the two halves of a surrogate pair), and
 /// then "\n[truncated]" when it was longer.
 QString bounded(QStringView text, qsizetype max);
+/// `text` within `max` characters: as it is, or its start and its end (half of the room each, the
+/// start's half the larger) around "\n[Content truncated]\n" — never between the halves of a
+/// character; "" when not even that fits.
+QString headAndTail(QStringView text, qsizetype max);
+
+/// The longest answers asked for (tokens): a commit message, a pull request's text, a name.
+inline constexpr int MaxCommitTokens = 1000;
+inline constexpr int MaxPullRequestTokens = 2000;
+inline constexpr int MaxNameTokens = 100;
 
 // ---- A commit message ------------------------------------------------------------------------
 
