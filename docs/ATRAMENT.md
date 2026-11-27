@@ -1201,7 +1201,10 @@ scrolling, `tst_atrament_editor`) before the next:
   method's composition to the AtramentView, clicks and taps on its rows (`AtramentView.rowTop` /
   `rowHeight` say where they are) — and checks the model, the field (`editRow`, `editText`,
   `editCursor`), what an input method is told and the suggestion popup — then document mode's
-  keys and its toggle: the QML around the view and the view tested together. It found a
+  keys and its toggle, the edited text's menu (a right-click's items with real clicks: copy, cut,
+  paste, select all, a highlight, a misspelled word's correction; on a phone the input method's
+  selection and the floating toolbar's shortcuts) and the menus of chips and links inside an
+  embedded block and a query result: the QML around the view and the view tested together. It found a
   composition left marked by Backspace, a zoom's end leaving the edited block out of view and
   another page opening at the last one's scroll.
 
