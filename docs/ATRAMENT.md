@@ -700,8 +700,9 @@ scrolling, `tst_atrament_editor`) before the next:
    take it (`AtramentView.editingStarted`: the QML around decides). The edited field is a text
    input named "Block text" for screen readers, as InlineEditor.
    Tested by `tests/atrament/editor/tst_atrament_editing`. **Not yet**: spell marks in the edited
-   text, Vim, the touch toolbar's formatting buttons (they act on an InlineEditor), the reminder
-   chips while editing.
+   text, Vim, the touch toolbar's highlight menu (it acts on an InlineEditor; the toolbar's other
+   buttons work: `MobileEditToolbar.atramentPage` commits the composition and inserts at the
+   caret, `AtramentView.insertAtCaret`), the reminder chips while editing.
 3. **Selection.** Block selection (Shift+click, Shift+arrows, a mouse's drag across rows), its band,
    copy / cut / paste through `PageController`'s selection; on a phone the long press and the
    handles. **Built so far** (2026-11-27): the band (`selectionEdge`), Shift+click and Ctrl+click
