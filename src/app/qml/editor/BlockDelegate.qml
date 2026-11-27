@@ -272,9 +272,10 @@ Item {
         sourceComponent: BlockParts.part("TagTint")
     }
 
-    // Made only for selected blocks (most blocks never are).
+    // Made only for selected blocks (most blocks never are). (Hosted by the page drawn by Atrament,
+    // the page draws the band under the block itself, its grips too: pageselection.cpp.)
     Loader {
-        active: block.bandEdge !== ""
+        active: block.bandEdge !== "" && !block.editor.usesAtrament
         x: block.bandX
         y: block.bandTop
         width: block.bandRight - x
@@ -475,7 +476,7 @@ Item {
     // A round grip at the band's start (top left) and end (bottom right), 44 px to hold: the finger
     // moves that end of the selection (the editor follows it, also when this block scrolls away).
     Loader {
-        active: block.bandStart && block.editor.selectionGrips
+        active: block.bandStart && block.editor.selectionGrips && !block.editor.usesAtrament
         z: 5
         // (Inside the window: a document's band starts near the screen's edge on a phone.)
         x: Math.max(block.bandX, 12) - Theme.touchTarget / 2
@@ -483,7 +484,7 @@ Item {
         sourceComponent: BlockParts.part("GripStart")
     }
     Loader {
-        active: block.bandEnd && block.editor.selectionGrips
+        active: block.bandEnd && block.editor.selectionGrips && !block.editor.usesAtrament
         z: 5
         // (Inside the window: the band reaches the screen's edge on a phone.)
         x: Math.min(block.bandRight, block.width - 12) - Theme.touchTarget / 2

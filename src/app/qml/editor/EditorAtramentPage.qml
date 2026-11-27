@@ -167,6 +167,40 @@ AtramentView {
         if (root.editor)
             root.editor.suggestionKey(key)
     }
+    // ---- The block selection (docs/ATRAMENT.md M2 steps 3 and 4): its keys are the page's (it keeps
+    // the keyboard; the editor's own parts through BlockEditor.atramentSelectionCommand), the touch
+    // selection mode's grips and its "One by one", the toolbar a drag scrolls above.
+    selectionGrips: editor ? editor.selectionGrips : false
+    selectionPicking: editor ? editor.pickMode : false
+    dragBottomInset: editor && editor.toolbarVisible ? editor.toolbarHeight : 0
+    onSelectionCommand: (command, row) => {
+        if (!root.editor || !root.editor.controller)
+            return
+        // Enter on a selected table: its delegate takes the keys (its first cell).
+        if (command === "edit" && root.editor.controller.blocks.viewAt(row) === "table") {
+            root.editor.selectionMode = false
+            const item = root.rowItem(row) as BlockDelegate
+            if (item)
+                item.focusContent()
+            root.acceptSelectionCommand()
+            return
+        }
+        if (root.editor.atramentSelectionCommand(command, row))
+            root.acceptSelectionCommand()
+    }
+    // The selection's keys win over application-wide shortcuts while the page has the keyboard.
+    Keys.onShortcutOverride: (event) => {
+        const key = event.key
+        const modifiers = event.modifiers
+        if (!root.editor || !root.editor.controller || root.editor.controller.editingRow >= 0
+                || root.editor.controller.selectedRow < 0 || !(modifiers & Qt.ControlModifier))
+            return
+        switch (key) {
+        case Qt.Key_A: case Qt.Key_C: case Qt.Key_X: case Qt.Key_V: case Qt.Key_Z: case Qt.Key_Y:
+        case Qt.Key_Return: case Qt.Key_Enter:
+            event.accepted = true
+        }
+    }
     activeFocusOnTab: true
     Accessible.name: qsTr("Page")
 

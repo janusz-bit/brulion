@@ -731,6 +731,74 @@ bool PageController::moveSelectionDown()
     return r.changed();
 }
 
+QList<int> PageController::selectionSiblings() const
+{
+    QList<int> siblings;
+    const RowRange range = selectionRange();
+    const int zoom = zoomBlock();
+    if (range.count <= 0 || !m_selectionContiguous || (zoom >= range.first && zoom <= range.last()))
+        return siblings;
+    const BlockDocument &doc = m_model->document();
+    const QList<int> tops = doc.rangeTops(range.first, range.last());
+    if (tops.isEmpty())
+        return siblings;
+    const markdown::BlockEntry &first = doc.at(tops.first());
+    // The parent's children (or the top-level blocks), each with its subtree jumped over.
+    const int parent = first.parent;
+    for (int j = parent + 1; j < doc.count(); j = doc.subtreeRange(j).last() + 1) {
+        const markdown::BlockEntry &e = doc.at(j);
+        if (parent >= 0 && e.depth <= doc.at(parent).depth)
+            break;
+        if (e.parent == parent && e.depth == first.depth && e.kind != BlockKind::Frontmatter)
+            siblings.append(j);
+    }
+    // The tops: consecutive siblings, else nothing moves (a range rising through levels).
+    const qsizetype a = siblings.indexOf(tops.first());
+    if (a < 0 || a + tops.size() > siblings.size())
+        return {};
+    for (qsizetype k = 0; k < tops.size(); ++k) {
+        if (siblings[a + k] != tops[k])
+            return {};
+    }
+    return siblings;
+}
+
+bool PageController::moveSelectionNextTo(int sibling, bool after)
+{
+    if (refusesEdit())
+        return false;
+    const QList<int> siblings = selectionSiblings();
+    const qsizetype to = siblings.indexOf(sibling);
+    if (to < 0)
+        return false;
+    const BlockDocument &doc = m_model->document();
+    const RowRange range = selectionRange();
+    const QList<int> tops = doc.rangeTops(range.first, range.last());
+    const qsizetype a = siblings.indexOf(tops.first());
+    const qsizetype b = a + tops.size() - 1;
+    // The gap the range goes to: before siblings[gap] (gap == size: after the last one).
+    const qsizetype gap = after ? to + 1 : to;
+    if (gap >= a && gap <= b + 1)
+        return false; // there already (or `sibling` is one of them)
+    const quint64 firstUid = m_model->uidAt(tops.first());
+    const quint64 lastUid = m_model->uidAt(tops.last());
+    const qsizetype steps = gap < a ? a - gap : gap - (b + 1);
+    beginCommand();
+    bool moved = false;
+    for (qsizetype k = 0; k < steps; ++k) {
+        const int first = m_model->rowOfUid(firstUid);
+        const int last = m_model->rowOfUid(lastUid);
+        const EditResult r = applyOp([&](BlockDocument &d) {
+            return gap < a ? d.moveRangeUp(first, last) : d.moveRangeDown(first, last);
+        });
+        if (!r.changed())
+            break;
+        moved = true;
+    }
+    endCommand(currentFocus());
+    return moved;
+}
+
 void PageController::setSelectionTaskStatus(const QString &status)
 {
     if (refusesEdit())

@@ -398,6 +398,10 @@ FocusScope {
         if (reveal)
             ensureRowVisible(row)
     }
+    /// What has the keyboard while no block is edited (a block selection's keys, reading mode): the
+    /// list, or the page drawn by Atrament, which keeps it and handles the selection's keys itself
+    /// (EditorAtramentPage; docs/ATRAMENT.md M2 step 3).
+    readonly property Item keysHolder: atramentPage !== null ? atramentPage : list
     /// What a block selection or reading mode takes over from editing: the suggestions close, a
     /// touch UI loses its keyboard (and enters the selection mode when `selecting`), the list has
     /// the keys.
@@ -408,8 +412,8 @@ FocusScope {
             if (selecting)
                 selectionMode = true
         }
-        if (!list.activeFocus)
-            list.forceActiveFocus()
+        if (!editor.keysHolder.activeFocus)
+            editor.keysHolder.forceActiveFocus()
     }
 
     // ---- Reading mode (docs/UI.md "Reading mode") ---------------------------------------------------
@@ -755,6 +759,10 @@ FocusScope {
                 editor.pageView.page.ensureRowVisible(row)
                 return
             }
+            if (editor.atramentPage) {
+                QmlCall.call1(editor.atramentPage, "revealRow", row)
+                return
+            }
             if (row >= list.count)
                 return
             if (list.itemAtIndex(row) === null)
@@ -895,7 +903,7 @@ FocusScope {
         } else {
             if (touch)
                 controller.stopEditing()
-            list.forceActiveFocus()
+            editor.keysHolder.forceActiveFocus()
         }
     }
 
@@ -912,7 +920,7 @@ FocusScope {
         list.userMoved = true
         revealedLater.row = row
         revealedLater.restart()
-        list.forceActiveFocus()
+        editor.keysHolder.forceActiveFocus()
     }
     Later {
         id: revealedLater
@@ -1143,7 +1151,7 @@ FocusScope {
         closeSuggestions()
         if (controller && controller.editingRow >= 0)
             controller.stopEditing()
-        list.forceActiveFocus()
+        editor.keysHolder.forceActiveFocus()
     }
     /// Select `row` (with its subtree) and, on touch UIs, enter the selection mode (the keyboard
     /// goes away, the selection tools dock where the editing toolbar was).
@@ -1212,8 +1220,8 @@ FocusScope {
         const result = controller.toggleSelected(row)
         if (result === "inParent")
             notice(qsTr("This block is selected with the block it belongs to"), "info", null)
-        if (!list.activeFocus)
-            list.forceActiveFocus()
+        if (!editor.keysHolder.activeFocus)
+            editor.keysHolder.forceActiveFocus()
         if (touch && controller.selectionCount > 0) {
             DeviceInfo.hideInputMethod()
             selectionMode = true
@@ -1453,7 +1461,7 @@ FocusScope {
         controller.stopEditing()
         if (select && row >= 0)
             controller.selectedRow = row
-        list.forceActiveFocus()
+        editor.keysHolder.forceActiveFocus()
     }
 
     /// Undo (`redo` false) or redo a step from the editor (keys, the toolbar). A step that brings a
@@ -2144,8 +2152,8 @@ FocusScope {
                     && !findKeepsKeyboard)
                 activeEditor.forceActiveFocus()
         } else if (controller.selectedRow >= 0) {
-            if (!list.activeFocus)
-                list.forceActiveFocus()
+            if (!editor.keysHolder.activeFocus)
+                editor.keysHolder.forceActiveFocus()
             ensureRowVisible(controller.selectedRow)
         }
         if (!vim.typing)
@@ -2190,7 +2198,7 @@ FocusScope {
         if (controller.blocks.viewAt(row) === "table") {
             controller.stopEditing()
             controller.selectedRow = row
-            list.forceActiveFocus()
+            editor.keysHolder.forceActiveFocus()
             ensureRowVisible(row)
             return
         }
@@ -2460,7 +2468,7 @@ FocusScope {
             controller.selectRange(row, row)
         if (inSpan)
             return true // (the day the selection's end went to takes over: StreamSelection.focusMoved)
-        list.forceActiveFocus()
+        editor.keysHolder.forceActiveFocus()
         if (touch && controller.selectionCount > 0)
             selectionMode = true
         ensureRowVisible(controller.selectedRow)
@@ -2657,6 +2665,65 @@ FocusScope {
         return false
     }
 
+    /// A key of the block selection in the page drawn by Atrament (PageView::selectionKey): its part
+    /// that lives here, as handleSelectionKeyCode() has it — the copies, the deletion and the paste
+    /// with their toasts, Esc and Back leaving the selection mode, menus, the journal stream's
+    /// selection over several days, a selection with gaps that does not move. True when taken (done,
+    /// or refused with a toast); false leaves it to the page (it indents, moves and extends itself).
+    function atramentSelectionCommand(command: string, row: int): bool {
+        if (!controller)
+            return false
+        const range = row >= 0 && ((controller.selectionAnchorRow >= 0 && controller.selectionAnchorRow !== row)
+                                   || controller.selectionPicked)
+        switch (command) {
+        case "copy": copySelection(false); return true
+        case "cut": cutSelection(); return true
+        case "delete": deleteSelection(); return true
+        case "paste": pasteOverSelection(); return true
+        case "escape": leaveSelectionMode(); return true
+        case "back":
+            if (!selectionMode && !spanTools)
+                return false
+            leaveSelectionMode()
+            return true
+        case "edit":
+            selectionMode = false
+            startEditing(row, -1)
+            return true
+        case "taskMenu":
+            if (!spanRefuses())
+                openTaskStatusMenuFor(row, range)
+            return true
+        case "sourceMode":
+            if (editor.sourceModeShortcut !== "Ctrl+E")
+                return false
+            toggleSourceMode()
+            return true
+        case "copyReference":
+            if (editor.copyRefShortcut !== "Ctrl+Shift+C")
+                return false
+            copyCurrentLink("blockRef") // nothing selected: says what to do
+            return true
+        case "indent": case "outdent": case "moveUp": case "moveDown":
+            return spanRefuses() || (range && !selectionMovable())
+        case "cycleTasks":
+            return spanRefuses()
+        case "extendUp": case "extendDown":
+            if (!inSpan)
+                return false
+            stream.extendBy(controller, command === "extendDown" ? 1 : -1)
+            return true
+        case "extendPastTop": case "extendPastBottom":
+            return stream !== null && stream.extendBy(controller, command === "extendPastBottom" ? 1 : -1)
+        case "extended":
+            // A touch UI with a keyboard: the range has the selection's tools and grips.
+            if (touch && controller.selectionCount > 0)
+                selectionMode = true
+            return true
+        }
+        return false
+    }
+
     /// Focus left an inline editor: flush the save when it left the editor entirely.
     function editorFocusLost(): void {
         focusLostLater.restart()
@@ -2735,7 +2802,7 @@ FocusScope {
         }
         function onSourceModeChanged() {
             if (!editor.controller.sourceMode)
-                list.forceActiveFocus()
+                editor.keysHolder.forceActiveFocus()
         }
         function onAttachmentFailed(name: string) {
             editor.notice(qsTr("Could not add “%1” to the notebook").arg(name), "error", null)
@@ -3154,7 +3221,7 @@ FocusScope {
         drag.startRow = -1
         setScrollingHeld(false)
         if (selecting && controller && controller.selectionCount > 0) {
-            list.forceActiveFocus()
+            editor.keysHolder.forceActiveFocus()
             if (touch)
                 selectionMode = true
         }
@@ -3282,6 +3349,11 @@ FocusScope {
             controller.extendSelectionTo(row)
         } else {
             selectBlock(row)
+        }
+        if (usesAtrament) {
+            // The page drawn by Atrament follows the finger itself (its release is no tap either).
+            drag.selected = true
+            return
         }
         drag.armed = true
         drag.selected = true
@@ -4185,7 +4257,7 @@ FocusScope {
         // The block being edited (this one or another) keeps its editing when the menu closes.
         const editing = controller.editingRow >= 0 && activeEditor !== null && activeEditor.row === controller.editingRow
                         && activeEditor.activeFocus
-        taskMenuReturn = editing ? "edit" : list.activeFocus ? "list" : ""
+        taskMenuReturn = editing ? "edit" : editor.keysHolder.activeFocus ? "list" : ""
         const status = taskStatusOf(row)
         QmlCall.set(taskMenu, "status", status)
         // The timer and "Add dependency…" for a task (docs/SYNTAX.md §5).
@@ -4466,7 +4538,7 @@ FocusScope {
                 && editor.activeEditor.row === editor.controller.editingRow)
             editor.activeEditor.ensureFocus()
         else if (back === "list")
-            list.forceActiveFocus()
+            editor.keysHolder.forceActiveFocus()
     }
 
     /// The editor's dialogs (EditorDialogs: dates, reminders, recurrence, pictures, files, QR

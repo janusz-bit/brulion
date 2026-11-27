@@ -387,6 +387,7 @@ at::AnyElement PageView::render(at::Window &window, at::Context<PageView> &cx)
     }
     m_frame = frame;
     m_selfId = cx.entityId();
+    m_viewWidth = window.viewportSize().width;
     PageView *self = this;
     const at::EntityId rootSelf = m_selfId;
     return at::div()
@@ -395,18 +396,23 @@ at::AnyElement PageView::render(at::Window &window, at::Context<PageView> &cx)
             .flexCol()
             // A mouse's release ends a press that may have selected blocks (after the rows' click).
             .onMouseUp(at::MouseButton::Left,
-                       [rootSelf](const at::MouseUpEvent &, at::Window &, at::App &a) {
-                           a.updateEntity<PageView>(rootSelf, [](PageView &v, at::Context<PageView> &) {
+                       [rootSelf](const at::MouseUpEvent &e, at::Window &, at::App &a) {
+                           a.updateEntity<PageView>(rootSelf, [&](PageView &v, at::Context<PageView> &c) {
                                v.m_dragUid = 0;
+                               if (v.m_drag.kind != DragKind::None)
+                                   v.dragReleased(e.cancelled, c);
                            });
                        })
             // The pressed mouse moving over the page: into another block, the blocks between are
-            // selected (the row under the pointer from the list's rows, wherever the press is).
+            // selected (the row under the pointer from the list's rows, wherever the press is). A
+            // drag of blocks begun (pagedrag.cpp) follows it until its own layer does.
             .onMouseMove([rootSelf](const at::MouseMoveEvent &e, at::Window &, at::App &a) {
-                if (e.pointer != at::PointerKind::Mouse || e.pressedButton != at::MouseButton::Left)
-                    return;
                 a.updateEntity<PageView>(rootSelf, [&](PageView &v, at::Context<PageView> &c) {
-                    v.dragOver(e.position, c);
+                    if (v.m_drag.kind != DragKind::None) {
+                        if (v.followsPointer(e.pointer))
+                            v.dragMoved(e.position, c);
+                    } else if (e.pointer == at::PointerKind::Mouse && e.pressedButton == at::MouseButton::Left)
+                        v.dragOver(e.position, c);
                 });
             })
             .child(at::list(u"page", m_extents,
@@ -436,7 +442,12 @@ at::AnyElement PageView::render(at::Window &window, at::Context<PageView> &cx)
                            self->onContentHeight(h);
                    })
                            .absolute()
-                           .size(0));
+                           .size(0))
+            // A drag of blocks: the drop line, the listener that follows it (pagedrag.cpp).
+            .child(dragLayer())
+            // A block selection's keys while no block is edited (pageselection.cpp): the page keeps
+            // the keyboard.
+            .child(keyLayer());
 }
 
 bool PageView::reveal(at::Rect r, float margin, float viewportHeight, at::Context<PageView> &cx)
@@ -513,14 +524,9 @@ at::AnyElement PageView::renderRow(std::size_t row)
         if (m.contentWidth > 0)
             std::move(d).maxW(m.contentX + m.contentWidth);
         if (!edge.isEmpty()) {
-            const bool start = edge == u"single" || edge == u"first";
-            const bool end = edge == u"single" || edge == u"last";
-            const float r = m_selectionLook.radius;
-            std::move(d).bg(m_selectionLook.band).roundedT(start ? r : 0).roundedB(end ? r : 0);
-            if (edge == u"single")
-                std::move(d).border(1).borderColor(m_selectionLook.ring.fadedBy(0.65f));
-            else
-                std::move(d).borderL(2).borderColor(m_selectionLook.ring.fadedBy(0.4f));
+            // (pageselection.cpp: the band and the touch selection mode's grips.)
+            if (std::optional<at::AnyElement> band = selectionBand(int(row)))
+                std::move(d).child(std::move(*band));
         }
         return d;
     };
@@ -699,6 +705,19 @@ at::AnyElement PageView::renderRow(std::size_t row)
                         });
                     });
         }
+        if (m_controller && !m_controller->readOnly()) {
+            // A mouse's press on the marker dragged a few px moves the block (pagedrag.cpp).
+            const at::EntityId dragSelf = m_selfId;
+            std::move(bullet).id(u"bullet").onMouseDown(
+                    at::MouseButton::Left, [dragSelf, row](const at::MouseDownEvent &e, at::Window &w, at::App &a) {
+                        if (e.pointer != at::PointerKind::Mouse || e.modifiers.any())
+                            return;
+                        a.updateEntity<PageView>(dragSelf, [&](PageView &v, at::Context<PageView> &c) {
+                            v.bulletPressed(int(row), e.position, c);
+                        });
+                        w.stopPropagation(); // no drag selection from the row under it
+                    });
+        }
         std::move(content).child(std::move(bullet));
     }
     at::Div column = at::div().flex1().minW(0);
@@ -750,10 +769,11 @@ at::AnyElement PageView::renderRow(std::size_t row)
             });
         });
     if (onLongPressRow)
-        std::move(drawn).onLongPress([selfId, row](at::Point, at::Window &, at::App &a) {
-            a.updateEntity<PageView>(selfId, [row](PageView &v, at::Context<PageView> &) {
-                if (v.onLongPressRow)
-                    v.onLongPressRow(int(row));
+        // The touch selection mode, the finger then extending it or moving the selected blocks
+        // (pagedrag.cpp).
+        std::move(drawn).onLongPress([selfId, row](at::Point p, at::Window &w, at::App &a) {
+            a.updateEntity<PageView>(selfId, [&](PageView &v, at::Context<PageView> &c) {
+                v.rowLongPressed(int(row), p, w, c);
             });
         });
     if (m_controller && !m_controller->readOnly()) {

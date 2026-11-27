@@ -19,14 +19,15 @@ at::AnyElement PageView::foreignRow(std::size_t row)
     // delegate is over it. No node for screen readers either: the delegate's own are Qt Quick's.
     const float h = float(m_rows->heights().height(PageRows::treeRow(int(row))));
     PageView *self = this;
-    return at::div()
-            .id(at::ElementId::number(uid))
-            .h(std::max(h, 1.0f))
-            .ariaHidden()
-            .child(at::canvas([self, row, uid](at::Rect bounds, at::Window &window, at::App &) {
-                       self->m_foreignFrames.push_back(
-                               {ForeignFrame::Kind::Row, int(row), uid, bounds, window.contentMask()});
-                   }).sizeFull());
+    at::Div box = at::div().id(at::ElementId::number(uid)).h(std::max(h, 1.0f)).ariaHidden();
+    // A selected row's band (and grips) under its delegate, as the rows Atrament draws have it
+    // (pageselection.cpp; the delegate draws none of its own here).
+    if (std::optional<at::AnyElement> band = selectionBand(int(row)))
+        std::move(box).child(std::move(*band));
+    return std::move(box).child(at::canvas([self, row, uid](at::Rect bounds, at::Window &window, at::App &) {
+                                    self->m_foreignFrames.push_back(
+                                            {ForeignFrame::Kind::Row, int(row), uid, bounds, window.contentMask()});
+                                }).sizeFull());
 }
 
 at::AnyElement PageView::edgeElement(ForeignFrame::Kind kind)
