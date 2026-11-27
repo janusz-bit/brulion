@@ -85,6 +85,19 @@ class AtramentView : public brulion::atrament::AtramentItem {
     Q_PROPERTY(bool drawsDiagrams MEMBER m_drawsDiagrams NOTIFY styleChanged FINAL)
     Q_PROPERTY(bool drawsMath MEMBER m_drawsMath NOTIFY styleChanged FINAL)
     Q_PROPERTY(QVariantMap diagramLook MEMBER m_diagramLook NOTIFY styleChanged FINAL)
+    // Pictures, files, embedded blocks and query results drawn by Atrament (docs/ATRAMENT.md M2 step
+    // 5; off: the rows with them are the QML delegate's): pictures (attachments, cached ones from the
+    // internet, PDF thumbnails), files' chips, embedded pages / sections / blocks, ```query and
+    // ```dataview results; their look { frame, border, borderStrong, faint, linkMissing, danger,
+    // backing, chipBackground, chipText, embedFill, queryBackground, hover, focusRing (colours),
+    // radius, radiusSm, spacing, smallSize, tinySize, bodySize, h1Size, h2Size, headerHeight,
+    // indentStep, taskBoxWidth, queryItems (numbers), frames, lightBacking (bools), uiFamily }
+    // (EmbedView's, TransclusionView's, QueryBlockView's Theme values; pageview.h MediaLook).
+    Q_PROPERTY(bool drawsPictures MEMBER m_drawsPictures NOTIFY styleChanged FINAL)
+    Q_PROPERTY(bool drawsFiles MEMBER m_drawsFiles NOTIFY styleChanged FINAL)
+    Q_PROPERTY(bool drawsTransclusions MEMBER m_drawsTransclusions NOTIFY styleChanged FINAL)
+    Q_PROPERTY(bool drawsQueries MEMBER m_drawsQueries NOTIFY styleChanged FINAL)
+    Q_PROPERTY(QVariantMap mediaLook MEMBER m_mediaLook NOTIFY styleChanged FINAL)
     // The find bar's query and options (NoteFind): its matches tinted with findColor.
     Q_PROPERTY(QString findQuery MEMBER m_findQuery NOTIFY findChanged FINAL)
     Q_PROPERTY(bool findMatchCase MEMBER m_findMatchCase NOTIFY findChanged FINAL)
@@ -176,6 +189,9 @@ public:
     // "page": edits cell (`tableRow`, `column`) (−1: the header) of the table in `row` with the caret
     // at `cursor` of its text (−1: its end), when Atrament draws that table.
     Q_INVOKABLE bool editTableCell(int row, int tableRow, int column, int cursor);
+    // "page": what a query block's results answer for a link of item `item` ("open:": the item)
+    // — QueryResultModel::activateLink / open: { action: "scrollTo", row } …
+    Q_INVOKABLE QVariantMap activateQueryLink(int row, int item, const QString &link);
 
 Q_SIGNALS:
     void viewChanged();
@@ -233,6 +249,17 @@ Q_SIGNALS:
     void tableLinkClicked(int row, int tableRow, int column, const QString &link, qreal x, qreal y);
     void tableCellMenuRequested(int row, int tableRow, int column, int rowCount, int columnCount,
                                 const QString &align, qreal sceneX, qreal sceneY);
+    // "page", pictures and files (EmbedView's signals): an embed of `row` clicked — BlockListModel's
+    // `embeds` entry: a picture (the viewer; one from the internet: WebPictureViewer), a PDF (the
+    // PDF viewer), a file; a picture from the internet's menu asked for at a point of this item.
+    void embedClicked(int row, const QVariantMap &embed);
+    void embedMenuRequested(int row, const QVariantMap &embed, qreal x, qreal y);
+    // A link of an embedded block's text (TransclusionView.activate: its file, line and Markdown).
+    void embeddedLinkActivated(int row, const QString &link, const QString &path, int line, const QString &raw);
+    // A link of a query result's text (QueryBlockView: a date chip's dialog, else
+    // activateQueryLink()); the results' answer to a click on an item (BlockEditor.revealRow…).
+    void queryLinkActivated(int row, int item, const QString &link, const QString &path, int line, const QString &raw);
+    void queryAnswered(int row, const QVariantMap &answer);
 
 protected:
     void componentComplete() override;
@@ -278,6 +305,11 @@ private:
     bool m_drawsDiagrams = true;
     bool m_drawsMath = true;
     QVariantMap m_diagramLook;
+    bool m_drawsPictures = true;
+    bool m_drawsFiles = true;
+    bool m_drawsTransclusions = true;
+    bool m_drawsQueries = true;
+    QVariantMap m_mediaLook;
     void applyFind();
     qreal m_contentHeight = 0;
     QString m_findQuery;

@@ -122,6 +122,42 @@ AtramentView {
         if (root.editor)
             root.editor.openCellBlockMenuAt(row, Qt.point(sceneX, sceneY), tableRow, column, rowCount, columnCount, align)
     }
+    // Pictures, files, embedded blocks and query results drawn by Atrament (docs/ATRAMENT.md M2
+    // step 5; drawsPictures, drawsFiles, drawsTransclusions, drawsQueries: on), in EmbedView's,
+    // TransclusionView's and QueryBlockView's look. Pictures get their hairline frame and, in a
+    // dark theme, their light backing by the note's own option, else the device's setting.
+    readonly property int notePictureFrames: editor && editor.controller ? editor.controller.pictureFrames : -1
+    readonly property int notePictureBacking: editor && editor.controller ? editor.controller.pictureBacking : -1
+    mediaLook: ({
+        frame: Theme.borderSubtle,
+        border: Theme.border,
+        borderStrong: Theme.borderStrong,
+        faint: Theme.fgFaint,
+        linkMissing: Theme.linkMissing,
+        danger: Theme.dangerText,
+        backing: Theme.pictureBacking,
+        chipBackground: Theme.chipBg("neutral"),
+        chipText: Theme.chipFg("neutral"),
+        embedFill: Theme.alpha(Theme.bgSunken, Theme.dark ? 0.55 : 0.7),
+        queryBackground: Theme.bgElevated,
+        hover: Theme.bgHover,
+        focusRing: Theme.focusRing,
+        radius: Theme.radius,
+        radiusSm: Theme.radiusSm,
+        spacing: Theme.space2,
+        smallSize: Theme.textSm,
+        tinySize: Theme.textXs,
+        bodySize: Theme.textEditor,
+        h1Size: Theme.textLg,
+        h2Size: Theme.textMd,
+        headerHeight: Theme.touchUi ? 36 : 28,
+        indentStep: Theme.compact ? 16 : 20,
+        taskBoxWidth: editor ? editor.taskBoxWidth : 24,
+        queryItems: Theme.touchUi ? 20 : 50,
+        frames: notePictureFrames >= 0 ? notePictureFrames > 0 : AppSettings.pictureFrames,
+        lightBacking: Theme.dark && (notePictureBacking >= 0 ? notePictureBacking > 0 : AppSettings.lightPictureBacking),
+        uiFamily: Theme.fontUi
+    })
     bandColor: Theme.bgSelected
     ringColor: Theme.focusRing
     bandRadius: Theme.radiusSm
@@ -251,6 +287,83 @@ AtramentView {
     Connections {
         target: root.editor
         function onFindSelectionChanged() { root.selectFindMatch() }
+    }
+    // ---- Pictures, files, embedded blocks, queries (what EmbedView, TransclusionView and
+    // QueryBlockView open)
+    MapHolder { id: embedInfo }
+    MapHolder { id: queryAnswer }
+    MapHolder { id: locationAnswer }
+    /// A click on a picture, a PDF or a file (EmbedView's clicked / drawingClicked / pdfClicked / webOpen).
+    function openEmbed(row: int, embed: var): void {
+        embedInfo.map = embed
+        const web = embedInfo.map.web === true
+        const drawing = embedInfo.map.drawing === true
+        const pdf = embedInfo.map.pdf === true
+        const path = "" + (embedInfo.map.path || "")
+        const target = "" + (embedInfo.map.target || "")
+        const page = embedInfo.map.page || 1
+        if (!root.editor || !root.editor.controller)
+            return
+        if (web)
+            root.editor.openWebPictureViewer(row, embedInfo.map)
+        else if (drawing)
+            root.editor.controller.openDrawing(path)
+        else if (pdf)
+            root.editor.controller.openPdf(row, path, page)
+        else
+            root.editor.controller.activateLink(row, "page:" + Js.encodeURIComponent(target), false)
+    }
+    onEmbedClicked: (row, embed) => root.openEmbed(row, embed)
+    // A picture from the internet: its menu (WebPictureMenu) at the pointer.
+    onEmbedMenuRequested: (row, embed, x, y) => {
+        embedInfo.map = embed
+        const target = "" + (embedInfo.map.target || "")
+        const host = "" + (embedInfo.map.host || "")
+        if (root.editor)
+            root.editor.openWebPictureMenu(row, target, host, root, x, y)
+    }
+    /// A link of an embedded block's text (TransclusionView's tap and activate()): a date chip's
+    /// dialog; a 🔁 or priority chip edits the block with the embed; tasks and reminders belong to
+    /// the source block (its place opens); any other link opens.
+    function activateEmbedded(row: int, link: string, path: string, line: int, raw: string): void {
+        if (!root.editor || !root.editor.controller)
+            return
+        if (root.editor.openTokenDialogIn(path, line, raw, link))
+            return
+        if (root.editor.editsOnClick(link)) {
+            root.editor.startEditing(row, -1)
+            return
+        }
+        if (Js.startsWith(link, "task:") || Js.startsWith(link, "reminder:")) {
+            if (path !== "") {
+                locationAnswer.map = root.editor.controller.openLocation(path, line, false)
+                if (locationAnswer.map.action === "scrollTo")
+                    root.editor.revealRow(locationAnswer.map.row)
+            }
+            return
+        }
+        root.editor.activateLink(row, link)
+    }
+    onEmbeddedLinkActivated: (row, link, path, line, raw) => root.activateEmbedded(row, link, path, line, raw)
+    /// What a query's results answered (QueryBlockView.followAnswer).
+    function followQueryAnswer(): void {
+        if (!root.editor)
+            return
+        if (queryAnswer.map.action === "scrollTo")
+            root.editor.revealRow(queryAnswer.map.row)
+        else if (queryAnswer.map.action === "notFound")
+            root.editor.noticeNotFound(queryAnswer.map)
+    }
+    // A link of a query result: a date chip's dialog on its token, else the results follow it.
+    onQueryLinkActivated: (row, item, link, path, line, raw) => {
+        if (!root.editor || root.editor.openTokenDialogIn(path, line, raw, link))
+            return
+        queryAnswer.map = root.activateQueryLink(row, item, link)
+        root.followQueryAnswer()
+    }
+    onQueryAnswered: (row, answer) => {
+        queryAnswer.map = answer
+        root.followQueryAnswer()
     }
     onSuggestionKeyPressed: key => {
         if (root.editor)

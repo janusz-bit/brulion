@@ -39,6 +39,7 @@
 
 #include <QMetaObject>
 #include <QPointer>
+#include <QVariantMap>
 
 #include <functional>
 #include <memory>
@@ -50,8 +51,10 @@ namespace brulion::editor {
 
 class BlockListModel;
 class PageController;
+class QueryResultModel;
 namespace atr {
 class EditStyler;
+class PictureCache;
 }
 
 namespace atr {
@@ -610,6 +613,102 @@ private:
     mutable std::unordered_map<CellKey, CellFrame, CellKeyHash> m_cellFrames;
     mutable std::unordered_map<quint64, std::shared_ptr<TableEntry>> m_tables;
     std::uint64_t m_tablesPurged = 0;
+    // --- Pictures, files, embedded blocks and query results drawn by Atrament (docs/ATRAMENT.md
+    // M2 step 5; mediarows.cpp, queryrows.cpp, picturecache.h). A block's pictures and files below
+    // its text (EmbedView, PdfEmbedTile), its embedded pages, sections and blocks (TransclusionView)
+    // and a ```query / ```dataview block's results (QueryBlockView) — a row is Atrament's when every
+    // part of it is of a kind switched on and drawable, else the whole row stays the QML delegate's.
+public:
+    enum MediaKind : unsigned {
+        Pictures = 1,      // attachments' pictures, pictures from the internet once cached, PDF thumbnails
+        Files = 2,         // other attachments, PDFs without a thumbnail: their chips
+        Transclusions = 4, // ![[Page]], ![[Page#Heading]], ![[Page#^id]], !((id))
+        Queries = 8,       // ```query and ```dataview results (not database views: `view:`, ```base)
+    };
+    // The look of those parts (EmbedView's, TransclusionView's, QueryBlockView's Theme values).
+    struct MediaLook {
+        atrament::Color frame = atrament::rgba(0x8c959f33); // Theme.borderSubtle
+        atrament::Color border = atrament::rgba(0x8c959f59); // Theme.border
+        atrament::Color borderStrong = atrament::rgb(0xb5bcc4);
+        atrament::Color faint = atrament::rgb(0x9aa0a6);    // Theme.fgFaint
+        atrament::Color linkMissing = atrament::rgb(0x7a5ea3);
+        atrament::Color danger = atrament::rgb(0xa8382d);    // Theme.dangerText
+        atrament::Color backing = atrament::rgb(0xe9e5dc);   // Theme.pictureBacking
+        atrament::Color chipBackground = atrament::rgba(0x8c959f1f);
+        atrament::Color chipText = atrament::rgb(0x4b5563);
+        atrament::Color embedFill = atrament::rgba(0xf3f1ecb3); // Theme.bgSunken at 0.7
+        atrament::Color queryBackground = atrament::rgb(0xffffff); // Theme.bgElevated (also files' chips)
+        atrament::Color hover = atrament::rgba(0x8c959f1a);     // Theme.bgHover
+        atrament::Color focusRing = atrament::rgb(0x3b5bdb);
+        float radius = 10;       // Theme.radius
+        float radiusSm = 7;      // Theme.radiusSm
+        float spacing = 8;       // Theme.space2
+        float smallSize = 12;    // Theme.textSm
+        float tinySize = 11;     // Theme.textXs
+        float bodySize = 15;     // Theme.textEditor
+        float h1Size = 17;       // Theme.textLg
+        float h2Size = 15;       // Theme.textMd
+        float headerHeight = 28; // TransclusionView's header (36 on touch)
+        float indentStep = 20;   // an embedded block's indent per depth (16 compact)
+        float taskBoxWidth = 24; // BlockEditor.taskBoxWidth
+        int queryItems = 50;     // QueryResultModel.maxItems (20 on touch)
+        bool frames = false;     // pictures' hairline frames (AppSettings.pictureFrames, `picture-frames`)
+        bool lightBacking = false; // a light backing under pictures (a dark theme, `picture-backing`)
+        std::u16string uiFamily; // Theme.fontUi ("": the page's)
+        // Words of the views (translated by the host; English by default).
+        QString embeddedName = QStringLiteral("Embedded: %1");
+    };
+    void setDrawsMedia(unsigned kinds, const MediaLook &look, atrament::Context<PageView> &cx);
+    unsigned drawsMedia() const { return m_mediaKinds; }
+    // The decoded pictures (default: PictureCache::shared(), the process's).
+    void setPictureCache(std::shared_ptr<PictureCache> cache, atrament::Context<PageView> &cx);
+    PictureCache &pictureCache();
+    // Whether row `row` has such parts (nullopt: none — the other rules decide) and is drawn
+    // by Atrament with them (false: a foreign row, the QML delegate's — also while a query's source
+    // is edited, which its InlineEditor does).
+    std::optional<bool> drawsMediaRow(int row) const;
+    // A click on an embed of row `row` (BlockListModel's `embeds` entry: a picture, a PDF, a file):
+    // what EmbedView's signals open (the viewer, the PDF viewer, the attachment) — the host decides.
+    // A right-click or a finger held on a picture from the internet: its menu at a window point.
+    std::function<void(int row, const QVariantMap &embed)> onEmbedClick;
+    std::function<void(int row, const QVariantMap &embed, atrament::Point at)> onEmbedMenu;
+    // A link of an embedded block's text clicked: its file, line and Markdown (a date chip's dialog,
+    // a task's place: TransclusionView.activate). Unset: onLink with the link.
+    std::function<void(int row, const QString &link, const QString &path, int line, const QString &raw)>
+            onEmbeddedLink;
+    // A link of a query result's text clicked (QueryBlockView: a date chip's dialog, else
+    // QueryResultModel::activateLink — activateQueryLink()); the model's answer to a click on an
+    // item ({ action: "scrollTo", row } on this page: BlockEditor.revealRow; "notFound").
+    std::function<void(int row, int item, const QString &link, const QString &path, int line, const QString &raw)>
+            onQueryLink;
+    std::function<void(int row, const QVariantMap &answer)> onQueryAnswer;
+    // What QueryResultModel::activateLink answers for item `item` of query row `row`'s results.
+    QVariantMap activateQueryLink(int row, int item, const QString &link);
+    // The results of query row `row` drawn in the last frames (nullptr: none).
+    QueryResultModel *queryResults(int row) const;
+    // Where the last frame drew pictures: row, the embed's index, window bounds, whether decoded.
+    struct PictureFrame {
+        int row = -1;
+        int embed = -1;
+        atrament::Rect bounds;
+        bool decoded = false;
+    };
+    const std::vector<PictureFrame> &pictureFrames() const { return m_pictureFrames; }
+
+private:
+    struct Media; // mediarows.cpp: the frames' state (pictures held, query models, parsed embeds)
+    std::optional<atrament::AnyElement> mediaRow(std::size_t row, const QModelIndex &index);
+    atrament::AnyElement embedsPart(std::size_t row, const QVariantList &embeds, float width);
+    atrament::AnyElement transclusionsPart(std::size_t row, quint64 uid, const QVariantList &transclusions);
+    atrament::AnyElement queryRow(std::size_t row, const QModelIndex &index, float textX);
+    void mediaClicked(std::size_t row, const atrament::ClickEvent &click);
+    void mediaFrame();
+    unsigned m_mediaKinds = 0;
+    MediaLook m_mediaLook;
+    bool m_mediaInner = false; // renderRow() draws a row's text for mediaRow()
+    std::shared_ptr<Media> m_media;
+    std::vector<PictureFrame> m_pictureFrames;
+    std::uint64_t m_pictureFrame = 0;
 };
 
 } // namespace atr

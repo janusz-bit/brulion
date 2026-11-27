@@ -19,6 +19,8 @@ qt_add_library(brulion_editor_atrament STATIC
     pageicons.h pageicons.cpp
     tablelayout.h tablelayout.cpp
     tablerows.cpp
+    picturecache.h picturecache.cpp
+    mediarows_p.h mediarows.cpp queryrows.cpp
 )
 target_include_directories(brulion_editor_atrament PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(brulion_editor_atrament PUBLIC brulion_editor brulion_atrament_ui brulion_atrament_qt

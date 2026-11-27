@@ -17,3 +17,8 @@ set_tests_properties(tst_atrament_editor_hosting PROPERTIES
 # Tables drawn and edited by Atrament (tablerows.cpp, tablelayout.h).
 brulion_add_test(tst_atrament_tables SOURCES tst_atrament_tables.cpp LIBS brulion_editor_atrament)
 target_compile_definitions(tst_atrament_tables PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+# Pictures, files, embedded blocks and query results drawn by Atrament (mediarows.cpp, queryrows.cpp),
+# and the cache that decodes the pictures off the GUI thread (picturecache.h).
+brulion_add_test(tst_atrament_media SOURCES tst_atrament_media.cpp LIBS brulion_editor_atrament)
+target_compile_definitions(tst_atrament_media PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+brulion_add_test(tst_atrament_picturecache SOURCES tst_atrament_picturecache.cpp LIBS brulion_editor_atrament)

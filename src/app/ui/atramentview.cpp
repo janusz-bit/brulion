@@ -19,6 +19,7 @@
 #include "foreignhost.h"
 #include "pageview.h"
 #include "tablelayout.h"
+#include "queryresultmodel.h"
 #endif
 
 using namespace Qt::StringLiterals;
@@ -474,6 +475,51 @@ void AtramentView::applyStyle()
         page.setViewLook(views, cx);
         page.setDrawsDiagrams(m_drawsDiagrams, cx);
         page.setDrawsMath(m_drawsMath, cx);
+        // Pictures, files, embedded blocks, queries (mediarows.cpp, queryrows.cpp).
+        PageView::MediaLook media;
+        auto mediaColour = [this](const char *key, at::Color fallback) {
+            const QVariant v = m_mediaLook.value(QString::fromLatin1(key));
+            const QColor c = v.metaType() == QMetaType::fromType<QColor>() ? v.value<QColor>() : QColor::fromString(v.toString());
+            return c.isValid() ? atColor(c) : fallback;
+        };
+        auto mediaNumber = [this](const char *key, float fallback) {
+            bool ok = false;
+            const double d = m_mediaLook.value(QString::fromLatin1(key)).toDouble(&ok);
+            return ok && d > 0 ? float(d) : fallback;
+        };
+        media.frame = mediaColour("frame", media.frame);
+        media.border = mediaColour("border", media.border);
+        media.borderStrong = mediaColour("borderStrong", media.borderStrong);
+        media.faint = mediaColour("faint", media.faint);
+        media.linkMissing = mediaColour("linkMissing", media.linkMissing);
+        media.danger = mediaColour("danger", media.danger);
+        media.backing = mediaColour("backing", media.backing);
+        media.chipBackground = mediaColour("chipBackground", media.chipBackground);
+        media.chipText = mediaColour("chipText", media.chipText);
+        media.embedFill = mediaColour("embedFill", media.embedFill);
+        media.queryBackground = mediaColour("queryBackground", media.queryBackground);
+        media.hover = mediaColour("hover", media.hover);
+        media.focusRing = mediaColour("focusRing", media.focusRing);
+        media.radius = mediaNumber("radius", media.radius);
+        media.radiusSm = mediaNumber("radiusSm", media.radiusSm);
+        media.spacing = mediaNumber("spacing", media.spacing);
+        media.smallSize = mediaNumber("smallSize", media.smallSize);
+        media.tinySize = mediaNumber("tinySize", media.tinySize);
+        media.bodySize = mediaNumber("bodySize", media.bodySize);
+        media.h1Size = mediaNumber("h1Size", media.h1Size);
+        media.h2Size = mediaNumber("h2Size", media.h2Size);
+        media.headerHeight = mediaNumber("headerHeight", media.headerHeight);
+        media.indentStep = mediaNumber("indentStep", media.indentStep);
+        media.taskBoxWidth = mediaNumber("taskBoxWidth", media.taskBoxWidth);
+        media.queryItems = int(mediaNumber("queryItems", float(media.queryItems)));
+        media.frames = m_mediaLook.value(u"frames"_s).toBool();
+        media.lightBacking = m_mediaLook.value(u"lightBacking"_s).toBool();
+        media.uiFamily = std::u16string(u16View(m_mediaLook.value(u"uiFamily"_s).toString()));
+        media.embeddedName = QCoreApplication::translate("TransclusionView", "Embedded: %1");
+        page.setDrawsMedia((m_drawsPictures ? PageView::Pictures : 0u) | (m_drawsFiles ? PageView::Files : 0u)
+                                   | (m_drawsTransclusions ? PageView::Transclusions : 0u)
+                                   | (m_drawsQueries ? PageView::Queries : 0u),
+                           media, cx);
         page.setEditLook(atColor(m_caretColor), atColor(m_selectionColor),
                          std::u16string(u16View(m_placeholderText)), std::u16string(u16View(m_editLabel)), cx);
         cx.notify();
@@ -580,6 +626,29 @@ void AtramentView::attachView()
                         const QPointF scene = guard->mapToScene(QPointF(p.x, p.y));
                         Q_EMIT guard->blockMenuRequested(row, scene.x(), scene.y());
                     };
+                    // Pictures, files, embedded blocks, queries (docs/ATRAMENT.md M2 step 5).
+                    page.onEmbedClick = [guard](int row, const QVariantMap &embed) {
+                        if (guard)
+                            Q_EMIT guard->embedClicked(row, embed);
+                    };
+                    page.onEmbedMenu = [guard](int row, const QVariantMap &embed, at::Point p) {
+                        if (guard)
+                            Q_EMIT guard->embedMenuRequested(row, embed, p.x, p.y);
+                    };
+                    page.onEmbeddedLink = [guard](int row, const QString &link, const QString &path, int line,
+                                                  const QString &raw) {
+                        if (guard)
+                            Q_EMIT guard->embeddedLinkActivated(row, link, path, line, raw);
+                    };
+                    page.onQueryLink = [guard](int row, int item, const QString &link, const QString &path, int line,
+                                               const QString &raw) {
+                        if (guard)
+                            Q_EMIT guard->queryLinkActivated(row, item, link, path, line, raw);
+                    };
+                    page.onQueryAnswer = [guard](int row, const QVariantMap &answer) {
+                        if (guard)
+                            Q_EMIT guard->queryAnswered(row, answer);
+                    };
                 });
         applyStyle();
         connectTables();
@@ -647,6 +716,23 @@ QQuickItem *AtramentView::rowItem(int row) const
 #endif
     Q_UNUSED(row);
     return nullptr;
+}
+
+QVariantMap AtramentView::activateQueryLink(int row, int item, const QString &link)
+{
+    QVariantMap answer;
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    // (Outside of an update of the page: following the link may open another page.)
+    brulion::editor::QueryResultModel *results =
+            m_page ? m_page->entity.read(runtime().app).queryResults(row) : nullptr;
+    if (results)
+        answer = link == u"open:"_s ? results->open(item, false) : results->activateLink(item, link, false);
+#else
+    Q_UNUSED(row)
+    Q_UNUSED(item)
+    Q_UNUSED(link)
+#endif
+    return answer;
 }
 
 void AtramentView::placeHostedChildren()
