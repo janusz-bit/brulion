@@ -727,6 +727,20 @@ at::AnyElement PageView::renderRow(std::size_t row)
                                   if (self->onToggleTask)
                                       self->onToggleTask(int(row));
                               });
+        if (onTaskMenu) {
+            // Its status menu (BlockPartTaskBox's): a right-click or a finger held on the box.
+            std::move(box)
+                    .onMouseDown(at::MouseButton::Right,
+                                 [self, row](const at::MouseDownEvent &e, at::Window &w, at::App &) {
+                                     if (self->onTaskMenu)
+                                         self->onTaskMenu(int(row), e.position);
+                                     w.stopPropagation();
+                                 })
+                    .onLongPress([self, row](at::Point p, at::Window &, at::App &) {
+                        if (self->onTaskMenu)
+                            self->onTaskMenu(int(row), p);
+                    });
+        }
         if (closed)
             std::move(box).bg(m_palette.muted);
         std::move(content).child(at::div()

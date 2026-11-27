@@ -250,6 +250,10 @@ AtramentView {
         if (root.editor && !root.editor.openDateMenu(row, link, root, x, y))
             root.editor.openBlockLinkMenu(row, link, root, x, y)
     }
+    onTaskMenuRequested: (row, x, y) => {
+        if (root.editor)
+            root.editor.openTaskStatusMenu(row, root, x, y)
+    }
     onTaskToggled: row => {
         if (root.editor && root.editor.controller)
             root.editor.controller.toggleTask(row)

@@ -137,6 +137,7 @@ private Q_SLOTS:
     void revealPastEstimatedRows();
     void sourcesAreNoProse();
     void pointsInTheEditedText();
+    void taskBoxMenu();
 };
 
 void TestAtramentEditing::clickEditsAtTheCharacter()
@@ -1093,6 +1094,43 @@ void TestAtramentEditing::pointsInTheEditedText()
     QCOMPARE(h.controller.editingRow(), 0);
     QCOMPARE(h.inputCaret(), 9);
     QVERIFY(!h.view().editPoint(400));
+}
+
+// A right-click or a finger held on a task's box asks for its status menu (BlockPartTaskBox's
+// menuRequested: TaskStatusMenu), never the block's menu or the selection mode, and toggles
+// nothing; a plain click still toggles.
+void TestAtramentEditing::taskBoxMenu()
+{
+    using namespace std::chrono_literals;
+    Harness h(u"- [ ] Kupić płytki 📅 2026-10-16\n- zwykły\n"_s);
+    int menuFor = -1;
+    int blockMenus = 0;
+    int held = 0;
+    int toggled = 0;
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &cx) {
+        v.onTaskMenu = [&](int row, at::Point) { menuFor = row; };
+        v.onBlockMenu = [&](int, at::Point) { ++blockMenus; };
+        v.onLongPressRow = [&](int) { ++held; };
+        v.onToggleTask = [&](int) { ++toggled; };
+        cx.notify();
+    });
+    h.tw.settle();
+    const std::optional<at::Point> box = h.view().taskBoxPoint(0);
+    QVERIFY(box);
+    h.tw.simulateClick(*box, at::MouseButton::Right);
+    QCOMPARE(menuFor, 0);
+    QCOMPARE(blockMenus, 0);
+    QCOMPARE(toggled, 0);
+    menuFor = -1;
+    h.tw.simulateTouchDown(*box);
+    h.tw.advance(600ms);
+    h.tw.simulateTouchUp(*box);
+    QCOMPARE(menuFor, 0);
+    QCOMPARE(held, 0);
+    QCOMPARE(toggled, 0);
+    h.tw.advance(400ms);
+    h.tw.simulateClick(*box);
+    QCOMPARE(toggled, 1);
 }
 
 QTEST_MAIN(TestAtramentEditing)

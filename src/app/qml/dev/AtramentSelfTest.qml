@@ -148,6 +148,7 @@ QtObject {
         test.chips()
         test.sources()
         test.spelling()
+        test.taskMenu()
     }
     function reading(): void {
         if (window.at()) {
@@ -872,6 +873,56 @@ QtObject {
             page.stopEditing()
             SpellCheck.enabled = false
         }
+    }
+
+    // The task box's status menu (the taskstatus test's first part): a right-click or a finger
+    // held on the box opens it — the task not toggled, its status checked —, a status chosen is
+    // written (one undo step), a plain click still toggles, "No status" removes the box.
+    function statusMenu(): BMenu { return editor.taskMenu }
+    function statusMenuOpen(): bool { return test.statusMenu() !== null && test.statusMenu().visible }
+    function statusItem(name: string): T.MenuItem { return window.menuItemNamed(test.statusMenu(), name) }
+    function taskMenu(): void {
+        if (window.at()) {
+            page.stopEditing()
+            page.save()
+            host.setFile("Statusy.md", "- [ ] Kupić płytki 📅 2026-10-16\n- zwykły blok\n")
+            page.path = "Statusy.md"
+        }
+        if (window.at()) window.waitStep(page.loaded && test.findTaskBox(0), "the task's box is drawn")
+        if (window.at()) test.findTaskBox(0)
+        test.menuGesture("task", test.statusMenuOpen())
+        if (window.at()) window.waitStep(test.statusMenuOpen() && !test.blockMenuOpen(),
+                                         (window.touchRun ? "a finger held" : "a right-click") + " on the box opens the status menu")
+        if (window.at()) {
+            test.check(test.info(0).taskStatus === "todo", "the gesture does not toggle the task")
+            const todo = test.statusItem("taskStatus_todo")
+            const doing = test.statusItem("taskStatus_doing")
+            test.check(todo !== null && todo.checked && doing !== null && !doing.checked, "the current status is checked")
+            if (doing)
+                window.tapItem(doing)
+        }
+        if (window.at()) window.waitStep(!test.statusMenuOpen() && test.info(0).taskStatus === "doing"
+                                         && Js.indexOf(host.file("Statusy.md"), "- [/] Kupić płytki") === 0,
+                                         "the chosen status is written: " + host.file("Statusy.md"))
+        if (window.at()) page.undo()
+        if (window.at()) window.waitStep(test.info(0).taskStatus === "todo", "one undo step puts the status back")
+        if (window.at()) { test.findTaskBox(0); test.tapSpot() }
+        if (window.at()) window.waitStep(test.info(0).taskStatus === "done" && !test.statusMenuOpen(),
+                                         "a plain click still toggles, without a menu")
+        if (window.at()) page.undo()
+        if (window.at()) test.findTaskBox(0)
+        test.menuGesture("task", test.statusMenuOpen())
+        if (window.at()) window.waitStep(test.statusMenuOpen(), "the menu opens again")
+        if (window.at()) {
+            const none = test.statusItem("taskStatus_none")
+            if (none)
+                window.tapItem(none)
+        }
+        if (window.at()) window.waitStep(!test.statusMenuOpen() && test.info(0).taskStatus === ""
+                                         && Js.indexOf(host.file("Statusy.md"), "- Kupić płytki") === 0,
+                                         "“No status” removes the box, the text stays a list item")
+        if (window.at()) page.undo()
+        if (window.at()) window.waitStep(test.info(0).taskStatus === "todo", "undo brings the box back")
     }
 
     Component.onCompleted: window.runSteps("atramenttest")

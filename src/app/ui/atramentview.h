@@ -244,6 +244,9 @@ Q_SIGNALS:
     // (x, y) of this item (BlockEditor.openDateMenu / openBlockLinkMenu), not the block's.
     void linkMenuRequested(int row, const QString &link, qreal x, qreal y);
     void taskToggled(int row);
+    // A right-click or a finger held on a task's box at (x, y) of this item: its status menu
+    // (BlockEditor.openTaskStatusMenu).
+    void taskMenuRequested(int row, qreal x, qreal y);
     void styleChanged();
     void pageControllerChanged();
     // "page", editing: a click or a tap asks to edit `row` with the caret at `cursor` (−1: not

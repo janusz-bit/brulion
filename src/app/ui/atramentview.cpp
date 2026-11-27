@@ -664,6 +664,10 @@ void AtramentView::attachView()
                         if (guard)
                             Q_EMIT guard->taskToggled(row);
                     };
+                    page.onTaskMenu = [guard](int row, at::Point p) {
+                        if (guard)
+                            Q_EMIT guard->taskMenuRequested(row, p.x, p.y);
+                    };
                     page.onContentHeight = [guard](float height) {
                         // (Told in the frame's paint: the item changes size after it.)
                         if (!guard)
