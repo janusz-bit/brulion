@@ -47,8 +47,6 @@ public:
 
 private:
     QByteArray readFrames(qint64 max);
-    /// More compressed bytes into m_in when it is used up; false at the file's end.
-    bool refill();
 
     struct Decoder;
     QFile m_file;

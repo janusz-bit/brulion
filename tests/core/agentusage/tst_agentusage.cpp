@@ -4,6 +4,7 @@
 // the test), in the shapes the agents write.
 
 #include "agentusage/history.h"
+#include "agentusage/logstream_p.h"
 #include "agentusage/reader.h"
 #include "agentusage/usage.h"
 
@@ -228,6 +229,13 @@ private Q_SLOTS:
     void compressedLater();
     void archivedRolloutCountsOnce();
     void bothRepresentations();
+    void compressedRewrittenShorter();
+    void malformedCacheEntry_data();
+    void malformedCacheEntry();
+    void unreadableFile();
+    void goneLongAgo();
+    void noSource();
+    void logStream();
     void unpackedLimit();
     void incrementalCache();
     void rewrittenFile();
@@ -1015,6 +1023,197 @@ void TestAgentUsage::bothRepresentations()
     QCOMPARE(stats.filesRead, 1);
     QCOMPARE(stats.duplicates, 0);
     QCOMPARE(totalOf(h).tokens.requests, RolloutRequests);
+}
+
+void TestAgentUsage::compressedRewrittenShorter()
+{
+    // A compressed rollout replaced by a shorter text with the same start: read again from its
+    // start — its first response alone.
+    QTemporaryDir dir;
+    const QString file = dir.filePath(u"archived_sessions/"_s + RolloutName + u".zst"_s);
+    writeFile(file, fixture(u"rollout.jsonl.zst"_s));
+    const QString cache = dir.filePath(u"cache.json"_s);
+    QCOMPARE(totalOf(readHistory(codexSource(dir.path()), options(cache))).tokens.requests, RolloutRequests);
+    writeFile(file, fixture(u"rollout-seven.jsonl.zst"_s));
+    touch(file, 5);
+    ReadStats stats;
+    const History h = readHistory(codexSource(dir.path()), options(cache), &stats);
+    QCOMPARE(stats.filesRead, 1);
+    QCOMPARE(totalOf(h).tokens.requests, 1);
+    QCOMPARE(totalOf(h).tokens.input, 4000);
+    QCOMPARE(h.skippedLines, 0);
+}
+
+void TestAgentUsage::malformedCacheEntry_data()
+{
+    // One field of a compressed rollout's entry in the cache changed: an entry that cannot be trusted
+    // rebuilds the cache (the logs read again: the same use).
+    QTest::addColumn<QString>("field");
+    QTest::addColumn<QJsonValue>("value");
+    QTest::addColumn<bool>("rebuilt");
+    QTest::newRow("as written") << QString() << QJsonValue() << false;
+    QTest::newRow("negative size") << u"size"_s << QJsonValue(-1) << true;
+    QTest::newRow("size in words") << u"size"_s << QJsonValue(u"duży"_s) << true;
+    QTest::newRow("no time") << u"mtime"_s << QJsonValue(QJsonValue::Undefined) << true;
+    QTest::newRow("negative offset") << u"offset"_s << QJsonValue(-5) << true;
+    QTest::newRow("head too long") << u"headLength"_s << QJsonValue(5000) << true;
+    QTest::newRow("a plain file's offset past its size") << u"compressed"_s << QJsonValue(false) << true;
+    QTest::newRow("keys cut") << u"keys"_s << QJsonValue(QString::fromLatin1(QByteArray(7, 'k').toBase64()))
+                              << true;
+    QTest::newRow("a bucket too short") << u"buckets"_s << QJsonValue(QJsonArray{QJsonArray{1, 0, 0, 0, 1, 2, 3}})
+                                        << true;
+    QTest::newRow("a bucket's name not there")
+            << u"buckets"_s << QJsonValue(QJsonArray{QJsonArray{1, 0, 99, 0, 1, 2, 3, 4, 5, 6, 7, 0}}) << true;
+    QTest::newRow("a bucket's negative count")
+            << u"buckets"_s << QJsonValue(QJsonArray{QJsonArray{1, 0, 0, 0, 1, -2, 3, 4, 5, 6, 7, 0}}) << true;
+    QTest::newRow("codex totals cut") << u"codex"_s
+                                      << QJsonValue(QJsonObject{{u"has"_s, true}, {u"totals"_s, QJsonArray{1, 2}}})
+                                      << true;
+    QTest::newRow("no key") << u"key"_s << QJsonValue(QString()) << true;
+}
+
+void TestAgentUsage::malformedCacheEntry()
+{
+    QFETCH(QString, field);
+    QFETCH(QJsonValue, value);
+    QFETCH(bool, rebuilt);
+    QTemporaryDir dir;
+    writeFile(dir.filePath(u"sessions/2026/11/24/"_s + RolloutName + u".zst"_s), fixture(u"rollout.jsonl.zst"_s));
+    const QString cache = dir.filePath(u"cache.json"_s);
+    QCOMPARE(totalOf(readHistory(codexSource(dir.path()), options(cache))).tokens.requests, RolloutRequests);
+    QFile f(cache);
+    QVERIFY(f.open(QIODevice::ReadOnly));
+    QJsonObject root = QJsonDocument::fromJson(f.readAll()).object();
+    f.close();
+    QJsonArray files = root.value(u"files"_s).toArray();
+    QCOMPARE(files.size(), 1);
+    QJsonObject entry = files.first().toObject();
+    QCOMPARE(entry.value(u"key"_s).toString(), RolloutName);
+    QVERIFY(entry.value(u"compressed"_s).toBool());
+    QVERIFY(entry.value(u"offset"_s).toInteger() > entry.value(u"size"_s).toInteger());
+    if (!field.isEmpty()) {
+        if (value.isUndefined())
+            entry.remove(field);
+        else
+            entry.insert(field, value);
+    }
+    files.replace(0, entry);
+    root.insert(u"files"_s, files);
+    writeFile(cache, QJsonDocument(root).toJson());
+    ReadStats stats;
+    const History h = readHistory(codexSource(dir.path()), options(cache), &stats);
+    QCOMPARE(stats.cacheRebuilt, rebuilt);
+    QCOMPARE(stats.filesRead, rebuilt ? 1 : 0);
+    QCOMPARE(totalOf(h).tokens.requests, RolloutRequests);
+    QCOMPARE(totalOf(h).tokens.input, RolloutInput);
+}
+
+void TestAgentUsage::unreadableFile()
+{
+#ifdef Q_OS_WIN
+    QSKIP("Windows: no unreadable file of one's own by permissions");
+#else
+    // A log that cannot be opened now: read the next time it can.
+    QTemporaryDir dir;
+    const QString file = dir.filePath(u"sessions/2026/11/24/"_s + RolloutName + u".zst"_s);
+    writeFile(file, fixture(u"rollout.jsonl.zst"_s));
+    QVERIFY(QFile::setPermissions(file, QFileDevice::WriteOwner));
+    if (QFile(file).open(QIODevice::ReadOnly))
+        QSKIP("the file can be read anyway (root)");
+    const QString cache = dir.filePath(u"cache.json"_s);
+    ReadStats stats;
+    History h = readHistory(codexSource(dir.path()), options(cache), &stats);
+    QCOMPARE(stats.filesRead, 0);
+    QCOMPARE(totalOf(h).tokens.requests, 0);
+    QVERIFY(QFile::setPermissions(file, QFileDevice::ReadOwner | QFileDevice::WriteOwner));
+    h = readHistory(codexSource(dir.path()), options(cache), &stats);
+    QCOMPARE(stats.filesRead, 1);
+    QCOMPARE(totalOf(h).tokens.requests, RolloutRequests);
+#endif
+}
+
+void TestAgentUsage::goneLongAgo()
+{
+    // A log gone from the disk keeps its use — until that use is older than the history: then the
+    // cache forgets it, and its messages count again should it come back.
+    QTemporaryDir dir;
+    const QString file = dir.filePath(u"projects/p/stary.jsonl"_s);
+    ClaudeUse a;
+    writeFile(file, claudeLine(a));
+    const QString cache = dir.filePath(u"cache.json"_s);
+    QCOMPARE(totalOf(readHistory(claudeSource(dir.path()), options(cache))).tokens.requests, 1);
+    QVERIFY(QFile::remove(file));
+    ReadOptions later = options(cache);
+    later.now = later.now.addDays(RetentionDays + 1);
+    History h = readHistory(claudeSource(dir.path()), later);
+    QCOMPARE(totalOf(h).tokens.requests, 0);
+    // (Back with a time of its own within the history: read anew, counted once.)
+    writeFile(file, claudeLine(a));
+    ReadStats stats;
+    h = readHistory(claudeSource(dir.path()), options(cache), &stats);
+    QCOMPARE(stats.duplicates, 0);
+    QCOMPARE(totalOf(h).tokens.requests, 1);
+    // A log untouched for longer than the history: not even opened.
+    touch(file, -int(RetentionDays + 2) * 24 * 3600);
+    QVERIFY(QFile::remove(cache));
+    later.cacheFile = cache;
+    later.now = QDateTime::currentDateTimeUtc();
+    h = readHistory(claudeSource(dir.path()), later, &stats);
+    QCOMPARE(stats.filesRead, 0);
+    QCOMPARE(h.files, 0);
+}
+
+void TestAgentUsage::noSource()
+{
+    ReadStats stats;
+    const History h = readHistory(Source{}, options(QString()), &stats);
+    QCOMPARE(h.error, u"no_source"_s);
+    QVERIFY(!h.found);
+    QCOMPARE(stats.filesRead, 0);
+}
+
+void TestAgentUsage::logStream()
+{
+    // A log's text in pieces, plain or through its frames, bounded.
+    const QByteArray text = fixture(u"rollout.jsonl"_s);
+    QTemporaryDir dir;
+    const QString plain = dir.filePath(u"tekst.jsonl"_s);
+    const QString packed = dir.filePath(u"tekst.jsonl.zst"_s);
+    writeFile(plain, text);
+    writeFile(packed, fixture(u"rollout.jsonl.zst"_s));
+    for (const bool compressed : {false, true}) {
+        LogStream s(compressed ? packed : plain, compressed, MaxUnpackedBytes);
+        QVERIFY(s.read(10).isEmpty()); // (not open yet)
+        QVERIFY(!s.skipTo(5));
+        QVERIFY(s.open());
+        QCOMPARE(s.read(100), text.first(100));
+        QCOMPARE(s.position(), 100);
+        QVERIFY(!s.skipTo(50)); // (never back)
+        QVERIFY(s.read(0).isEmpty());
+        QVERIFY(s.skipTo(12000));
+        QCOMPARE(s.read(1000), text.mid(12000));
+        QVERIFY(s.read(1000).isEmpty());
+        QVERIFY(!s.skipTo(text.size() + 1));
+        QVERIFY(!s.failed());
+    }
+    LogStream beyond(plain, false, MaxUnpackedBytes);
+    QVERIFY(beyond.open());
+    QVERIFY(!beyond.skipTo(text.size() + 1));
+    QVERIFY(beyond.skipTo(text.size()));
+    QVERIFY(beyond.read(10).isEmpty());
+    // At most so much of a compressed text: the rest is no text, and says so.
+    LogStream bounded(packed, true, 50);
+    QVERIFY(bounded.open());
+    QCOMPARE(bounded.read(100), text.first(50));
+    QVERIFY(bounded.failed());
+    QVERIFY(bounded.read(100).isEmpty());
+    // As much as the limit, exactly: whole, not failed.
+    LogStream exact(packed, true, text.size());
+    QVERIFY(exact.open());
+    QCOMPARE(exact.read(text.size() + 10), text);
+    QVERIFY(exact.read(10).isEmpty());
+    QVERIFY(!exact.failed());
+    QVERIFY(!LogStream(dir.filePath(u"brak.zst"_s), true, 1).open());
 }
 
 void TestAgentUsage::unpackedLimit()

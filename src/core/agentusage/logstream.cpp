@@ -8,15 +8,43 @@ namespace brulion::agentusage {
 
 struct LogStream::Decoder {
     ZSTD_DStream *stream = nullptr;
-    QByteArray in;                        ///< compressed bytes read from the file
-    ZSTD_inBuffer buffer{nullptr, 0, 0};  ///< what of them is not decoded yet
-    size_t hint = 1;                      ///< the decoder's last answer: 0 once a frame ended and all of it is out
+    QByteArray in;                       ///< compressed bytes read from the file
+    ZSTD_inBuffer buffer{nullptr, 0, 0}; ///< what of them is not decoded yet
+    size_t hint = 1;                     ///< the decoder's last answer: 0 once a frame ended and all of it is out
     bool fileEnded = false;
 
     Decoder() = default;
     Decoder(const Decoder &) = delete;
     Decoder &operator=(const Decoder &) = delete;
     ~Decoder() { ZSTD_freeDStream(stream); }
+
+    enum class Step { More, End, Failed };
+    /// One step of decoding into `o`: End once the last frame ended with the file, Failed for no
+    /// zstd, a broken frame, a window too large — or a frame going on beyond the file's end.
+    Step step(QFile &file, ZSTD_outBuffer &o)
+    {
+        const bool more = buffer.pos < buffer.size || refill(file);
+        if (!more && hint == 0)
+            return Step::End;
+        const size_t outBefore = o.pos;
+        const size_t inBefore = buffer.pos;
+        const size_t answer = ZSTD_decompressStream(stream, &o, &buffer);
+        if (ZSTD_isError(answer) || (!more && o.pos == outBefore && buffer.pos == inBefore))
+            return Step::Failed;
+        hint = answer;
+        return Step::More;
+    }
+
+    /// More compressed bytes when those read are used up; false at the file's end.
+    bool refill(QFile &file)
+    {
+        if (fileEnded)
+            return false;
+        in = file.read(qint64(ZSTD_DStreamInSize()));
+        buffer = ZSTD_inBuffer{in.constData(), size_t(in.size()), 0};
+        fileEnded = in.isEmpty();
+        return !fileEnded;
+    }
 };
 
 LogStream::LogStream(const QString &path, bool compressed, qint64 maxBytes)
@@ -68,50 +96,18 @@ bool LogStream::skipTo(qint64 position)
 
 QByteArray LogStream::readFrames(qint64 max)
 {
-    Decoder &d = *m_decoder;
     // (One byte more than the text may still hold shows that it holds more: a "zip bomb".)
     const qint64 room = std::max<qint64>(m_maxBytes - m_position, 0);
     QByteArray out(std::min(max, room + 1), Qt::Uninitialized);
     ZSTD_outBuffer o{out.data(), size_t(out.size()), 0};
-    while (o.pos < o.size) {
-        const bool more = d.buffer.pos < d.buffer.size || refill();
-        if (!more && d.hint == 0) {
-            m_ended = true; // (the last frame ended: the text's end)
-            break;
-        }
-        const size_t outBefore = o.pos;
-        const size_t inBefore = d.buffer.pos;
-        const size_t hint = ZSTD_decompressStream(d.stream, &o, &d.buffer);
-        if (ZSTD_isError(hint)) {
-            m_failed = true; // (no zstd, a broken frame, a window too large)
-            break;
-        }
-        d.hint = hint;
-        if (!more && o.pos == outBefore && d.buffer.pos == inBefore) {
-            m_failed = true; // (the frame goes on beyond the file's end: cut short)
-            break;
-        }
-    }
+    Decoder::Step step = Decoder::Step::More;
+    while (o.pos < o.size && step == Decoder::Step::More)
+        step = m_decoder->step(m_file, o);
     out.truncate(qsizetype(o.pos));
-    if (out.size() > room) {
-        out.truncate(qsizetype(room));
-        m_failed = true;
-    }
-    if (m_failed)
-        m_ended = true;
+    m_failed = step == Decoder::Step::Failed || out.size() > room;
+    m_ended = m_failed || step == Decoder::Step::End;
+    out.truncate(std::min(out.size(), qsizetype(room)));
     return out;
-}
-
-bool LogStream::refill()
-{
-    Decoder &d = *m_decoder;
-    if (d.fileEnded)
-        return false;
-    d.in = m_file.read(qint64(ZSTD_DStreamInSize()));
-    d.buffer = ZSTD_inBuffer{d.in.constData(), size_t(d.in.size()), 0};
-    if (d.in.isEmpty())
-        d.fileEnded = true;
-    return !d.fileEnded;
 }
 
 } // namespace brulion::agentusage

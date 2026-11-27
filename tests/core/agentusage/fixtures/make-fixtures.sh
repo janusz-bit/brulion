@@ -7,6 +7,7 @@
 #                                level 3, the text's size in the frame, no checksum)
 #   rollout-checksum.jsonl.zst   zstd's own default: with a checksum of the text
 #   rollout-frames.jsonl.zst     two frames: the first seven lines, then the rest
+#   rollout-seven.jsonl.zst      the first seven lines alone (the first response's)
 #   rollout-cut.jsonl.zst        rollout.jsonl.zst cut to half its bytes
 #   rollout-garbage.jsonl.zst    the first frame of rollout-frames.jsonl.zst, then 64 bytes of no frame
 #   rollout-window.jsonl.zst     a window of 2^26 bytes (--long=26, the text's size not in the frame):
@@ -22,6 +23,7 @@ z() { "$zstd" -q -c "$@"; }
 z -3 --no-check rollout.jsonl > rollout.jsonl.zst
 z -3 --check rollout.jsonl > rollout-checksum.jsonl.zst
 { head -n 7 rollout.jsonl | z -3 --no-check; tail -n +8 rollout.jsonl | z -3 --no-check; } > rollout-frames.jsonl.zst
+head -n 7 rollout.jsonl | z -3 --no-check > rollout-seven.jsonl.zst
 head -c "$(( $(stat -c %s rollout.jsonl.zst) / 2 ))" rollout.jsonl.zst > rollout-cut.jsonl.zst
 { head -n 7 rollout.jsonl | z -3 --no-check; printf '\xff%.0s' $(seq 64); } > rollout-garbage.jsonl.zst
 z -3 --no-check --long=26 < rollout.jsonl > rollout-window.jsonl.zst
