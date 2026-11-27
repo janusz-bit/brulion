@@ -409,22 +409,22 @@ thread's files opening the viewer at their line (`CodeView.openFileInViewer(path
 * Windows: Code mode's tests run there (CI: the terminal on ConPTY, git and gh with Windows paths,
   the Changes panel), not yet a session by hand with a real agent; a worktree of a repository whose
   paths pass 260 characters needs git's `core.longpaths`; a terminal before Windows 10 1809.
-* A pull request's text written by AI (the commit message is: "Write with AI"), and the rest of
-  docs/CODE-GIT.md "Not done (yet)".
+* The rest of docs/CODE-GIT.md "Not done (yet)".
 * Threads on the phone: committing, pushing, pull requests, the branch picker, reverting a turn and
   the terminal of a project of another computer (the phone shows its changes read-only); a new
   worktree there from another base than its HEAD in the UI; projects of two computers with the same id
   (the first computer's is listed).
 * t3.json's `stopOnSettle`, `runOnSettle`, `previewUrl` (no in-app browser), `worktreeSubmodules`,
-  sparse checkouts, multi-repository projects and custom worktree layouts; a branch name the AI makes
-  up for a new worktree (the prefix and the first message's slug only); automatic worktree cleanup
-  (by age, merged pull requests).
+  sparse checkouts, multi-repository projects and custom worktree layouts; T3 Code's branch naming
+  modes (a semantic prefix the AI picks, the user's own instructions for it); automatic worktree
+  cleanup (by age, merged pull requests).
 * Cloning: other hosts' repository lists (GitLab, Forgejo, Bitbucket — their addresses clone, their
   lists are not shown), T3 Code's "Clone into host folders" (`<host>/<owner>/<repo>`), a new project
   made from nothing (`git init` with a README, a GitHub repository published for it), copying a
   project's ignored files (`.env`) to a clone on another computer, cloning on a computer that shares
   its agents from the phone.
-* Settling and snoozing threads, "Regenerate title", dropping files on a thread's row, scratch threads
-  without a project.
+* Settling and snoozing threads, a title the AI gives a new thread by itself (its first message's
+  words name it; "Regenerate title" asks), dropping files on a thread's row, scratch threads without a
+  project.
 * Editing a project's files in the viewer, rendered Markdown, HTML and PDF files there, find within
   the file shown, mentions of threads and pull requests (docs/CODE-FILES.md "Not done").

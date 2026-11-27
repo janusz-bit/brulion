@@ -13,15 +13,18 @@ done in the repository simply disappears from the list.
   macOS at all; t3.json read again when it changes, on Windows (CI's runner saw no change of it:
   tst_shell_codeprojects configInProject skips it there); a terminal on Windows before 10 1809; the terminal's resizable splits;
   hunks of the Changes panel's other sources than Uncommitted and single lines staged or thrown away,
-  a pull request's text written by AI (the commit message is: "Write with AI", AiAsk), a turn's
-  changes without what the user changed between turns, `--skip` while rebasing, `git fetch` of its
-  own (docs/CODE-GIT.md "Not done (yet)"); for a thread of another computer's project (continued from
+  the pull request of "Commit, push and create PR" written by AI too (the pull request dialog's and the
+  commit message are: "Write with AI", an empty message written by itself), a turn's changes without
+  what the user changed between turns, `--skip` while rebasing, `git fetch` of its own
+  (docs/CODE-GIT.md "Not done (yet)"); for a thread of another computer's project (continued from
   the phone through `acp serve --projects`): committing, pushing, pull requests, reverting a turn and
   the terminal from the phone, a worktree from another base, projects of two computers with the same
   id; t3.json's `stopOnSettle`, `runOnSettle`, `previewUrl`, `worktreeSubmodules`, sparse checkouts,
-  multi-repository projects and custom worktree layouts; an AI-made branch name for a new worktree;
-  automatic worktree cleanup (by age, merged pull requests); settling and snoozing threads,
-  "Regenerate title", files dropped on a thread's row, scratch threads without a project; in the file
+  multi-repository projects and custom worktree layouts; T3 Code's branch naming modes (the AI names
+  a new worktree's branch: a semantic prefix it picks, the user's own instructions); automatic worktree
+  cleanup (by age, merged pull requests); settling and snoozing threads, a new thread's title written
+  by the AI by itself ("Regenerate title" is there), files dropped on a thread's row, scratch threads
+  without a project; in the file
   viewer (docs/CODE-FILES.md): editing files, rendered Markdown / HTML / CSV / PDF / ZIP files, find
   within the file shown, the index following the disk through a file watcher; in a thread's composer:
   mentions of threads, models and pull requests (`#`), review comments as chips instead of text.
