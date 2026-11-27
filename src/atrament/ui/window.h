@@ -58,9 +58,6 @@ struct TextPaintStyle {
     bool overline = false;                    // a line over them, at the font's ascent
 };
 
-// Where a line of a paragraph starts within `boxWidth` when aligned (paintText's offset).
-float alignedLineX(const TextLine &line, TextAlign align, float boxWidth);
-
 class Window {
 public:
     Window(App &app, PlatformWindow &platform, AnyView root);
@@ -259,17 +256,14 @@ public:
     void paintQuad(Rect bounds, const std::optional<Background> &background, Edges borderWidths, Color borderColor,
             Corners cornerRadii);
     void paintShadows(Rect bounds, Corners cornerRadii, std::span<const BoxShadow> shadows);
-    // A paragraph at `origin` (its top-left), each glyph styled by its styleIndex; lines aligned
-    // within `boxWidth` (centre / right): the background shapes of the whole paragraph first, then
-    // the glyphs and their decorations (underlines, strikes).
-    void paintText(const TextLayout &layout, Point origin, std::span<const TextPaintStyle> styles,
-            TextAlign align = TextAlign::Left, float boxWidth = 0);
+    // A paragraph at `origin` (its top-left), each glyph styled by its styleIndex, its lines where
+    // the layout aligned them (TextLine::x): the background shapes of the whole paragraph first,
+    // then the glyphs and their decorations (underlines, strikes).
+    void paintText(const TextLayout &layout, Point origin, std::span<const TextPaintStyle> styles);
     // paintText's two layers apart, for an element that draws between them: a selection goes over
     // the shapes and under the glyphs (paintTextBackgrounds, the selection, paintTextGlyphs).
-    void paintTextBackgrounds(const TextLayout &layout, Point origin, std::span<const TextPaintStyle> styles,
-            TextAlign align = TextAlign::Left, float boxWidth = 0);
-    void paintTextGlyphs(const TextLayout &layout, Point origin, std::span<const TextPaintStyle> styles,
-            TextAlign align = TextAlign::Left, float boxWidth = 0);
+    void paintTextBackgrounds(const TextLayout &layout, Point origin, std::span<const TextPaintStyle> styles);
+    void paintTextGlyphs(const TextLayout &layout, Point origin, std::span<const TextPaintStyle> styles);
     void paintGlyph(FaceId face, std::uint32_t glyph, float fontSize, Point baselineOrigin, Color color);
     void paintPicture(Rect bounds, Corners cornerRadii, std::shared_ptr<const ImageData> image, float opacity = 1,
             bool grayscale = false);

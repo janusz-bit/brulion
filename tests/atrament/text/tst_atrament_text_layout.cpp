@@ -2,6 +2,7 @@
 // editing queries (carets, hit tests, selections, ↑/↓).
 #include "text/segmentation.h"
 #include "text/textlayout.h"
+#include "text/textsystem.h"
 
 #include "textfixtures.h"
 
@@ -105,6 +106,7 @@ void compareLayouts(const TextLayout &a, const TextLayout &b)
         QCOMPARE(x.height, y.height);
         QCOMPARE(x.baseline, y.baseline);
         QCOMPARE(x.width, y.width);
+        QCOMPARE(x.x, y.x);
         QCOMPARE(x.firstGlyph, y.firstGlyph);
         QCOMPARE(x.glyphCount, y.glyphCount);
     }
@@ -168,6 +170,8 @@ private Q_SLOTS:
     void affinityAtWrap();
     void rewrapMatches_data();
     void rewrapMatches();
+    void aligned_data();
+    void aligned();
     void emptyText();
     void severalFonts();
     void lineHeightOverride();
@@ -658,6 +662,121 @@ void TestAtramentTextLayout::rewrapMatches()
     // A default-constructed layout is shaped from scratch.
     compareLayouts(rewrapParagraph(*m_fonts.fonts, TextLayout{}, runs, styleOf(second)),
                    layoutParagraph(*m_fonts.fonts, u"", runs, styleOf(second)));
+}
+
+void TestAtramentTextLayout::aligned_data()
+{
+    QTest::addColumn<int>("align");
+    QTest::addColumn<float>("wrap"); // < 0: none
+    QTest::addColumn<float>("box");  // < 0: none
+    QTest::newRow("right, wrapped") << int(TextAlign::Right) << 90.0f << -1.0f;
+    QTest::newRow("centre, wrapped") << int(TextAlign::Center) << 90.0f << -1.0f;
+    QTest::newRow("right, in a wider box") << int(TextAlign::Right) << 90.0f << 140.0f;
+    QTest::newRow("centre, unwrapped in a box") << int(TextAlign::Center) << -1.0f << 400.0f;
+    QTest::newRow("right, unwrapped: the widest line") << int(TextAlign::Right) << -1.0f << -1.0f;
+    QTest::newRow("right, a box narrower than a line") << int(TextAlign::Right) << -1.0f << 20.0f;
+}
+
+void TestAtramentTextLayout::aligned()
+{
+    // Lines aligned in the paragraph's box: everything the layout gives moves with its line.
+    QFETCH(int, align);
+    QFETCH(float, wrap);
+    QFETCH(float, box);
+    using namespace std::string_literals;
+    auto near = [](const Rect &a, const Rect &b) {
+        return std::abs(a.left() - b.left()) < 1e-3f && std::abs(a.right() - b.right()) < 1e-3f
+               && std::abs(a.top() - b.top()) < 1e-3f && std::abs(a.bottom() - b.bottom()) < 1e-3f;
+    };
+    const std::u16string t = u"Zażółć gęślą jaźń\nŁódź i \u00a0\u00a0 ćma 👍🏽 koniec"s;
+    const int object = int(t.find(u'\u00a0'));
+    FontRun boxed = run(2, m_fonts.interRegular);
+    boxed.inlineBox = InlineBox{18, 12, 3};
+    const FontRun runs[] = {run(object, m_fonts.interRegular, 16, 1), boxed,
+                            run(int(t.size()) - object - 2, m_fonts.literataItalic, 18, 2)};
+    ParagraphStyle plain;
+    if (wrap >= 0)
+        plain.wrapWidth = wrap;
+    ParagraphStyle style = plain;
+    style.align = TextAlign(align);
+    if (box >= 0)
+        style.alignWidth = box;
+    const TextLayout left = layoutParagraph(*m_fonts.fonts, t, runs, plain);
+    const TextLayout l = layoutParagraph(*m_fonts.fonts, t, runs, style);
+    checkLayout(l);
+    QCOMPARE(l.size(), left.size());
+    QCOMPARE(l.align(), TextAlign(align));
+    const float boxWidth = box >= 0 ? box : wrap >= 0 ? wrap : left.size().width;
+    QCOMPARE(l.boxWidth(), boxWidth);
+    QVERIFY(l.lines().size() >= 2);
+    QCOMPARE(l.lines().size(), left.lines().size());
+    for (std::size_t i = 0; i < l.lines().size(); ++i) {
+        const TextLine &a = l.lines()[i];
+        const TextLine &b = left.lines()[i];
+        QCOMPARE(a.start, b.start);
+        QCOMPARE(a.end, b.end);
+        QCOMPARE(a.width, b.width);
+        QCOMPARE(b.x, 0.0f);
+        const float room = std::max(0.0f, boxWidth - a.width);
+        QVERIFY(std::abs(a.x - (TextAlign(align) == TextAlign::Center ? room / 2 : room)) < 1e-3f);
+        // Its glyphs, its carets.
+        for (std::uint32_t g = a.firstGlyph; g < a.firstGlyph + a.glyphCount; ++g)
+            QVERIFY(std::abs(l.glyphs()[g].position.x - (left.glyphs()[g].position.x + a.x)) < 1e-3f);
+        QVERIFY(std::abs(l.caretX(a.start) - a.x) < 1e-3f);
+        QVERIFY(std::abs(l.caretX(a.end, CaretAffinity::Upstream) - (left.caretX(b.end, CaretAffinity::Upstream) + a.x)) < 1e-3f);
+    }
+    for (int i = 0; i <= int(t.size()); i = l.nextCaretStop(i)) {
+        for (const CaretAffinity affinity : {CaretAffinity::Downstream, CaretAffinity::Upstream}) {
+            const float dx = l.lines()[std::size_t(l.lineIndex(i, affinity))].x;
+            QVERIFY(std::abs(l.caretX(i, affinity) - (left.caretX(i, affinity) + dx)) < 1e-3f);
+            // A hit test where the caret is drawn finds it.
+            const Rect r = l.caretRect(i, affinity);
+            CaretAffinity got = CaretAffinity::Downstream;
+            QVERIFY2(l.offsetAt(r.center(), &got) == i, qPrintable(u"offset %1"_s.arg(i)));
+            QCOMPARE(l.lineIndex(i, got), l.lineIndex(i, affinity));
+        }
+        if (i == int(t.size()))
+            break;
+    }
+    // Selection and glyph rectangles, the inline box.
+    const std::vector<Rect> sel = l.selectionRects({0, l.length()});
+    const std::vector<Rect> selLeft = left.selectionRects({0, l.length()});
+    QCOMPARE(sel.size(), selLeft.size());
+    for (std::size_t i = 0; i < sel.size(); ++i)
+        QVERIFY(near(sel[i], selLeft[i].translated({l.lines()[i].x, 0})));
+    const std::vector<LineRect> glyphs = l.glyphRects({2, l.length() - 2});
+    const std::vector<LineRect> glyphsLeft = left.glyphRects({2, l.length() - 2});
+    QCOMPARE(glyphs.size(), glyphsLeft.size());
+    for (std::size_t i = 0; i < glyphs.size(); ++i)
+        QVERIFY(near(glyphs[i].rect, glyphsLeft[i].rect.translated({l.lines()[std::size_t(glyphs[i].line)].x, 0})));
+    QCOMPARE(l.inlineBoxes().size(), std::size_t(1));
+    const PlacedInlineBox &placed = l.inlineBoxes().front();
+    QVERIFY(near(placed.bounds, left.inlineBoxes().front().bounds.translated({l.lines()[std::size_t(placed.line)].x, 0})));
+    QVERIFY(std::abs(placed.bounds.left() - l.caretX(object)) < 1e-3f);
+    // ↑/↓ by the drawn x: from the last line's start to the line above, at the same place.
+    const std::size_t last = l.lines().size() - 1;
+    const int start = l.lines()[last].start;
+    const float x = l.caretX(start);
+    const int above = l.offsetAbove(start, x);
+    const TextLine &up = l.lines()[last - 1];
+    QVERIFY(above >= up.start && above <= up.end);
+    // (A wrapped line's end is the next line's start: ↑ stops before it.)
+    const int stop = up.end == up.next ? l.previousCaretStop(up.end) : up.end;
+    for (int o = up.start; o <= stop; o = l.nextCaretStop(o)) {
+        QVERIFY(std::abs(l.caretX(o) - x) >= std::abs(l.caretX(above) - x) - 1e-3f);
+        if (o == stop)
+            break;
+    }
+    // Rewrapped to another alignment and back: as laid out directly.
+    compareLayouts(rewrapParagraph(*m_fonts.fonts, l, runs, plain), left);
+    compareLayouts(rewrapParagraph(*m_fonts.fonts, left, runs, style), l);
+    // The text system keeps them apart.
+    TextSystem system(m_fonts.fonts);
+    const auto cachedLeft = system.layout(t, runs, plain);
+    const auto cached = system.layout(t, runs, style);
+    QVERIFY(cachedLeft != cached);
+    QCOMPARE(cached->lines().front().x, l.lines().front().x);
+    QCOMPARE(system.layout(t, runs, style), cached);
 }
 
 void TestAtramentTextLayout::emptyText()

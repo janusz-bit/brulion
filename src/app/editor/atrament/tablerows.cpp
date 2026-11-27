@@ -447,11 +447,9 @@ at::AnyElement PageView::renderTableCell(std::size_t row, quint64 uid, const Tab
         std::move(body).child(*m_cellInput);
         return std::move(d).child(std::move(body));
     }
-    // (Aligned by placing the text, as wide as its lines, at the right or in the middle: a Text's
-    // own alignment moves its glyphs, not its links' hit regions nor its layout handle's offsets.)
     switch (shownAlign(grid, r, c)) {
-    case TableAlign::Right: std::move(body).flexRow().justifyEnd(); break;
-    case TableAlign::Center: std::move(body).flexRow().justifyCenter(); break;
+    case TableAlign::Right: std::move(body).textRight(); break;
+    case TableAlign::Center: std::move(body).textCenter(); break;
     default: break;
     }
     if (!cell.error.isEmpty())

@@ -24,6 +24,12 @@
 // or down from the line's baseline and its ascent and descent with them (the line's height counts
 // the moved run, as CSS's line box counts a `vertical-align`ed inline).
 //
+// Alignment (ParagraphStyle::align): each line is placed in the paragraph's box — at its left,
+// in its middle or at its right (TextLine::x) — and every position the layout gives is the placed
+// one: glyphs, carets, hit tests, ↑/↓, selection and glyph rectangles, inline boxes. Whoever draws
+// or asks the layout needs no offset of their own. The box is ParagraphStyle::alignWidth wide,
+// else the wrap width, else as wide as the widest line.
+//
 // Inline boxes (an icon, a checkbox in a line): a run with `inlineBox` is laid out as one box of
 // that size instead of glyphs — its text (U+FFFC, or no-break spaces reserved for it) keeps its
 // offsets but is never drawn. The line reserves the box's width, and its ascent and descent count
@@ -43,6 +49,9 @@
 #include <vector>
 
 namespace brulion::atrament {
+
+// Where a paragraph's lines sit in its box (ParagraphStyle::align).
+enum class TextAlign : std::uint8_t { Left, Center, Right };
 
 // The size of an inline box (logical px).
 struct InlineBox {
@@ -94,6 +103,7 @@ struct TextLine {
     float ascent = 0;
     float descent = 0;
     float width = 0; // without hanging spaces
+    float x = 0;     // where the line starts in the paragraph's box (its alignment)
     std::uint32_t firstGlyph = 0; // into glyphs()
     std::uint32_t glyphCount = 0;
 };
@@ -132,6 +142,12 @@ public:
     const std::u16string &text() const { return m_text; }
     int length() const { return int(m_text.size()); }
     std::optional<float> wrapWidth() const { return m_wrapWidth; }
+    // The box the lines are aligned in (ParagraphStyle::alignWidth, else the wrap width, else the
+    // widest line) and how.
+    float boxWidth() const { return m_boxWidth; }
+    TextAlign align() const { return m_align; }
+    // The widest line (without hanging spaces) and the lines' height: what the text needs, not
+    // its box (an aligned line may start further right).
     Size size() const { return m_size; }
     const std::vector<TextLine> &lines() const { return m_lines; }
     const std::vector<PositionedGlyph> &glyphs() const { return m_glyphs; }
@@ -178,6 +194,8 @@ private:
     friend struct Builder;
     std::u16string m_text;
     std::optional<float> m_wrapWidth;
+    float m_boxWidth = 0;
+    TextAlign m_align = TextAlign::Left;
     Size m_size;
     float m_minContentWidth = 0;
     float m_maxContentWidth = 0;
@@ -194,6 +212,10 @@ private:
 struct ParagraphStyle {
     std::optional<float> wrapWidth; // none: one line per mandatory break
     float lineHeight = 0; // logical px; 0: the fonts' own
+    // Each line's place in the paragraph's box, `alignWidth` wide (none: the wrap width, else the
+    // widest line); see "Alignment" above.
+    TextAlign align = TextAlign::Left;
+    std::optional<float> alignWidth = std::nullopt;
 };
 
 class FontCollection;

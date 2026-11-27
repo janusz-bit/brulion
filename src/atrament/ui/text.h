@@ -7,6 +7,10 @@
 //
 // A string converts to a text element by itself: `.child(u"Zażółć gęślą jaźń")`.
 //
+// Aligned right or centred (`textRight()`, `textCenter()`), each line goes where the paragraph's
+// layout places it in the element's box (TextLayout "Alignment"): its links' hit regions, its
+// inline objects, its layout handle's offsets and its nodes for screen readers with it.
+//
 // Links (hit regions in text, docs/ATRAMENT.md M2 "What is new"): `.link(range, onClick)` makes a
 // range of the text clickable — the pointing hand over it, underlined while hovered, a click (or a
 // finger's tap) runs `onClick` and goes no further, and a screen reader finds a link node named by
@@ -155,7 +159,8 @@ public:
 
 private:
     void buildRuns(Window &window);
-    std::shared_ptr<const TextLayout> layoutAt(std::optional<float> wrapWidth);
+    // `boxWidth`: the box aligned lines go in (none: the wrap width, else the widest line).
+    std::shared_ptr<const TextLayout> layoutAt(std::optional<float> wrapWidth, std::optional<float> boxWidth);
     void paintObjects(Rect bounds, Window &window);
 
     ArenaU16String m_text;

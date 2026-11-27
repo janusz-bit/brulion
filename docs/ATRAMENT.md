@@ -167,6 +167,23 @@ public:
 * `TextLayout`: a paragraph wrapped at a width — lines of glyph runs, ascent/descent/line height,
   and the editing queries: caret position for an offset, offset for a point, selection rectangles
   for a range, the next/previous grapheme and word boundary.
+* **Alignment** (a style's `textRight()` / `textCenter()`; `ParagraphStyle::align` and
+  `alignWidth`): the layout places each line in the paragraph's box itself (`TextLine::x`, the box
+  `TextLayout::boxWidth()`: `alignWidth`, else the wrap width, else the widest line), and every
+  position it gives is the placed one — glyphs, carets, hit tests, ↑/↓, selection and glyph
+  rectangles, inline boxes. Whoever draws or asks the layout adds no offset of its own
+  (`Window::paintText` has no alignment parameters any more): a right-aligned or centred `Text`'s
+  links' hit regions, its inline objects, its `TextLayoutHandle`'s offsets and its accessibility
+  bounds are where its glyphs are, and a `TextInput` aligns its text, caret, selection and
+  placeholder in its width. A `Text` aligns in its own box — a wrapping one at its wrap width, one
+  that does not wrap in the width prepaint gives it (laid out again when that differs); `size()`
+  stays the widest line, what the text needs. Decision: the alignment lives in the layout, not in
+  the painter — the painter's offset was the bug (tables placed their text instead), and a
+  second offset in every consumer would be the next one. Tested by
+  `tests/atrament/text/tst_atrament_text_layout` (`aligned`: every query against the left-aligned
+  layout moved by its line's x, rewrapping, the cache) and `tests/atrament/ui/tst_atrament_align`
+  (the glyphs' ink against a link's node and click, the handle's offsets, an object's box, wrapped
+  lines, a field's caret).
 * **Background shapes** (`TextBackground`, `ui/style.h`: a span's `style.background`): a pill
   (`pill`), a rounded box (`radius`) or a square box behind a span's glyphs, `paddingX` beyond them
   on each side, `inset` in from their extent — the fonts' ascent above and descent below the
@@ -1066,9 +1083,8 @@ scrolling, `tst_atrament_editor`) before the next:
    error, link previews), an ellipsis for a cell longer than its column, dragging the sideways
    scroll bar, the app's Alt+← / Alt+→ (Back, Forward) still taking those keys before the cell,
    Qt's table interfaces for screen readers (`QAccessibleTableInterface`: rows and columns counted,
-   a cell's coordinates). In Atrament itself: a `Text` aligned right or centred moves its glyphs
-   but not its links' hit regions nor its layout handle's offsets — cells are aligned by placing
-   their text instead.
+   a cell's coordinates). Each cell is aligned by Atrament's own text alignment ("Text": its links,
+   its layout handle's offsets and the caret a click puts where its glyphs are).
    **Pictures, files, embedded blocks and query results** (2026-11-27; `PageView::setDrawsMedia`,
    `src/app/editor/atrament/mediarows.cpp`, `queryrows.cpp`, `picturecache.h`; `AtramentView.
    drawsPictures` / `drawsFiles` / `drawsTransclusions` / `drawsQueries`, all on, and `mediaLook`).

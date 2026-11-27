@@ -13,6 +13,7 @@
 #include "layout/layout.h"
 #include "scene/scene.h"
 #include "text/fonts.h"
+#include "text/textlayout.h" // TextAlign
 #include "ui/platform.h"
 
 #include <array>
@@ -29,7 +30,6 @@ struct BoxShadow {
     float spreadRadius = 0;
 };
 
-enum class TextAlign : std::uint8_t { Left, Center, Right };
 enum class WhiteSpace : std::uint8_t { Normal, NoWrap };
 
 struct UnderlineStyle {

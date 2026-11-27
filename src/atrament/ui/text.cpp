@@ -159,11 +159,15 @@ void Text::buildRuns(Window &window)
     }
 }
 
-std::shared_ptr<const TextLayout> Text::layoutAt(std::optional<float> wrapWidth)
+std::shared_ptr<const TextLayout> Text::layoutAt(std::optional<float> wrapWidth, std::optional<float> boxWidth)
 {
     ParagraphStyle style;
     style.wrapWidth = m_whiteSpace == WhiteSpace::NoWrap ? std::nullopt : wrapWidth;
     style.lineHeight = m_lineHeight;
+    // Aligned in the element's box: the wrap width, or (not wrapping) the box prepaint gives.
+    style.align = m_align;
+    if (m_align != TextAlign::Left)
+        style.alignWidth = boxWidth;
     return m_app->textSystem().layout(std::u16string_view(m_text.data(), m_text.size()),
             std::span<const FontRun>(m_runs.data(), m_runs.size()), style);
 }
@@ -184,7 +188,7 @@ NodeId Text::requestLayout(Window &window, App &app)
                     wrap = std::max(0.0f, availableWidth.value);
                 else if (availableWidth.kind == AvailableSpace::Kind::MinContent)
                     wrap = 0.0f;
-                self->m_layout = self->layoutAt(wrap);
+                self->m_layout = self->layoutAt(wrap, std::nullopt);
                 Size size = self->m_layout->size();
                 if (knownWidth)
                     size.width = *knownWidth;
@@ -196,10 +200,12 @@ NodeId Text::requestLayout(Window &window, App &app)
 
 void Text::prepaint(Rect bounds, Window &window, App &)
 {
-    // The layout's last measure may have been at another width (min-content while sizing).
+    // The layout's last measure may have been at another width (min-content while sizing), and
+    // aligned lines go in the element's own box.
     const bool wraps = m_whiteSpace != WhiteSpace::NoWrap;
-    if (!m_layout || (wraps && (!m_layout->wrapWidth() || std::abs(*m_layout->wrapWidth() - bounds.width()) > 0.01f)))
-        m_layout = layoutAt(wraps ? std::optional<float>(bounds.width()) : std::nullopt);
+    if (!m_layout || (wraps && (!m_layout->wrapWidth() || std::abs(*m_layout->wrapWidth() - bounds.width()) > 0.01f))
+        || (m_align != TextAlign::Left && std::abs(m_layout->boxWidth() - bounds.width()) > 0.01f))
+        m_layout = layoutAt(wraps ? std::optional<float>(bounds.width()) : std::nullopt, bounds.width());
     if (m_layoutHandle) {
         m_layoutHandle->layout = m_layout;
         m_layoutHandle->bounds = bounds;
@@ -243,7 +249,7 @@ void Text::paintObjects(Rect bounds, Window &window)
         if (object.range.start != box.start || !object.object->paint)
             continue;
         const TextLine &line = lines[std::size_t(box.line)];
-        const Point at { bounds.left() + alignedLineX(line, m_align, bounds.width()), bounds.top() };
+        const Point at = bounds.origin; // (the box is where the layout aligned its line)
         InlineObjectPaint p;
         p.bounds = box.bounds.translated(at);
         if (!p.bounds.intersects(mask) && !p.bounds.isEmpty())
@@ -264,8 +270,7 @@ void Text::paint(Rect bounds, Window &window, App &)
         window.addAccessibilityText(text(), bounds, m_layout.get());
     if (!m_layout)
         return;
-    window.paintText(*m_layout, bounds.origin, std::span<const TextPaintStyle>(m_paint.data(), m_paint.size()),
-            m_align, bounds.width());
+    window.paintText(*m_layout, bounds.origin, std::span<const TextPaintStyle>(m_paint.data(), m_paint.size()));
     paintObjects(bounds, window);
     if (m_links.empty() || !m_linkState)
         return;

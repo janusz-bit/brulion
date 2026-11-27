@@ -152,6 +152,10 @@ std::uint64_t hashStyle(const ParagraphStyle &style, std::uint64_t h)
     h = hashCombine(h, style.wrapWidth.has_value());
     if (style.wrapWidth)
         h = hashFloat(*style.wrapWidth, h);
+    h = hashCombine(h, std::uint64_t(style.align));
+    h = hashCombine(h, style.alignWidth.has_value());
+    if (style.alignWidth)
+        h = hashFloat(*style.alignWidth, h);
     return hashFloat(style.lineHeight, h);
 }
 
@@ -159,7 +163,8 @@ bool sameStyle(const ParagraphStyle &a, const ParagraphStyle &b)
 {
     auto same = [](float x, float y) { return x == y || (std::isnan(x) && std::isnan(y)); };
     return a.wrapWidth.has_value() == b.wrapWidth.has_value() && (!a.wrapWidth || same(*a.wrapWidth, *b.wrapWidth))
-           && same(a.lineHeight, b.lineHeight);
+           && same(a.lineHeight, b.lineHeight) && a.align == b.align
+           && a.alignWidth.has_value() == b.alignWidth.has_value() && (!a.alignWidth || same(*a.alignWidth, *b.alignWidth));
 }
 
 } // namespace
