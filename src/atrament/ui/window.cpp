@@ -20,6 +20,7 @@ void Window::Frame::clear()
     dispatchNodes.clear();
     keyListeners.clear();
     longPressListeners.clear();
+    touchDragClaims.clear();
     actionListeners.clear();
     scrollTargets.clear();
     inputFocus = 0;

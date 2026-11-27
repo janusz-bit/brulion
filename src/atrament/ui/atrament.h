@@ -7,6 +7,7 @@
 #include "ui/accessibility.h"
 #include "ui/app.h"
 #include "ui/div.h"
+#include "ui/edgescroll.h"
 #include "ui/element.h"
 #include "ui/events.h"
 #include "ui/keymap.h"
