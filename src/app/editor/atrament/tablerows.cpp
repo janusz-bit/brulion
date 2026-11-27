@@ -33,6 +33,7 @@
 #include "editstyles.h"
 #include "pagecontroller.h"
 #include "tablelayout.h"
+#include "tablerows_p.h"
 #include "text/textsystem.h"
 
 #include <QCoreApplication>
@@ -64,27 +65,6 @@ QString tableText(const char *source)
 }
 
 } // namespace
-
-// The table of a row as last read: the role's map, its grid, the columns' natural widths and each
-// cell's rendering.
-struct PageView::TableEntry {
-    QVariantMap data;
-    TableGrid grid;
-    std::vector<float> widths;
-    std::vector<markdown::RenderedText> header;
-    std::vector<std::vector<markdown::RenderedText>> rows;
-    std::uint64_t frame = 0;
-    const markdown::RenderedText *rendered(int r, int c) const
-    {
-        if (c < 0 || c >= grid.columnCount())
-            return nullptr;
-        if (r == -1)
-            return &header[std::size_t(c)];
-        if (r < 0 || r >= grid.rowCount())
-            return nullptr;
-        return &rows[std::size_t(r)][std::size_t(c)];
-    }
-};
 
 std::size_t PageView::CellKeyHash::operator()(const CellKey &k) const noexcept
 {
@@ -415,14 +395,22 @@ at::AnyElement PageView::renderTableCell(std::size_t row, quint64 uid, const Tab
     // column on the left (TableBlockView's Rectangles); where the cell is, for clicks and ↑/↓.
     const at::Color top = firstBodyRow ? look.borderStrong : look.borderSubtle;
     const bool formulaTint = cell.formula && !edited;
+    // In the selected rectangle of cells; the cursor cell of it (outlined).
+    const bool picked = !edited && cellSelected(int(row), r, c);
+    const bool cursorCell = picked && m_cellSel.cells.cursorRow == r && m_cellSel.cells.cursorColumn == c;
+    if (picked)
+        std::move(d).selected(true);
     std::move(d).child(
-            at::canvas([self, key, top, header, c, edited, formulaTint](at::Rect b, at::Window &w, at::App &) {
+            at::canvas([self, key, top, header, c, edited, formulaTint, picked, cursorCell](at::Rect b, at::Window &w, at::App &) {
                 const TableLook &look = self->m_tableLook;
                 self->m_cellFrames[key].bounds = b;
                 if (edited)
                     w.paintQuad(b, at::Background::solid(look.input), at::Edges::all(2), look.focusRing, at::Corners::all(2));
                 else if (formulaTint)
                     w.paintQuad(b.inset(at::Edges::all(1)), at::Background::solid(look.formula), {}, at::transparent(), {});
+                if (picked)
+                    w.paintQuad(b.inset(at::Edges::all(1)), at::Background::solid(look.picked),
+                                cursorCell ? at::Edges::all(2) : at::Edges{}, look.focusRing, {});
                 if (!header)
                     w.paintQuad(at::Rect::fromXYWH(b.left(), b.top(), b.width(), 1), at::Background::solid(top), {},
                                 at::transparent(), {});
@@ -430,6 +418,13 @@ at::AnyElement PageView::renderTableCell(std::size_t row, quint64 uid, const Tab
                     w.paintQuad(at::Rect::fromXYWH(b.left(), b.top(), 1, b.height()),
                                 at::Background::solid(look.borderSubtle), {}, at::transparent(), {});
             })
+                    // The selection's cursor cell shown (sideways in the table, the table in the page).
+                    .onPrepaint([self, key](at::Rect b, at::Window &w, at::App &) {
+                        if (self->m_revealCell && *self->m_revealCell == key) {
+                            self->m_revealCell.reset();
+                            w.revealRect(b);
+                        }
+                    })
                     .absolute()
                     .inset(0));
     // Its text, as wide as the cell (a column: the text stretched across it), aligned as its
@@ -513,11 +508,14 @@ void PageView::connectTables(at::Context<PageView> &cx)
     m_tableConnections.list.push_back(QObject::connect(controller, &PageController::editingRowChanged, controller, [app, self] {
         app->updateEntity<PageView>(self, [](PageView &v, at::Context<PageView> &c) { v.tableEditingRowChanged(c); });
     }));
-    // Blocks selected around the table (Shift+click, the QML list's keys): the cell's editing ends.
+    // Blocks selected around the table (Shift+click, the QML list's keys): the cell's editing ends,
+    // as does a cell selection.
     m_tableConnections.list.push_back(QObject::connect(controller, &PageController::selectionChanged, controller, [app, self] {
         app->updateEntity<PageView>(self, [](PageView &v, at::Context<PageView> &c) {
             if (v.m_cellUid && v.m_controller && v.m_controller->selectionCount() > 0)
                 v.stopEditingCell(c);
+            if (v.m_cellSel.uid && !v.m_keepCellSelection && v.m_controller && v.m_controller->selectionCount() > 0)
+                v.clearCellSelection(c);
         });
     }));
 }
@@ -528,9 +526,10 @@ void PageView::tableEditingRowChanged(at::Context<PageView> &cx)
     const int row = ctl ? ctl->editingRow() : -1;
     if (row < 0)
         return;
-    // Another block edited: the cell's editing ends.
+    // Another block edited: the cell's editing ends, a cell selection too.
     if (m_cellUid)
         stopEditingCell(cx);
+    clearCellSelection(cx);
     if (!isTable(row) || ctl->readOnly())
         return;
     // The controller edits a table Atrament draws (↑/↓ from the block above or below, the QML
@@ -590,7 +589,8 @@ bool PageView::editCell(int row, int tableRow, int column, int cursor, at::Conte
     const QString shown = cell->display;
     const bool formula = cell->formula;
     const quint64 uid = m_model->uidAt(row);
-    // No block is edited or selected meanwhile (TableBlockView.startCell).
+    // No block is edited or selected meanwhile (TableBlockView.startCell), no cells.
+    clearCellSelection(cx);
     m_cellUid = 0;
     m_controller->setSelectedRow(-1);
     m_controller->stopEditing();
@@ -760,8 +760,17 @@ void PageView::cellClicked(std::size_t row, int tableRow, int column, const at::
         m_dragSelected = false;
         return;
     }
+    // Shift+click with a cell of this table edited or cells selected: the cells up to this one.
+    const quint64 uid = m_model->uidAt(int(row));
+    if (click.up.modifiers.shift && !m_touchGrips && (m_cellUid == uid || m_cellSel.uid == uid)) {
+        if (m_cellUid == uid)
+            extendCellsFromEdited(tableRow, column, cx);
+        else
+            selectCells(int(row), m_cellSel.cells.anchorRow, m_cellSel.cells.anchorColumn, tableRow, column, cx);
+        return;
+    }
     // (The edited cell's field places its caret itself.)
-    if (m_cellUid && m_cellUid == m_model->uidAt(int(row)) && m_cellRow == tableRow && m_cellColumn == column)
+    if (m_cellUid && m_cellUid == uid && m_cellRow == tableRow && m_cellColumn == column)
         return;
     const int cursor = click.fromAccessibility ? -1 : cellCursorAt(int(row), tableRow, column, click.up.position);
     if (onCellEditRequest && onCellEditRequest(int(row), tableRow, column, cursor, click.up.modifiers))
@@ -840,12 +849,11 @@ bool PageView::tableKey(const at::Keystroke &k, at::Window &, at::Context<PageVi
             return true;
         }
         if (k.key == u"v" && !m.shift && ctl->clipboardCellCount() >= 2) {
-            // Several cells: pasted from this one down and right (TableBlockView's pasteCells()).
+            // Several cells: pasted from this one down and right, then selected (TableBlockView's
+            // pasteCells(); rows added below the last one).
             commitCellComposition(cx);
-            const QList<int> rows = grid.rowsFrom(r);
             stopEditingCell(cx);
-            ctl->pasteClipboardCells(row, rows, c, 1, 1);
-            editCell(row, r, c, -1, cx);
+            pasteCellsAt(row, r, c, 1, 1, cx);
             return true;
         }
         return false;
@@ -909,6 +917,17 @@ bool PageView::tableKey(const at::Keystroke &k, at::Window &, at::Context<PageVi
             ctl->setSelectedRow(now);
         if (onEscape)
             onEscape();
+        return true;
+    }
+    if ((k.key == u"up" || k.key == u"down" || k.key == u"left" || k.key == u"right") && m.shift && !ctrl && !m.alt) {
+        // Shift+arrows (a horizontal one at the text's edge): the cell is left, the cells from it to
+        // the one beside selected (TableBlockView's arrow()).
+        if (composing)
+            return false;
+        if ((k.key == u"left" && caret > 0) || (k.key == u"right" && caret < length))
+            return false;
+        const auto [toRow, toColumn] = neighbourCell(grid, r, c, k.key);
+        extendCellsFromEdited(toRow, toColumn, cx);
         return true;
     }
     if ((k.key == u"up" || k.key == u"down") && !m.any()) {

@@ -102,8 +102,14 @@ AtramentView {
         cellPadding: Theme.space3,
         radius: Theme.radius,
         buttonHeight: Theme.controlHeightSm,
-        buttonTextSize: Theme.textSm
+        buttonTextSize: Theme.textSm,
+        picked: Theme.alpha(Theme.accent, Theme.dark ? 0.26 : 0.16)
     })
+    // The toasts of a table's cell selection (copied, cut, pasted cells; nothing to paste).
+    onNoticeRequested: (text, level) => {
+        if (root.editor)
+            root.editor.notice(text, level, null)
+    }
     // A click on a cell edits it (Shift / Ctrl+click and the touch selection mode select blocks).
     onTableCellTapped: (row, tableRow, column, cursor, modifiers) => {
         if (!root.editor || root.editor.blockTappedWith(row, modifiers) || root.editor.readOnlyRefuses())
@@ -442,8 +448,9 @@ AtramentView {
     Keys.onShortcutOverride: (event) => {
         const key = event.key
         const modifiers = event.modifiers
+        // (A table's cell selection: its Ctrl keys too.)
         if (!root.editor || !root.editor.controller || root.editor.controller.editingRow >= 0
-                || root.editor.controller.selectedRow < 0 || !(modifiers & Qt.ControlModifier))
+                || (root.editor.controller.selectedRow < 0 && !root.cellsSelected) || !(modifiers & Qt.ControlModifier))
             return
         switch (key) {
         case Qt.Key_A: case Qt.Key_C: case Qt.Key_X: case Qt.Key_V: case Qt.Key_Z: case Qt.Key_Y:

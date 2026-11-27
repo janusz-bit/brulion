@@ -136,6 +136,9 @@ class AtramentView : public brulion::atrament::AtramentItem {
     // buttonTextSize } (TableBlockView's Theme values; pageview.h TableLook).
     Q_PROPERTY(bool drawsTables MEMBER m_drawsTables NOTIFY styleChanged FINAL)
     Q_PROPERTY(QVariantMap tableLook MEMBER m_tableLook NOTIFY styleChanged FINAL)
+    // "page": cells of a table drawn by Atrament are selected (their keys are the page's: its Ctrl
+    // keys win over the application's shortcuts).
+    Q_PROPERTY(bool cellsSelected READ cellsSelected NOTIFY cellSelectionChanged FINAL)
 
     // "page", the edited text's extras (docs/ATRAMENT.md M2 step 2: spell marks, reminder chips,
     // Vim): the app's SpellCheck (the QML singleton; null: no marks) and the marks' colour
@@ -210,6 +213,7 @@ public:
     // "page": edits cell (`tableRow`, `column`) (−1: the header) of the table in `row` with the caret
     // at `cursor` of its text (−1: its end), when Atrament draws that table.
     Q_INVOKABLE bool editTableCell(int row, int tableRow, int column, int cursor);
+    bool cellsSelected() const { return m_cellsSelected; }
     // "page": what a query block's results answer for a link of item `item` ("open:": the item)
     // — QueryResultModel::activateLink / open: { action: "scrollTo", row } …
     Q_INVOKABLE QVariantMap activateQueryLink(int row, int item, const QString &link);
@@ -280,6 +284,10 @@ Q_SIGNALS:
     void tableLinkClicked(int row, int tableRow, int column, const QString &link, qreal x, qreal y);
     void tableCellMenuRequested(int row, int tableRow, int column, int rowCount, int columnCount,
                                 const QString &align, qreal sceneX, qreal sceneY);
+    // The cell selection was made, moved or ended; a toast its commands ask for (BlockEditor.notice:
+    // "success", "info", "error").
+    void cellSelectionChanged();
+    void noticeRequested(const QString &text, const QString &level);
     // "page", pictures and files (EmbedView's signals): an embed of `row` clicked — BlockListModel's
     // `embeds` entry: a picture (the viewer; one from the internet: WebPictureViewer), a PDF (the
     // PDF viewer), a file; a picture from the internet's menu asked for at a point of this item.
@@ -393,6 +401,7 @@ private:
     void connectTables();
     bool m_drawsTables = true;
     QVariantMap m_tableLook;
+    bool m_cellsSelected = false;
     // The edited text's extras.
     void applyExtras();
     QPointer<QObject> m_spellCheck;

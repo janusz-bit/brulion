@@ -837,6 +837,7 @@ void AtramentView::applyTableStyle()
         look.error = colour("error", look.error);
         look.input = colour("input", look.input);
         look.hover = colour("hover", look.hover);
+        look.picked = colour("picked", look.picked);
         look.fontFamily = family("fontFamily", look.fontFamily);
         look.monoFamily = family("monoFamily", look.monoFamily);
         look.fontSize = number("fontSize", look.fontSize);
@@ -888,6 +889,16 @@ void AtramentView::connectTables()
             const QPointF scene = guard->mapToScene(QPointF(p.x, p.y));
             Q_EMIT guard->tableCellMenuRequested(row, tableRow, column, grid.rowCount(), grid.columnCount(), align,
                                                  scene.x(), scene.y());
+        };
+        page.onNotice = [guard](const QString &text, const QString &level) {
+            if (guard)
+                Q_EMIT guard->noticeRequested(text, level);
+        };
+        page.onCellSelectionChanged = [guard](bool selected) {
+            if (!guard)
+                return;
+            guard->m_cellsSelected = selected;
+            Q_EMIT guard->cellSelectionChanged();
         };
     });
 #endif

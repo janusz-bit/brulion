@@ -93,6 +93,24 @@ QList<int> TableGrid::rowsFrom(int r) const
     return out;
 }
 
+QList<int> TableGrid::rowsBetween(int from, int to) const
+{
+    QList<int> out;
+    const int lo = std::max(-1, std::min(from, to));
+    const int hi = std::min(rowCount() - 1, std::max(from, to));
+    for (int n = lo; n <= hi; ++n) {
+        if (n == lo || n == hi || n == -1 || rowShown(n))
+            out.append(n);
+    }
+    return out;
+}
+
+int TableGrid::rowAfter(int r, int steps) const
+{
+    const QList<int> down = rowsFrom(r);
+    return down.isEmpty() ? r : down.at(std::clamp(steps, 0, int(down.size()) - 1));
+}
+
 TableGrid readTableGrid(const QVariantMap &data)
 {
     TableGrid g;

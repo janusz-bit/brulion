@@ -50,6 +50,12 @@ struct TableGrid {
     // The rows shown from row `r` down to the last one (`r` itself whatever the filters say):
     // a paste's rows (BlockViews::tableRowsFrom).
     QList<int> rowsFrom(int r) const;
+    // The rows shown between `from` and `to` (either way round), both ends whatever the filters
+    // say, from the top one down: a cell selection's rows (BlockViews::tableRowsBetween).
+    QList<int> rowsBetween(int from, int to) const;
+    // The row `steps` shown rows below `r` (rowsFrom(r)'s; its last one past the end:
+    // BlockViews::tableRowAfter).
+    int rowAfter(int r, int steps) const;
 };
 
 // The `tableData` role as a grid; an empty grid for anything else.

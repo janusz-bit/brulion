@@ -263,12 +263,21 @@ public:
     {
     }
     Style &styleRef() { return m_style; }
+    // `f` runs in prepaint with the bounds too, where the scroll containers around are known (a
+    // rectangle revealed: Window::revealRect) and hitboxes go.
+    Canvas &&onPrepaint(Painter f) &&
+    {
+        m_prepaint = f;
+        return std::move(*this);
+    }
     NodeId requestLayout(Window &window, App &app) override;
+    void prepaint(Rect bounds, Window &window, App &app) override;
     void paint(Rect bounds, Window &window, App &app) override;
 
 private:
     Style m_style;
     Painter m_painter;
+    Painter m_prepaint;
 };
 
 inline Canvas canvas(Canvas::Painter painter)

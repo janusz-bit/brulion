@@ -1081,7 +1081,7 @@ scrolling, `tst_atrament_editor`) before the next:
    stops — past the header or the last row the block above / below (↑/↓ from those edit the
    header's or the last row's cell under the caret), ←/→ at the text's edge the cell beside,
    Ctrl+Enter a row below, Alt+↑/↓ and Alt+←/→ move the row / the column with the cell, Alt+Enter
-   the link at the caret, Ctrl+V of several cells pastes them from this one, Esc cancels the cell's
+   the link at the caret, Ctrl+V of several cells pastes them from this one (then selected), Esc cancels the cell's
    typing (`cancelTableCell`) and selects the table, Ctrl+Z / Ctrl+Y the page's undo with the cell
    edited on (the touch toolbar's undo in a cell). "+ Row" / "+ Column" under the grid while a cell
    is edited or the table is selected (always on touch UIs); a right-click on a cell opens the block
@@ -1091,9 +1091,28 @@ scrolling, `tst_atrament_editor`) before the next:
    named by its text and described by its column's header, the edited one a text input "Cell …". A
    table showing its filter row stays the QML view's (its fields), as every table does with
    `drawsTables` off. Tested by `tests/atrament/editor/tst_atrament_tables` (TableSelfTest's checks
-   of the keys among them). **Not yet** for tables: the cell selection (Shift+arrows and Shift+click
-   over cells; copying, cutting, emptying and pasting a rectangle; typing over a selected cell), the
-   filter row, the block menu's items that edit a cell afterwards (a new row's or column's: they
+   of the keys and of the cell selection among them).
+   * **The cell selection** (`tableselection.cpp`; TableBlockView's): Shift+arrows from the edited
+     cell (a horizontal one at its text's edge) and Shift+click on a cell of its table select a
+     rectangle from it; Shift+click moves its end. While it is there no cell is edited and its keys
+     are the page's (the window's root key listener, before the block selection's:
+     `PageView::cellRangeKey`): the arrows move it, with Shift its end (the header and the last row
+     stop), Home / End the row's first / last cell, with Ctrl the table's, Tab / Shift+Tab the
+     next / previous cell (a new row after the last cell), Enter / F2 edit the cursor cell, a typed
+     character edits it with that character in place of its text (written at once), Delete /
+     Backspace empty the cells, Ctrl+C / Ctrl+X copy and cut them as TSV, Ctrl+V pastes the
+     clipboard over them (TSV, CSV, a Markdown table, lines; one value fills the selection; rows
+     added past the last) with the pasted cells selected after — as a paste of several cells from
+     the edited cell does —, Ctrl+A every cell, Ctrl+Z / Ctrl+Y the page's undo with the selection
+     kept, Esc ends it with the table selected; each change one undo step (`PageController.
+     copyTableCells` / `clearTableCells` / `pasteClipboardCells`), its toasts through
+     `PageView::onNotice` (`AtramentView.noticeRequested` → `BlockEditor.notice`, in TableBlockView's
+     translations). It ends when a cell or a block is edited or blocks are selected. Drawn in the
+     cells: Theme.accent's tint, the cursor cell outlined in the focus ring and scrolled into view,
+     also sideways (`canvas(…).onPrepaint(f)`, new in Atrament: a painter that also runs in prepaint,
+     where the scroll containers around are known); selected cells are selected for screen
+     readers. Its Ctrl keys win over the application's shortcuts (`AtramentView.cellsSelected`).
+   **Not yet** for tables: the filter row, the block menu's items that edit a cell afterwards (a new row's or column's: they
    change the table, `BlockEditor.editTableCell` finds no QML table to edit), Enter on a selected
    table editing its first cell, the touch toolbar's cell tools (the next cell, undo / redo, More)
    and the cell kept above them, a long press on a cell's chip (its menu), tooltips (a formula's
