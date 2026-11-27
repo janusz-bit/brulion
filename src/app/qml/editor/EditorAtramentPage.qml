@@ -20,6 +20,7 @@ AtramentView {
     caretColor: Theme.accent
     selectionColor: Theme.selection
     placeholderText: qsTr("Type / for commands")
+    editLabel: qsTr("Block text")
     bandColor: Theme.bgSelected
     ringColor: Theme.focusRing
     bandRadius: Theme.radiusSm

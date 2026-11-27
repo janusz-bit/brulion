@@ -261,7 +261,7 @@ void AtramentView::applyStyle()
         callouts.radius = float(m_calloutRadius);
         page.setCalloutLook(callouts);
         page.setEditLook(atColor(m_caretColor), atColor(m_selectionColor),
-                         std::u16string(u16View(m_placeholderText)), cx);
+                         std::u16string(u16View(m_placeholderText)), std::u16string(u16View(m_editLabel)), cx);
         cx.notify();
     });
 #endif

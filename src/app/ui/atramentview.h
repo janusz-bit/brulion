@@ -59,6 +59,7 @@ class AtramentView : public brulion::atrament::AtramentItem {
     Q_PROPERTY(QColor caretColor MEMBER m_caretColor NOTIFY styleChanged FINAL)
     Q_PROPERTY(QColor selectionColor MEMBER m_selectionColor NOTIFY styleChanged FINAL)
     Q_PROPERTY(QString placeholderText MEMBER m_placeholderText NOTIFY styleChanged FINAL)
+    Q_PROPERTY(QString editLabel MEMBER m_editLabel NOTIFY styleChanged FINAL)
     // Selected blocks' band (Theme.bgSelected, Theme.focusRing, Theme.radiusSm).
     Q_PROPERTY(QColor bandColor MEMBER m_bandColor NOTIFY styleChanged FINAL)
     Q_PROPERTY(QColor ringColor MEMBER m_ringColor NOTIFY styleChanged FINAL)
@@ -157,6 +158,7 @@ private:
     QColor m_caretColor{0x3b, 0x5b, 0xdb};
     QColor m_selectionColor{0x3b, 0x5b, 0xdb, 0x40};
     QString m_placeholderText;
+    QString m_editLabel;
     bool m_suggestionsOpen = false;
     QColor m_bandColor{0x3b, 0x5b, 0xdb, 0x22};
     QColor m_ringColor{0x3b, 0x5b, 0xdb};

@@ -152,9 +152,10 @@ public:
     const atrament::Entity<atrament::TextInput> *input() const { return m_input ? &*m_input : nullptr; }
     // The edited text's spans (the editor's highlighting of the block's Markdown); none: plain.
     void setEditStyler(atrament::TextInput::Styler styler, atrament::Context<PageView> &cx);
-    // The field's look: its caret and selection colours, the placeholder of an empty block.
+    // The field's look: its caret and selection colours, the placeholder of an empty block, its
+    // name for screen readers ("Block text", InlineEditor's).
     void setEditLook(atrament::Color caret, atrament::Color selection, std::u16string placeholder,
-                     atrament::Context<PageView> &cx);
+                     std::u16string label, atrament::Context<PageView> &cx);
     // Where a click or a tap on drawn row `row` at window point `p` puts the caret: an offset of
     // the block's `editText` (−1: not known — the row was not drawn in the last frame).
     int editCursorAt(int row, atrament::Point p) const;
@@ -240,6 +241,7 @@ private:
     atrament::Color m_editCaret = atrament::rgb(0x3b5bdb);
     atrament::Color m_editSelection = atrament::rgba(0x3b5bdb40);
     std::u16string m_editPlaceholder;
+    std::u16string m_editLabel = u"Block text";
     std::uint64_t m_frame = 0;
     atrament::EntityId m_selfId = 0;
     atrament::App *m_app = nullptr;

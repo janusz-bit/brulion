@@ -118,6 +118,7 @@ private Q_SLOTS:
     void shiftArrowsSelectBlocks();
     void bulletAndMenu();
     void calloutDrawnAndEdited();
+    void editedBlockForScreenReaders();
 };
 
 void TestAtramentEditing::clickEditsAtTheCharacter()
@@ -544,6 +545,23 @@ void TestAtramentEditing::calloutDrawnAndEdited()
     h.tw.simulateTyping(u"dalej");
     QCOMPARE(h.model()->rowCount(), 2);
     QVERIFY2(h.editText(0).endsWith(u"\n> dalej"_s), qPrintable(h.editText(0)));
+}
+
+void TestAtramentEditing::editedBlockForScreenReaders()
+{
+    Harness h(u"- Zażółć **gęślą**\n- drugi\n"_s);
+    h.tw.simulateTyping(u""); // (nothing focused yet)
+    for (at::Window *w : {&*h.app.windows().front()})
+        w->setAccessibilityEnabled(true);
+    h.tw.settle();
+    h.clickInto(0, 2);
+    const QString tree = str(h.app.windows().front()->accessibilityTree().dump());
+    // The edited block: a text input named like InlineEditor, its value the block's Markdown.
+    QVERIFY2(tree.contains(u"textInput \"Block text\""_s), qPrintable(tree));
+    QVERIFY2(tree.contains(u"Zażółć **gęślą**"_s), qPrintable(tree));
+    // A row being read: its text, no button per row.
+    QVERIFY2(tree.contains(u"drugi"_s), qPrintable(tree));
+    QVERIFY2(!tree.contains(u"button \"drugi"_s), qPrintable(tree));
 }
 
 QTEST_MAIN(TestAtramentEditing)

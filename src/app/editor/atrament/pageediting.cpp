@@ -118,15 +118,18 @@ void PageView::setEditStyler(at::TextInput::Styler styler, at::Context<PageView>
         m_input->update(cx.app(), [this](at::TextInput &t, at::Context<at::TextInput> &c) { t.setStyler(m_editStyler, c); });
 }
 
-void PageView::setEditLook(at::Color caret, at::Color selection, std::u16string placeholder,
+void PageView::setEditLook(at::Color caret, at::Color selection, std::u16string placeholder, std::u16string label,
                            at::Context<PageView> &cx)
 {
     m_editCaret = caret;
     m_editSelection = selection;
     m_editPlaceholder = std::move(placeholder);
+    if (!label.empty())
+        m_editLabel = std::move(label);
     if (m_input)
         m_input->update(cx.app(), [this](at::TextInput &t, at::Context<at::TextInput> &c) {
             t.setColors(m_editCaret, m_editSelection, c);
+            t.setLabel(m_editLabel, c);
         });
     cx.notify();
 }
@@ -160,6 +163,7 @@ void PageView::loadInput(int row, int cursor, at::Context<PageView> &cx)
         options.caretColor = m_editCaret;
         options.selectionColor = m_editSelection;
         options.placeholder = m_editPlaceholder;
+        options.label = m_editLabel;
         m_input = cx.newEntity<at::TextInput>(std::move(options));
         m_inputSubscriptions.push_back(cx.subscribe<at::TextInput::Changed>(
                 *m_input, [](PageView &v, const at::TextInput::Changed &, at::Context<PageView> &c) { v.inputChanged(c); }));
