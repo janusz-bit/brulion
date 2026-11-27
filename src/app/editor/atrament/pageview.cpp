@@ -446,8 +446,27 @@ bool PageView::reveal(at::Rect r, float margin, float viewportHeight, at::Contex
         dy = r.top() - margin;
     else if (r.bottom() > viewportHeight - margin)
         dy = std::min(r.bottom() - (viewportHeight - margin), r.top() - margin);
-    if (std::abs(dy) < 0.5f || !m_handle.scrollBy(dy))
+    if (std::abs(dy) < 0.5f)
         return false;
+    // By rows: the view's new top as an offset into the row under the area (rows below the view
+    // are estimates, and a pixel scroll stops where the last frame's estimated height ends).
+    const int row = rowAtY(r.top());
+    const std::optional<at::Rect> bounds = row >= 0 ? rowBounds(row) : std::nullopt;
+    if (bounds) {
+        // (The list fills the window from its top: the view's top is at 0.)
+        m_handle.scrollToAnchor(std::size_t(row), dy - bounds->top());
+    } else if (!m_handle.scrollBy(dy)) {
+        return false;
+    }
+    cx.notify();
+    return true;
+}
+
+bool PageView::revealRow(int row, at::Context<PageView> &cx)
+{
+    if (!m_model || row < 0 || row >= m_model->rowCount() || m_extents.isHidden(std::size_t(row)))
+        return false;
+    m_handle.scrollToRow(std::size_t(row), at::ListPosition::Nearest);
     cx.notify();
     return true;
 }

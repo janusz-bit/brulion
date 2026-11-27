@@ -7,7 +7,7 @@ import Brulion
 // keys parts) against the page drawn by Atrament (docs/ATRAMENT.md M2: "the editor's existing
 // behaviour tests pass against it"), in the editor playground (`brulion --editor --editor-script
 // atramenttest`; ctest tst_editor_qml_atrament, desktop, and tst_editor_qml_atrament_touch, a phone
-// with --touch). The BlockEditor draws its rows with Atrament (`forceAtrament`: the device's
+// with --touch). The BlockEditor draws its rows with Atrament (`--atrament-editor`: the device's
 // setting is never written) and every key, every typed letter and every word an input method
 // composes goes the way a user's does: through the window to the AtramentView, its edited block's
 // field and PageView's keys — none of BlockEditor's key functions are called. Checked: a click / tap
@@ -148,7 +148,7 @@ QtObject {
     }
     function reading(): void {
         if (window.at()) {
-            editor.forceAtrament = true
+            test.check(DevTools.atramentEditor, "the app was started with --atrament-editor")
             test.r = test.rowOf("Wywieźć gruz")
         }
         if (window.at()) window.waitStep(test.view() !== null && test.r > 0 && test.rowTop(test.r) >= 0,
@@ -157,9 +157,15 @@ QtObject {
         // block scrolled into view first: a phone's screen ends above it).
         if (window.at()) {
             const row = test.rowOf("Ekipa może")
-            QmlCall.call5(test.view(), "revealArea", 0, test.rowTop(row), 1, test.rowHeight(row), 24)
+            editor.ensureRowVisible(row)
         }
-        if (window.at()) window.waitStep(test.rowInView(test.rowOf("Ekipa może")), "the block to click is in view")
+        if (window.at()) {
+            const row = test.rowOf("Ekipa może")
+            const top = test.rowTop(row)
+            const height = test.rowHeight(row)
+            const view = test.view().height
+            window.waitStep(test.rowInView(row), "the block to click is in view: " + top + " + " + height + " in " + view)
+        }
         if (window.at()) {
             const row = test.rowOf("Ekipa może")
             const v = test.view()

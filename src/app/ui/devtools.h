@@ -67,6 +67,9 @@ class DevTools : public QObject {
     Q_PROPERTY(QString section READ section CONSTANT FINAL)
     Q_PROPERTY(bool editor READ editor CONSTANT FINAL)
     Q_PROPERTY(QString editorScript READ editorScript CONSTANT FINAL)
+    /// `--atrament-editor`: the block editor drawn by Atrament whatever the device's setting
+    /// (AppSettings.editorAtrament; the self-tests never write it) — where Atrament is built.
+    Q_PROPERTY(bool atramentEditor READ atramentEditor CONSTANT FINAL)
     Q_PROPERTY(QString theme READ theme CONSTANT FINAL)
     /// --accent: a preset's name, "custom" for a colour (customAccent), "" without the option.
     Q_PROPERTY(QString accentName READ accentName CONSTANT FINAL)
@@ -101,6 +104,7 @@ public:
     QString section() const { return m_section; }
     bool editor() const { return m_editor; }
     QString editorScript() const { return m_editorScript; }
+    bool atramentEditor() const { return m_atramentEditor; }
     QString theme() const { return m_theme; }
     QString accentName() const { return m_accentName; }
     QString customAccent() const { return m_customAccent; }
@@ -142,6 +146,7 @@ private:
 
     bool m_gallery = false;
     bool m_atrament = false;
+    bool m_atramentEditor = false;
     QString m_section;
     bool m_editor = false;
     QString m_editorScript;

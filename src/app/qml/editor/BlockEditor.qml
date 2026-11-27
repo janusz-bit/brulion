@@ -127,10 +127,8 @@ FocusScope {
     /// Atrament is built: DeviceInfo.atrament; docs/ATRAMENT.md M2): pages and journal days (an
     /// autoHeight editor: its Atrament page is as tall as its blocks, the journal list scrolls).
     /// The list stays, without rows, as the holder of the keyboard.
-    readonly property bool usesAtrament: DeviceInfo.atrament && (AppSettings.editorAtrament || forceAtrament) && !usesPageItem
-    /// Draws the rows with Atrament whatever the setting (the playground's `atramenttest`: the
-    /// self-test never writes the device's settings).
-    property bool forceAtrament: false
+    /// (`--atrament-editor`: whatever the setting — the self-tests never write the device's settings.)
+    readonly property bool usesAtrament: DeviceInfo.atrament && (AppSettings.editorAtrament || DevTools.atramentEditor) && !usesPageItem
     /// The blocks' height in the page drawn by Atrament (EditorAtramentPage.contentHeight): an
     /// autoHeight editor (a journal day) is as tall as them.
     property real atramentContentHeight: 0
@@ -756,6 +754,10 @@ FocusScope {
                 return
             if (editor.pageView) {
                 editor.pageView.page.ensureRowVisible(row)
+                return
+            }
+            if (editor.atramentPage) {
+                QmlCall.call1(editor.atramentPage, "revealRow", row)
                 return
             }
             if (row >= list.count)

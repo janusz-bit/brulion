@@ -134,6 +134,8 @@ public:
     // Scrolls the page the least that shows [x, y, w, h] of this item with `margin` around it (a
     // hosted delegate's caret: BlockEditor.ensureVisible).
     Q_INVOKABLE bool revealArea(qreal x, qreal y, qreal w, qreal h, qreal margin);
+    // Scrolls the page the least that shows model row `row` whole (BlockEditor.ensureRowVisible).
+    Q_INVOKABLE bool revealRow(int row);
     // Where model row `row` is in this item by the last frame (its estimated height until it is
     // measured), −1 for a row not laid out (hidden, or before the first frame): the self-tests'
     // "the row is in view" (qml/dev/AtramentSelfTest.qml).

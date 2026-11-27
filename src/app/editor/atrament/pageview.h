@@ -244,6 +244,9 @@ public:
     // view of `viewportHeight` (a hosted delegate's caret: BlockEditor.ensureVisible); whether it
     // moved.
     bool reveal(atrament::Rect r, float margin, float viewportHeight, atrament::Context<PageView> &cx);
+    // Scrolls the least that shows model row `row` whole (measured first; a row taller than the
+    // view at its top) — BlockEditor.ensureRowVisible; false for a hidden row.
+    bool revealRow(int row, atrament::Context<PageView> &cx);
     // The rendered text of drawn row `row` as laid out in the last frame (nullptr: not drawn).
     const atrament::TextLayoutHandle *rowText(int row) const;
     // Where drawn row `row`'s first link whose href contains `hrefPart` is, and its task's box (the

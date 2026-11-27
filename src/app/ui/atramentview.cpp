@@ -162,6 +162,21 @@ QRectF AtramentView::editCaretRect() const
     return {};
 }
 
+bool AtramentView::revealRow(int row)
+{
+    bool moved = false;
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_page)
+        m_page->entity.update(runtime().app, [&](brulion::editor::atr::PageView &page,
+                                                 at::Context<brulion::editor::atr::PageView> &cx) {
+            moved = page.revealRow(row, cx);
+        });
+#else
+    Q_UNUSED(row)
+#endif
+    return moved;
+}
+
 qreal AtramentView::rowTop(int row) const
 {
 #ifdef BRULION_HAS_ATRAMENT_EDITOR

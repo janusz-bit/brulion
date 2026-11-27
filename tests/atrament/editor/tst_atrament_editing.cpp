@@ -134,6 +134,7 @@ private Q_SLOTS:
     void anotherPageOpensAtItsTop();
     void pointsOfLinksAndTaskBoxes();
     void chipAndTagMenus();
+    void revealPastEstimatedRows();
 };
 
 void TestAtramentEditing::clickEditsAtTheCharacter()
@@ -1015,6 +1016,38 @@ void TestAtramentEditing::chipAndTagMenus()
     QVERIFY(box);
     h.tw.simulateClick({box->x + 40, box->y}, at::MouseButton::Right);
     QCOMPARE(blockMenus, 1);
+}
+
+// Revealing an area near the end of a page whose rows below the view are not measured yet (their
+// estimates one line, the rows wrapping to several): the area ends in view, not where the last
+// frame's estimated height let the scroll go.
+void TestAtramentEditing::revealPastEstimatedRows()
+{
+    QString md;
+    for (int k = 0; k < 12; ++k)
+        md += u"- krótki %1\n"_s.arg(k);
+    for (int k = 0; k < 12; ++k)
+        md += u"- długi %1: zażółć gęślą jaźń, pchnąć w tę łódź jeża lub ośm skrzyń fig, a potem jeszcze raz to samo, "
+              "bo tak się pisze notatki, które zawijają się na kilka linii w wąskim oknie\n"_s.arg(k);
+    Harness h(md);
+    const int row = 22;
+    const std::optional<at::Rect> before = h.view().rowBounds(row);
+    QVERIFY(before && before->top() > 400);
+    // A caret's area at the row's top (BlockEditor.ensureVisible): it ends in view.
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &cx) {
+        v.reveal(at::Rect::fromXYWH(40, before->top(), 2, 24), 24, 400, cx);
+    });
+    h.tw.settle();
+    const std::optional<at::Rect> after = h.view().rowBounds(row);
+    QVERIFY(after);
+    QVERIFY2(after->top() >= 0 && after->top() + 24 <= 400.5f,
+             qPrintable(u"%1 + %2"_s.arg(after->top()).arg(after->height())));
+    // A whole row (BlockEditor.ensureRowVisible): measured first, shown whole.
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &cx) { QVERIFY(v.revealRow(23, cx)); });
+    h.tw.settle();
+    const std::optional<at::Rect> last = h.view().rowBounds(23);
+    QVERIFY(last);
+    QVERIFY2(last->top() >= 0 && last->bottom() <= 400.5f, qPrintable(u"%1 + %2"_s.arg(last->top()).arg(last->height())));
 }
 
 QTEST_MAIN(TestAtramentEditing)

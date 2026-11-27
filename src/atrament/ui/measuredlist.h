@@ -144,6 +144,17 @@ public:
         m_state->anchorRow = 0;
         m_state->anchorInto = 0;
     }
+    // The next frame puts the view's top `into` px below the top of `row` (< 0: above it): a scroll
+    // by rows, which no estimate of the rows around changes (scrollBy clamps to the last frame's
+    // estimated height).
+    void scrollToAnchor(std::size_t row, float into)
+    {
+        m_state->scrollTo.reset();
+        m_state->atEnd = false;
+        m_state->atTop = false;
+        m_state->anchorRow = row;
+        m_state->anchorInto = into;
+    }
     std::size_t anchorRow() const { return m_state->anchorRow; }
     float anchorInto() const { return m_state->anchorInto; }
     const ScrollState &scroll() const { return m_state->scroll; }

@@ -829,8 +829,8 @@ scrolling, `tst_atrament_editor`) before the next:
   existing behaviour tests pass against it" is that list, complete.
 * `tst_editor_qml_atrament` (desktop) and `tst_editor_qml_atrament_touch` (a phone, `--touch`):
   the editor playground's `atramenttest` (qml/dev/AtramentSelfTest.qml) runs the outline and keys
-  parts of `selftest` against the page drawn by Atrament (`BlockEditor.forceAtrament`: the device's
-  setting is never written) with real input — keys and typed letters through the window, an input
+  parts of `selftest` against the page drawn by Atrament (`--atrament-editor`, `DevTools.atramentEditor`: the
+  device's setting is never written) with real input — keys and typed letters through the window, an input
   method's composition to the AtramentView, clicks and taps on its rows (`AtramentView.rowTop` /
   `rowHeight` say where they are) — and checks the model, the field (`editRow`, `editText`,
   `editCursor`), what an input method is told and the suggestion popup — then document mode's

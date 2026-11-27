@@ -285,7 +285,7 @@ if(TARGET brulion AND BRULION_DEV_QML_ENABLED AND EXISTS "${_brulion_qt_qml_root
                 list(GET _atr 1 _atr_size)
                 list(GET _atr 2 _atr_touch)
                 add_test(NAME ${_atr_test}
-                    COMMAND brulion --editor --editor-script atramenttest --no-single-instance
+                    COMMAND brulion --editor --editor-script atramenttest --atrament-editor --no-single-instance
                         --size ${_atr_size} ${_atr_touch} --now "2026-10-15 10:00" --locale pl)
                 set_tests_properties(${_atr_test} PROPERTIES
                     ENVIRONMENT "${_playground_env}"
