@@ -595,6 +595,11 @@ void PageView::rowClicked(std::size_t row, const at::ClickEvent &click, at::Wind
 {
     if (!m_controller || m_controller->readOnly() || click.isKeyboard || click.fromAccessibility)
         return;
+    // The release of a press that selected blocks by dragging edits nothing.
+    if (m_dragSelected) {
+        m_dragSelected = false;
+        return;
+    }
     const int cursor = editCursorAt(int(row), click.up.position);
     if (onEditRequest && onEditRequest(int(row), cursor, click.up.modifiers))
         return;

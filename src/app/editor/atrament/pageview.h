@@ -139,6 +139,10 @@ public:
     // A finger held on a drawn row's text (not the edited one): the touch selection mode
     // (BlockEditor.longPressText). Unset: a long press is a press.
     std::function<void(int row)> onLongPressRow;
+    // A mouse's press on one block dragged into another: the blocks from `anchor` to `focus` are
+    // selected (default: PageController::stopEditing + selectRange; the QML editor also takes the
+    // keyboard to its list: BlockEditor.leaveEditingForSelection).
+    std::function<void(int anchor, int focus)> onDragSelect;
     const PageRows &rows() const { return *m_rows; }
     atrament::ListHandle &handle() { return m_handle; }
     const atrament::ListHandle &handle() const { return m_handle; }
@@ -262,6 +266,13 @@ private:
     atrament::App *m_app = nullptr;
     SelectionLook m_selectionLook;
     quint64 m_hoveredUid = 0; // the row under the mouse (its fold arrow shows)
+    // A mouse's press on a block (its uid; 0: none), whether it selected blocks by dragging (its
+    // release then edits nothing).
+    quint64 m_dragUid = 0;
+    bool m_dragSelected = false;
+    int m_dragFocus = -1;
+    float m_listTop = 0; // the list's top in the window (the last frame)
+    void dragOver(atrament::Point p, atrament::Context<PageView> &cx);
     CalloutLook m_calloutLook;
     struct Find {
         QString query;

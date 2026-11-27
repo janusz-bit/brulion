@@ -177,6 +177,35 @@ PageView::~PageView()
         QObject::disconnect(c);
 }
 
+void PageView::dragOver(at::Point p, at::Context<PageView> &)
+{
+    if (!m_dragUid || !m_model || !m_controller)
+        return;
+    const int start = m_model->rowOfUid(m_dragUid);
+    if (start < 0)
+        return;
+    // The row under the pointer: the view's top in the content (the anchor row's offset and how
+    // far the view is into it), then the row at the pointer's y there.
+    const at::ListHandle::State &st = *m_handle.shared();
+    const float viewTop = m_extents.offsetOf(st.anchorRow) + st.anchorInto;
+    const std::size_t at = m_extents.rowAt(viewTop + (p.y - m_listTop));
+    if (at >= m_extents.count())
+        return;
+    const int row = int(at);
+    if (row == start && !m_dragSelected)
+        return; // (inside the pressed block: its text's own selection)
+    if (m_dragSelected && row == m_dragFocus)
+        return;
+    m_dragSelected = true;
+    m_dragFocus = row;
+    if (onDragSelect) {
+        onDragSelect(start, row);
+    } else {
+        m_controller->stopEditing();
+        m_controller->selectRange(start, row);
+    }
+}
+
 void PageView::setSelectionLook(const SelectionLook &look)
 {
     m_selectionLook = look;
@@ -286,10 +315,27 @@ at::AnyElement PageView::render(at::Window &window, at::Context<PageView> &cx)
     m_frame = frame;
     m_selfId = cx.entityId();
     PageView *self = this;
+    const at::EntityId rootSelf = m_selfId;
     return at::div()
             .sizeFull()
             .bg(m_palette.background)
             .flexCol()
+            // A mouse's release ends a press that may have selected blocks (after the rows' click).
+            .onMouseUp(at::MouseButton::Left,
+                       [rootSelf](const at::MouseUpEvent &, at::Window &, at::App &a) {
+                           a.updateEntity<PageView>(rootSelf, [](PageView &v, at::Context<PageView> &) {
+                               v.m_dragUid = 0;
+                           });
+                       })
+            // The pressed mouse moving over the page: into another block, the blocks between are
+            // selected (the row under the pointer from the list's rows, wherever the press is).
+            .onMouseMove([rootSelf](const at::MouseMoveEvent &e, at::Window &, at::App &a) {
+                if (e.pointer != at::PointerKind::Mouse || e.pressedButton != at::MouseButton::Left)
+                    return;
+                a.updateEntity<PageView>(rootSelf, [&](PageView &v, at::Context<PageView> &c) {
+                    v.dragOver(e.position, c);
+                });
+            })
             .child(at::list(u"page", m_extents,
                             [self](std::size_t row, at::Window &, at::App &) -> at::AnyElement {
                                 return self->renderRow(row);
@@ -302,7 +348,8 @@ at::AnyElement PageView::render(at::Window &window, at::Context<PageView> &cx)
                            .textColor(m_palette.text)
                            .fontFamily(m_palette.bodyFamily))
             // After the list's prepaint (its rows measured): the page's height, when it changed.
-            .child(at::canvas([self](at::Rect, at::Window &, at::App &) {
+            .child(at::canvas([self](at::Rect bounds, at::Window &, at::App &) {
+                       self->m_listTop = bounds.top();
                        const float h = self->contentHeight();
                        if (std::abs(h - self->m_reportedHeight) < 0.5f)
                            return;
@@ -344,8 +391,23 @@ at::AnyElement PageView::renderRow(std::size_t row)
     // blocks, rounded at its ends, a line down its left edge; a block alone framed).
     const QString edge = index.data(BlockListModel::SelectionEdgeRole).toString();
     const at::EntityId menuSelf = m_selfId;
+    const quint64 rowUid = index.data(BlockListModel::UidRole).toString().toULongLong();
     auto line = [&] {
         at::Div d = at::div().id(id).pl(m.contentX).py(m.rowPad);
+        if (m_controller && !m_controller->readOnly()) {
+            // A mouse's press here may become a drag that selects blocks (dragOver).
+            std::move(d)
+                    .onMouseDown(at::MouseButton::Left,
+                                 [menuSelf, rowUid](const at::MouseDownEvent &e, at::Window &, at::App &a) {
+                                     if (e.pointer != at::PointerKind::Mouse || e.modifiers.shift)
+                                         return;
+                                     a.updateEntity<PageView>(menuSelf, [&](PageView &v, at::Context<PageView> &) {
+                                         v.m_dragUid = rowUid;
+                                         v.m_dragSelected = false;
+                                         v.m_dragFocus = -1;
+                                     });
+                                 });
+        }
         if (onBlockMenu)
             // A right-click on a block: its menu (BlockEditor.openBlockMenuAt).
             std::move(d).onMouseDown(at::MouseButton::Right,

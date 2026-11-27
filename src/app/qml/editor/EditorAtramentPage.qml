@@ -94,6 +94,12 @@ AtramentView {
         if (root.editor && root.editor.controller && !root.editor.blockTapped(row))
             root.editor.controller.zoomInto(row)
     }
+    onDragSelectRequested: (anchor, focus) => {
+        if (!root.editor || !root.editor.controller)
+            return
+        root.editor.leaveEditingForSelection()
+        root.editor.controller.selectRange(anchor, focus)
+    }
     onRowLongPressed: row => {
         if (root.editor)
             root.editor.longPressText(row)

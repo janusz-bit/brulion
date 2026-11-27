@@ -143,6 +143,8 @@ Q_SIGNALS:
     void blockMenuRequested(int row, qreal sceneX, qreal sceneY);
     // A finger held on a block's text: the touch selection mode (BlockEditor.longPressText).
     void rowLongPressed(int row);
+    // A mouse's press on one block dragged into another: select blocks `anchor` to `focus`.
+    void dragSelectRequested(int anchor, int focus);
 
 protected:
     void componentComplete() override;

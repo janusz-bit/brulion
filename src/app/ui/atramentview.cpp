@@ -371,6 +371,10 @@ void AtramentView::attachView()
                                 },
                                 Qt::QueuedConnection);
                     };
+                    page.onDragSelect = [guard](int anchor, int focus) {
+                        if (guard)
+                            Q_EMIT guard->dragSelectRequested(anchor, focus);
+                    };
                     page.onLongPressRow = [guard](int row) {
                         if (guard)
                             Q_EMIT guard->rowLongPressed(row);

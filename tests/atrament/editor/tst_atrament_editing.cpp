@@ -121,6 +121,7 @@ private Q_SLOTS:
     void editedBlockForScreenReaders();
     void findMatchesTintedAndSelected();
     void longPressSelects();
+    void mouseDragSelectsBlocks();
 };
 
 void TestAtramentEditing::clickEditsAtTheCharacter()
@@ -625,6 +626,33 @@ void TestAtramentEditing::longPressSelects()
     h.tw.settle();
     QCOMPARE(pressed, -1);
     QCOMPARE(h.controller.editingRow(), 1);
+}
+
+void TestAtramentEditing::mouseDragSelectsBlocks()
+{
+    Harness h(u"- jeden\n- dwa\n- trzy\n- cztery\n"_s);
+    const at::Point from = h.pointOf(0, 2);
+    const at::Point to = h.pointOf(2, 2);
+    // Pressed on the first block, dragged into the third: three blocks selected, nothing edited.
+    h.tw.simulateMouseMove(from);
+    h.tw.simulateMouseDown(from);
+    h.tw.simulateMouseMove(h.pointOf(0, 4), at::MouseButton::Left); // inside the block: nothing yet
+    QCOMPARE(h.controller.selectionCount(), 0);
+    h.tw.simulateMouseMove(to, at::MouseButton::Left);
+    QCOMPARE(h.controller.selectionCount(), 3);
+    QCOMPARE(h.controller.selectionFirstRow(), 0);
+    QCOMPARE(h.controller.selectionLastRow(), 2);
+    // Back to the second one: two.
+    h.tw.simulateMouseMove(h.pointOf(1, 1), at::MouseButton::Left);
+    QCOMPARE(h.controller.selectionCount(), 2);
+    h.tw.simulateMouseUp(h.pointOf(1, 1));
+    h.tw.settle();
+    QCOMPARE(h.controller.editingRow(), -1);
+    QCOMPARE(h.controller.selectionCount(), 2);
+    // A plain click afterwards edits again.
+    h.tw.simulateClick(h.pointOf(3, 2));
+    h.tw.settle();
+    QCOMPARE(h.controller.editingRow(), 3);
 }
 
 QTEST_MAIN(TestAtramentEditing)

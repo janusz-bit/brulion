@@ -704,7 +704,13 @@ scrolling, `tst_atrament_editor`) before the next:
    chips while editing.
 3. **Selection.** Block selection (Shift+click, Shift+arrows, a mouse's drag across rows), its band,
    copy / cut / paste through `PageController`'s selection; on a phone the long press and the
-   handles.
+   handles. **Built so far** (2026-11-27): the band (`selectionEdge`), Shift+click and Ctrl+click
+   (`BlockEditor.blockTappedWith`), Shift+↑/↓ out of the edited block, Ctrl+A twice, Esc, a
+   mouse's press dragged from one block into another (`PageView::dragOver`: the row under the
+   pointer from the list's anchor; its release edits nothing; `dragSelectRequested` →
+   `leaveEditingForSelection` + `selectRange`), a finger's long press (the touch selection mode);
+   the selection's keys, copy, cut and paste are still the QML list's (it takes the keyboard). Not
+   yet: the touch grips, the edge auto-scroll while dragging, a drag across the journal's days.
 4. **Structure.** Folding, zoom into a block, drag to move, dates and reminders chips, the journal
    — a stream of days as sections of one list (what `JournalDayItem` draws today).
    **Built so far** (2026-11-27): folding (the arrows, step 2's entry), the bullet's zoom, and the
