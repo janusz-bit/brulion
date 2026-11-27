@@ -1232,6 +1232,31 @@ QByteArray excludeOccurrence(const QByteArray &ics, const QString &uid, const io
     return serialize(roots);
 }
 
+namespace {
+
+/// `master`'s EXDATEs, one value each, renamed.
+QList<io::ical::Property> renamedExdates(const io::ical::Component &master,
+                                         const std::function<DateSpec(const io::ical::DateTimeValue &)> &rename,
+                                         const TodoContext &context, bool *usedZone)
+{
+    QList<io::ical::Property> out;
+    for (const io::ical::Property &p : master.properties) {
+        if (p.name != u"EXDATE") {
+            out.append(p);
+            continue;
+        }
+        for (const QString &value : p.value.split(u',')) {
+            io::ical::Property one = p;
+            one.value = value.trimmed();
+            if (const auto v = io::ical::parseDateTime(one))
+                out.append(dateProperty(u"EXDATE"_s, rename(*v), context.zone, usedZone));
+        }
+    }
+    return out;
+}
+
+} // namespace
+
 QByteArray renameInstances(const QByteArray &ics, const QString &uid,
                            const std::function<DateSpec(const io::ical::DateTimeValue &)> &rename,
                            const TodoContext &context)
@@ -1241,23 +1266,10 @@ QByteArray renameInstances(const QByteArray &ics, const QString &uid,
     if (!master)
         return ics;
     bool usedZone = false;
-    QList<io::ical::Property> kept;
-    for (const io::ical::Property &p : std::as_const(master->properties)) {
-        if (p.name != u"EXDATE") {
-            kept.append(p);
-            continue;
-        }
-        for (const QString &value : p.value.split(u',')) {
-            io::ical::Property one = p;
-            one.value = value.trimmed();
-            if (const auto v = io::ical::parseDateTime(one))
-                kept.append(dateProperty(u"EXDATE"_s, rename(*v), context.zone, &usedZone));
-        }
-    }
-    master->properties = kept;
+    master->properties = renamedExdates(*master, rename, context, &usedZone);
     for (io::ical::Component &c : cal->children) {
-        const io::ical::Property *rid = c.name == u"VEVENT" && c.text(u"UID").trimmed() == uid ? c.property(u"RECURRENCE-ID")
-                                                                                              : nullptr;
+        const bool ofSeries = c.name == u"VEVENT" && c.text(u"UID").trimmed() == uid;
+        const io::ical::Property *rid = ofSeries ? c.property(u"RECURRENCE-ID") : nullptr;
         if (const auto v = rid ? io::ical::parseDateTime(*rid) : std::nullopt)
             setDate(c, u"RECURRENCE-ID"_s, rename(*v), context.zone, &usedZone);
     }

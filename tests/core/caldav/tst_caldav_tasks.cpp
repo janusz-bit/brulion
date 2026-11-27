@@ -688,9 +688,11 @@ void TestCalDavTasks::eventsFromTheInbox()
 {
     FakeCalDav server;
     server.addCalendar(u"praca"_s, praca());
-    server.putMember(u"praca"_s, u"stand.ics"_s,
-                     vevent(u"stand"_s, u"DTSTART;TZID=Europe/Warsaw:20261116T093000\r\nDTEND;TZID=Europe/Warsaw:20261116T094500\r\n"
-                                        u"RRULE:FREQ=DAILY;COUNT=5\r\nSUMMARY:Stand-up\r\n"_s));
+    server.putMember(
+            u"praca"_s, u"stand.ics"_s,
+            vevent(u"stand"_s,
+                   u"DTSTART;TZID=Europe/Warsaw:20261116T093000\r\nDTEND;TZID=Europe/Warsaw:20261116T094500\r\n"
+                   u"RRULE:FREQ=DAILY;COUNT=5\r\nSUMMARY:Stand-up\r\n"_s));
     Device dev(&server);
     dev.run();
     const QString folder = dev.store->folder();

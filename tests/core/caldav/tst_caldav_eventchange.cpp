@@ -90,14 +90,17 @@ CalendarState praca()
                            u"RRULE:FREQ=WEEKLY\r\nEXDATE;TZID=Europe/Warsaw:20261028T100000\r\n"
                            u"SUMMARY:Zażółć gęślą jaźń\r\nLOCATION:Sala B\r\n"
                            u"BEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER:-PT10M\r\nEND:VALARM\r\n"_s)
-                + vevent(u"stand"_s, u"RECURRENCE-ID;TZID=Europe/Warsaw:20261021T100000\r\n"
-                                     u"DTSTART;TZID=Europe/Warsaw:20261023T120000\r\nDTEND;TZID=Europe/Warsaw:20261023T130000\r\n"
-                                     u"SUMMARY:Zażółć (przeniesione)\r\n"_s));
+                + vevent(u"stand"_s,
+                         u"RECURRENCE-ID;TZID=Europe/Warsaw:20261021T100000\r\n"
+                         u"DTSTART;TZID=Europe/Warsaw:20261023T120000\r\nDTEND;TZID=Europe/Warsaw:20261023T130000\r\n"
+                         u"SUMMARY:Zażółć (przeniesione)\r\n"_s));
     add(u"nowy-jork.ics"_s, u"nowy-jork"_s,
-        vevent(u"nowy-jork"_s, u"DTSTART;TZID=America/New_York:20261120T090000\r\n"
-                               u"DTEND;TZID=America/New_York:20261120T100000\r\nSUMMARY:Rozmowa z Nowym Jorkiem\r\n"_s));
+        vevent(u"nowy-jork"_s,
+               u"DTSTART;TZID=America/New_York:20261120T090000\r\n"
+               u"DTEND;TZID=America/New_York:20261120T100000\r\nSUMMARY:Rozmowa z Nowym Jorkiem\r\n"_s));
     add(u"urlop.ics"_s, u"urlop"_s,
-        vevent(u"urlop"_s, u"DTSTART;VALUE=DATE:20261123\r\nDTEND;VALUE=DATE:20261126\r\nSUMMARY:Urlop w Zakopanem\r\n"_s));
+        vevent(u"urlop"_s,
+               u"DTSTART;VALUE=DATE:20261123\r\nDTEND;VALUE=DATE:20261126\r\nSUMMARY:Urlop w Zakopanem\r\n"_s));
     add(u"dziwny.ics"_s, u"dziwny"_s,
         vevent(u"dziwny"_s, u"DTSTART:20261001T080000Z\r\nDTEND:20261001T090000Z\r\nRRULE:FREQ=WEEKLY;COUNT=4\r\n"
                             u"SUMMARY:Cztery razy\r\n"_s));
@@ -191,33 +194,40 @@ void TestCalDavEventChange::editedTimes_data()
     QTest::addColumn<QString>("current");
     QTest::addColumn<QString>("start");
     QTest::addColumn<QString>("end");
-    QTest::addColumn<int>("allDay"); // -1 not given
+    QTest::addColumn<int>("allDay");       // -1 not given
     QTest::addColumn<QString>("expected"); // describe(), or a problem code
     const QString timed = u"2026-11-20 09:30/2026-11-20 10:15"_s;
     const QString days = u"2026-11-20/2026-11-22"_s;
     const QString night = u"2026-11-20 22:00/2026-11-21 02:00"_s;
-    QTest::newRow("new at a time: an hour") << "" << "2026-12-01 10:00" << "" << -1 << "2026-12-01 10:00/2026-12-01 11:00";
+    QTest::newRow("new at a time: an hour")
+            << "" << "2026-12-01 10:00" << "" << -1 << "2026-12-01 10:00/2026-12-01 11:00";
     QTest::newRow("new on a day: all-day") << "" << "2026-12-01" << "" << -1 << "2026-12-01/2026-12-01";
     QTest::newRow("new over three days") << "" << "2026-12-01" << "2026-12-03" << -1 << "2026-12-01/2026-12-03";
-    QTest::newRow("new with an end time") << "" << "2026-12-01 10:00" << "11:30" << -1 << "2026-12-01 10:00/2026-12-01 11:30";
-    QTest::newRow("new over midnight") << "" << "2026-12-01 23:00" << "01:00" << -1 << "2026-12-01 23:00/2026-12-02 01:00";
-    QTest::newRow("new with an end day and time") << "" << "2026-12-01 22:00" << "2026-12-02 02:00" << -1
-                                                  << "2026-12-01 22:00/2026-12-02 02:00";
+    QTest::newRow("new with an end time")
+            << "" << "2026-12-01 10:00" << "11:30" << -1 << "2026-12-01 10:00/2026-12-01 11:30";
+    QTest::newRow("new over midnight") << "" << "2026-12-01 23:00" << "01:00" << -1
+                                       << "2026-12-01 23:00/2026-12-02 01:00";
+    QTest::newRow("new with an end day and time")
+            << "" << "2026-12-01 22:00" << "2026-12-02 02:00" << -1 << "2026-12-01 22:00/2026-12-02 02:00";
     QTest::newRow("new at a time by the flag") << "" << "2026-12-01" << "" << 0 << "2026-12-01 09:00/2026-12-01 10:00";
     QTest::newRow("new without a day") << "" << "" << "" << -1 << "no_start";
     QTest::newRow("new at a time alone") << "" << "10:00" << "" << -1 << "no_start";
     QTest::newRow("new ending before it starts") << "" << "2026-12-03" << "2026-12-01" << -1 << "end_before_start";
-    QTest::newRow("new ending before its time") << "" << "2026-12-01 10:00" << "2026-12-01 09:00" << -1 << "end_before_start";
+    QTest::newRow("new ending before its time")
+            << "" << "2026-12-01 10:00" << "2026-12-01 09:00" << -1 << "end_before_start";
     QTest::newRow("new all-day at a time") << "" << "2026-12-01 10:00" << "" << 1 << "all_day_with_time";
-    QTest::newRow("new all-day ending at a time") << "" << "2026-12-01" << "2026-12-02 10:00" << -1 << "all_day_with_time";
+    QTest::newRow("new all-day ending at a time")
+            << "" << "2026-12-01" << "2026-12-02 10:00" << -1 << "all_day_with_time";
     QTest::newRow("nothing given: kept") << timed << "" << "" << -1 << timed;
-    QTest::newRow("moved to a day: its time and length") << timed << "2026-11-23" << "" << -1
-                                                         << "2026-11-23 09:30/2026-11-23 10:15";
-    QTest::newRow("moved to a time: its length") << timed << "2026-11-23 14:00" << "" << -1 << "2026-11-23 14:00/2026-11-23 14:45";
+    QTest::newRow("moved to a day: its time and length")
+            << timed << "2026-11-23" << "" << -1 << "2026-11-23 09:30/2026-11-23 10:15";
+    QTest::newRow("moved to a time: its length")
+            << timed << "2026-11-23 14:00" << "" << -1 << "2026-11-23 14:00/2026-11-23 14:45";
     QTest::newRow("a time alone: its day") << timed << "08:00" << "" << -1 << "2026-11-20 08:00/2026-11-20 08:45";
     QTest::newRow("late: over midnight") << timed << "23:50" << "" << -1 << "2026-11-20 23:50/2026-11-21 00:35";
     QTest::newRow("its end alone") << timed << "" << "12:00" << -1 << "2026-11-20 09:30/2026-11-20 12:00";
-    QTest::newRow("its end as a day: its end time") << timed << "" << "2026-11-21" << -1 << "2026-11-20 09:30/2026-11-21 10:15";
+    QTest::newRow("its end as a day: its end time")
+            << timed << "" << "2026-11-21" << -1 << "2026-11-20 09:30/2026-11-21 10:15";
     QTest::newRow("its end before its start") << timed << "" << "2026-11-19 12:00" << -1 << "end_before_start";
     QTest::newRow("timed to all-day") << timed << "" << "" << 1 << "2026-11-20/2026-11-20";
     QTest::newRow("all-day yet a time") << timed << "10:00" << "" << 1 << "all_day_with_time";
@@ -231,8 +241,8 @@ void TestCalDavEventChange::editedTimes_data()
     QTest::newRow("all-day, a later last day") << days << "" << "2026-11-25" << -1 << "2026-11-20/2026-11-25";
     QTest::newRow("all-day, a last day before") << days << "" << "2026-11-19" << -1 << "end_before_start";
     // The wall clock, never an instant: a week later is 10:00 again although the clocks went back.
-    QTest::newRow("across the clock change") << "2026-10-21 10:00/2026-10-21 11:00" << "2026-10-28" << "" << -1
-                                             << "2026-10-28 10:00/2026-10-28 11:00";
+    QTest::newRow("across the clock change")
+            << "2026-10-21 10:00/2026-10-21 11:00" << "2026-10-28" << "" << -1 << "2026-10-28 10:00/2026-10-28 11:00";
 }
 
 void TestCalDavEventChange::editedTimes()
@@ -335,15 +345,18 @@ void TestCalDavEventChange::fields_data()
                                    << "Zażółć gęślą jaźń" << "every week" << 10 << true;
     QTest::newRow("the moved one") << "stand" << "20261021T100000@Europe/Warsaw" << "2026-10-23 12:00/2026-10-23 13:00"
                                    << "Zażółć (przeniesione)" << "" << -1 << true;
-    QTest::newRow("the left-out one") << "stand" << "20261028T100000@Europe/Warsaw" << "no_occurrence" << "" << "" << -1 << false;
-    QTest::newRow("never one") << "stand" << "20261015T100000@Europe/Warsaw" << "no_occurrence" << "" << "" << -1 << false;
+    QTest::newRow("the left-out one") << "stand" << "20261028T100000@Europe/Warsaw" << "no_occurrence" << "" << "" << -1
+                                      << false;
+    QTest::newRow("never one") << "stand" << "20261015T100000@Europe/Warsaw" << "no_occurrence" << "" << "" << -1
+                               << false;
     QTest::newRow("New York's time on Warsaw's clock") << "nowy-jork" << "" << "2026-11-20 15:00/2026-11-20 16:00"
                                                        << "Rozmowa z Nowym Jorkiem" << "" << -1 << false;
-    QTest::newRow("all-day: its last day") << "urlop" << "" << "2026-11-23/2026-11-25" << "Urlop w Zakopanem" << "" << -1
-                                           << false;
+    QTest::newRow("all-day: its last day")
+            << "urlop" << "" << "2026-11-23/2026-11-25" << "Urlop w Zakopanem" << "" << -1 << false;
     QTest::newRow("an occurrence of no series") << "urlop" << "20261123" << "no_occurrence" << "" << "" << -1 << false;
-    QTest::newRow("a rule Brulion cannot show") << "dziwny" << "" << "2026-10-01 10:00/2026-10-01 11:00" << "Cztery razy"
-                                                << "" << -1 << true;
+    QTest::newRow("a rule Brulion cannot show")
+            << "dziwny" << "" << "2026-10-01 10:00/2026-10-01 11:00" << "Cztery razy"
+            << "" << -1 << true;
     QTest::newRow("no such event") << "brak" << "" << "not_found" << "" << "" << -1 << false;
 }
 
@@ -505,7 +518,8 @@ void TestCalDavEventChange::acrossTheClockChange()
     QVERIFY(change->data.contains("DTSTART;TZID=Europe/Warsaw:20261028T100000"));
     QVERIFY(change->data.contains("DTEND;TZID=Europe/Warsaw:20261028T103000"));
     addToOutbox(state, *change);
-    QCOMPARE(shown(state, u"kawa"_s, QDate(2026, 10, 1), QDate(2026, 10, 31)), QStringList{u"2026-10-28 10:00 Kawa z Łucją"_s});
+    QCOMPARE(shown(state, u"kawa"_s, QDate(2026, 10, 1), QDate(2026, 10, 31)),
+             QStringList{u"2026-10-28 10:00 Kawa z Łucją"_s});
 }
 
 void TestCalDavEventChange::deleted()
@@ -558,20 +572,24 @@ void TestCalDavEventChange::refused_data()
     const int create = int(EventIntent::Kind::Create);
     const int change = int(EventIntent::Kind::Change);
     const int del = int(EventIntent::Kind::Delete);
-    QTest::newRow("read-only") << create << "x" << "" << "read-only" << "Nowe" << "2026-12-01" << "" << "-" << "read_only";
+    QTest::newRow("read-only") << create << "x" << "" << "read-only" << "Nowe" << "2026-12-01" << "" << "-"
+                               << "read_only";
     QTest::newRow("tasks only") << create << "x" << "" << "tasks" << "Nowe" << "2026-12-01" << "" << "-" << "no_events";
-    QTest::newRow("events hidden") << change << "stand" << "" << "hidden" << "Inne" << "" << "" << "-" << "events_hidden";
+    QTest::newRow("events hidden") << change << "stand" << "" << "hidden" << "Inne" << "" << "" << "-"
+                                   << "events_hidden";
     QTest::newRow("no title") << create << "x" << "" << "" << "-" << "2026-12-01" << "" << "-" << "no_title";
     QTest::newRow("no day") << create << "x" << "" << "" << "Nowe" << "" << "" << "-" << "no_start";
     QTest::newRow("no such event") << change << "brak" << "" << "" << "Inne" << "" << "" << "-" << "not_found";
     QTest::newRow("no such event to delete") << del << "brak" << "" << "" << "-" << "" << "" << "-" << "not_found";
-    QTest::newRow("no such occurrence") << change << "stand" << "20261015T100000@Europe/Warsaw" << "" << "Inne" << "" << ""
+    QTest::newRow("no such occurrence") << change << "stand" << "20261015T100000@Europe/Warsaw" << "" << "Inne" << ""
+                                        << ""
                                         << "-" << "no_occurrence";
     QTest::newRow("an occurrence's own rule") << change << "stand" << "20261104T100000@Europe/Warsaw" << "" << "-" << ""
                                               << "" << "every day" << "occurrence_rule";
     QTest::newRow("its end before its start") << change << "kawa" << "" << "" << "-" << "" << "2026-10-20 12:00" << "-"
                                               << "end_before_start";
-    QTest::newRow("a rule nobody knows") << create << "x" << "" << "" << "Nowe" << "2026-12-01" << "" << "raz na ruski rok"
+    QTest::newRow("a rule nobody knows") << create << "x" << "" << "" << "Nowe" << "2026-12-01" << ""
+                                         << "raz na ruski rok"
                                          << "unknown_rule";
 }
 
@@ -699,7 +717,8 @@ void TestCalDavEventChange::pendingOverlay()
     elsewhere.calendarId = u"c-2"_s;
     EventIntent broken = intent(EventIntent::Kind::Change, u"brak"_s);
     broken.patch.title = u"Nic"_s;
-    const CalendarState after = withIntents(praca(), pracaEntry(), {create, rename, skip, elsewhere, broken}, context());
+    const CalendarState after =
+            withIntents(praca(), pracaEntry(), {create, rename, skip, elsewhere, broken}, context());
     QCOMPARE(shown(after, u"brulion-event-nowe"_s, QDate(2026, 11, 1), QDate(2026, 11, 30)),
              QStringList{u"2026-11-26 18:00 Próba chóru — kolędy"_s});
     QCOMPARE(shown(after, u"stand"_s, QDate(2026, 11, 1), QDate(2026, 11, 11)),

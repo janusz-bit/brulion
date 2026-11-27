@@ -76,23 +76,23 @@ struct EventIntent {
 /// Why an intent cannot be carried out.
 enum class EventProblem {
     None,
-    NoCalendar,     ///< no calendar of that id
-    Subscription,   ///< an ICS subscription: a copy of another program's feed, read only
-    ReadOnly,       ///< the server does not let the account write the calendar
-    NoEvents,       ///< the calendar holds tasks only
-    EventsHidden,   ///< its events are not shown (the calendar's "Events in the calendar" is off)
-    NotFound,       ///< no event of that UID in the calendar
-    NoOccurrence,   ///< the series has no occurrence that started there
+    NoCalendar,   ///< no calendar of that id
+    Subscription, ///< an ICS subscription: a copy of another program's feed, read only
+    ReadOnly,     ///< the server does not let the account write the calendar
+    NoEvents,     ///< the calendar holds tasks only
+    EventsHidden, ///< its events are not shown (the calendar's "Events in the calendar" is off)
+    NotFound,     ///< no event of that UID in the calendar
+    NoOccurrence, ///< the series has no occurrence that started there
     NoTitle,
-    NoStart,        ///< a new event needs its day
+    NoStart, ///< a new event needs its day
     EndBeforeStart,
     AllDayWithTime, ///< all-day, yet a time given
     UnknownRule,    ///< the recurrence is not understood
     OccurrenceRule, ///< one occurrence has no recurrence of its own
 };
 
-/// "no_calendar", "subscription", "read_only", "end_before_start" …: stable (brulion-cli's error
-/// codes, the log's).
+/// "no_calendar", "subscription", "read_only", "end_before_start" …: stable (the `reason` of
+/// brulion-cli's errors).
 QString problemCode(EventProblem problem);
 /// The problem in English words (the log's technical text).
 QString problemText(EventProblem problem);
@@ -103,9 +103,9 @@ EventProblem writableProblem(const CalendarSettings &settings, const QString &id
 
 /// An event (or one occurrence of a series) as the event dialog shows it.
 struct EventFields {
-    EventEdit edit;   ///< its fields on the device's clock (ruleChanged, reminderChanged false)
-    QString ruleText; ///< RRULE as written ("" none); edit.rule is "" when it is not representable
-    QString path;     ///< its CalDAV resource ("" for a subscription's)
+    EventEdit edit;       ///< its fields on the device's clock (ruleChanged, reminderChanged false)
+    QString ruleText;     ///< RRULE as written ("" none); edit.rule is "" when it is not representable
+    QString path;         ///< its CalDAV resource ("" for a subscription's)
     qsizetype event = -1; ///< its index in the data: the occurrence's override, else the series
     bool recurring = false;
 };

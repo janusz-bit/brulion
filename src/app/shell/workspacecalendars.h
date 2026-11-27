@@ -33,7 +33,6 @@
 #include "eventsource.h"
 #include "types.h"
 
-#include <QFileSystemWatcher>
 #include <QDateTime>
 #include <QHash>
 #include <QPointer>
@@ -45,6 +44,8 @@
 
 #include <functional>
 #include <memory>
+
+class QFileSystemWatcher;
 
 namespace brulion {
 struct ScheduledNotification;
@@ -61,6 +62,8 @@ namespace brulion::caldav {
 class CalendarStore;
 class CalendarSync;
 struct CalendarData;
+struct CalendarSettings;
+struct EventEdit;
 struct EventIntent;
 struct CalendarRunReport;
 struct Discovery;
@@ -223,6 +226,9 @@ private:
     bool queueIntent(caldav::EventIntent intent, bool sayWhy);
     /// The inbox of brulion-cli's changes watched while the notebook has calendars.
     void watchInbox();
+    void refreshTaskPages(const caldav::CalendarSettings &settings);
+    /// "Fri, Nov 20, 14:00–15:30" in the app's language.
+    QString whenText(const caldav::EventEdit &fields) const;
     void takeInbox();
     void rebuild();
     void teardown();

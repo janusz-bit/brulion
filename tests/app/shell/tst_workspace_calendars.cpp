@@ -339,7 +339,8 @@ void TestWorkspaceCalendars::changesFromTheCommandLine()
     QCOMPARE(week.at(1).start, QTime(11, 0));
     QCOMPARE(week.at(2).start, QTime(9, 30));
     waitIdle();
-    QVERIFY(m_server.member(u"praca"_s, u"stand.ics"_s)->data.contains("RECURRENCE-ID;TZID=Europe/Warsaw:20261117T093000"));
+    QVERIFY(m_server.member(u"praca"_s, u"stand.ics"_s)
+                    ->data.contains("RECURRENCE-ID;TZID=Europe/Warsaw:20261117T093000"));
     // brulion-cli left a meeting and a change that cannot be made: the app takes them at once,
     // shows the meeting, sends it, and says in the log what was refused.
     caldav::EventIntent create;
