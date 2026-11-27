@@ -14,6 +14,7 @@
 #ifdef BRULION_HAS_ATRAMENT_EDITOR
 #include "blocklistmodel.h"
 #include "editorhost.h"
+#include "editstyles.h"
 #include "pagecontroller.h"
 #include "foreignhost.h"
 #include "pageview.h"
@@ -336,6 +337,9 @@ void AtramentView::applyStyle()
         callouts.fill = float(m_calloutFill);
         callouts.radius = float(m_calloutRadius);
         page.setCalloutLook(callouts);
+        // The edited text coloured by the highlighter's rules (markdownstyles.h) in the code face.
+        page.setEditStyler(EditStyler(m_highlighterPalette, p.codeFamily).styler(brulion::editor::MarkdownMode::Inline),
+                           cx);
         page.setEditLook(atColor(m_caretColor), atColor(m_selectionColor),
                          std::u16string(u16View(m_placeholderText)), std::u16string(u16View(m_editLabel)), cx);
         cx.notify();

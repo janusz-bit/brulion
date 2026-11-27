@@ -24,6 +24,7 @@ AtramentView {
     selectionColor: Theme.selection
     placeholderText: qsTr("Type / for commands")
     editLabel: qsTr("Block text")
+    highlighterPalette: editor ? editor.highlighterPalette : ({})
     bandColor: Theme.bgSelected
     ringColor: Theme.focusRing
     bandRadius: Theme.radiusSm

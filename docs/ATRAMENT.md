@@ -595,7 +595,10 @@ In **Atrament** (`src/atrament/ui`, Qt-free, generic — nothing Brulion-specifi
   a link node named by the range's text that a screen reader activates.
 * **A styled `TextInput`**: the input's text with spans from a callback (the edited block's
   Markdown highlighted: markers dimmed, bold bold, code in its face), so editing keeps the look of
-  `InlineEditor.qml`'s `MarkdownHighlighter`. **Built**: `TextInput::setStyler(f)` — `f(text)`
+  `InlineEditor.qml`'s `MarkdownHighlighter`. **Built** (the rules: `src/app/editor/atrament/editstyles.h`,
+  `EditStyler` over markdownstyles.h's `styleMarkdownLine` / `flattenStyles` with BlockEditor's
+  `highlighterPalette` — the same colours, weights, faces and boxes InlineEditor shows):
+  `TextInput::setStyler(f)` — `f(text)`
   gives the spans, asked once per text (a revision counter), applied over the inherited style as a
   `Text`'s spans are; `setColors(caret, selection)`, `setPlaceholder`, `clearUndo()` (an owner
   with an undo stack of its own), `layout()`, and the event `SelectionChanged` next to `Changed`.

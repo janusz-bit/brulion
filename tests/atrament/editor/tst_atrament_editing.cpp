@@ -9,6 +9,7 @@
 #include "blocklistmodel.h"
 #include "fakeeditorhost.h"
 #include "pagecontroller.h"
+#include "editstyles.h"
 #include "pageview.h"
 #include "text/fonts.h"
 #include "ui/testplatform.h"
@@ -125,6 +126,7 @@ private Q_SLOTS:
     void linkClickWithItsPlace();
     void toolbarInsertsAtTheCaret();
     void revealScrollsTheLeast();
+    void highlighterRulesColourTheField();
 };
 
 void TestAtramentEditing::clickEditsAtTheCharacter()
@@ -718,6 +720,48 @@ void TestAtramentEditing::revealScrollsTheLeast()
         moved = v.reveal(at::Rect::fromXYWH(20, 200, 100, 20), 24, 400, cx);
     });
     QVERIFY(!moved);
+}
+
+void TestAtramentEditing::highlighterRulesColourTheField()
+{
+    QVariantMap palette;
+    palette.insert(u"link"_s, u"#0000ff"_s);
+    palette.insert(u"tag"_s, u"#00aa00"_s);
+    palette.insert(u"marker"_s, u"#999999"_s);
+    const EditStyler styler(palette, u"Brulion JetBrains Mono");
+    const std::u16string text = u"**gęś** `kod` [[Strona]]\n#tag i ==ważne==";
+    const std::vector<at::TextSpan> spans = styler.spans(text, MarkdownMode::Inline);
+    auto at = [&](std::u16string_view word) -> std::vector<const at::TextSpan *> {
+        const int from = int(text.find(word));
+        std::vector<const at::TextSpan *> found;
+        for (const at::TextSpan &sp : spans)
+            if (sp.range.start <= from && sp.range.end >= from + int(word.size()))
+                found.push_back(&sp);
+        return found;
+    };
+    auto any = [&](std::u16string_view word, auto pred) {
+        for (const at::TextSpan *sp : at(word))
+            if (pred(*sp))
+                return true;
+        return false;
+    };
+    // Bold between its markers, the markers dimmed.
+    QVERIFY(any(u"gęś", [](const at::TextSpan &sp) { return sp.style.fontWeight && sp.style.fontWeight->value >= 600; }));
+    QVERIFY(any(u"**", [](const at::TextSpan &sp) { return sp.style.color && sp.style.color->r > 0.5f; }));
+    // Inline code in the code face on a box.
+    QVERIFY(any(u"kod", [](const at::TextSpan &sp) {
+        return sp.style.fontFamily == std::u16string(u"Brulion JetBrains Mono") && sp.style.background
+               && sp.style.background->has_value();
+    }));
+    // The link and, on the second line, the tag in the palette's colours.
+    QVERIFY(any(u"Strona", [](const at::TextSpan &sp) { return sp.style.color && sp.style.color->b > 0.9f && sp.style.color->r < 0.1f; }));
+    QVERIFY(any(u"#tag", [](const at::TextSpan &sp) { return sp.style.color && sp.style.color->g > 0.6f && sp.style.color->r < 0.1f; }));
+    QVERIFY(any(u"ważne", [](const at::TextSpan &sp) { return sp.style.background && sp.style.background->has_value(); }));
+    // In the field: the page's styler colours the edited block.
+    Harness h(u"- **gruby** tekst\n"_s);
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &cx) { v.setEditStyler(styler.styler(MarkdownMode::Inline), cx); });
+    h.clickInto(0, 2);
+    QVERIFY(!h.view().input()->read(h.app).spans().empty());
 }
 
 QTEST_MAIN(TestAtramentEditing)

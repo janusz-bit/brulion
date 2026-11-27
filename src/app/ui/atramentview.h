@@ -13,6 +13,7 @@
 #include <QQmlComponent>
 #include <QQmlEngine>
 #include <QString>
+#include <QVariantMap>
 
 #include <memory>
 
@@ -61,6 +62,9 @@ class AtramentView : public brulion::atrament::AtramentItem {
     Q_PROPERTY(QColor selectionColor MEMBER m_selectionColor NOTIFY styleChanged FINAL)
     Q_PROPERTY(QString placeholderText MEMBER m_placeholderText NOTIFY styleChanged FINAL)
     Q_PROPERTY(QString editLabel MEMBER m_editLabel NOTIFY styleChanged FINAL)
+    // The edited block's Markdown colours (BlockEditor.highlighterPalette: MarkdownHighlighter's
+    // keys) and the code face; the field is coloured by the highlighter's rules (editstyles.h).
+    Q_PROPERTY(QVariantMap highlighterPalette MEMBER m_highlighterPalette NOTIFY styleChanged FINAL)
     // The find bar's query and options (NoteFind): its matches tinted with findColor.
     Q_PROPERTY(QString findQuery MEMBER m_findQuery NOTIFY findChanged FINAL)
     Q_PROPERTY(bool findMatchCase MEMBER m_findMatchCase NOTIFY findChanged FINAL)
@@ -211,6 +215,7 @@ private:
     QColor m_selectionColor{0x3b, 0x5b, 0xdb, 0x40};
     QString m_placeholderText;
     QString m_editLabel;
+    QVariantMap m_highlighterPalette;
     void applyFind();
     qreal m_contentHeight = 0;
     QString m_findQuery;
