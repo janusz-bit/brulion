@@ -502,8 +502,9 @@ private:
     // Tab / Shift+Tab the next / previous cell (a new row after the last), Enter the cell below,
     // ↑/↓ across rows and out of the table to the blocks above and below, ←/→ at the text's edge
     // the next cell, Ctrl+Enter a row below, Alt+arrows move the row or the column, Esc cancels the
-    // cell's typing and selects the table, Ctrl+Z / Ctrl+Y the page's undo (the cell stays edited).
-    // Off, and for a table showing its filter row: tables are foreign rows (the QML delegate).
+    // cell's typing and selects the table, Ctrl+Z / Ctrl+Y the page's undo (the cell stays edited);
+    // the cell selection (tableselection.cpp) and the filter row (tablefilters.cpp) below. Off:
+    // tables are foreign rows (the QML delegate).
 public:
     struct TableLook {
         atrament::Color background = atrament::rgb(0xffffff);           // Theme.bgElevated: the grid

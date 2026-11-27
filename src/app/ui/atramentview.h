@@ -218,11 +218,12 @@ class AtramentView : public brulion::atrament::AtramentItem {
     Q_PROPERTY(QQmlComponent *delegate READ delegate WRITE setDelegate NOTIFY delegateChanged FINAL)
     Q_PROPERTY(QQuickItem *header READ header WRITE setHeader NOTIFY headerChanged FINAL)
     Q_PROPERTY(QQuickItem *footer READ footer WRITE setFooter NOTIFY footerChanged FINAL)
-    // "page": tables drawn and edited by Atrament (editor/atrament/tablerows.cpp; off: the QML
-    // delegate hosts them, as it does a table showing its filter row), and their look: { background,
-    // header, border, borderStrong, borderSubtle, focusRing, formula, error, input, hover (colours),
-    // fontFamily, monoFamily, fontSize, lineHeight, rowHeight, cellPadding, radius, buttonHeight,
-    // buttonTextSize } (TableBlockView's Theme values; pageview.h TableLook).
+    // "page": tables drawn and edited by Atrament (editor/atrament/tablerows.cpp, their cell
+    // selection and filter row too; off: the QML delegate hosts them), and their look: { background,
+    // header, border, borderStrong, borderSubtle, focusRing, formula, error, input, hover, picked,
+    // accent, muted (colours), fontFamily, monoFamily, fontSize, lineHeight, rowHeight, cellPadding,
+    // radius, buttonHeight, buttonTextSize, filterHeight, fieldTextSize, statusTextSize }
+    // (TableBlockView's Theme values; pageview.h TableLook).
     Q_PROPERTY(bool drawsTables MEMBER m_drawsTables NOTIFY styleChanged FINAL)
     Q_PROPERTY(QVariantMap tableLook MEMBER m_tableLook NOTIFY styleChanged FINAL)
     // "page": cells of a table drawn by Atrament are selected (their keys are the page's: its Ctrl

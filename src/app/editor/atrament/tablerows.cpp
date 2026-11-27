@@ -9,10 +9,10 @@
 // (`html`, the InlineRenderer's) read into RenderedText and drawn with renderedSpans() — links,
 // chips, tags clickable through Text::link —, aligned as its column says (formulas right without
 // one), in the header's weight for the header, on one line ending with "…" when it is longer (a
-// header: its lines). The
-// columns get TableBlockView's natural widths (tableColumnWidths(), measured by Atrament's text
-// layout) and share what the page has beyond them in proportion to them (flex-grow), as the QML
-// table stretches them; a table wider than the page scrolls sideways inside its row.
+// header: its lines). The columns get TableBlockView's natural widths (tableColumnWidths(),
+// measured by Atrament's text layout) and share what the page has beyond them in proportion to
+// them (flex-grow), as the QML table stretches them; a table wider than the page scrolls sideways
+// inside its row.
 //
 // Editing: a click on a cell edits it (editCell()): a TextInput in the cell over the cell's text
 // (a formula as written), the controller editing no block meanwhile (TableBlockView.startCell);
@@ -22,7 +22,8 @@
 // the last cell), ↑/↓ the cell above / below and past the header or the last row the block there,
 // ←/→ at the text's edge the cell beside, Ctrl+Enter a new row below, Alt+↑/↓ / Alt+←/→ move the
 // row / the column with the cell, Alt+Enter the link at the caret, Ctrl+V of several cells pastes
-// them from this one, Esc cancels the cell's typing and selects the table, Ctrl+Z / Ctrl+Y the
+// them from this one and selects them (tableselection.cpp: the cell selection; tablefilters.cpp:
+// the filter row), a right-click opens the cell's menu, Esc cancels the cell's typing and selects the table, Ctrl+Z / Ctrl+Y the
 // page's undo with the cell edited on. ↑/↓ from the block above or below edit the header's or the
 // last row's cell under the caret (the controller's editing row becoming the table:
 // tableEditingRowChanged()).

@@ -1071,8 +1071,10 @@ scrolling, `tst_atrament_editor`) before the next:
    each cell's visible text measured by Atrament's text layout, 56…280 px) shared out in proportion
    to them on a wider page (flex-grow), a table wider than the page scrolled sideways inside its row
    (the wheel with Shift, a touchpad, a finger), a cell longer than its column on one line ending
-   with "…" (a header: its `<br>` lines; "Text", line clamp), as TableBlockView elides it. A click or a tap on a cell edits it at the character under the pointer
-   (`BlockListModel::tableCellText`: the cell rendered with its source map; a formula as written,
+   with "…" (a header: its `<br>` lines; "Text", line clamp), as TableBlockView elides it, each cell
+   aligned by Atrament's own text alignment ("Text": its links, its layout handle's offsets and the
+   caret a click puts are where its glyphs are). A click or a tap on a cell edits it at the
+   character under the pointer (`BlockListModel::tableCellText`: the cell rendered with its source map; a formula as written,
    the caret at its end): a TextInput styled by EditStyler's Inline rules, each change written by
    `PageController::setTableCell(…, typing)` (one undo step per cell, nothing waits for the cell to
    be left), the controller editing no block meanwhile. The keys, TableBlockView's cell field's:
@@ -1081,8 +1083,8 @@ scrolling, `tst_atrament_editor`) before the next:
    stops — past the header or the last row the block above / below (↑/↓ from those edit the
    header's or the last row's cell under the caret), ←/→ at the text's edge the cell beside,
    Ctrl+Enter a row below, Alt+↑/↓ and Alt+←/→ move the row / the column with the cell, Alt+Enter
-   the link at the caret, Ctrl+V of several cells pastes them from this one (then selected), Esc cancels the cell's
-   typing (`cancelTableCell`) and selects the table, Ctrl+Z / Ctrl+Y the page's undo with the cell
+   the link at the caret, Ctrl+V of several cells pastes them from this one (then selected), Esc
+   cancels the cell's typing (`cancelTableCell`) and selects the table, Ctrl+Z / Ctrl+Y the page's undo with the cell
    edited on (the touch toolbar's undo in a cell). "+ Row" / "+ Column" under the grid while a cell
    is edited or the table is selected (always on touch UIs); a right-click on a cell opens the block
    menu with its Row and Column (`tableCellMenuRequested` → `BlockEditor.openCellBlockMenuAt`) —
@@ -1092,8 +1094,8 @@ scrolling, `tst_atrament_editor`) before the next:
    link's menu; in the touch selection mode a finger held there is the row's long press). For
    screen readers a table of rows of cells — Atrament's new generic roles `Table`, `Row`, `Cell`,
    `ColumnHeader` (`ui/accessibility.h`, mapped to Qt's in `qt/qtaccessibility.cpp`) —, each cell
-   named by its text and described by its column's header, the edited one a text input "Cell …".
-   With `drawsTables` off every table is the QML view's. Tested by `tests/atrament/editor/
+   named by its text and described by its column's header, the edited one a text input "Cell …", the
+   table with Qt's table interfaces ("Accessibility" above). With `drawsTables` off every table is the QML view's. Tested by `tests/atrament/editor/
    tst_atrament_tables` (TableSelfTest's checks of the keys, of the cell selection and of the filter
    row among them) and `tst_editor_qml_atrament_table[_touch]` (qml/dev/AtramentTableSelfTest.qml,
    `--editor-script atramenttabletest --atrament-editor`: TableSelfTest's steps with real input
@@ -1151,9 +1153,7 @@ scrolling, `tst_atrament_editor`) before the next:
      `AtramentView.editTableRow` is a row). The tools are `PageView::nextCell`, `undoInCell`,
      `closeCell`, `onCellEditingChanged`.
    **Not yet** for tables: tooltips (a formula's error, a truncated cell's text, link previews),
-   dragging the sideways scroll bar (Atrament draws none). For screen readers the table has Qt's
-   table interfaces ("Accessibility" above). Each cell is aligned by Atrament's own text alignment
-   ("Text": its links, its layout handle's offsets and the caret a click puts where its glyphs are).
+   dragging the sideways scroll bar (Atrament draws none).
    **Pictures, files, embedded blocks and query results** (2026-11-27; `PageView::setDrawsMedia`,
    `src/app/editor/atrament/mediarows.cpp`, `queryrows.cpp`, `picturecache.h`; `AtramentView.
    drawsPictures` / `drawsFiles` / `drawsTransclusions` / `drawsQueries`, all on, and `mediaLook`).
