@@ -1035,18 +1035,47 @@ private Q_SLOTS:
     void atMost64ViewsReplaced()
     {
         // Eight extensions replace the eight views: 64; one more is refused, the 64 stay.
-        for (int i = 0; i < 9; ++i) {
-            const Result r = m_engine.load(ext(u"z%1"_s.arg(i), uR"lua(
+        for (int i = 0; i < 8; ++i)
+            QVERIFY(m_engine.load(ext(u"z%1"_s.arg(i), uR"lua(
                 b.view("v", function() return b.ui.text("v") end)
                 for _, name in { "journals", "tasks", "calendar", "habits", "graph", "allPages", "tags", "search" } do
                     b.app.replaceView(name, "v")
                 end
-            )lua"_s));
-            QCOMPARE(r.ok(), i < 8);
-            if (!r.ok())
-                QVERIFY2(r.error.contains(u"at most 64 views replaced"_s), qPrintable(r.error));
-        }
+            )lua"_s))
+                            .ok());
         QCOMPARE(m_engine.viewReplacements().size(), 64);
+        const Result more = m_engine.load(ext(u"jeszcze"_s, uR"lua(
+            b.view("v", function() return b.ui.text("v") end)
+            b.app.replaceView("tasks", "v")
+        )lua"_s));
+        QVERIFY(!more.ok());
+        QVERIFY2(more.error.contains(u"at most 64 views replaced"_s), qPrintable(more.error));
+        QCOMPARE(m_engine.viewReplacements().size(), 64);
+    }
+
+    void unloadTellsTheAppWhatItHad_data()
+    {
+        QTest::addColumn<QString>("code");
+        const QString view = u"b.view(\"v\", function() return b.ui.text(\"v\") end)\n"_s;
+        QTest::newRow("a replaced view alone") << view + u"b.app.replaceView(\"tasks\", \"v\")"_s;
+        QTest::newRow("a theme and a style")
+                << u"b.app.theme({ radius = 9 })\nb.app.tagStyle({ tag = \"a\", tint = \"info\" })"_s;
+        QTest::newRow("a rule and a replaced view")
+                << view + u"b.app.inputRule({ match = \"->\", replace = \"→\" })\nb.app.replaceView(\"tasks\", \"v\")"_s;
+        QTest::newRow("a style and a replaced view")
+                << view + u"b.app.tagStyle({ tag = \"a\", tint = \"info\" })\nb.app.replaceView(\"tasks\", \"v\")"_s;
+    }
+    void unloadTellsTheAppWhatItHad()
+    {
+        // Unloaded, an extension's app state goes and the app is told — whatever it had.
+        QFETCH(QString, code);
+        QVERIFY(m_engine.load(ext(u"u"_s, code)).ok());
+        const int before = m_engine.appRevision();
+        m_host.changed.clear();
+        m_engine.unload(u"u"_s);
+        QVERIFY(m_engine.appRevision() > before);
+        QVERIFY(m_host.changed.contains(u"u"_s));
+        QVERIFY(m_engine.viewReplacements().isEmpty() && m_engine.tagStyles().isEmpty());
     }
 
     void replacedRoutes()
