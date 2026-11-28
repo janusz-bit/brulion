@@ -7,6 +7,7 @@
 #include "sync/folderstorage.h"
 #include "sync/foldertransport.h"
 
+#include <QBuffer>
 #include <QSignalSpy>
 #include <QTest>
 #include <QThread>
@@ -43,14 +44,42 @@ public:
     FolderReadResult read(const QString &path, qint64 maxBytes) override
     {
         note();
-        return m_inner.read(path, maxBytes);
+        FolderReadResult read = m_inner.read(path, maxBytes);
+        largestWhole = std::max(largestWhole.load(), qint64(read.data.size()));
+        return read;
     }
     FolderStatResult write(const QString &path, const QByteArray &data) override
     {
         note();
+        largestWhole = std::max(largestWhole.load(), qint64(data.size()));
         if (writeError.isError())
             return {std::nullopt, writeError};
         return m_inner.write(path, data);
+    }
+    bool streams() const override { return streaming; }
+    FolderError readInto(const QString &path, qint64 maxBytes, const PieceSink &sink) override
+    {
+        if (!streaming)
+            return FolderStorage::readInto(path, maxBytes, sink);
+        note();
+        return m_inner.readInto(path, maxBytes, [this, &sink](QByteArrayView piece) {
+            largestPiece = std::max(largestPiece.load(), qint64(piece.size()));
+            return sink(piece);
+        });
+    }
+    FolderStatResult writeFrom(const QString &path, const PieceSource &source) override
+    {
+        if (!streaming)
+            return FolderStorage::writeFrom(path, source);
+        note();
+        if (writeError.isError())
+            return {std::nullopt, writeError};
+        return m_inner.writeFrom(path, [this, &source]() {
+            std::optional<QByteArray> piece = source();
+            if (piece)
+                largestPiece = std::max(largestPiece.load(), qint64(piece->size()));
+            return piece;
+        });
     }
     FolderError makeFolder(const QString &path) override
     {
@@ -78,6 +107,9 @@ public:
     FolderError writeError;
     bool canCreateRoot = true;
     bool canMove = true;
+    bool streaming = true; ///< false: as a storage that reads and writes files whole
+    std::atomic<qint64> largestWhole{0}; ///< the largest file read or written whole
+    std::atomic<qint64> largestPiece{0}; ///< the largest piece read or written
     int moves = 0;
     std::atomic<int> calls{0};
     std::atomic<int> offThread{0};
@@ -185,6 +217,45 @@ struct FolderDevice {
     std::unique_ptr<FolderDavTransport> transport;
     std::unique_ptr<WebDavClient> client;
     std::unique_ptr<SyncEngine> engine;
+};
+
+constexpr qint64 MiB = 1024 * 1024;
+
+QByteArray readFile(const QString &path)
+{
+    QFile f(path);
+    return f.open(QIODevice::ReadOnly) ? f.readAll() : QByteArray();
+}
+
+/// `size` bytes that differ from `seed` to `seed`.
+QByteArray pattern(qint64 size, int seed = 0)
+{
+    QByteArray out(size, Qt::Uninitialized);
+    for (qint64 i = 0; i < size; ++i)
+        out[i] = char((i * 7919 + 13 + seed * 31) & 0xff);
+    return out;
+}
+
+/// An upload's body that cannot be read past `failAt` bytes (a file that went away half-way).
+class FailingDevice : public QIODevice {
+public:
+    FailingDevice(qint64 size, qint64 failAt) : m_size(size), m_failAt(failAt) { open(QIODevice::ReadOnly); }
+    qint64 size() const override { return m_size; }
+
+protected:
+    qint64 readData(char *data, qint64 maxSize) override
+    {
+        if (pos() >= m_failAt)
+            return -1;
+        const qint64 n = std::min(maxSize, m_failAt - pos());
+        std::fill(data, data + n, 'z');
+        return n;
+    }
+    qint64 writeData(const char *, qint64) override { return -1; }
+
+private:
+    qint64 m_size;
+    qint64 m_failAt;
 };
 
 } // namespace
@@ -657,6 +728,187 @@ private Q_SLOTS:
         QVERIFY2(!report.failed(), qPrintable(report.failureMessage()));
         QCOMPARE(counts(report), (Counts{.up = 1, .down = 1}));
         QCOMPARE(d.storage->offThread.load(), 0);
+    }
+
+    // --- large files in pieces -----------------------------------------------------------------
+    void largeFilesTravelInPieces()
+    {
+        const QByteArray film = pattern(20 * MiB, 1);
+        const QByteArray scan = pattern(12 * MiB, 2);
+        FolderDevice d({{u"Filmy/wakacje.mov"_s, film}, {u"Notatka.md"_s, "Zażółć\n"}},
+                       {{u"Skany/umowa.pdf"_s, scan}});
+        QVERIFY(d.transport->streams());
+        {
+            const SyncReport report = d.sync();
+            QVERIFY2(!report.failed(), qPrintable(report.failureMessage()));
+        }
+        QCOMPARE(readFile(d.folderRoot + u"/Filmy/wakacje.mov"_s), film);
+        QCOMPARE(readFile(d.vaultRoot + u"/Skany/umowa.pdf"_s), scan);
+        // Neither file was held whole on its way: pieces of at most 256 KiB.
+        QVERIFY2(d.storage->largestWhole.load() < MiB, qPrintable(QString::number(d.storage->largestWhole.load())));
+        QVERIFY(d.storage->largestPiece.load() > 0);
+        QVERIFY(d.storage->largestPiece.load() <= HttpRequest::StreamPieceBytes);
+    }
+
+    void aStorageThatDoesNotStreamGetsWholeFiles()
+    {
+        const QByteArray film = pattern(6 * MiB, 3);
+        FolderDevice d({{u"wideo.mov"_s, film}});
+        d.storage->streaming = false;
+        QVERIFY(!d.transport->streams());
+        {
+            const SyncReport report = d.sync();
+            QVERIFY2(!report.failed(), qPrintable(report.failureMessage()));
+        }
+        QCOMPARE(readFile(d.folderRoot + u"/wideo.mov"_s), film);
+        QCOMPARE(d.storage->largestWhole.load(), film.size());
+        QCOMPARE(d.storage->largestPiece.load(), 0);
+    }
+
+    void piecesAreHandedOverOnTheOwnerThread()
+    {
+        QTemporaryDir tmp;
+        const QByteArray photo = pattern(3 * MiB + 17, 4);
+        QVERIFY(writeFileBehind(tmp.path(), u"zdjęcie.jpg"_s, photo));
+        auto storage = std::make_shared<TestStorage>(tmp.path());
+        FolderDavTransport transport(storage, deviceFolderUrl(kId));
+        QByteArray received;
+        bool ownerThread = true;
+        qint64 largest = 0;
+        std::optional<HttpResponse> answer;
+        HttpRequest r = request("GET", u"zdjęcie.jpg"_s);
+        r.bodySink = [&](QByteArrayView piece) {
+            ownerThread = ownerThread && QThread::currentThread() == transport.thread();
+            largest = std::max(largest, qint64(piece.size()));
+            received.append(piece);
+            return true;
+        };
+        transport.send(r, [&answer](const HttpResponse &response) { answer = response; });
+        QVERIFY(waitFor([&answer] { return answer.has_value(); }));
+        QCOMPARE(answer->status, 200);
+        QVERIFY(answer->body.isEmpty());
+        QVERIFY(!answer->header("etag").isEmpty());
+        QCOMPARE(received, photo);
+        QVERIFY(ownerThread);
+        QVERIFY(largest <= HttpRequest::StreamPieceBytes);
+        QCOMPARE(storage->offThread.load(), storage->calls.load());
+    }
+
+    void aRefusedPieceStopsTheDownload()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(writeFileBehind(tmp.path(), u"a.bin"_s, pattern(2 * MiB, 5)));
+        auto storage = std::make_shared<TestStorage>(tmp.path());
+        FolderDavTransport transport(storage, deviceFolderUrl(kId));
+        int pieces = 0;
+        std::optional<HttpResponse> answer;
+        HttpRequest r = request("GET", u"a.bin"_s);
+        r.bodySink = [&pieces](QByteArrayView) { return ++pieces < 2; }; // a full disk at the second
+        transport.send(r, [&answer](const HttpResponse &response) { answer = response; });
+        QVERIFY(waitFor([&answer] { return answer.has_value(); }));
+        QCOMPARE(pieces, 2);
+        QCOMPARE(answer->status, 0);
+        QVERIFY(!answer->networkError.isEmpty());
+    }
+
+    void destroyedWhileAPieceWaits()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(writeFileBehind(tmp.path(), u"a.bin"_s, pattern(4 * MiB, 6)));
+        auto storage = std::make_shared<TestStorage>(tmp.path());
+        int pieces = 0;
+        int answered = 0;
+        {
+            FolderDavTransport transport(storage, deviceFolderUrl(kId));
+            HttpRequest r = request("GET", u"a.bin"_s);
+            r.bodySink = [&pieces](QByteArrayView) { ++pieces; return true; };
+            transport.send(r, [&answered](const HttpResponse &) { ++answered; });
+            QTest::qWait(20); // the worker reads its first piece and waits for this thread
+        }
+        const int handed = pieces;
+        QTest::qWait(50);
+        QCOMPARE(pieces, handed); // nothing after the transport has gone
+        QCOMPARE(answered, 0);
+    }
+
+    void aStorageThatDoesNotStreamAnswersPiecesToo()
+    {
+        // FolderDavTransport::answer() with a sink or a body device over a storage that reads
+        // and writes files whole (FolderStorage's own readInto() and writeFrom()).
+        QTemporaryDir tmp;
+        TestStorage storage(tmp.path());
+        storage.streaming = false;
+        const QByteArray photo = pattern(MiB + 3, 8);
+        QVERIFY(writeFileBehind(tmp.path(), u"zdjęcie.jpg"_s, photo));
+        QByteArray received;
+        qint64 largest = 0;
+        HttpRequest r = request("GET", u"zdjęcie.jpg"_s);
+        r.bodySink = [&](QByteArrayView piece) {
+            largest = std::max(largest, qint64(piece.size()));
+            received.append(piece);
+            return true;
+        };
+        QCOMPARE(ask(storage, r).status, 200);
+        QCOMPARE(received, photo);
+        QCOMPARE(largest, HttpRequest::StreamPieceBytes);
+        QCOMPARE(storage.largestWhole.load(), photo.size());
+        r.bodySink = [](QByteArrayView) { return false; };
+        QVERIFY(!ask(storage, r).networkError.isEmpty());
+
+        auto buffer = std::make_shared<QBuffer>();
+        buffer->setData(photo);
+        QVERIFY(buffer->open(QIODevice::ReadOnly));
+        HttpRequest put = request("PUT", u"kopia.jpg"_s);
+        put.bodyDevice = buffer;
+        QCOMPARE(ask(storage, put).status, 201);
+        QCOMPARE(readFile(tmp.path() + u"/kopia.jpg"_s), photo);
+        put.bodyDevice = std::make_shared<FailingDevice>(3 * MiB, MiB);
+        QVERIFY(ask(storage, put).status >= 400);
+        QCOMPARE(readFile(tmp.path() + u"/kopia.jpg"_s), photo); // as it was
+    }
+
+    void anUploadReadInPieces()
+    {
+        QTemporaryDir tmp;
+        LocalFolderStorage storage(tmp.path());
+        const QByteArray film = pattern(5 * MiB + 3, 7);
+        auto buffer = std::make_shared<QBuffer>();
+        buffer->setData(film);
+        QVERIFY(buffer->open(QIODevice::ReadOnly));
+        HttpRequest r = request("PUT", u"film.mov"_s);
+        r.bodyDevice = buffer;
+        QCOMPARE(ask(storage, r).status, 201);
+        QCOMPARE(readFile(tmp.path() + u"/film.mov"_s), film);
+    }
+
+    void anUploadThatFailsHalfWayLeavesNoFile()
+    {
+        QTemporaryDir tmp;
+        QVERIFY(writeFileBehind(tmp.path(), u"stary.mov"_s, "poprzednia wersja"));
+        LocalFolderStorage storage(tmp.path());
+        for (const QString &name : {u"nowy.mov"_s, u"stary.mov"_s}) {
+            HttpRequest r = request("PUT", name);
+            r.bodyDevice = std::make_shared<FailingDevice>(3 * MiB, MiB);
+            const HttpResponse response = ask(storage, r);
+            QVERIFY2(response.status >= 400, qPrintable(QString::number(response.status)));
+        }
+        QVERIFY(!QFile::exists(tmp.path() + u"/nowy.mov"_s));
+        QCOMPARE(readFile(tmp.path() + u"/stary.mov"_s), QByteArray("poprzednia wersja"));
+        QCOMPARE(QDir(tmp.path()).entryList(QDir::Files | QDir::Hidden), (QStringList{u"stary.mov"_s}));
+    }
+
+    void anUploadShorterThanItsSizeIsRefused()
+    {
+        QTemporaryDir tmp;
+        LocalFolderStorage storage(tmp.path());
+        auto buffer = std::make_shared<QBuffer>();
+        buffer->setData(pattern(1000));
+        QVERIFY(buffer->open(QIODevice::ReadOnly));
+        HttpRequest r = request("PUT", u"krótki.bin"_s);
+        r.bodyDevice = buffer;
+        QVERIFY(buffer->read(10).size() == 10); // (no longer at its start: 990 bytes left of 1000)
+        QVERIFY(ask(storage, r).status >= 400);
+        QVERIFY(!QFile::exists(tmp.path() + u"/krótki.bin"_s));
     }
 };
 

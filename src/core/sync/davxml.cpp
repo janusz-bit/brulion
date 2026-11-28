@@ -3,6 +3,7 @@
 #include "sync/url.h"
 
 #include <QDateTime>
+#include <QLocale>
 #include <QRegularExpression>
 #include <QTimeZone>
 #include <QXmlStreamReader>
@@ -210,6 +211,43 @@ QByteArray propfindBody()
                              "    <oc:fileid/>\n"
                              "  </d:prop>\n"
                              "</d:propfind>\n");
+}
+
+namespace {
+
+QString escapeXml(QString s)
+{
+    return s.replace(u'&', u"&amp;"_s).replace(u'<', u"&lt;"_s).replace(u'>', u"&gt;"_s).replace(u'"', u"&quot;"_s);
+}
+
+} // namespace
+
+QString httpDate(qint64 ms)
+{
+    return QLocale::c().toString(QDateTime::fromMSecsSinceEpoch(ms, QTimeZone::UTC), u"ddd, dd MMM yyyy HH:mm:ss 'GMT'"_s);
+}
+
+QByteArray writeMultistatus(const QList<DavResource> &resources)
+{
+    QString body;
+    for (const DavResource &res : resources) {
+        QString props;
+        if (!res.etag.isEmpty())
+            props += u"<d:getetag>&quot;%1&quot;</d:getetag>"_s.arg(escapeXml(res.etag));
+        if (res.mtime > 0)
+            props += u"<d:getlastmodified>%1</d:getlastmodified>"_s.arg(httpDate(res.mtime));
+        if (res.isCollection)
+            props += u"<d:resourcetype><d:collection/></d:resourcetype>"_s;
+        else
+            props += u"<d:resourcetype/><d:getcontentlength>%1</d:getcontentlength>"_s.arg(res.size);
+        if (!res.fileId.isEmpty())
+            props += u"<oc:fileid>%1</oc:fileid>"_s.arg(escapeXml(res.fileId));
+        body += u"<d:response><d:href>%1</d:href><d:propstat><d:prop>%2</d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>"_s
+                        .arg(escapeXml(res.href), props);
+    }
+    return (u"<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<d:multistatus xmlns:d=\"DAV:\" xmlns:oc=\"http://owncloud.org/ns\">"_s
+            + body + u"</d:multistatus>"_s)
+            .toUtf8();
 }
 
 MultistatusResult parseMultistatus(QByteArrayView xml)

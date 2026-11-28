@@ -279,6 +279,27 @@ private Q_SLOTS:
         QFETCH(qint64, expected);
         QCOMPARE(parseHttpDate(text), expected);
     }
+
+    void writtenListingsReadBack()
+    {
+        DavResource folder;
+        folder.href = u"/remote.php/dav/files/jan/Notatki/%C5%81%C3%B3d%C5%BA/"_s;
+        folder.isCollection = true;
+        folder.etag = u"d1"_s;
+        folder.mtime = 1'790'000'000'000;
+        DavResource file;
+        file.href = u"/remote.php/dav/files/jan/Notatki/a%26b%20%3Cx%3E.md"_s;
+        file.etag = u"e&<\"1"_s;
+        file.size = 12345;
+        file.fileId = u"00000042oc"_s;
+        DavResource unknownTime;
+        unknownTime.href = u"/x.bin"_s;
+        const MultistatusResult parsed = parseMultistatus(writeMultistatus({folder, file, unknownTime}));
+        QVERIFY(parsed.ok());
+        QCOMPARE(parsed.resources, (QList<DavResource>{folder, file, unknownTime}));
+        QVERIFY(parseMultistatus(writeMultistatus({})).ok());
+        QCOMPARE(httpDate(1'790'000'000'000), u"Mon, 21 Sep 2026 14:13:20 GMT"_s);
+    }
 };
 
 QTEST_GUILESS_MAIN(TestSyncXml)

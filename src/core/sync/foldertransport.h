@@ -28,6 +28,7 @@
 #include <QString>
 #include <QThreadPool>
 
+#include <atomic>
 #include <memory>
 
 namespace brulion::sync {
@@ -53,6 +54,11 @@ public:
     Q_DISABLE_COPY_MOVE(FolderDavTransport)
 
     void send(const HttpRequest &request, HttpCallback done) override;
+    /// The storage streams() (LocalFolderStorage does): a GET with a bodySink and a PUT with a
+    /// bodyDevice hold no more than a piece of the file. The worker hands each piece over to the
+    /// thread that owns the transport, where the sink is called and the device read, and waits
+    /// for it — one piece in flight.
+    bool streams() const override { return m_storage && m_storage->streams(); }
 
     /// Answer on the calling thread instead of the worker (still from the event loop): tests.
     void setSynchronous(bool on) { m_synchronous = on; }
@@ -70,6 +76,8 @@ private:
     QString m_basePathname;
     QThreadPool m_pool;
     bool m_synchronous = false;
+    /// Set by the destructor: a worker waiting for the owner's turn stops (OwnerSide::run).
+    std::shared_ptr<std::atomic<bool>> m_stopping = std::make_shared<std::atomic<bool>>(false);
 };
 
 } // namespace brulion::sync

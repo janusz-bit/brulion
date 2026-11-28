@@ -9,10 +9,15 @@
 #pragma once
 
 #include <QByteArray>
+#include <QByteArrayView>
 #include <QList>
 #include <QString>
 
+#include <functional>
 #include <optional>
+
+class QFile;
+class QSaveFile;
 
 namespace brulion::sync {
 
@@ -62,6 +67,12 @@ struct FolderReadResult {
     FolderError error;
 };
 
+/// A piece of a file read (FolderStorage::readInto): false stops the reading.
+using PieceSink = std::function<bool(QByteArrayView piece)>;
+/// The next piece of a file to write (FolderStorage::writeFrom): an empty one at its end,
+/// std::nullopt when the source failed (then nothing is written).
+using PieceSource = std::function<std::optional<QByteArray>()>;
+
 /// The folder, reached by relative paths: "Dziennik/2026-11-22.md", "" for the folder itself;
 /// '/' between names, never "." or ".." (FolderDavTransport refuses them before asking).
 /// Synchronous; FolderDavTransport calls it from one worker thread at a time, never from two at
@@ -89,6 +100,18 @@ public:
     /// Moves or renames a file or folder into an existing folder; Exists when `to` is taken and
     /// not `overwrite`. Unsupported by default: the engine then copies and deletes.
     virtual FolderError move(const QString &from, const QString &to, bool overwrite);
+
+    /// True when readInto() and writeFrom() hold no more than a piece of a file at a time
+    /// (FolderDavTransport then streams: HttpTransport::streams()). False by default: they go
+    /// through read() and write(), the whole file in memory.
+    virtual bool streams() const { return false; }
+    /// The file handed to `sink` in order, in pieces of at most HttpRequest::StreamPieceBytes;
+    /// errors as read()'s, Failed when the sink refused a piece.
+    virtual FolderError readInto(const QString &path, qint64 maxBytes, const PieceSink &sink);
+    /// The file written from `source`'s pieces until an empty one, created or replaced as
+    /// write() does — all of it or nothing: when the source fails (Failed) the file stays as it
+    /// was.
+    virtual FolderStatResult writeFrom(const QString &path, const PieceSource &source);
 };
 
 /// A plain folder of the file system (QFile/QDir; files written through QSaveFile).
@@ -105,9 +128,16 @@ public:
     FolderError makeFolder(const QString &path) override;
     FolderError remove(const QString &path) override;
     FolderError move(const QString &from, const QString &to, bool overwrite) override;
+    bool streams() const override { return true; }
+    FolderError readInto(const QString &path, qint64 maxBytes, const PieceSink &sink) override;
+    FolderStatResult writeFrom(const QString &path, const PieceSource &source) override;
 
 private:
     QString absolute(const QString &path) const;
+    /// The file opened for reading, or why it cannot be (missing, a folder, over `maxBytes`).
+    FolderError openToRead(const QString &path, qint64 maxBytes, QFile &f) const;
+    /// The file opened to be replaced as a whole, or why it cannot be (no folder, a folder).
+    FolderError openToWrite(const QString &path, QSaveFile &f) const;
     QString m_root;
 };
 

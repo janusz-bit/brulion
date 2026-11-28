@@ -1,14 +1,15 @@
 #include "sync/foldertransport.h"
 
+#include "sync/davxml.h"
 #include "sync/url.h"
 
 #include <QCryptographicHash>
-#include <QDateTime>
-#include <QLocale>
 #include <QMetaObject>
-#include <QTimeZone>
+#include <QMutex>
+#include <QWaitCondition>
 #include <QUrl>
 
+#include <atomic>
 #include <utility>
 
 using namespace Qt::StringLiterals;
@@ -68,42 +69,42 @@ QString childOf(const QString &folder, const QString &name)
     return folder.isEmpty() ? name : folder + u'/' + name;
 }
 
-QString escapeXml(QString s)
-{
-    return s.replace(u'&', u"&amp;"_s).replace(u'<', u"&lt;"_s).replace(u'>', u"&gt;"_s).replace(u'"', u"&quot;"_s);
-}
-
-QString httpDate(qint64 ms)
-{
-    return QLocale::c().toString(QDateTime::fromMSecsSinceEpoch(ms, QTimeZone::UTC), u"ddd, dd MMM yyyy HH:mm:ss 'GMT'"_s);
-}
-
 /// The path of `url` relative to the base folder (decoded), std::nullopt outside it.
 std::optional<QString> relativeOf(const QUrl &url, const QString &basePathname)
 {
     return relativeTo(urlPathname(url.toString(QUrl::FullyEncoded)), basePathname);
 }
 
-/// One <d:response> of a multistatus answer.
-QString davResponse(const QString &basePathname, const QString &path, const FolderEntry &entry)
+/// One resource of a multistatus answer.
+DavResource davResource(const QString &basePathname, const QString &path, const FolderEntry &entry)
 {
-    QString href = basePathname + u'/' + encodePath(path);
-    if (entry.isDir && !href.endsWith(u'/'))
-        href += u'/';
-    QString props = u"<d:getetag>&quot;%1&quot;</d:getetag>"_s.arg(FolderDavTransport::etagOf(entry));
-    if (entry.mtime > 0)
-        props += u"<d:getlastmodified>%1</d:getlastmodified>"_s.arg(httpDate(entry.mtime));
-    if (entry.isDir)
-        props += u"<d:resourcetype><d:collection/></d:resourcetype>"_s;
-    else
-        props += u"<d:resourcetype/><d:getcontentlength>%1</d:getcontentlength>"_s.arg(entry.size);
-    return u"<d:response><d:href>%1</d:href><d:propstat><d:prop>%2</d:prop><d:status>HTTP/1.1 200 OK</d:status></d:propstat></d:response>"_s
-            .arg(escapeXml(href), props);
+    DavResource res;
+    res.href = basePathname + u'/' + encodePath(path);
+    if (entry.isDir && !res.href.endsWith(u'/'))
+        res.href += u'/';
+    res.isCollection = entry.isDir;
+    res.etag = FolderDavTransport::etagOf(entry);
+    res.mtime = entry.mtime;
+    res.size = entry.isDir ? 0 : entry.size;
+    return res;
 }
 
 bool validName(const QString &name)
 {
     return !name.isEmpty() && name != u"." && name != u".." && !name.contains(u'/') && !name.contains(QChar(0));
+}
+
+/// The children of the folder `path` appended to a listing (names no WebDAV path can carry left
+/// out).
+FolderError appendChildren(FolderStorage &storage, const QString &basePathname, const QString &path,
+                           QList<DavResource> &resources)
+{
+    const FolderListResult children = storage.list(path);
+    for (const FolderEntry &child : children.entries) {
+        if (validName(child.name))
+            resources.append(davResource(basePathname, childOf(path, child.name), child));
+    }
+    return children.error;
 }
 
 HttpResponse propfind(FolderStorage &storage, const QString &basePathname, const HttpRequest &request,
@@ -117,18 +118,61 @@ HttpResponse propfind(FolderStorage &storage, const QString &basePathname, const
         return failure(self.error);
     if (!self.entry)
         return respond(404, "Not found");
-    QString body = davResponse(basePathname, path, *self.entry);
+    QList<DavResource> resources{davResource(basePathname, path, *self.entry)};
     if (depth == "1" && self.entry->isDir) {
-        const FolderListResult children = storage.list(path);
-        if (children.error.isError())
-            return failure(children.error);
-        for (const FolderEntry &child : children.entries) {
-            if (validName(child.name))
-                body += davResponse(basePathname, childOf(path, child.name), child);
-        }
+        if (const FolderError error = appendChildren(storage, basePathname, path, resources); error.isError())
+            return failure(error);
     }
-    const QString xml = u"<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<d:multistatus xmlns:d=\"DAV:\">%1</d:multistatus>"_s.arg(body);
-    return respond(207, xml.toUtf8(), {{"content-type", "application/xml; charset=utf-8"}});
+    return respond(207, writeMultistatus(resources), {{"content-type", "application/xml; charset=utf-8"}});
+}
+
+/// The headers of a file's body read whole or in pieces: its length, and the ETag of the entry
+/// stat() saw — unless the file changed meanwhile (then none, and the engine asks again before it
+/// trusts this version).
+QHash<QByteArray, QByteArray> bodyHeaders(const FolderEntry &entry, qint64 read)
+{
+    QHash<QByteArray, QByteArray> headers{{"content-length", QByteArray::number(read)}};
+    if (read == entry.size)
+        headers.insert("etag", quoteEtag(FolderDavTransport::etagOf(entry)).toUtf8());
+    return headers;
+}
+
+/// GET into the request's bodySink: the response's body stays empty.
+HttpResponse getInPieces(FolderStorage &storage, const HttpRequest &request, const QString &path,
+                         const FolderEntry &entry)
+{
+    qint64 read = 0;
+    bool refused = false;
+    const FolderError error = storage.readInto(path, request.bodyLimit(), [&](QByteArrayView piece) {
+        read += piece.size();
+        refused = !request.bodySink(piece);
+        return !refused;
+    });
+    if (refused) {
+        HttpResponse stopped;
+        stopped.networkError = u"The answer could not be kept"_s;
+        return stopped;
+    }
+    if (error.isError())
+        return failure(error);
+    return respond(200, {}, bodyHeaders(entry, read));
+}
+
+/// The pieces of the request's bodyDevice, exactly its size() bytes: std::nullopt when it ends
+/// sooner or cannot be read.
+PieceSource bodyPieces(const HttpRequest &request)
+{
+    QIODevice *device = request.bodyDevice.get();
+    auto left = std::make_shared<qint64>(device->size());
+    return [device, left]() -> std::optional<QByteArray> {
+        if (*left == 0)
+            return QByteArray();
+        QByteArray piece = device->read(std::min(*left, HttpRequest::StreamPieceBytes));
+        if (piece.isEmpty())
+            return std::nullopt;
+        *left -= piece.size();
+        return piece;
+    };
 }
 
 HttpResponse get(FolderStorage &storage, const HttpRequest &request, const QString &path)
@@ -142,39 +186,61 @@ HttpResponse get(FolderStorage &storage, const HttpRequest &request, const QStri
         return respond(405, "A folder");
     if (self.entry->size > request.bodyLimit())
         return HttpResponse::oversized(request);
+    if (request.bodySink)
+        return getInPieces(storage, request, path, *self.entry);
     FolderReadResult read = storage.read(path, request.bodyLimit());
     if (read.error.isError())
         return failure(read.error);
-    // The ETag of what was read: the entry stat() saw, unless the file changed meanwhile (then
-    // none, and the engine asks again before it trusts this version).
-    QHash<QByteArray, QByteArray> headers{{"content-length", QByteArray::number(read.data.size())}};
-    if (read.data.size() == self.entry->size)
-        headers.insert("etag", quoteEtag(FolderDavTransport::etagOf(*self.entry)).toUtf8());
-    return respond(200, read.data, headers);
+    return respond(200, read.data, bodyHeaders(*self.entry, read.data.size()));
 }
 
-HttpResponse put(FolderStorage &storage, const HttpRequest &request, const QString &path)
+/// A PUT's folder is not there (409, as a WebDAV server answers), nullopt when it is.
+std::optional<HttpResponse> parentMissing(FolderStorage &storage, const QString &path)
 {
-    if (path.isEmpty())
-        return respond(405, "The folder itself");
     const FolderStatResult parent = storage.stat(parentOf(path));
     if (parent.error.isError())
         return failure(parent.error, 409);
     if (!parent.entry || !parent.entry->isDir)
         return respond(409, "Parent missing");
-    const FolderStatResult current = storage.stat(path);
+    return std::nullopt;
+}
+
+/// The request's If-Match / If-None-Match does not hold for what is there (412).
+std::optional<HttpResponse> conditionFails(const HttpRequest &request, const std::optional<FolderEntry> &current)
+{
+    if (request.hasHeader("if-match")) {
+        const QString wanted = normalizeEtag(QString::fromUtf8(request.header("if-match")));
+        if (!current || FolderDavTransport::etagOf(*current) != wanted)
+            return respond(412, "Changed meanwhile");
+    }
+    if (request.header("if-none-match").trimmed() == "*" && current)
+        return respond(412, "Exists");
+    return std::nullopt;
+}
+
+/// Why a PUT of `path` cannot be written, nullopt when it can; `current` is what is there.
+std::optional<HttpResponse> putRefusal(FolderStorage &storage, const HttpRequest &request, const QString &path,
+                                       FolderStatResult &current)
+{
+    if (path.isEmpty())
+        return respond(405, "The folder itself");
+    if (std::optional<HttpResponse> missing = parentMissing(storage, path))
+        return missing;
+    current = storage.stat(path);
     if (current.error.isError())
         return failure(current.error);
     if (current.entry && current.entry->isDir)
         return respond(405, "A folder");
-    if (request.hasHeader("if-match")) {
-        const QString wanted = normalizeEtag(QString::fromUtf8(request.header("if-match")));
-        if (!current.entry || FolderDavTransport::etagOf(*current.entry) != wanted)
-            return respond(412, "Changed meanwhile");
-    }
-    if (request.header("if-none-match").trimmed() == "*" && current.entry)
-        return respond(412, "Exists");
-    const FolderStatResult written = storage.write(path, request.body);
+    return conditionFails(request, current.entry);
+}
+
+HttpResponse put(FolderStorage &storage, const HttpRequest &request, const QString &path)
+{
+    FolderStatResult current;
+    if (std::optional<HttpResponse> refusal = putRefusal(storage, request, path, current))
+        return *refusal;
+    const FolderStatResult written =
+            request.bodyDevice ? storage.writeFrom(path, bodyPieces(request)) : storage.write(path, request.body);
     if (written.error.isError())
         return failure(written.error, 409);
     QHash<QByteArray, QByteArray> headers;
@@ -208,11 +274,8 @@ HttpResponse mkcol(FolderStorage &storage, const QString &path)
     if (current.entry)
         return respond(405, "Exists");
     if (!path.isEmpty()) {
-        const FolderStatResult parent = storage.stat(parentOf(path));
-        if (parent.error.isError())
-            return failure(parent.error, 409);
-        if (!parent.entry || !parent.entry->isDir)
-            return respond(409, "Parent missing");
+        if (std::optional<HttpResponse> missing = parentMissing(storage, path))
+            return *missing;
     }
     const FolderError error = storage.makeFolder(path);
     if (error.is(FolderErrorCode::Exists))
@@ -241,11 +304,8 @@ HttpResponse move(FolderStorage &storage, const QString &basePathname, const Htt
         return failure(source.error);
     if (!source.entry)
         return respond(404, "Not found");
-    const FolderStatResult parent = storage.stat(parentOf(*target));
-    if (parent.error.isError())
-        return failure(parent.error, 409);
-    if (!parent.entry || !parent.entry->isDir)
-        return respond(409, "Parent missing");
+    if (std::optional<HttpResponse> missing = parentMissing(storage, *target))
+        return *missing;
     const bool overwrite = request.header("overwrite").trimmed().toUpper() != "F";
     const FolderStatResult existing = storage.stat(*target);
     if (existing.error.isError())
@@ -261,6 +321,93 @@ HttpResponse move(FolderStorage &storage, const QString &basePathname, const Htt
         return failure(error, 409);
     return respond(taken ? 204 : 201);
 }
+
+/// A streamed request's sink and body, kept on the thread that owns the transport: the worker
+/// hands each piece over to it and waits — one piece in flight —, so the client's callbacks run
+/// where they belong and nothing of theirs is ever destroyed on the worker. A child of the
+/// transport, deleted by its answer (or with the transport).
+class OwnerSide : public QObject {
+public:
+    OwnerSide(QObject *transport, const HttpRequest &request, std::shared_ptr<std::atomic<bool>> stopping)
+        : QObject(transport)
+        , m_sink(request.bodySink)
+        , m_device(request.bodyDevice)
+        , m_size(m_device ? m_device->size() : 0)
+        , m_stopping(std::move(stopping))
+    {
+    }
+
+    /// `work` on the owner's thread, the worker waiting for it; false when the transport goes
+    /// meanwhile (its destructor sets `stopping` before it waits for the worker).
+    bool run(const std::function<bool()> &work)
+    {
+        struct Turn {
+            QMutex mutex;
+            QWaitCondition ended;
+            bool done = false;
+            bool result = false;
+        };
+        auto turn = std::make_shared<Turn>();
+        QMetaObject::invokeMethod(this, [turn, &work] {
+            const bool result = work();
+            const QMutexLocker lock(&turn->mutex);
+            turn->done = true;
+            turn->result = result;
+            turn->ended.wakeAll();
+        }, Qt::QueuedConnection);
+        QMutexLocker lock(&turn->mutex);
+        while (!turn->done) {
+            if (m_stopping->load())
+                return false; // (the queued call is dropped with this object, `work` never runs)
+            turn->ended.wait(&turn->mutex, QDeadlineTimer(20));
+        }
+        return turn->result;
+    }
+
+    /// The worker's copy of the request (on the worker: the device is made there and goes there):
+    /// a sink and a body device that go through run().
+    void fill(HttpRequest &copy)
+    {
+        if (m_sink)
+            copy.bodySink = [this](QByteArrayView piece) { return run([this, piece] { return m_sink(piece); }); };
+        if (m_device)
+            copy.bodyDevice = std::make_shared<OwnerReadDevice>(this, m_size);
+    }
+
+private:
+    /// The body device as the worker reads it: every read is the real device's, on the owner's thread.
+    class OwnerReadDevice : public QIODevice {
+    public:
+        OwnerReadDevice(OwnerSide *side, qint64 size) : m_side(side), m_size(size)
+        {
+            open(QIODevice::ReadOnly | QIODevice::Unbuffered);
+        }
+        qint64 size() const override { return m_size; }
+        bool isSequential() const override { return true; }
+
+    protected:
+        qint64 readData(char *data, qint64 maxSize) override
+        {
+            qint64 n = -1;
+            if (!m_side->run([this, data, maxSize, &n] {
+                    n = m_side->m_device->read(data, maxSize);
+                    return true;
+                }))
+                return -1;
+            return n;
+        }
+        qint64 writeData(const char *, qint64) override { return -1; }
+
+    private:
+        OwnerSide *m_side;
+        qint64 m_size;
+    };
+
+    std::function<bool(QByteArrayView)> m_sink;
+    std::shared_ptr<QIODevice> m_device;
+    qint64 m_size;
+    std::shared_ptr<std::atomic<bool>> m_stopping;
+};
 
 } // namespace
 
@@ -305,6 +452,7 @@ FolderDavTransport::FolderDavTransport(std::shared_ptr<FolderStorage> storage, c
 
 FolderDavTransport::~FolderDavTransport()
 {
+    m_stopping->store(true); // (a worker waiting for a piece's turn here stops waiting)
     m_pool.clear();
     m_pool.waitForDone();
 }
@@ -319,6 +467,8 @@ void FolderDavTransport::send(const HttpRequest &request, HttpCallback done)
     copy.body = request.body;
     copy.maxBodyBytes = request.maxBodyBytes;
     if (m_synchronous || !m_storage) {
+        copy.bodySink = request.bodySink;
+        copy.bodyDevice = request.bodyDevice;
         HttpResponse response = m_storage ? answer(*m_storage, m_basePathname, copy) : HttpResponse{};
         if (!m_storage)
             response.networkError = u"No folder"_s;
@@ -326,12 +476,18 @@ void FolderDavTransport::send(const HttpRequest &request, HttpCallback done)
                                   Qt::QueuedConnection);
         return;
     }
-    m_pool.start([this, storage = m_storage, base = m_basePathname, copy = std::move(copy),
+    OwnerSide *side = request.bodySink || request.bodyDevice ? new OwnerSide(this, request, m_stopping) : nullptr;
+    m_pool.start([this, storage = m_storage, base = m_basePathname, copy = std::move(copy), side,
                   done = std::move(done)]() mutable {
+        if (side)
+            side->fill(copy);
         HttpResponse response = answer(*storage, base, copy);
+        copy = {}; // (its body device and sink go here, before their OwnerSide)
         // (The destructor waits for this job: `this` is alive while it posts.)
-        QMetaObject::invokeMethod(this, [done = std::move(done), response = std::move(response)] { done(response); },
-                                  Qt::QueuedConnection);
+        QMetaObject::invokeMethod(this, [side, done = std::move(done), response = std::move(response)] {
+            delete side;
+            done(response);
+        }, Qt::QueuedConnection);
     });
 }
 

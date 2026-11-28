@@ -42,6 +42,14 @@ QByteArray propfindBody();
 /// whose root is not <multistatus> (an HTML login page) gives an error.
 MultistatusResult parseMultistatus(QByteArrayView xml);
 
+/// A 207 Multi-Status body listing `resources` as a server answers PROPFIND: each href as given
+/// (percent-encoded), the ETag quoted, getlastmodified when mtime is known, getcontentlength for
+/// files, oc:fileid when known. parseMultistatus() reads it back to the same resources.
+QByteArray writeMultistatus(const QList<DavResource> &resources);
+
+/// An HTTP date (IMF-fixdate, "Tue, 14 Oct 2026 08:00:00 GMT") of ms since the epoch.
+QString httpDate(qint64 ms);
+
 /// HTTP status code of a status line ("HTTP/1.1 404 Not Found" -> 404).
 std::optional<int> parseStatusLine(QStringView line);
 
