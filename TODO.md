@@ -288,8 +288,7 @@ done in the repository simply disappears from the list.
   in-memory server and a real Radicale (`scripts/caldav-radicale-test.sh`). Missing: checks against
   real Nextcloud, Fastmail, iCloud and Baïkal (Digest), with Thunderbird and DAVx⁵ / Tasks.org on the
   other side and on a real phone (Android's background check, which also arms the events' alarms);
-  invitations (attendees, iTIP) and free/busy; an `RRULE` inside a `RANGE=THISANDFUTURE` exception (ignored; clients normally split the series
-  instead); Google's own CalDAV (it needs an OAuth sign-in — its secret iCal
+  invitations (attendees, iTIP) and free/busy; Google's own CalDAV (it needs an OAuth sign-in — its secret iCal
   address works as a subscription).
 * **Reminder chips in Markdown source mode and table cells** — in an edited block a ⏰ is a chip
   with its words, its menu and the caret over it as one unit (docs/UI.md); the source mode's

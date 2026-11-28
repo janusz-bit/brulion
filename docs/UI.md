@@ -7742,8 +7742,9 @@ Nextcloud app password (`<app data>/secrets/caldav-<account>`). A second device 
   UTC); a plain override of one later instance beats the range, `EXDATE` still removes an
   instance, a cancelled range ends the series there, and a range naming an instance the series does
   not have shows at its own start and gives its properties to the later ones. `RANGE=THISANDPRIOR`
-  (deprecated) is one instance, and an `RRULE` inside a range override is ignored (the series' goes
-  on). The header's calendars button (`calendar-range`) lists the calendars with their
+  (deprecated) is one instance. A range override with an `RRULE` of its own (a series split in one
+  component) replaces the series from the instance it names with its own instances — from its
+  `DTSTART`, without its `EXDATE`s — until the next range begins. The header's calendars button (`calendar-range`) lists the calendars with their
   colours, each ticked when shown (a click hides or shows it: `setCalendarVisible`), "New event…"
   (when a writable CalDAV calendar shows events), "Refresh calendars" and "Manage calendars…" (the
   sync center's tab; "Add a calendar…" while there are none).

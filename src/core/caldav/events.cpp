@@ -168,6 +168,59 @@ struct Builder {
             out.append(o);
     }
 
+    /// The UNTIL of `e`'s rule on its own clock.
+    std::optional<NaiveDateTime> untilOf(const Event &e) const
+    {
+        const auto &u = e.rrule->until;
+        if (!u)
+            return std::nullopt;
+        if (!u->time)
+            return NaiveDateTime{u->date, QTime(23, 59, 59)};
+        if (!u->utc)
+            return NaiveDateTime{u->date, *u->time};
+        const qint64 ms = QDateTime(u->date, *u->time, QTimeZone::UTC).toMSecsSinceEpoch();
+        return e.allDay() ? NaiveDateTime{QDateTime::fromMSecsSinceEpoch(ms, target).date(), QTime(23, 59, 59)}
+                          : data.zones.inZoneOf(ms, e.start, target);
+    }
+
+    /// The starts of `e` within [from, to) on its own clock: its rule's, else its DTSTART.
+    QList<io::ical::DateTimeValue> ruleStarts(const Event &e, const NaiveDateTime &from, const NaiveDateTime &to)
+    {
+        QList<io::ical::DateTimeValue> starts;
+        const NaiveDateTime dtstart{e.start.date, e.start.time.value_or(QTime(0, 0))};
+        if (!e.rrule) {
+            if (dtstart >= from && dtstart < to)
+                starts.append(e.start);
+            return starts;
+        }
+        bool cutShort = false;
+        const QList<NaiveDateTime> list = expandRRule(*e.rrule, dtstart, e.allDay(), from, to, untilOf(e), limits, &cutShort);
+        truncated = truncated || cutShort;
+        for (const NaiveDateTime &t : list)
+            starts.append(withNaive(e.start, t));
+        return starts;
+    }
+
+    /// The instances of a range's own rule (`range`, the ranges after it `next` …): from its
+    /// DTSTART, without its EXDATEs, until the next range begins.
+    void rangeRule(const FutureOverride &range, const FutureOverride *next, const NaiveDateTime &from,
+                   const NaiveDateTime &to)
+    {
+        const Event &o = data.events.at(range.index);
+        usedFuture.insert(range.index);
+        if (o.cancelled())
+            return;
+        QSet<QString> excluded;
+        for (const io::ical::DateTimeValue &ex : o.exdates)
+            excluded.insert(instanceKey(ex, data.zones));
+        const Span span = spanOf(o, data.zones);
+        for (const io::ical::DateTimeValue &s : ruleStarts(o, from, to)) {
+            if (excluded.contains(instanceKey(s, data.zones)) || (next && orderKey(s, data.zones) >= next->from))
+                continue;
+            add(range.index, s, span, s, true);
+        }
+    }
+
     void series(const QString &uid, qsizetype master, const QList<qsizetype> &overrides)
     {
         const Event &m = data.events.at(master);
@@ -234,29 +287,7 @@ struct Builder {
                 excluded.insert(instanceKey(ex, data.zones));
         }
         const bool recurring = m.rrule.has_value() || !m.rdates.isEmpty() || !overrides.isEmpty();
-        QList<io::ical::DateTimeValue> starts;
-        const NaiveDateTime dtstart{m.start.date, m.start.time.value_or(QTime(0, 0))};
-        if (m.rrule) {
-            std::optional<NaiveDateTime> until;
-            if (const auto &u = m.rrule->until) {
-                if (!u->time) {
-                    until = NaiveDateTime{u->date, QTime(23, 59, 59)};
-                } else if (u->utc) {
-                    const qint64 ms = QDateTime(u->date, *u->time, QTimeZone::UTC).toMSecsSinceEpoch();
-                    until = m.allDay() ? NaiveDateTime{QDateTime::fromMSecsSinceEpoch(ms, target).date(), QTime(23, 59, 59)}
-                                       : data.zones.inZoneOf(ms, m.start, target);
-                } else {
-                    until = NaiveDateTime{u->date, *u->time};
-                }
-            }
-            bool cutShort = false;
-            const QList<NaiveDateTime> list = expandRRule(*m.rrule, dtstart, m.allDay(), sFrom, sTo, until, limits, &cutShort);
-            truncated = truncated || cutShort;
-            for (const NaiveDateTime &t : list)
-                starts.append(withNaive(m.start, t));
-        } else if (dtstart >= sFrom && dtstart < sTo) {
-            starts.append(m.start);
-        }
+        QList<io::ical::DateTimeValue> starts = ruleStarts(m, sFrom, sTo);
         for (const io::ical::DateTimeValue &r : m.rdates) {
             io::ical::DateTimeValue v = r;
             if (m.allDay()) {
@@ -289,8 +320,8 @@ struct Builder {
                 const Event &o = data.events.at(range->index);
                 if (order == range->from)
                     usedFuture.insert(range->index);
-                if (o.cancelled())
-                    continue;
+                if (o.cancelled() || o.rrule)
+                    continue; // (a range with a rule of its own: rangeRule())
                 io::ical::DateTimeValue moved = s;
                 if (range->shiftSecs != 0) {
                     const NaiveDateTime n = NaiveDateTime{s.date, s.time.value_or(QTime(0, 0))}.addSecs(range->shiftSecs);
@@ -302,6 +333,10 @@ struct Builder {
                 continue;
             }
             add(master, s, span, recurring ? std::optional(s) : std::nullopt, recurring);
+        }
+        for (qsizetype k = 0; k < future.size(); ++k) {
+            if (data.events.at(future.at(k).index).rrule)
+                rangeRule(future.at(k), k + 1 < future.size() ? &future.at(k + 1) : nullptr, sFrom, sTo);
         }
         Q_UNUSED(uid);
     }
