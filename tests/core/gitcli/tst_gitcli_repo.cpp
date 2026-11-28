@@ -253,6 +253,7 @@ private Q_SLOTS:
     void mergeAborted();
     void takeTheirsOfADeletion();
     void rebaseContinued();
+    void rebaseSkipped();
     void cherryPickAborted();
     void stashes();
 
@@ -2094,6 +2095,40 @@ void TestGitCliRepo::rebaseContinued()
     QCOMPARE(Client::operationIn(info.gitDir), Operation::None);
     QCOMPARE(repo.text({u"log"_s, u"-1"_s, u"--format=%s"_s}), u"inna zmiana"_s);
     QCOMPARE(repo.text({u"rev-parse"_s, u"HEAD~1"_s}), repo.text({u"rev-parse"_s, u"main"_s}));
+}
+
+// Skipping the commit that stopped a rebase (T3 Code's --skip): the rebase ends without it; a
+// cherry-pick skips too; a merge has nothing to skip.
+void TestGitCliRepo::rebaseSkipped()
+{
+    Repo repo;
+    makeConflict(repo);
+    repo.run({u"switch"_s, u"-q"_s, u"inna"_s});
+    int code = 0;
+    repo.run({u"rebase"_s, u"main"_s}, {}, &code);
+    QVERIFY(code != 0);
+    Client client;
+    const RepoInfo info = await<RepoInfo>([&](auto done) { client.repository(repo.root, done); });
+    QCOMPARE(Client::operationIn(info.gitDir), Operation::Rebase);
+    Outcome o = await<Outcome>([&](auto done) { client.skipOperation(repo.root, Operation::Rebase, done); });
+    QVERIFY2(o.ok, qPrintable(o.message));
+    QCOMPARE(Client::operationIn(info.gitDir), Operation::None);
+    // (Its one commit skipped: the branch is main now.)
+    QCOMPARE(repo.text({u"rev-parse"_s, u"HEAD"_s}), repo.text({u"rev-parse"_s, u"main"_s}));
+    QCOMPARE(repo.text({u"status"_s, u"--porcelain"_s}), QString());
+    // A cherry-pick stopped by a conflict, skipped.
+    repo.run({u"switch"_s, u"-q"_s, u"main"_s});
+    const QString head = repo.text({u"rev-parse"_s, u"HEAD"_s});
+    repo.run({u"cherry-pick"_s, u"ORIG_HEAD"_s}, {}, nullptr);
+    if (Client::operationIn(info.gitDir) == Operation::CherryPick) {
+        o = await<Outcome>([&](auto done) { client.skipOperation(repo.root, Operation::CherryPick, done); });
+        QVERIFY2(o.ok, qPrintable(o.message));
+        QCOMPARE(Client::operationIn(info.gitDir), Operation::None);
+        QCOMPARE(repo.text({u"rev-parse"_s, u"HEAD"_s}), head);
+    }
+    // Nothing to skip in a merge, or with nothing in progress.
+    QVERIFY(!await<Outcome>([&](auto done) { client.skipOperation(repo.root, Operation::Merge, done); }).ok);
+    QVERIFY(!await<Outcome>([&](auto done) { client.skipOperation(repo.root, Operation::None, done); }).ok);
 }
 
 void TestGitCliRepo::cherryPickAborted()

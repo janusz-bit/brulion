@@ -39,6 +39,8 @@ Item {
     property string checkpointLabel
     /// A refresh every so many ms while shown (0: on git's own changes and after actions only).
     property int pollInterval: 0
+    /// A quiet `git fetch` every so many ms (CodeGit.fetchInterval; 0 never).
+    property int fetchInterval: 5 * 60 * 1000
     /// "turn" | "uncommitted" | "branch" | "commit" — the changes listed ("all" is "uncommitted").
     property string source: "turn"
     /// The turn shown: an index into `checkpoints` (-1 the latest).
@@ -336,6 +338,8 @@ Item {
             panel.pushGuarded()
         else if (action === "pull")
             repo.pull()
+        else if (action === "fetch")
+            repo.fetch()
         else if (action === "createPr")
             panel.openPullRequest()
         else if (action === "openPr")
@@ -486,6 +490,8 @@ Item {
         id: repo
         folder: panel.folder
         pollInterval: panel.pollInterval
+        // (What the remote has, every five minutes: ahead / behind and Pull follow it.)
+        fetchInterval: panel.fetchInterval
         onDiffReady: (path, oldText, newText, binary, tooLarge) => {
             if (path !== panel.selectedPath)
                 return
@@ -800,6 +806,16 @@ Item {
                         enabled: !repo.busy
                         busy: repo.busyAction === "abort"
                         onClicked: abortDialog.open()
+                    }
+                    // The commit that stopped it left out (`--skip`): a merge has none.
+                    BButton {
+                        objectName: "gitSkip"
+                        visible: repo.operation !== "merge"
+                        text: qsTr("Skip this commit")
+                        size: "small"
+                        enabled: !repo.busy
+                        busy: repo.busyAction === "skip"
+                        onClicked: repo.skipOperation()
                     }
                     BButton {
                         objectName: "gitContinue"
@@ -1396,6 +1412,13 @@ Item {
             iconName: "arrow-down"
             unavailable: panel.why("pull", repo.revision, repo.busy)
             onTriggered: panel.run("pull")
+        }
+        BMenuItem {
+            objectName: "gitFetch"
+            text: qsTr("Fetch")
+            iconName: "refresh-cw"
+            unavailable: panel.why("fetch", repo.revision, repo.busy)
+            onTriggered: panel.run("fetch")
         }
         BMenuItem {
             objectName: "gitCreatePr"

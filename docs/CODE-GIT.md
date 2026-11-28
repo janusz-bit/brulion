@@ -306,8 +306,11 @@ entry chosen on a touch screen says why this way too), `openFile(absolutePath, l
 * A merge, rebase, cherry-pick, revert or `git am` stopped (`gitOperationBanner`): what it is
   (`gitOperationTitle`), how many files are conflicted (`gitOperationHint`), each conflicted file
   (`gitConflict_<i>`: `gitConflictOurs`, `gitConflictTheirs`, `gitConflictResolved`,
-  `gitConflictOpen`), `gitAbort` (confirmed: `gitAbortDialog`) and `gitContinue` ("Commit the merge" /
-  "Continue", once no file is conflicted). The quick action is hidden meanwhile.
+  `gitConflictOpen`), `gitAbort` (confirmed: `gitAbortDialog`), `gitSkip` ("Skip this commit", not for
+  a merge: `CodeGit.skipOperation()` → `gitcli::Client::skipOperation()`, `git rebase|cherry-pick|revert|am
+  --skip` without an editor — the commit that stopped it left out, the operation going on) and
+  `gitContinue` ("Commit the merge" / "Continue", once no file is conflicted). The quick action is
+  hidden meanwhile.
 * The list `gitChangeList` of `GitChangeRow`s — flat (`gitChange_<i>`: `gitChangeLetter` in the
   status's colour, `gitChangeName`, `gitChangeDir` dimmed — or "from <old path>" for a rename —, a dot
   when something is staged (`gitChangeStaged`, amber when only partly), `gitChangeBinary`,
@@ -324,9 +327,14 @@ entry chosen on a touch screen says why this way too), `openFile(absolutePath, l
 * Empty states: `gitNoChanges` (per source), `gitTurnError` (the comparison failed: a checkpoint
   gone, a base with nothing in common), `gitNotRepo` ("Not a git repository" with
   `gitInitButton`; "No folder"; git not installed).
+* **Fetching by itself**: `CodeGit.fetchInterval` (GitChangesPanel's `fetchInterval`, five minutes)
+  runs a quiet fetch while the branch has an upstream and no action runs (`fetchQuietly()`: no
+  actionFinished(), a failure kept in `lastFetchError`), then refreshes: ahead / behind and Pull follow
+  the remote.
 * Footer (`gitFooter`): the quick action `gitPrimary` (CodeGit.primaryAction: "Commit…", "Push N",
   "Pull N", "Create PR…", "Open PR #12", "Publish…", "Initialize git"; "Up to date" disabled) and
-  `gitMoreActions` → `gitActionsMenu` (`gitCommit`, `gitPush`, `gitPull`, `gitCreatePr`,
+  `gitMoreActions` → `gitActionsMenu` (`gitCommit`, `gitPush`, `gitPull`, `gitFetch` — `git fetch
+  --prune --quiet`, `Client::fetch()`, actionFinished("fetch") —, `gitCreatePr`,
   `gitPublish`, `gitStash`, `gitNewBranchAction`; a disabled entry says why in its tooltip:
   CodeGit.unavailableReason()); for a turn `gitRevertTurn` (that turn alone: the latest restores its
   checkpoint, an older one `revertBetween()`) and `gitRevertTo` ("Revert to before turn N…": its
@@ -448,9 +456,7 @@ too), the stashes (`gitStashList`: `gitStash_<i>` with `gitStashApply`, `gitStas
   turn before them (the snapshots are of the whole working tree).
 * Hunks of untracked, conflicted or binary files; lines (not whole hunks) staged; the hunks of the
   other sources (a turn, the branch) staged or thrown away.
-* Skipping a commit while rebasing or cherry-picking (`--skip`); editing the message of a merge.
-* Fetching (`git fetch`) by itself: ahead / behind and Pull follow what the last fetch, pull or push
-  brought.
+* Editing the message of a merge.
 * Watching the whole working tree for changes git does not see (the panel relies on
   `pollInterval`, actions and explicit refreshes).
 * Expand / collapse all files of a source at once (the panel shows one file's diff at a time) and the

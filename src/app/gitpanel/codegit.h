@@ -47,6 +47,10 @@ class CodeGit : public QObject {
     Q_PROPERTY(QString turnCheckpoint READ turnCheckpoint WRITE setTurnCheckpoint NOTIFY turnCheckpointChanged FINAL)
     /// A refresh every so many milliseconds (0: only on changes git makes and on request).
     Q_PROPERTY(int pollInterval READ pollInterval WRITE setPollInterval NOTIFY pollIntervalChanged FINAL)
+    /// A fetch by itself every so many milliseconds while the branch has an upstream and no action
+    /// runs (0: never) — quietly: no actionFinished(), a failure only in lastFetchError.
+    Q_PROPERTY(int fetchInterval READ fetchInterval WRITE setFetchInterval NOTIFY fetchIntervalChanged FINAL)
+    Q_PROPERTY(QString lastFetchError READ lastFetchError NOTIFY fetchIntervalChanged FINAL)
 
     /// The first refresh of this folder is done (before it, isRepo says nothing).
     Q_PROPERTY(bool loaded READ loaded NOTIFY stateChanged FINAL)
@@ -147,6 +151,11 @@ public:
     QString turnCheckpoint() const { return m_turnCheckpoint; }
     void setTurnCheckpoint(const QString &id);
     int pollInterval() const { return m_pollInterval; }
+    int fetchInterval() const { return m_fetchInterval; }
+    void setFetchInterval(int ms);
+    QString lastFetchError() const { return m_lastFetchError; }
+    /// The quiet fetch of fetchInterval now (tests).
+    void fetchQuietly();
     void setPollInterval(int ms);
 
     bool loaded() const { return m_loaded; }
@@ -230,9 +239,10 @@ public:
     /// line): actionFinished("commit", ok, message, the pull request's url).
     Q_INVOKABLE void commit(const QString &message, bool push, bool createPr, const QString &prTitle,
                             const QString &prBody, bool draft);
-    /// actionFinished("push" / "pull", …).
+    /// actionFinished("push" / "pull" / "fetch", …).
     Q_INVOKABLE void push();
     Q_INVOKABLE void pull();
+    Q_INVOKABLE void fetch();
     /// Fills branchList (and branchesReady()).
     Q_INVOKABLE void branches();
     /// A new branch from HEAD, switched to (the working tree's changes come along):
@@ -334,9 +344,11 @@ public:
 
     // ---- Merges, rebases, stashes -------------------------------------------------------------------
 
-    /// The operation in progress aborted / continued: actionFinished("abort" / "continue", …).
+    /// The operation in progress aborted / continued / its stopping commit skipped (`--skip`, not a
+    /// merge): actionFinished("abort" / "continue" / "skip", …).
     Q_INVOKABLE void abortOperation();
     Q_INVOKABLE void continueOperation();
+    Q_INVOKABLE void skipOperation();
     /// Fills stashList.
     Q_INVOKABLE void stashes();
     /// actionFinished("stash" / "stashApply" / "stashPop" / "stashDrop", …); the list follows.
@@ -366,6 +378,7 @@ Q_SIGNALS:
     void folderChanged();
     void turnCheckpointChanged();
     void pollIntervalChanged();
+    void fetchIntervalChanged();
     void stateChanged();
     void turnChangesChanged();
     void branchListChanged();
@@ -452,6 +465,10 @@ private:
     QString m_folder;
     QString m_turnCheckpoint;
     int m_pollInterval = 0;
+    int m_fetchInterval = 0;
+    QTimer m_fetchTimer;
+    bool m_fetching = false;
+    QString m_lastFetchError;
     /// Bumps with the folder: answers for an older one are dropped.
     int m_generation = 0;
     gitcli::RepoInfo m_info;

@@ -12689,57 +12689,57 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
 <context>
     <name>GitChangesPanel</name>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="548"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="554"/>
         <source>Detached HEAD</source>
         <translation>Odłączony HEAD</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="548"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="554"/>
         <source>No branch</source>
         <translation>Brak gałęzi</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="572"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="578"/>
         <source>%1 ahead, %2 behind %3</source>
         <translation>Względem %3: %1 do przodu, %2 w tyle</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="600"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="606"/>
         <source>not pushed</source>
         <translation>niewypchnięta</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="623"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="629"/>
         <source>Refresh</source>
         <translation>Odśwież</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="845"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="861"/>
         <source>No folder</source>
         <translation>Brak folderu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="845"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="861"/>
         <source>Not a git repository</source>
         <translation>To nie jest repozytorium git</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="846"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="862"/>
         <source>Open a project to see its changes here.</source>
         <translation>Otwórz projekt, żeby zobaczyć tu jego zmiany.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="848"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="864"/>
         <source>git is not installed: install it to see and commit the changes of your projects.</source>
         <translation>git nie jest zainstalowany: zainstaluj go, żeby widzieć i zatwierdzać zmiany swoich projektów.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="881"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="897"/>
         <source>Changed files</source>
         <translation>Zmienione pliki</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="898"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="914"/>
         <source>and %n more file(s)</source>
         <translation>
             <numerusform>i jeszcze %n plik</numerusform>
@@ -12748,245 +12748,245 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="911"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="927"/>
         <source>No changes in this turn</source>
         <translation>Brak zmian w tej turze</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="914"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="930"/>
         <source>No changes</source>
         <translation>Brak zmian</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="915"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="931"/>
         <source>The files are as they were before the turn.</source>
         <translation>Pliki są takie jak przed turą.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="918"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="934"/>
         <source>The working tree matches the last commit.</source>
         <translation>Drzewo robocze odpowiada ostatniemu commitowi.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="937"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="953"/>
         <source>This turn&apos;s changes cannot be shown</source>
         <translation>Nie można pokazać zmian z tej tury</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="970"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="986"/>
         <source>Back to the files</source>
         <translation>Wróć do plików</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="993"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1009"/>
         <source>Close the diff</source>
         <translation>Zamknij różnice</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1031"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1047"/>
         <source>No diff</source>
         <translation>Nie można pokazać różnic</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1031"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1047"/>
         <source>Binary file</source>
         <translation>Plik binarny</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1032"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1048"/>
         <source>Too large to show</source>
         <translation>Zbyt duży, by go pokazać</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1034"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1050"/>
         <source>Its contents are not text.</source>
         <translation>Jego zawartość nie jest tekstem.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1035"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1051"/>
         <source>One of its versions is larger than 2 MB.</source>
         <translation>Jedna z jego wersji ma więcej niż 2 MB.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="423"/>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1381"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="427"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1397"/>
         <source>Commit…</source>
         <translation>Zatwierdź…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="425"/>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1388"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="429"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1404"/>
         <source>Push %1</source>
         <translation>Wypchnij %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="425"/>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1388"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="429"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1404"/>
         <source>Push</source>
         <translation>Wypchnij</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="427"/>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1395"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="431"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1411"/>
         <source>Pull %1</source>
         <translation>Pobierz %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1395"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1411"/>
         <source>Pull</source>
         <translation>Pobierz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="429"/>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1402"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="433"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1425"/>
         <source>Create PR…</source>
         <translation>Utwórz pull request…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1095"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1111"/>
         <source>Revert this turn…</source>
         <translation>Cofnij tę turę…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1448"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1471"/>
         <source>in a worktree</source>
         <translation>w worktree</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1426"/>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1465"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1449"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1488"/>
         <source>New branch…</source>
         <translation>Nowa gałąź…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="84"/>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1131"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="86"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1147"/>
         <source>Latest turn</source>
         <translation>Ostatnia tura</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="85"/>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1159"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="87"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1175"/>
         <source>Branch</source>
         <translation>Gałąź</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="86"/>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1170"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="88"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1186"/>
         <source>Commits</source>
         <translation>Commity</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="87"/>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1148"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="89"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1164"/>
         <source>Uncommitted</source>
         <translation>Niezatwierdzone</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="431"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="435"/>
         <source>Open PR #%1</source>
         <translation>Otwórz PR #%1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="433"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="437"/>
         <source>Publish…</source>
         <translation>Opublikuj…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="435"/>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="854"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="439"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="870"/>
         <source>Initialize git</source>
         <translation>Utwórz repozytorium git</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="437"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="441"/>
         <source>Up to date</source>
         <translation>Wszystko aktualne</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="460"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="464"/>
         <source>A merge is in progress</source>
         <translation>Trwa scalanie (merge)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="462"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="466"/>
         <source>A rebase is in progress</source>
         <translation>Trwa rebase</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="464"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="468"/>
         <source>A cherry-pick is in progress</source>
         <translation>Trwa cherry-pick</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="466"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="470"/>
         <source>A revert is in progress</source>
         <translation>Trwa wycofywanie (revert)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="468"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="472"/>
         <source>Patches are being applied</source>
         <translation>Trwa nakładanie łatek</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="549"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="555"/>
         <source>Switch to another branch, make a new one or stash the changes</source>
         <translation>Przełącz na inną gałąź, utwórz nową albo odłóż zmiany</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="560"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="566"/>
         <source>#%1 draft</source>
         <translation>#%1 szkic</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="561"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="567"/>
         <source>#%1 merged</source>
         <translation>#%1 scalony</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="562"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="568"/>
         <source>#%1 closed</source>
         <translation>#%1 zamknięty</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="563"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="569"/>
         <source>#%1 open</source>
         <translation>#%1 otwarty</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="600"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="606"/>
         <source>no remote</source>
         <translation>brak zdalnego</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="616"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="622"/>
         <source>View options</source>
         <translation>Opcje widoku</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="648"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="654"/>
         <source>Which changes to show</source>
         <translation>Które zmiany pokazać</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="661"/>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1160"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="667"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1176"/>
         <source>against %1</source>
         <translation>względem %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="661"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="667"/>
         <source>Choose a base</source>
         <translation>Wybierz bazę</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="677"/>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="927"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="683"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="943"/>
         <source>Choose a commit</source>
         <translation>Wybierz commit</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="736"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="742"/>
         <source>%n file(s) with conflicts: take a side, or edit them and mark them resolved.</source>
         <translation>
             <numerusform>%n plik z konfliktami: wybierz stronę albo popraw go i oznacz jako rozwiązany.</numerusform>
@@ -12995,254 +12995,264 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="737"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="743"/>
         <source>No conflicts left: continue, or abort to go back.</source>
         <translation>Nie ma już konfliktów: kontynuuj albo przerwij, by wrócić.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="759"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="765"/>
         <source>Ours</source>
         <translation>Nasza</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="767"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="773"/>
         <source>Theirs</source>
         <translation>Ich</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="775"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="781"/>
         <source>Resolved</source>
         <translation>Rozwiązany</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="784"/>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1304"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="790"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1320"/>
         <source>Open in the editor</source>
         <translation>Otwórz w edytorze</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="798"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="804"/>
         <source>Abort…</source>
         <translation>Przerwij…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="806"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="814"/>
+        <source>Skip this commit</source>
+        <translation>Pomiń ten commit</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="822"/>
         <source>Commit the merge</source>
         <translation>Zatwierdź scalanie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="806"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="822"/>
         <source>Continue</source>
         <translation>Kontynuuj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="847"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="863"/>
         <source>This folder has no git repository yet: initialize one to follow its changes, commit and push them.</source>
         <translation>Ten folder nie ma jeszcze repozytorium git: utwórz je, by śledzić zmiany, zatwierdzać je i wypychać.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="912"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="928"/>
         <source>No changes on this branch</source>
         <translation>Brak zmian na tej gałęzi</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="913"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="929"/>
         <source>The commit changes no file</source>
         <translation>Commit nie zmienia żadnego pliku</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="916"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="932"/>
         <source>The branch has nothing that %1 does not have.</source>
         <translation>Gałąź nie ma niczego, czego nie ma %1.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="928"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="944"/>
         <source>Its own changes are shown: against its parent, the first commit against nothing.</source>
         <translation>Widać jego własne zmiany: względem rodzica, a pierwszy commit względem pustego repozytorium.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="937"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="953"/>
         <source>These changes cannot be shown</source>
         <translation>Nie można pokazać tych zmian</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="985"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1001"/>
         <source>Actions for this file</source>
         <translation>Działania dla tego pliku</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1088"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1104"/>
         <source>More git actions</source>
         <translation>Więcej działań git</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1105"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1121"/>
         <source>Revert to before %1…</source>
         <translation>Cofnij do stanu przed: %1…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1149"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1165"/>
         <source>against the last commit</source>
         <translation>względem ostatniego commita</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1171"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1187"/>
         <source>one of the newest 100</source>
         <translation>jeden z najnowszych 100</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1197"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1213"/>
         <source>default</source>
         <translation>domyślna</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1244"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1260"/>
         <source>Side by side</source>
         <translation>Obok siebie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1247"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1263"/>
         <source>The panel is too narrow: make it wider</source>
         <translation>Panel jest za wąski: poszerz go</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1255"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1271"/>
         <source>Wrap long lines</source>
         <translation>Zawijaj długie wiersze</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1265"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1281"/>
         <source>Hide whitespace changes</source>
         <translation>Ukryj zmiany odstępów</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1275"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1291"/>
         <source>Files as a tree</source>
         <translation>Pliki jako drzewo</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1286"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1302"/>
         <source>Find in the diff</source>
         <translation>Znajdź w różnicach</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1289"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1305"/>
         <source>Open a file&apos;s diff first</source>
         <translation>Najpierw otwórz różnice pliku</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1306"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1322"/>
         <source>The file is deleted</source>
         <translation>Plik jest usunięty</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1311"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1327"/>
         <source>Copy the path</source>
         <translation>Kopiuj ścieżkę</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1322"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1338"/>
         <source>Stage</source>
         <translation>Dodaj do indeksu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1331"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1347"/>
         <source>Unstage</source>
         <translation>Usuń z indeksu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1340"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1356"/>
         <source>Take ours</source>
         <translation>Weź naszą wersję</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1341"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1357"/>
         <source>this branch&apos;s side</source>
         <translation>strona tej gałęzi</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1349"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1365"/>
         <source>Take theirs</source>
         <translation>Weź ich wersję</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1350"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1366"/>
         <source>the incoming side</source>
         <translation>strona przychodząca</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1358"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1374"/>
         <source>Mark resolved</source>
         <translation>Oznacz jako rozwiązany</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1369"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1385"/>
         <source>Discard changes…</source>
         <translation>Odrzuć zmiany…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1409"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1418"/>
+        <source>Fetch</source>
+        <translation>Pobierz (fetch)</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1432"/>
         <source>Publish to GitHub…</source>
         <translation>Opublikuj na GitHubie…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1417"/>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1471"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1440"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1494"/>
         <source>Stash changes…</source>
         <translation>Odłóż zmiany (stash)…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1471"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1494"/>
         <source>Stashes (%1)…</source>
         <translation>Odłożone zmiany (%1)…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1482"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1505"/>
         <source>New branch</source>
         <translation>Nowa gałąź</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1483"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1506"/>
         <source>From the current commit; the changes in the working tree come along.</source>
         <translation>Z bieżącego commita; zmiany w drzewie roboczym przechodzą razem z nią.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1485"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1508"/>
         <source>Create and switch</source>
         <translation>Utwórz i przełącz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1493"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1516"/>
         <source>Branch name</source>
         <translation>Nazwa gałęzi</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1494"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1517"/>
         <source>e.g. fix/sync-conflict</source>
         <translation>np. fix/sync-conflict</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1496"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1519"/>
         <source>A branch name has no spaces, no “..”, no backslash and none of ~ ^ : ? * [</source>
         <translation>Nazwa gałęzi nie może zawierać spacji, „..”, ukośnika wstecznego ani znaków ~ ^ : ? * [</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1510"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1533"/>
         <source>Revert this turn?</source>
         <translation>Cofnąć tę turę?</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1510"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1533"/>
         <source>Revert to before %1?</source>
         <translation>Cofnąć do stanu przed: %1?</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1514"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1537"/>
         <source>The files go back to how they were before %1: its changes and those of every turn after it are undone.</source>
         <translation>Pliki wrócą do stanu sprzed: %1 — jej zmiany i zmiany każdej późniejszej tury zostaną cofnięte.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1516"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1539"/>
         <source>The files go back to how they were before the turn: the %n file(s) it changed are put back, files it added are deleted.</source>
         <translation>
             <numerusform>Pliki wrócą do stanu sprzed tury: %n zmieniony w niej plik zostanie przywrócony, a dodane w niej pliki zostaną usunięte.</numerusform>
@@ -13251,82 +13261,82 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1517"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1540"/>
         <source>Only this turn&apos;s changes are taken out; what later turns changed stays. If they changed the same lines, nothing is changed.</source>
         <translation>Cofnięte zostaną tylko zmiany tej tury; to, co zmieniły późniejsze tury, zostaje. Jeśli zmieniły te same wiersze, nic się nie zmieni.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1518"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1541"/>
         <source>Commits, the staging area and ignored files stay as they are.</source>
         <translation>Commity, indeks (staging area) i ignorowane pliki zostają bez zmian.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1519"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1542"/>
         <source>Revert</source>
         <translation>Cofnij</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1540"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1563"/>
         <source>Discard this change?</source>
         <translation>Odrzucić tę zmianę?</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1540"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1563"/>
         <source>Discard the changes?</source>
         <translation>Odrzucić zmiany?</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1543"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1566"/>
         <source>The lines go back to how they are in the staging area.</source>
         <translation>Wiersze wrócą do stanu z indeksu.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1545"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1568"/>
         <source>The new file goes to the trash (deleted where there is no trash).</source>
         <translation>Nowy plik trafi do kosza (zostanie usunięty, gdzie nie ma kosza).</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1546"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1569"/>
         <source>The file goes back to how it is in the last commit, staged changes too.</source>
         <translation>Plik wróci do stanu z ostatniego commita, także zmiany w indeksie.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1547"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1570"/>
         <source>This cannot be undone with git.</source>
         <translation>Tego nie da się cofnąć gitem.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1548"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1571"/>
         <source>Discard</source>
         <translation>Odrzuć</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1561"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1584"/>
         <source>Abort?</source>
         <translation>Przerwać?</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1564"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1587"/>
         <source>The branch and the files go back to how they were before it started: conflicts you resolved are lost.</source>
         <translation>Gałąź i pliki wrócą do stanu sprzed rozpoczęcia: rozwiązane konflikty przepadną.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1565"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1588"/>
         <source>Abort</source>
         <translation>Przerwij</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1573"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1596"/>
         <source>Drop the stash?</source>
         <translation>Usunąć odłożone zmiany?</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1575"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1598"/>
         <source>Its changes are gone for good.</source>
         <translation>Te zmiany przepadną na zawsze.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1576"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1599"/>
         <source>Drop</source>
         <translation>Usuń</translation>
     </message>
@@ -14427,60 +14437,65 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <translation>Pobrano zmiany</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="805"/>
-        <location filename="../src/core/gitcli/client.cpp" line="818"/>
-        <location filename="../src/core/gitcli/client.cpp" line="852"/>
+        <location filename="../src/core/gitcli/client.cpp" line="806"/>
+        <source>Fetched</source>
+        <translation>Pobrano</translation>
+    </message>
+    <message>
+        <location filename="../src/core/gitcli/client.cpp" line="814"/>
+        <location filename="../src/core/gitcli/client.cpp" line="827"/>
+        <location filename="../src/core/gitcli/client.cpp" line="861"/>
         <location filename="../src/core/gitcli/client_files.cpp" line="408"/>
         <source>“%1” cannot be a branch&apos;s name</source>
         <translation>„%1” nie może być nazwą gałęzi</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="810"/>
+        <location filename="../src/core/gitcli/client.cpp" line="819"/>
         <source>Created the branch %1</source>
         <translation>Utworzono gałąź %1</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="826"/>
+        <location filename="../src/core/gitcli/client.cpp" line="835"/>
         <source>Switched to %1</source>
         <translation>Przełączono na %1</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="853"/>
+        <location filename="../src/core/gitcli/client.cpp" line="862"/>
         <source>No folder for the worktree</source>
         <translation>Nie podano folderu dla worktree</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="864"/>
+        <location filename="../src/core/gitcli/client.cpp" line="873"/>
         <source>Added a worktree at %1</source>
         <translation>Dodano worktree w %1</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="879"/>
+        <location filename="../src/core/gitcli/client.cpp" line="888"/>
         <source>Removed the worktree %1</source>
         <translation>Usunięto worktree %1</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="887"/>
+        <location filename="../src/core/gitcli/client.cpp" line="896"/>
         <source>A pull request needs a title</source>
         <translation>Pull request wymaga tytułu</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="892"/>
+        <location filename="../src/core/gitcli/client.cpp" line="901"/>
         <source>The GitHub CLI (gh) is not installed: install it to create pull requests</source>
         <translation>Nie zainstalowano GitHub CLI (gh): bez niego nie można tworzyć pull requestów</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="912"/>
+        <location filename="../src/core/gitcli/client.cpp" line="921"/>
         <source>Created the pull request</source>
         <translation>Utworzono pull request</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="915"/>
+        <location filename="../src/core/gitcli/client.cpp" line="924"/>
         <source>A pull request for this branch exists already</source>
         <translation>Pull request dla tej gałęzi już istnieje</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client.cpp" line="919"/>
+        <location filename="../src/core/gitcli/client.cpp" line="928"/>
         <location filename="../src/core/gitcli/client_history.cpp" line="30"/>
         <source>Sign in to GitHub first: run “gh auth login” in a terminal</source>
         <translation>Najpierw zaloguj się do GitHuba: uruchom „gh auth login” w terminalu</translation>
@@ -14714,6 +14729,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     <message>
         <location filename="../src/core/gitcli/client_operations.cpp" line="115"/>
         <location filename="../src/core/gitcli/client_operations.cpp" line="127"/>
+        <location filename="../src/core/gitcli/client_operations.cpp" line="154"/>
         <source>Nothing is in progress</source>
         <translation>Nic nie trwa</translation>
     </message>
@@ -14738,47 +14754,57 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <translation>Najpierw rozwiąż każdy plik z konfliktem: %1</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client_operations.cpp" line="173"/>
+        <location filename="../src/core/gitcli/client_operations.cpp" line="155"/>
+        <source>A merge has no commit to skip: abort it instead</source>
+        <translation>Scalanie nie ma commita do pominięcia: przerwij je</translation>
+    </message>
+    <message>
+        <location filename="../src/core/gitcli/client_operations.cpp" line="163"/>
+        <source>Skipped: the operation goes on without that commit</source>
+        <translation>Pominięto: operacja trwa dalej bez tego commita</translation>
+    </message>
+    <message>
+        <location filename="../src/core/gitcli/client_operations.cpp" line="191"/>
         <source>No changes to stash</source>
         <translation>Brak zmian do odłożenia</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client_operations.cpp" line="176"/>
+        <location filename="../src/core/gitcli/client_operations.cpp" line="194"/>
         <source>Stashed the changes</source>
         <translation>Odłożono zmiany</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client_operations.cpp" line="183"/>
+        <location filename="../src/core/gitcli/client_operations.cpp" line="201"/>
         <source>Not a stash</source>
         <translation>To nie są odłożone zmiany</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client_operations.cpp" line="190"/>
+        <location filename="../src/core/gitcli/client_operations.cpp" line="208"/>
         <source>The stash met conflicts: it is kept, resolve the files</source>
         <translation>Odłożone zmiany trafiły na konflikty: zostają zachowane, rozwiąż pliki</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client_operations.cpp" line="195"/>
+        <location filename="../src/core/gitcli/client_operations.cpp" line="213"/>
         <source>Applied the stash</source>
         <translation>Przywrócono odłożone zmiany</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client_operations.cpp" line="199"/>
+        <location filename="../src/core/gitcli/client_operations.cpp" line="217"/>
         <source>Applied and dropped the stash</source>
         <translation>Przywrócono i usunięto odłożone zmiany</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client_operations.cpp" line="200"/>
+        <location filename="../src/core/gitcli/client_operations.cpp" line="218"/>
         <source>Applied the stash, but it was not dropped: %1</source>
         <translation>Przywrócono odłożone zmiany, ale ich nie usunięto: %1</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client_operations.cpp" line="214"/>
+        <location filename="../src/core/gitcli/client_operations.cpp" line="232"/>
         <source>The stash is gone</source>
         <translation>Tych odłożonych zmian już nie ma</translation>
     </message>
     <message>
-        <location filename="../src/core/gitcli/client_operations.cpp" line="218"/>
+        <location filename="../src/core/gitcli/client_operations.cpp" line="236"/>
         <source>Dropped the stash</source>
         <translation>Usunięto odłożone zmiany</translation>
     </message>
@@ -32029,19 +32055,19 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
     </message>
     <message>
         <location filename="../src/app/qml/terminal/TerminalPanel.qml" line="281"/>
-        <location filename="../src/app/qml/terminal/TerminalPanel.qml" line="415"/>
+        <location filename="../src/app/qml/terminal/TerminalPanel.qml" line="468"/>
         <source>New terminal</source>
         <translation>Nowy terminal</translation>
     </message>
     <message>
         <location filename="../src/app/qml/terminal/TerminalPanel.qml" line="290"/>
-        <location filename="../src/app/qml/terminal/TerminalPanel.qml" line="514"/>
+        <location filename="../src/app/qml/terminal/TerminalPanel.qml" line="567"/>
         <source>Split right</source>
         <translation>Podziel w prawo</translation>
     </message>
     <message>
         <location filename="../src/app/qml/terminal/TerminalPanel.qml" line="300"/>
-        <location filename="../src/app/qml/terminal/TerminalPanel.qml" line="522"/>
+        <location filename="../src/app/qml/terminal/TerminalPanel.qml" line="575"/>
         <source>Split down</source>
         <translation>Podziel w dół</translation>
     </message>
@@ -32051,77 +32077,77 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
         <translation>Szukaj w terminalu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/terminal/TerminalPanel.qml" line="414"/>
+        <location filename="../src/app/qml/terminal/TerminalPanel.qml" line="467"/>
         <source>A terminal runs your shell in the thread&apos;s folder.</source>
         <translation>Terminal uruchamia Twoją powłokę w folderze wątku.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/terminal/TerminalPanel.qml" line="436"/>
+        <location filename="../src/app/qml/terminal/TerminalPanel.qml" line="489"/>
         <source>Add to chat</source>
         <translation>Dodaj do czatu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/terminal/TerminalPanel.qml" line="448"/>
+        <location filename="../src/app/qml/terminal/TerminalPanel.qml" line="501"/>
         <source>Copy</source>
         <translation>Kopiuj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/terminal/TerminalPanel.qml" line="460"/>
+        <location filename="../src/app/qml/terminal/TerminalPanel.qml" line="513"/>
         <source>Paste</source>
         <translation>Wklej</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/terminal/TerminalPanel.qml" line="472"/>
+        <location filename="../src/app/qml/terminal/TerminalPanel.qml" line="525"/>
         <source>Select all</source>
         <translation>Zaznacz wszystko</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/terminal/TerminalPanel.qml" line="484"/>
+        <location filename="../src/app/qml/terminal/TerminalPanel.qml" line="537"/>
         <source>Find…</source>
         <translation>Znajdź…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/terminal/TerminalPanel.qml" line="491"/>
+        <location filename="../src/app/qml/terminal/TerminalPanel.qml" line="544"/>
         <source>Jump to latest</source>
         <translation>Przejdź do najnowszych</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/terminal/TerminalPanel.qml" line="503"/>
+        <location filename="../src/app/qml/terminal/TerminalPanel.qml" line="556"/>
         <source>Clear</source>
         <translation>Wyczyść</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/terminal/TerminalPanel.qml" line="531"/>
+        <location filename="../src/app/qml/terminal/TerminalPanel.qml" line="584"/>
         <source>Close terminal</source>
         <translation>Zamknij terminal</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/terminal/TerminalPanel.qml" line="545"/>
+        <location filename="../src/app/qml/terminal/TerminalPanel.qml" line="598"/>
         <source>Close the terminal?</source>
         <translation>Zamknąć terminal?</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/terminal/TerminalPanel.qml" line="547"/>
+        <location filename="../src/app/qml/terminal/TerminalPanel.qml" line="600"/>
         <source>A program is still running in it. Closing the terminal stops it.</source>
         <translation>Wciąż działa w nim program. Zamknięcie terminala go zatrzyma.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/terminal/TerminalPanel.qml" line="548"/>
+        <location filename="../src/app/qml/terminal/TerminalPanel.qml" line="601"/>
         <source>Close</source>
         <translation>Zamknij</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/terminal/TerminalPanel.qml" line="413"/>
+        <location filename="../src/app/qml/terminal/TerminalPanel.qml" line="466"/>
         <source>No terminals open</source>
         <translation>Brak otwartych terminali</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/terminal/TerminalPanel.qml" line="427"/>
+        <location filename="../src/app/qml/terminal/TerminalPanel.qml" line="480"/>
         <source>No terminal on this device</source>
         <translation>Brak terminala na tym urządzeniu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/terminal/TerminalPanel.qml" line="428"/>
+        <location filename="../src/app/qml/terminal/TerminalPanel.qml" line="481"/>
         <source>Terminals run on Linux and macOS.</source>
         <translation>Terminale działają na Linuksie i macOS.</translation>
     </message>
@@ -40636,50 +40662,50 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="213"/>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="889"/>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="1044"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="214"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="920"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="1082"/>
         <source>The folder changed before it ran</source>
         <translation>Folder zmienił się, zanim polecenie zostało wykonane</translation>
     </message>
     <message>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="542"/>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="833"/>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="891"/>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="1048"/>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="1197"/>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="1303"/>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="1335"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="573"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="864"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="922"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="1086"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="1235"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="1343"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="1375"/>
         <source>Not a git repository</source>
         <translation>To nie jest repozytorium git</translation>
     </message>
     <message>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="922"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="953"/>
         <source>Committed, but the push failed: %1</source>
         <translation>Zatwierdzono, ale wypchnięcie się nie udało: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="926"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="957"/>
         <source>Committed and pushed</source>
         <translation>Zatwierdzono i wypchnięto</translation>
     </message>
     <message>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="935"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="966"/>
         <source>Committed and pushed, but no pull request: %1</source>
         <translation>Zatwierdzono i wypchnięto, ale nie utworzono pull requesta: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="1020"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="1058"/>
         <source>The push before the pull request failed: %1</source>
         <translation>Wypchnięcie przed utworzeniem pull requesta się nie udało: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="1068"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="1106"/>
         <source>Nothing to revert: the files are as they were</source>
         <translation>Nie ma czego cofać: pliki są takie, jak były</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/gitpanel/codegit.cpp" line="1070"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="1108"/>
         <source>Reverted %n file(s)</source>
         <translation>
             <numerusform>Przywrócono %n plik</numerusform>
@@ -40688,54 +40714,54 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="1191"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="1229"/>
         <source>Wait for the action that runs</source>
         <translation>Poczekaj, aż skończy się trwające działanie</translation>
     </message>
     <message>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="1193"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="1231"/>
         <source>This is a git repository already</source>
         <translation>To już jest repozytorium git</translation>
     </message>
     <message>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="1194"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="1232"/>
         <source>git is not installed</source>
         <translation>git nie jest zainstalowany</translation>
     </message>
     <message>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="1200"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="1238"/>
         <source>There are no changes to commit</source>
         <translation>Nie ma zmian do zatwierdzenia</translation>
     </message>
     <message>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="1202"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="1240"/>
         <source>Finish or abort what is in progress first</source>
         <translation>Najpierw dokończ albo przerwij to, co trwa</translation>
     </message>
     <message>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="1206"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="1244"/>
         <source>There are no changes to stash</source>
         <translation>Nie ma zmian do odłożenia</translation>
     </message>
     <message>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="1209"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="1247"/>
         <source>HEAD is detached: switch to a branch to push it</source>
         <translation>HEAD jest odłączony: przełącz na gałąź, by ją wypchnąć</translation>
     </message>
     <message>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="1211"/>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="1228"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="1249"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="1268"/>
         <source>Nothing is committed yet</source>
         <translation>Nic jeszcze nie zatwierdzono</translation>
     </message>
     <message>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="1213"/>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="1230"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="1251"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="1270"/>
         <source>The repository has no remote: publish it first</source>
         <translation>Repozytorium nie ma zdalnego: najpierw je opublikuj</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/gitpanel/codegit.cpp" line="1215"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="1253"/>
         <source>The remote has %n new commit(s): pull first</source>
         <translation>
             <numerusform>Zdalne ma %n nowy commit: najpierw pobierz</numerusform>
@@ -40744,82 +40770,87 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="1217"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="1255"/>
         <source>Everything is pushed</source>
         <translation>Wszystko jest wypchnięte</translation>
     </message>
     <message>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="1221"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="1259"/>
         <source>The branch has no upstream to pull from</source>
         <translation>Gałąź nie ma gałęzi nadrzędnej, z której można pobrać</translation>
     </message>
     <message>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="1224"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="1261"/>
+        <source>The branch has no upstream to fetch from</source>
+        <translation>Gałąź nie ma upstreamu, z którego można pobrać</translation>
+    </message>
+    <message>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="1264"/>
         <source>Install the GitHub CLI (gh) to create pull requests</source>
         <translation>Zainstaluj GitHub CLI (gh), by tworzyć pull requesty</translation>
     </message>
     <message>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="1226"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="1266"/>
         <source>HEAD is detached: switch to a branch first</source>
         <translation>HEAD jest odłączony: najpierw przełącz na gałąź</translation>
     </message>
     <message>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="1232"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="1272"/>
         <source>This is the default branch: make a branch for the pull request</source>
         <translation>To gałąź domyślna: utwórz gałąź dla pull requesta</translation>
     </message>
     <message>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="1235"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="1275"/>
         <source>The branch has a pull request: #%1</source>
         <translation>Gałąź ma już pull request: #%1</translation>
     </message>
     <message>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="1240"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="1280"/>
         <source>Install the GitHub CLI (gh) to publish repositories</source>
         <translation>Zainstaluj GitHub CLI (gh), by publikować repozytoria</translation>
     </message>
     <message>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="1242"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="1282"/>
         <source>The repository has a remote already</source>
         <translation>Repozytorium ma już zdalne</translation>
     </message>
     <message>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="1244"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="1284"/>
         <source>Commit something first</source>
         <translation>Najpierw coś zatwierdź</translation>
     </message>
     <message>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="1453"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="1493"/>
         <source>Choose the files to commit</source>
         <translation>Wybierz pliki do zatwierdzenia</translation>
     </message>
     <message>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="1656"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="1702"/>
         <source>Turn %1</source>
         <translation>Tura %1</translation>
     </message>
     <message>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="692"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="723"/>
         <source>A pull request&apos;s text is written for a branch with commits.</source>
         <translation>Tekst pull requesta powstaje dla gałęzi, która ma commity.</translation>
     </message>
     <message>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="718"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="749"/>
         <source>“%1” is no branch to compare with.</source>
         <translation>„%1” to nie gałąź, z którą można porównać.</translation>
     </message>
     <message>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="734"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="765"/>
         <source>The branch has no commits that %1 does not have.</source>
         <translation>Gałąź nie ma commitów, których nie ma %1.</translation>
     </message>
     <message>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="694"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="725"/>
         <source>There is no base branch to compare with: choose one.</source>
         <translation>Nie ma gałęzi bazowej do porównania: wybierz ją.</translation>
     </message>
     <message>
-        <location filename="../src/app/gitpanel/codegit.cpp" line="696"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="727"/>
         <source>“%1” cannot be the name of a branch.</source>
         <translation>„%1” nie może być nazwą gałęzi.</translation>
     </message>

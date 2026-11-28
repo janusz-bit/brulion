@@ -349,6 +349,9 @@ public:
     void push(const QString &folder, std::function<void(const Outcome &)> done);
     /// `git pull --ff-only`.
     void pull(const QString &folder, std::function<void(const Outcome &)> done);
+    /// `git fetch --prune --quiet` (the branch's remote, else origin): what ahead / behind and Pull
+    /// see, without touching the work tree.
+    void fetch(const QString &folder, std::function<void(const Outcome &)> done);
     /// `git switch -c <name>`: a new branch from HEAD, the work tree's changes kept.
     void createBranch(const QString &folder, const QString &name, std::function<void(const Outcome &)> done);
     /// `git switch <name>`; a remote-tracking branch ("origin/x") without a local one:
@@ -479,6 +482,9 @@ public:
     /// A merge committed with its MERGE_MSG (`git commit --no-edit`); a rebase, cherry-pick,
     /// revert or am continued (`--continue`) — never in an editor (GIT_EDITOR=true).
     void continueOperation(const QString &folder, Operation operation, std::function<void(const Outcome &)> done);
+    /// The commit that stopped a rebase, cherry-pick, revert or am left out (`--skip`), the operation
+    /// going on with the next one — never in an editor. A merge has nothing to skip: failed.
+    void skipOperation(const QString &folder, Operation operation, std::function<void(const Outcome &)> done);
     /// The repository's stashes (shared by its worktrees), the newest first.
     void stashes(const QString &folder, std::function<void(const StashList &)> done);
     /// `git stash push --include-untracked [-m message]`.

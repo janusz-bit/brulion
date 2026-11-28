@@ -147,6 +147,24 @@ void Client::continueOperation(const QString &folder, Operation operation, std::
     });
 }
 
+void Client::skipOperation(const QString &folder, Operation operation, std::function<void(const Outcome &)> done)
+{
+    const QString command = commandOf(operation);
+    if (command.isEmpty() || operation == Operation::Merge) {
+        const QString why = command.isEmpty() ? GitMessages::tr("Nothing is in progress")
+                                              : GitMessages::tr("A merge has no commit to skip: abort it instead");
+        later([done = std::move(done), why] { done(failedWith(why)); });
+        return;
+    }
+    RunOptions c;
+    c.env = {{u"GIT_EDITOR"_s, u"true"_s}, {u"GIT_SEQUENCE_EDITOR"_s, u"true"_s}};
+    c.timeoutMs = m_commitTimeoutMs;
+    git(folder, {command, u"--skip"_s}, c, [done = std::move(done)](const RunResult &r) {
+        done(r.ok() ? succeededWith(GitMessages::tr("Skipped: the operation goes on without that commit"))
+                    : failedWith(r.message()));
+    });
+}
+
 void Client::stashes(const QString &folder, std::function<void(const StashList &)> done)
 {
     RunOptions ro;

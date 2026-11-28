@@ -676,6 +676,31 @@ void TestCodeGit::commitAndPush()
     git.pull();
     QTRY_VERIFY_WITH_TIMEOUT(!finished(actions, u"pull"_s).isEmpty(), Wait);
     QVERIFY(finished(actions, u"pull"_s).at(1).toBool());
+
+    // A commit pushed from another clone: fetched — by hand, then by itself — behind 1, the work
+    // tree untouched.
+    QTemporaryDir otherDir;
+    gitIn(otherDir.path(), {u"clone"_s, u"-q"_s, remote, u"inny"_s});
+    const QString other = otherDir.filePath(u"inny"_s);
+    writeFile(other + u"/d.txt"_s, "d\n");
+    gitIn(other, {u"add"_s, u"-A"_s});
+    gitIn(other, {u"-c"_s, u"user.name=Ola"_s, u"-c"_s, u"user.email=ola@example.com"_s, u"commit"_s, u"-qm"_s, u"d"_s});
+    gitIn(other, {u"push"_s, u"-q"_s, u"origin"_s, u"main"_s});
+    git.fetch();
+    QTRY_VERIFY_WITH_TIMEOUT(!finished(actions, u"fetch"_s).isEmpty(), Wait);
+    QVERIFY(finished(actions, u"fetch"_s).at(1).toBool());
+    QTRY_COMPARE_WITH_TIMEOUT(git.behind(), 1, Wait);
+    QVERIFY(!QFileInfo::exists(repo.root + u"/d.txt"_s));
+    writeFile(other + u"/e.txt"_s, "e\n");
+    gitIn(other, {u"add"_s, u"-A"_s});
+    gitIn(other, {u"-c"_s, u"user.name=Ola"_s, u"-c"_s, u"user.email=ola@example.com"_s, u"commit"_s, u"-qm"_s, u"e"_s});
+    gitIn(other, {u"push"_s, u"-q"_s, u"origin"_s, u"main"_s});
+    QSignalSpy fetchSetting(&git, &CodeGit::fetchIntervalChanged);
+    git.setFetchInterval(200);
+    QTRY_COMPARE_WITH_TIMEOUT(git.behind(), 2, Wait);
+    QCOMPARE(git.lastFetchError(), QString());
+    git.setFetchInterval(0);
+    QVERIFY(!fetchSetting.isEmpty());
 }
 
 void TestCodeGit::commitPushAndPullRequest()
@@ -1391,6 +1416,17 @@ void TestCodeGit::mergeInProgress()
     QTRY_VERIFY_WITH_TIMEOUT(!finished(actions, u"abort"_s).isEmpty(), Wait);
     QTRY_COMPARE_WITH_TIMEOUT(git.operation(), QString(), Wait);
     QCOMPARE(repo.read(u"wspólny.txt"_s), QByteArray("jeden\nTRZY\n"));
+    // A rebase stopped by the same conflict: its commit skipped, the rebase over.
+    QProcess rebase;
+    rebase.start(gitProgram(), {u"-C"_s, repo.root, u"rebase"_s, u"main"_s});
+    rebase.waitForFinished(Wait);
+    git.refresh();
+    QTRY_COMPARE_WITH_TIMEOUT(git.operation(), u"rebase"_s, Wait);
+    git.skipOperation();
+    QTRY_VERIFY_WITH_TIMEOUT(!finished(actions, u"skip"_s).isEmpty(), Wait);
+    QVERIFY2(finished(actions, u"skip"_s).at(1).toBool(), qPrintable(finished(actions, u"skip"_s).at(2).toString()));
+    QTRY_COMPARE_WITH_TIMEOUT(git.operation(), QString(), Wait);
+    QCOMPARE(repo.read(u"wspólny.txt"_s), QByteArray("jeden\nDWA z innej\n"));
 }
 
 void TestCodeGit::stashes()

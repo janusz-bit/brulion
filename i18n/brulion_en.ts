@@ -983,7 +983,7 @@
 <context>
     <name>GitChangesPanel</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="736"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="742"/>
         <source>%n file(s) with conflicts: take a side, or edit them and mark them resolved.</source>
         <translation>
             <numerusform>%n file with conflicts: take a side, or edit them and mark them resolved.</numerusform>
@@ -991,7 +991,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="898"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="914"/>
         <source>and %n more file(s)</source>
         <translation>
             <numerusform>and %n more file</numerusform>
@@ -999,7 +999,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1516"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1539"/>
         <source>The files go back to how they were before the turn: the %n file(s) it changed are put back, files it added are deleted.</source>
         <translation>
             <numerusform>The files go back to how they were before the turn: the %n file it changed is put back, files it added are deleted.</numerusform>
@@ -2757,7 +2757,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/gitpanel/codegit.cpp" line="1070"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="1108"/>
         <source>Reverted %n file(s)</source>
         <translation>
             <numerusform>Reverted %n file</numerusform>
@@ -2765,7 +2765,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/gitpanel/codegit.cpp" line="1215"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="1253"/>
         <source>The remote has %n new commit(s): pull first</source>
         <translation>
             <numerusform>The remote has %n new commit: pull first</numerusform>

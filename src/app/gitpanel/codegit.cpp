@@ -115,6 +115,7 @@ CodeGit::CodeGit(QObject *parent) : QObject(parent)
         if (!m_refreshRunning)
             refresh();
     });
+    connect(&m_fetchTimer, &QTimer::timeout, this, &CodeGit::fetchQuietly);
     const auto changed = [this] {
         if (!m_debounce.isActive())
             m_debounce.start();
@@ -232,6 +233,36 @@ void CodeGit::setTurnCheckpoint(const QString &id)
     bump();
     if (!id.isEmpty() && !m_folder.isEmpty())
         changesSince(id);
+}
+
+void CodeGit::setFetchInterval(int ms)
+{
+    ms = qMax(0, ms);
+    if (ms == m_fetchInterval)
+        return;
+    m_fetchInterval = ms;
+    if (ms > 0)
+        m_fetchTimer.start(ms);
+    else
+        m_fetchTimer.stop();
+    Q_EMIT fetchIntervalChanged();
+}
+
+void CodeGit::fetchQuietly()
+{
+    if (m_fetching || busy() || m_upstream.isEmpty() || m_info.topLevel.isEmpty())
+        return;
+    m_fetching = true;
+    const int generation = m_generation;
+    m_client.fetch(m_info.topLevel, [this, generation](const gitcli::Outcome &o) {
+        m_fetching = false;
+        if (generation != m_generation)
+            return;
+        m_lastFetchError = o.ok ? QString() : o.message;
+        Q_EMIT fetchIntervalChanged();
+        if (o.ok)
+            refresh();
+    });
 }
 
 void CodeGit::setPollInterval(int ms)
@@ -971,6 +1002,13 @@ void CodeGit::push()
     });
 }
 
+void CodeGit::fetch()
+{
+    runAction(u"fetch"_s, [this](const QString &root) {
+        m_client.fetch(root, [this](const gitcli::Outcome &o) { finishAction(u"fetch"_s, o.ok, o.message, QString()); });
+    });
+}
+
 void CodeGit::pull()
 {
     runAction(u"pull"_s, [this](const QString &root) {
@@ -1219,6 +1257,8 @@ QString CodeGit::unavailableReason(const QString &action) const
     }
     if (action == u"pull"_s)
         return m_upstream.isEmpty() ? tr("The branch has no upstream to pull from") : QString();
+    if (action == u"fetch"_s)
+        return m_upstream.isEmpty() ? tr("The branch has no upstream to fetch from") : QString();
     if (action == u"createPr"_s) {
         if (!ghAvailable())
             return tr("Install the GitHub CLI (gh) to create pull requests");
@@ -1564,6 +1604,12 @@ void CodeGit::continueOperation()
 {
     const gitcli::Operation op = gitcli::Client::operationFromName(m_operation);
     simpleAction(u"continue"_s, [this, op](const QString &root, auto done) { m_client.continueOperation(root, op, done); });
+}
+
+void CodeGit::skipOperation()
+{
+    const gitcli::Operation op = gitcli::Client::operationFromName(m_operation);
+    simpleAction(u"skip"_s, [this, op](const QString &root, auto done) { m_client.skipOperation(root, op, done); });
 }
 
 void CodeGit::stashes()

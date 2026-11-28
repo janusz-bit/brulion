@@ -798,6 +798,15 @@ void Client::pull(const QString &folder, std::function<void(const Outcome &)> do
     });
 }
 
+void Client::fetch(const QString &folder, std::function<void(const Outcome &)> done)
+{
+    RunOptions net;
+    net.timeoutMs = m_networkTimeoutMs;
+    git(folder, {u"fetch"_s, u"--prune"_s, u"--quiet"_s}, net, [done = std::move(done)](const RunResult &r) {
+        done(r.ok() ? succeeded(GitMessages::tr("Fetched")) : failed(r.message()));
+    });
+}
+
 void Client::createBranch(const QString &folder, const QString &name, std::function<void(const Outcome &)> done)
 {
     if (!isValidBranchName(name)) {
