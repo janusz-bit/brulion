@@ -322,7 +322,7 @@ Item {
         id: dictionaryDialog
         objectName: "spellDictionaryDialog"
         title: qsTr("Personal dictionary")
-        subtitle: qsTr("Words spell checking takes as right, on this device.")
+        subtitle: qsTr("Words spell checking takes as right, kept in this notebook and synced with it.")
         iconName: "book-open"
         showReject: false
         acceptText: qsTr("Close")
@@ -1329,8 +1329,8 @@ Item {
                 visible: SpellCheck.available && AppSettings.spellCheck
                 title: qsTr("Personal dictionary")
                 description: SpellCheck.personalWords.length === 0
-                             ? qsTr("Words you add are kept on this device for all notebooks.")
-                             : qsTr("%n word(s), kept on this device for all notebooks.", "", SpellCheck.personalWords.length)
+                             ? qsTr("Words you add are kept in this notebook and synced with it.")
+                             : qsTr("%n word(s), kept in this notebook and synced with it.", "", SpellCheck.personalWords.length)
                 BButton {
                     objectName: "spellDictionaryButton"
                     size: "small"

@@ -46,7 +46,8 @@
 //     merge3(base, local, remote) -> MergeResult{text, clean, hunks}: diff3 with a union of
 //     concurrent insertions (journal appends on two devices merge cleanly), flashcards reviewed on
 //     both devices merged by their later review (mergeCardState), local EOL style and
-//     a three-way merged final newline; mergeJson3() key-wise for .brulion/config.json;
+//     a three-way merged final newline; mergeJson3() key-wise for .brulion/config.json; mergeWordSet3() as a set of
+//     words for .brulion/dictionary.txt (the personal dictionary);
 //     diffLines/diffComm/diff3Regions (Myers with a work budget). Drawings (an SVG with an
 //     Excalidraw scene, `*.excalidraw.md`) are merged element by element against their base
 //     (drawing::mergeDrawingFiles, module "drawing"), never line by line; canvases (`.canvas`,

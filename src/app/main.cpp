@@ -25,6 +25,7 @@
 #include "logcontroller.h"        // the event log page's controller (src/app/diag)
 #include "pdfpageimageprovider.h" // the thumbnails of PDF pages (src/app/drawing)
 #include "pdfviewimageprovider.h" // the PDF viewer's pages (src/app/pdf)
+#include "notebookdictionary.h"    // the personal dictionary: the notebook's, synced (src/app/shell)
 #include "spellcheck.h"           // spell checking of the editor (src/app/editor)
 #include "workspace.h"
 #include "workspacesync.h"
@@ -533,11 +534,13 @@ int main(int argc, char *argv[])
                 [settings](const QString &verbosity) { settings->setValue(u"diagnostics/logVerbosity"_s, verbosity); });
         logs.setRecentSyncs([ctl = controller.get()] { return ctl->workspace()->sync()->historyLines(5); });
         // Spell checking of the editor (docs/UI.md "Spell checking") follows the device's settings
-        // and the UI language; words added in the editor's menu are stored there.
+        // and the UI language; words added in the editor's menu go to the open notebook's dictionary.
         brulion::editor::SpellCheck *spell = brulion::editor::SpellCheck::instance();
         spell->setUiLanguage(devTools.language());
         spell->setLanguageSetting(settings->spellLanguages());
-        spell->setPersonalWords(settings->spellingWords());
+        // The open notebook's dictionary (synced), the device's list without one.
+        auto *dictionary = new brulion::shell::NotebookDictionary(workspace, settings, spell);
+        spell->setPersonalWords(dictionary->words());
         spell->setEnabled(settings->spellCheck());
         spell->setWholePage(settings->spellWholePage());
         QObject::connect(&devTools, &brulion::ui::DevTools::languageChanged, settings,
@@ -552,10 +555,10 @@ int main(int argc, char *argv[])
                          [spell, settings] { spell->setWholePage(settings->spellWholePage()); });
         QObject::connect(settings, &brulion::shell::AppSettings::spellLanguagesChanged, spell,
                          [spell, settings] { spell->setLanguageSetting(settings->spellLanguages()); });
-        QObject::connect(settings, &brulion::shell::AppSettings::spellingWordsChanged, spell,
-                         [spell, settings] { spell->setPersonalWords(settings->spellingWords()); });
-        QObject::connect(spell, &brulion::editor::SpellCheck::personalWordsEdited, settings,
-                         [spell, settings] { settings->setSpellingWords(spell->personalWords()); });
+        QObject::connect(dictionary, &brulion::shell::NotebookDictionary::wordsChanged, spell,
+                         [spell, dictionary] { spell->setPersonalWords(dictionary->words()); });
+        QObject::connect(spell, &brulion::editor::SpellCheck::personalWordsEdited, dictionary,
+                         [spell, dictionary] { dictionary->setWords(spell->personalWords()); });
         // Its dictionaries go while the app is away (and by themselves when nothing was checked
         // for a while); what they held goes back to the system.
         QObject::connect(memoryPolicy, &brulion::ui::MemoryPolicy::letGo, spell, [spell] { spell->unload(); });

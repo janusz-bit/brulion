@@ -31,7 +31,7 @@ bool isSyncTextPath(const VaultPath &path);
 
 /// Paths the engine syncs: everything the vault tracks except ignored folders (.trash, .git,
 /// .obsidian, logseq, …; hidden ones in any letter case — on case-insensitive storage a remote
-/// ".GIT/hooks/x" would land in the real .git) and temp files, plus ".brulion/config.json".
+/// ".GIT/hooks/x" would land in the real .git) and temp files, plus the notebook's settings files (isNotebookSettingsFile: config.json, dictionary.txt).
 /// Conflict copies are synced like normal files.
 bool isSyncablePath(const VaultPath &path);
 

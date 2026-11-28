@@ -352,6 +352,39 @@ private Q_SLOTS:
         QCOMPARE(sync::unionLines({u"- a"_s}, {u"- a"_s, u"- a"_s}), (QStringList{u"- a"_s, u"- a"_s}));
     }
 
+    // --- mergeWordSet3 -------------------------------------------------------------------------
+    void mergeWordSet3_data()
+    {
+        QTest::addColumn<QString>("base");
+        QTest::addColumn<QString>("local");
+        QTest::addColumn<QString>("remote");
+        QTest::addColumn<QString>("merged");
+        QTest::newRow("both add") << u"kot\n"_s << u"kot\nżółw\n"_s << u"Kraków\nkot\n"_s << u"Kraków\nkot\nżółw\n"_s;
+        QTest::newRow("one removes") << u"kot\npies\n"_s << u"kot\n"_s << u"kot\npies\n"_s << u"kot\n"_s;
+        QTest::newRow("removes and adds") << u"kot\npies\n"_s << u"pies\n"_s << u"kot\npies\nźdźbło\n"_s
+                                          << u"pies\nźdźbło\n"_s;
+        QTest::newRow("both remove the same") << u"a\nb\n"_s << u"b\n"_s << u"b\n"_s << u"b\n"_s;
+        QTest::newRow("no base: a union") << QString() << u"Łódź\nkot\n"_s << u"kot\nPoznań\n"_s
+                                          << u"Poznań\nkot\nŁódź\n"_s;
+        QTest::newRow("removed, added back elsewhere") << u"kot\n"_s << QString() << u"kot\n"_s << QString();
+        QTest::newRow("CRLF, blanks, spaces, duplicates") << u"kot\r\n"_s << u"kot\r\n\r\n  żółw \r\nżółw\r\n"_s
+                                                          << u"kot\n"_s << u"kot\nżółw\n"_s;
+        QTest::newRow("a line over 100 characters is no word") << QString() << QString(101, u'ą') + u"\nkot\n"_s
+                                                               << QString(100, u'ę') << u"kot\n"_s + QString(100, u'ę') + u'\n';
+        QTest::newRow("letter case is a word of its own") << QString() << u"Kraków\n"_s << u"kraków\n"_s
+                                                          << u"Kraków\nkraków\n"_s;
+    }
+    void mergeWordSet3()
+    {
+        QFETCH(QString, base);
+        QFETCH(QString, local);
+        QFETCH(QString, remote);
+        QFETCH(QString, merged);
+        QCOMPARE(brulion::sync::mergeWordSet3(base, local, remote), merged);
+        // Symmetric: which side is local does not matter.
+        QCOMPARE(brulion::sync::mergeWordSet3(base, remote, local), merged);
+    }
+
     // --- mergeJson3 ----------------------------------------------------------------------------
     void jsonKeysChangedOnDifferentSides()
     {

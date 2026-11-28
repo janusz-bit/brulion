@@ -695,8 +695,10 @@ void VaultPrivate::startWatching()
     toWatch.reserve(dirs.size() + fileWatches.size() + 2);
     for (auto it = dirs.cbegin(); it != dirs.cend(); ++it)
         toWatch.append(absPath(it.key()));
-    if (files.contains(vaultConfigPath()))
-        toWatch.append(absPath(vaultConfigPath()));
+    for (const VaultPath &settings : notebookSettingsFiles()) {
+        if (files.contains(settings))
+            toWatch.append(absPath(settings));
+    }
     for (const VaultPath &file : std::as_const(fileWatches)) {
         if (files.contains(file))
             toWatch.append(absPath(file));
@@ -717,7 +719,7 @@ void VaultPrivate::stopWatching()
 
 bool VaultPrivate::watchesFile(const VaultPath &path) const
 {
-    return path == vaultConfigPath() || fileWatches.contains(path);
+    return isNotebookSettingsFile(path) || fileWatches.contains(path);
 }
 
 void VaultPrivate::watchFile(const VaultPath &path)
@@ -743,7 +745,7 @@ void VaultPrivate::keepWatching(const VaultPath &path)
     fileWatches.append(path);
     if (fileWatches.size() > kMaxFileWatches) {
         const VaultPath oldest = fileWatches.takeFirst();
-        if (watcher && oldest != vaultConfigPath())
+        if (watcher && !isNotebookSettingsFile(oldest))
             watcher->removePath(absPath(oldest));
     }
     watchFile(path);
@@ -751,7 +753,7 @@ void VaultPrivate::keepWatching(const VaultPath &path)
 
 void VaultPrivate::stopWatchingFile(const VaultPath &path)
 {
-    if (!fileWatches.removeOne(path) || path == vaultConfigPath())
+    if (!fileWatches.removeOne(path) || isNotebookSettingsFile(path))
         return;
     if (watcher)
         watcher->removePath(absPath(path));

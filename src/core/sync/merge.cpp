@@ -3,11 +3,14 @@
 #include "sync/cardmerge.h"
 
 #include "sync/diff.h"
+#include "vault/vaultconfig.h"
 
 #include <QHash>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
+#include <QSet>
+#include <QStringList>
 
 #include <algorithm>
 
@@ -302,6 +305,22 @@ std::optional<QString> mergeJson3(const QString &base, const QString &local, con
     if (!json.endsWith(u'\n'))
         json += u'\n';
     return json;
+}
+
+QString mergeWordSet3(const QString &base, const QString &local, const QString &remote)
+{
+    const auto wordsOf = [](const QString &text) {
+        const QStringList words = parseDictionary(text);
+        return QSet<QString>(words.cbegin(), words.cend());
+    };
+    const QSet<QString> was = wordsOf(base);
+    const QSet<QString> here = wordsOf(local);
+    const QSet<QString> there = wordsOf(remote);
+    // Kept by both, or new on either side (a word one side removed is in neither part).
+    QSet<QString> merged = here & there;
+    merged |= here - was;
+    merged |= there - was;
+    return serializeDictionary(QStringList(merged.cbegin(), merged.cend()));
 }
 
 } // namespace brulion::sync

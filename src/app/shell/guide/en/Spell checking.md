@@ -34,7 +34,7 @@ Words with a hyphen (`well-known`) and with an apostrophe (`don't`) are checked 
 - **Spelling languages** — *Automatic* (the app's language, the system's language and English: e.g. with a Polish interface, Polish and English), *English*, *Polish* or *Both*. A word is correct if any of the chosen languages knows it.
 - **Personal dictionary** — the list of added words: add or remove them here.
 
-The personal dictionary is a setting of this device and covers all notebooks. It isn't saved in the notebook, so it doesn't go through sync — on another device you add words separately.
+The personal dictionary belongs to the notebook: it is saved in the notebook (the file `.brulion/dictionary.txt`, one word per line) and goes with it through sync — Nextcloud and Syncthing alike —, so a word added on the phone is known on the computer too. Words added on two devices at the same time are both kept, and a word removed on one device is gone on the other. A notebook opened for the first time on this version starts with the words this device had before (they were a setting of the device, for all notebooks).
 
 A word added as `London` is also correct as `LONDON`, but not as `london`. A word added in lowercase (`brulion`) is also correct at the start of a sentence (`Brulion`).
 

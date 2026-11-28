@@ -4270,9 +4270,15 @@ documentation notebook.
   language, the system's and English, `spell::resolveLanguages`; Polish, English, Both — of the
   languages this device has) and "Personal dictionary" (a dialog listing `SpellCheck.personalWords`:
   add, remove). main.cpp binds `SpellCheck` to these settings and to the UI language.
-* **The personal dictionary is a device setting** (`spelling/words`, every notebook of this device),
-  not a notebook file: Nextcloud sync carries only `.brulion/config.json` of the `.brulion/` folder,
-  and in that file a key-wise merge would drop the words one of two devices added at the same time.
+* **The personal dictionary is the notebook's** (`.brulion/dictionary.txt`: one word per line, sorted
+  by code point — `vault/vaultconfig.h` `parseDictionary` / `serializeDictionary`), tracked by the
+  vault like `config.json` (never among `files()`, watched, reported) and synced with it: Nextcloud
+  merges it as a set of words against its base (`sync::mergeWordSet3`: a word either device added is
+  in, one either removed is out, never a conflict copy; a first sync takes the union), Syncthing
+  carries the file. `shell::NotebookDictionary` gives `SpellCheck.personalWords` the open
+  notebook's words and writes the edits there; without an open notebook the device's list
+  (`spelling/words`) counts as before 2026-11-28. A notebook without the file starts from the
+  device's list and writes it at once (an empty file is an empty dictionary, never filled again).
   "Ignore" lasts until the app quits. Matching follows Hunspell's letter case: "Kraków" also
   accepts "KRAKÓW", "kot" also "Kot", never "kraków" for "Kraków".
 * **Backends** (`src/platform/spellbackends.h`, one per build): **Hunspell** on the desktop — the

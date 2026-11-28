@@ -362,6 +362,54 @@ QString vaultConfigPath()
     return u".brulion/config.json"_s;
 }
 
+QString vaultDictionaryPath()
+{
+    return u".brulion/dictionary.txt"_s;
+}
+
+const QList<VaultPath> &notebookSettingsFiles()
+{
+    static const QList<VaultPath> files{vaultConfigPath(), vaultDictionaryPath()};
+    return files;
+}
+
+bool isNotebookSettingsFile(const VaultPath &path)
+{
+    return notebookSettingsFiles().contains(path);
+}
+
+namespace {
+
+constexpr qsizetype kMaxDictionaryWord = 100;
+
+QStringList cleanWords(QStringList words)
+{
+    words.sort();
+    words.erase(std::unique(words.begin(), words.end()), words.end());
+    return words;
+}
+
+} // namespace
+
+QStringList parseDictionary(QStringView text)
+{
+    QStringList words;
+    for (const QStringView line : text.tokenize(u'\n')) {
+        const QStringView word = line.trimmed();
+        if (!word.isEmpty() && word.size() <= kMaxDictionaryWord)
+            words.append(word.toString());
+    }
+    return cleanWords(std::move(words));
+}
+
+QString serializeDictionary(const QStringList &words)
+{
+    QString out;
+    for (const QString &word : parseDictionary(words.join(u'\n')))
+        out += word + u'\n';
+    return out;
+}
+
 bool isUsableJournalFormat(const QString &format)
 {
     if (format.trimmed().isEmpty())

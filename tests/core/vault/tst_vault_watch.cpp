@@ -3,6 +3,7 @@
 // the vault's back" with plain QFile/rename calls and explicit modification times.
 #include "vaulttest.h"
 
+#include "vault/vaultconfig.h"
 #include "vault/vaultutil_p.h"
 
 #include <QRegularExpression>
@@ -250,7 +251,9 @@ private Q_SLOTS:
         QSignalSpy configSpy(f.vault.get(), &Vault::configChanged);
         f.write(u".brulion/config.json"_s, R"({"journalsFolder":"Dni"})");
         f.write(u".brulion/inne.json"_s, "{}");
-        QCOMPARE(shortChanges(f.vault->rescan()), QStringList{u"create:.brulion/config.json@external"_s});
+        f.write(u".brulion/dictionary.txt"_s, "kot\n");
+        QCOMPARE(sorted(shortChanges(f.vault->rescan())),
+                 (QStringList{u"create:.brulion/config.json@external"_s, u"create:.brulion/dictionary.txt@external"_s}));
         QCOMPARE(f.vault->config().journalsFolder, u"Dni"_s);
         QCOMPARE(configSpy.count(), 1);
     }
@@ -588,6 +591,28 @@ private Q_SLOTS:
                  (QStringList{u"create:.brulion/config.json@external"_s, u"modify:.brulion/config.json@external"_s,
                               u"delete:.brulion/config.json@external"_s}));
         QCOMPARE(configSpy.count(), 3);
+    }
+
+    /// The notebook's personal dictionary is tracked like its settings (docs/UI.md "Spell
+    /// checking"): never listed among the notes and attachments, but read, written and reported —
+    /// a rewrite in place, by Syncthing or another device's app, included.
+    void watcherReportsThePersonalDictionary()
+    {
+        Fixture f;
+        f.write(vaultDictionaryPath(), "kot\n");
+        QVERIFY(f.open());
+        QVERIFY(f.vault->exists(vaultDictionaryPath()));
+        QVERIFY(!f.files().contains(vaultDictionaryPath()));
+        QCOMPARE(f.text(vaultDictionaryPath()), u"kot\n"_s);
+        f.vault->startWatching();
+        f.write(vaultDictionaryPath(), "kot\nżółw\n");
+        QTRY_COMPARE(f.changes(), QStringList{u"modify:.brulion/dictionary.txt@external"_s});
+        QCOMPARE(f.text(vaultDictionaryPath()), u"kot\nżółw\n"_s);
+        QVERIFY(removeBehind(f.root(), vaultDictionaryPath()));
+        QTRY_COMPARE(f.changes().size(), 2);
+        QCOMPARE(f.changes().last(), u"delete:.brulion/dictionary.txt@external"_s);
+        QVERIFY(f.vault->writeText(vaultDictionaryPath(), u"Łódź\n"_s));
+        QCOMPARE(f.changes().last(), u"create:.brulion/dictionary.txt@user"_s);
     }
 
     void watcherComparesBinaryFilesByStat()

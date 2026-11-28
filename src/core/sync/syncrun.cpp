@@ -83,11 +83,12 @@ bool tripsMassDeletionGuard(int deletions, int files)
     return deletions >= SyncEngine::MassDeletionMinFiles && deletions > files * SyncEngine::MassDeletionRatio;
 }
 
-/// Synced files of one side, the vault config not counted.
+/// Synced files of one side, the notebook's settings files not counted.
 template<typename Map>
 int countWithoutConfig(const Map &files)
 {
-    return static_cast<int>(files.size()) - (files.contains(vaultConfigPath()) ? 1 : 0);
+    return static_cast<int>(files.size())
+           - static_cast<int>(std::ranges::count_if(notebookSettingsFiles(), [&](const VaultPath &p) { return files.contains(p); }));
 }
 
 /// The value under `key`, if any.
@@ -570,9 +571,11 @@ void SyncRun::listLocal()
         if (!stat.isDir && isSyncablePath(stat.path))
             m_local.insert(stat.path, stat);
     }
-    // files() does not list the vault config.
-    if (const std::optional<FileStat> config = vault()->stat(vaultConfigPath()); config && !config->isDir)
-        m_local.insert(config->path, *config);
+    // files() does not list the settings folder's files.
+    for (const VaultPath &settings : notebookSettingsFiles()) {
+        if (const std::optional<FileStat> file = vault()->stat(settings); file && !file->isDir)
+            m_local.insert(file->path, *file);
+    }
 }
 
 void SyncRun::loadStates()
@@ -634,7 +637,7 @@ bool SyncRun::guardEmptySides()
     bool localHas = false;
     bool remoteHas = false;
     for (auto it = m_states.cbegin(); it != m_states.cend(); ++it) {
-        if (it.key() == vaultConfigPath())
+        if (isNotebookSettingsFile(it.key()))
             continue;
         ++tracked;
         const bool hasLocal = m_local.contains(it.key());
@@ -706,7 +709,7 @@ bool SyncRun::recheckRemoteEmpty()
 {
     QList<VaultPath> onlyLocal;
     for (auto it = m_states.cbegin(); it != m_states.cend(); ++it) {
-        if (it.key() != vaultConfigPath() && m_local.contains(it.key()) && !m_remote.contains(it.key()))
+        if (!isNotebookSettingsFile(it.key()) && m_local.contains(it.key()) && !m_remote.contains(it.key()))
             onlyLocal.append(it.key());
     }
     QHash<QString, int> arrived = m_downloadedNew;
@@ -738,7 +741,7 @@ void SyncRun::guardMassDeletion()
     QList<VaultPath> remoteDeletions; // gone locally, unchanged remotely -> DeleteRemote
     for (auto it = m_states.cbegin(); it != m_states.cend(); ++it) {
         const VaultPath &path = it.key();
-        if (path == vaultConfigPath())
+        if (isNotebookSettingsFile(path))
             continue;
         const auto local = m_local.constFind(path);
         const auto remote = m_remote.constFind(path);
@@ -1770,6 +1773,52 @@ void SyncRun::deleteLocal(const PathCtx &ctx, Done done)
     done(Outcome::done());
 }
 
+namespace {
+
+/// The vault config is JSON: a line union (first sync) or a line merge can produce invalid JSON
+/// (missing commas, duplicate keys), so it is merged key by key unless the line merge is fine.
+std::optional<QString> mergeConfigText(const QString &base, const QString &local, const QString &remote)
+{
+    if (base.isEmpty())
+        return mergeJson3(QString(), local, remote);
+    const MergeResult result = merge3(base, local, remote);
+    if (result.clean && isJsonObject(result.text))
+        return result.text;
+    return mergeJson3(base, local, remote);
+}
+
+/// A text changed on both sides against its base. A canvas (docs/SYNTAX.md §2 "Canvases"): merged
+/// node by node and field by field, written in the remote's layout (canvas::mergeCanvasFiles), never
+/// line by line — two merged arrays may lose a comma and stop being JSON; one that cannot be read
+/// keeps both versions. A drawing: merged element by element (new elements of both, erased ones
+/// gone, the remote's order with this device's new elements on top), never line by line; one that
+/// cannot be merged so (an element Brulion does not draw, a broken scene) keeps both versions (a
+/// conflict copy; the sync center merges it on request). For both, one side as the base (a new
+/// ETag, the same text: a client uploaded it again) is no change there: the other side's version.
+/// Any other text: line by line.
+std::optional<QString> mergeAgainstBase(const VaultPath &path, const QString &base, const QString &local,
+                                        const QString &remote, qint64 nowMs)
+{
+    const bool isCanvas = canvas::isCanvasPath(path);
+    const bool isDrawing = !isCanvas && (isDrawingText(path, local) || isDrawingText(path, remote));
+    if (isCanvas || isDrawing) {
+        if (remote == base)
+            return local;
+        if (local == base)
+            return remote;
+    }
+    if (isCanvas)
+        return canvas::mergeCanvasFiles(base, local, remote);
+    if (isDrawing) {
+        const std::optional<QByteArray> merged = drawing::mergeDrawingFiles(base.toUtf8(), local.toUtf8(), remote.toUtf8(), nowMs);
+        return merged ? decodeSyncText(*merged) : std::nullopt;
+    }
+    const MergeResult result = merge3(base, local, remote);
+    return result.clean ? std::optional<QString>(result.text) : std::nullopt;
+}
+
+} // namespace
+
 std::optional<QString> SyncRun::mergeText(const VaultPath &path, const QString &local, const QString &remote,
                                           const std::optional<SyncFileState> &state) const
 {
@@ -1781,49 +1830,14 @@ std::optional<QString> SyncRun::mergeText(const VaultPath &path, const QString &
         haveBase = stored.isString();
         base = stored.toString();
     }
-    if (path == vaultConfigPath()) {
-        // The vault config is JSON: a line union (first sync) or a line merge can produce
-        // invalid JSON (missing commas, duplicate keys), so merge key by key unless the line
-        // merge is fine.
-        if (!haveBase || base.isEmpty())
-            return mergeJson3(QString(), local, remote);
-        const MergeResult result = merge3(base, local, remote);
-        if (result.clean && isJsonObject(result.text))
-            return result.text;
-        return mergeJson3(base, local, remote);
-    }
+    if (path == vaultConfigPath())
+        return mergeConfigText(haveBase ? base : QString(), local, remote);
+    if (path == vaultDictionaryPath()) // (a set of words: never a conflict; no base, the union)
+        return mergeWordSet3(haveBase ? base : QString(), local, remote);
+    // Two files born apart under one name: both versions kept (a drawing too).
     if (!haveBase)
         return std::nullopt;
-    // A canvas changed on both sides (docs/SYNTAX.md §2 "Canvases"): merged node by node and field
-    // by field against the base, written in the remote's layout (canvas::mergeCanvasFiles), never
-    // line by line — two merged arrays may lose a comma and stop being JSON. One that cannot be read
-    // keeps both versions.
-    if (canvas::isCanvasPath(path)) {
-        if (remote == base)
-            return local;
-        if (local == base)
-            return remote;
-        return canvas::mergeCanvasFiles(base, local, remote);
-    }
-    // A drawing changed on both sides: merged element by element against the base (new elements
-    // of both, erased ones gone, the remote's order with this device's new elements on top),
-    // never line by line. One side as the base (a new ETag, the same text: a client uploaded it
-    // again) is no change there: the other side's version. A drawing that cannot be merged so (an
-    // element Brulion does not draw, a broken scene, no base: two drawings born apart under one
-    // name) keeps both versions (a conflict copy; the sync center merges it on request).
-    if (isDrawingText(path, local) || isDrawingText(path, remote)) {
-        if (remote == base)
-            return local;
-        if (local == base)
-            return remote;
-        const std::optional<QByteArray> merged =
-                drawing::mergeDrawingFiles(base.toUtf8(), local.toUtf8(), remote.toUtf8(), now().toMSecsSinceEpoch());
-        if (!merged)
-            return std::nullopt;
-        return decodeSyncText(*merged);
-    }
-    const MergeResult result = merge3(base, local, remote);
-    return result.clean ? std::optional<QString>(result.text) : std::nullopt;
+    return mergeAgainstBase(path, base, local, remote, now().toMSecsSinceEpoch());
 }
 
 std::optional<VaultPath> SyncRun::findConflictCopy(const VaultPath &path, qint64 size, const QString &hash)

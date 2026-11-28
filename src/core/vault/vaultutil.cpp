@@ -132,7 +132,7 @@ bool isTextPath(const VaultPath &path)
 
 bool isTracked(const VaultPath &path)
 {
-    return !path.isEmpty() && (path == vaultConfigPath() || !paths::isIgnored(path));
+    return !path.isEmpty() && (isNotebookSettingsFile(path) || !paths::isIgnored(path));
 }
 
 QByteArray utf8Bom()

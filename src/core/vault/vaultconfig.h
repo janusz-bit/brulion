@@ -29,6 +29,19 @@ namespace brulion {
 
 /// ".brulion/config.json" — the vault path of the settings file.
 QString vaultConfigPath();
+/// ".brulion/dictionary.txt" — the notebook's personal dictionary: one word per line
+/// (docs/UI.md "Spell checking"), synced as a set of words (sync::mergeWordSet3()).
+QString vaultDictionaryPath();
+/// The files of the settings folder (`.brulion/`) a notebook tracks and syncs — its settings and its
+/// dictionary; the folder's other files (the encryption key, device state) stay where they are.
+/// Vault::files() lists none of them.
+const QList<VaultPath> &notebookSettingsFiles();
+/// The words of a dictionary file: one per line, trimmed, blank lines, duplicates and lines over 100
+/// characters left out, sorted by code point (letter case counts: "Kraków" and "kraków" are two).
+QStringList parseDictionary(QStringView text);
+/// `words` as a dictionary file: parseDictionary()'s rules, one word per line ending in "\n".
+QString serializeDictionary(const QStringList &words);
+bool isNotebookSettingsFile(const VaultPath &path);
 
 struct ParsedVaultConfig {
     VaultConfig config;   ///< defaults merged with the valid values of the file

@@ -286,6 +286,9 @@ if(TARGET brulion_sync_testsupport)
     # device without the key locked, the connection test.
     brulion_add_test(tst_shell_workspace_sync_encryption SOURCES tst_workspace_sync_encryption.cpp
         LIBS brulion_shell brulion_sync_testsupport)
+    # The open notebook's personal dictionary (synced between devices), the device's list without
+    # one, a notebook starting from the device's list, a change behind the app's back.
+    brulion_add_test(tst_shell_notebook_dictionary SOURCES tst_notebook_dictionary.cpp LIBS brulion_shell)
     # Nextcloud per notebook through AppController and the in-memory server: the settings of
     # 0.3.0 and older going to the notebook that was synced (never mixing two notebooks in one
     # server folder), the same notebook through a symlink or a relative path, the start screen.

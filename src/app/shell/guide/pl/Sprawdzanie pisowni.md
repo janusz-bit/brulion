@@ -34,7 +34,7 @@ Słowa z łącznikiem (`biało-czerwony`) i z apostrofem (`don't`) są sprawdzan
 - **Języki pisowni** — *Automatycznie* (język aplikacji, język systemu i angielski: przy polskim interfejsie polski i angielski), *Polski*, *Angielski* albo *Oba*. Słowo jest poprawne, jeśli zna je którykolwiek z wybranych języków.
 - **Słownik użytkownika** — lista dodanych słów: tu je dopiszesz albo usuniesz.
 
-Słownik użytkownika jest ustawieniem tego urządzenia i obejmuje wszystkie notatniki. Nie jest zapisywany w notatniku, więc nie przechodzi przez synchronizację — na drugim urządzeniu dodajesz słowa osobno.
+Słownik użytkownika należy do notatnika: jest zapisany w notatniku (plik `.brulion/dictionary.txt`, jedno słowo w wierszu) i przechodzi z nim przez synchronizację — przez Nextcloud i przez Syncthing —, więc słowo dodane w telefonie zna też komputer. Słowa dodane na dwóch urządzeniach w tym samym czasie zostają oba, a słowo usunięte na jednym urządzeniu znika także na drugim. Notatnik otwarty pierwszy raz w tej wersji zaczyna od słów, które to urządzenie miało wcześniej (były ustawieniem urządzenia, wspólnym dla wszystkich notatników).
 
 Słowo dodane jako `Kraków` jest poprawne także jako `KRAKÓW`, ale nie jako `kraków`. Słowo dodane małymi literami (`brulion`) jest poprawne także na początku zdania (`Brulion`).
 

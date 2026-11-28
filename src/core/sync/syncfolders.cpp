@@ -143,7 +143,7 @@ QStringList filesBelow(const QHash<VaultPath, SyncFileState> &states, const Vaul
 {
     QStringList files;
     for (auto it = states.cbegin(); it != states.cend(); ++it) {
-        if (it.key() != folder && isWithin(it.key(), folder) && it.key() != vaultConfigPath())
+        if (it.key() != folder && isWithin(it.key(), folder) && !isNotebookSettingsFile(it.key()))
             files.append(it.key());
     }
     std::ranges::sort(files, [](const VaultPath &a, const VaultPath &b) {
@@ -201,7 +201,7 @@ QSet<VaultPath> SyncRun::knownFolders() const
     // A synced file's folder existed on both sides when the file was synced.
     QSet<VaultPath> out = m_folderStates;
     for (auto it = m_states.cbegin(); it != m_states.cend(); ++it) {
-        if (it.key() != vaultConfigPath())
+        if (!isNotebookSettingsFile(it.key()))
             addAncestors(it.key(), out);
     }
     return out;
@@ -444,11 +444,11 @@ QList<SyncRun::FolderMove> SyncRun::findFileMoves()
     // and a MOVE would carry it over the renamed note (whose rename wins over the deletion on the
     // other side: uploaded as a new file instead).
     const auto goneHere = [this](const VaultPath &path) {
-        return path != vaultConfigPath() && m_states.contains(path) && !m_local.contains(path)
+        return !isNotebookSettingsFile(path) && m_states.contains(path) && !m_local.contains(path)
                && m_remote.contains(path) && !replacedOnServer(path);
     };
     const auto newHere = [this](const VaultPath &path) {
-        return path != vaultConfigPath() && m_local.contains(path) && !m_states.contains(path)
+        return !isNotebookSettingsFile(path) && m_local.contains(path) && !m_states.contains(path)
                && !m_remote.contains(path);
     };
     // Nothing on the server at or below the new name, in any letter case, but the file itself (the
@@ -860,7 +860,7 @@ void SyncRun::adoptRemoteFileMoves()
     QHash<QString, VaultPath> byId;
     QHash<QString, QList<VaultPath>> byEtag;
     for (auto it = m_remote.cbegin(); it != m_remote.cend(); ++it) {
-        if (it.key() == vaultConfigPath())
+        if (isNotebookSettingsFile(it.key()))
             continue;
         if (m_states.contains(it.key())) {
             if (replacedOnServer(it.key()))
@@ -878,7 +878,7 @@ void SyncRun::adoptRemoteFileMoves()
     // another file in their place (whose edits here would otherwise be merged into that file).
     QStringList gone;
     for (auto it = m_states.cbegin(); it != m_states.cend(); ++it) {
-        if (it.key() != vaultConfigPath() && m_local.contains(it.key())
+        if (!isNotebookSettingsFile(it.key()) && m_local.contains(it.key())
             && (!m_remoteAll.contains(it.key()) || replacedOnServer(it.key()))) {
             gone.append(it.key());
         }

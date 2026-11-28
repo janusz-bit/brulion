@@ -54,6 +54,7 @@ qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/appshare.cpp
     ${_brulion_shell_dir}/appautomation.cpp
     ${_brulion_shell_dir}/appsettings.h ${_brulion_shell_dir}/appsettings.cpp
+    ${_brulion_shell_dir}/notebookdictionary.h ${_brulion_shell_dir}/notebookdictionary.cpp
     ${_brulion_shell_dir}/applockcontroller.h ${_brulion_shell_dir}/applockcontroller.cpp
     ${_brulion_shell_dir}/appupdates.h ${_brulion_shell_dir}/appupdates.cpp
     ${_brulion_shell_dir}/localai.h ${_brulion_shell_dir}/localai.cpp

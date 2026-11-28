@@ -1857,14 +1857,6 @@
 <context>
     <name>SettingsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1333"/>
-        <source>%n word(s), kept on this device for all notebooks.</source>
-        <translation>
-            <numerusform>%n word, kept on this device for all notebooks.</numerusform>
-            <numerusform>%n words, kept on this device for all notebooks.</numerusform>
-        </translation>
-    </message>
-    <message numerus="yes">
         <location filename="../src/app/qml/views/SettingsView.qml" line="3598"/>
         <source>%n warning(s) or error(s)</source>
         <translation>
@@ -1902,6 +1894,14 @@
         <translation>
             <numerusform>%n reaction</numerusform>
             <numerusform>%n reactions</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1333"/>
+        <source>%n word(s), kept in this notebook and synced with it.</source>
+        <translation>
+            <numerusform>%n word, kept in this notebook and synced with it.</numerusform>
+            <numerusform>%n words, kept in this notebook and synced with it.</numerusform>
         </translation>
     </message>
     <message numerus="yes">

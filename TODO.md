@@ -225,8 +225,9 @@ done in the repository simply disappears from the list.
     spelling settings disappear); the Kotlin/JNI code (`SpellCheck.kt`) has not run on a device;
   * AppImage and Windows: build in CI and check that the dictionaries from the package load
     (Windows: a program folder with Polish characters in its path);
-  * a user dictionary synced between devices (today a device setting — Nextcloud carries only
-    `config.json` from `.brulion/`, and merging by keys would lose words);
+  * the notebook's dictionary (`.brulion/dictionary.txt`, synced by Nextcloud and Syncthing) in
+    backups and in the GitHub sync: both carry only `config.json` of `.brulion/` (backup/archive.cpp,
+    github/reposync.cpp), so a backup restores no dictionary and GitHub would merge it line by line;
   * the underlines outside the edited block and in source mode (docs/UI.md "Spell checking") on
     a real Android phone with "Underline in the whole page" on (every word on screen to the system's
     checker: how long it takes, battery) and a source-mode page of 0.5 MB in a Release build on

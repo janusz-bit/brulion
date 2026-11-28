@@ -644,6 +644,50 @@ private Q_SLOTS:
         QCOMPARE(p.a.vault->config().journalsFolder, u"Dziennik"_s);
     }
 
+    /// The notebook's personal dictionary (.brulion/dictionary.txt, docs/UI.md "Spell checking"):
+    /// words added on two devices at the same time are both kept, a word removed on one device is
+    /// gone on both — a set merged against its base, never a line merge that could drop a word or
+    /// make a conflict copy.
+    void personalDictionaryMergesAsASetOfWords()
+    {
+        const QString path = vaultDictionaryPath();
+        Pair p({{path, "Kraków\nżółw\n"}});
+        p.a.sync();
+        p.b.sync();
+        QCOMPARE(p.b.read(path), u"Kraków\nżółw\n"_s);
+        QVERIFY(p.a.write(path, u"Brulion\nKraków\nżółw\n"_s));       // + Brulion
+        QVERIFY(p.b.write(path, u"Kraków\nźdźbło\n"_s));               // − żółw, + źdźbło
+        p.a.sync();
+        const SyncReport rb = p.b.sync();
+        QVERIFY(rb.conflicts.isEmpty());
+        QCOMPARE(rb.merged, 1);
+        p.a.sync();
+        for (Device *d : {&p.a, &p.b})
+            QCOMPARE(d->read(path), u"Brulion\nKraków\nźdźbło\n"_s);
+        QVERIFY(findConflicts(p.a.vault->files()).isEmpty());
+    }
+
+    void firstSyncOfTwoDictionariesKeepsEveryWord()
+    {
+        const QString path = vaultDictionaryPath();
+        Pair p({{path, "Łódź\nkot\n"}}, {{path, "kot\nPoznań\n"}});
+        p.a.sync();
+        const SyncReport rb = p.b.sync();
+        QVERIFY(rb.conflicts.isEmpty());
+        p.a.sync();
+        for (Device *d : {&p.a, &p.b})
+            QCOMPARE(d->read(path), u"Poznań\nkot\nŁódź\n"_s); // (by code point)
+    }
+
+    /// Other files of .brulion/ stay on the device (only the settings and the dictionary travel).
+    void otherFilesOfTheSettingsFolderStayOnTheDevice()
+    {
+        Pair p({{u".brulion/notes.txt"_s, "lokalne"}, {vaultDictionaryPath(), "kot\n"}});
+        p.a.sync();
+        QVERIFY(p.server.text(u"Notatki/"_s + vaultDictionaryPath()).has_value());
+        QVERIFY(!p.server.text(u"Notatki/.brulion/notes.txt"_s).has_value());
+    }
+
     void keepsCrlfLineEndingsOfTheLocalFileWhenMerging()
     {
         Pair p({{u"w.md"_s, "a\r\nb\r\nc\r\n"}});

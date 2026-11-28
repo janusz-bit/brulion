@@ -55,7 +55,7 @@ bool isSyncablePath(const VaultPath &path)
     const VaultPath p = paths::normalize(path);
     if (p.isEmpty())
         return false;
-    if (p == vaultConfigPath())
+    if (isNotebookSettingsFile(p))
         return true;
     return !isIgnoredAnyCase(p);
 }

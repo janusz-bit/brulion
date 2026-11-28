@@ -78,4 +78,10 @@ QString joinLines(const QStringList &lines, const QString &eol, bool finalNewlin
 /// as {}). Output: indented JSON (QJsonDocument::Indented, keys sorted) ending with "\n".
 std::optional<QString> mergeJson3(const QString &base, const QString &local, const QString &remote);
 
+/// A list of words, one per line (the notebook's personal dictionary, vault/vaultconfig.h), merged
+/// as a set against its base: a word either side added is in, a word either side removed is out —
+/// nothing is ever a conflict. No base (a first sync): the union. The result is
+/// serializeDictionary()'s: sorted by code point, one word per line, letter case counting.
+QString mergeWordSet3(const QString &base, const QString &local, const QString &remote);
+
 } // namespace brulion::sync
