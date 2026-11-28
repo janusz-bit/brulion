@@ -594,6 +594,86 @@ private Q_SLOTS:
         QVERIFY(outline.page.canIndentSelection());
     }
 
+    void selectionMovedToAnotherPlace()
+    {
+        // Drag to move's drop (blockmove.h): between any two rows, deeper or shallower; one undo step,
+        // the blocks still selected where they went.
+        Fixture f(Outline);
+        f.page.selectRange(5, 5); // c
+        QVERIFY(f.page.canMoveSelectionTo({5, 2}));  // a child of b1
+        QVERIFY(!f.page.canMoveSelectionTo({5, 0})); // where it is
+        QVERIFY(f.page.moveSelectionTo({2, 1}));     // between a1 and a2
+        QCOMPARE(f.text(), u"- a\n\t- a1\n\t- c\n\t- a2\n- b\n\t- b1\n- d\n"_s);
+        QCOMPARE(f.selected(), QList<int>({2}));
+        QVERIFY(f.page.canUndo());
+        f.page.undo();
+        QCOMPARE(f.text(), Outline);
+        QCOMPARE(f.selected(), QList<int>({5}));
+        // A parent with its children, out of nothing into a folded block: it opens.
+        f.page.setFolded(3, true); // b
+        f.page.selectRange(0, 0);  // a with a1, a2
+        QVERIFY(f.page.moveSelectionTo({5, 1}));
+        QCOMPARE(f.text(), u"- b\n\t- b1\n\t- a\n\t\t- a1\n\t\t- a2\n- c\n- d\n"_s);
+        QVERIFY(!f.role(0, "collapsed").toBool());
+        QCOMPARE(f.selected(), QList<int>({2, 3, 4}));
+        // Picked blocks with gaps, reading mode: nothing.
+        Fixture picks(Picks);
+        picks.page.toggleSelected(0);
+        picks.page.toggleSelected(3);
+        QVERIFY(!picks.page.canMoveSelectionTo({6, 0}));
+        QVERIFY(!picks.page.moveSelectionTo({6, 0}));
+        f.page.selectRange(5, 5);
+        f.page.setReadOnly(true);
+        QVERIFY(!f.page.canMoveSelectionTo({0, 0}));
+        QVERIFY(!f.page.moveSelectionTo({0, 0}));
+    }
+
+    void selectionMovedInsideAZoom()
+    {
+        // Zoomed into a block: only inside it, below it; the zoomed block itself never.
+        Fixture f(Outline);
+        f.page.zoomInto(0); // a
+        f.page.selectRange(2, 2); // a2
+        QVERIFY(f.page.canMoveSelectionTo({1, 1}));  // before a1
+        QVERIFY(f.page.canMoveSelectionTo({2, 2}));  // a child of a1
+        QVERIFY(!f.page.canMoveSelectionTo({3, 0})); // out of the zoom
+        QVERIFY(!f.page.canMoveSelectionTo({6, 0}));
+        QVERIFY(f.page.moveSelectionTo({1, 1}));
+        QCOMPARE(f.text(), u"- a\n\t- a2\n\t- a1\n- b\n\t- b1\n- c\n- d\n"_s);
+        f.page.selectRange(0, 0);
+        QVERIFY(!f.page.canMoveSelectionTo({7, 0}));
+    }
+
+    void blocksInsertedFromAnotherPage()
+    {
+        // Blocks moved here from another day of the stream: at a place, their nesting below its
+        // depth, their block ids kept (the page they leave deletes them); one undo step.
+        Fixture f(u"- poniedziałek\n\t- pranie\n- wtorek\n"_s);
+        QVERIFY(f.host.blockIdTaken(u"inny1"_s)); // (Other.md has it: the page they come from)
+        QVERIFY(f.page.canInsertBlocksAt({2, 1}));
+        QVERIFY(!f.page.canInsertBlocksAt({0, 1})); // under nothing
+        QVERIFY(!f.page.canInsertBlocksAt({1, 0})); // the next block's parent taken away
+        const markdown::RowRange rows =
+                f.page.insertBlocksAt({2, 1}, u"- zakupy ^inny1\n\t- mleko\n\t- [ ] chleb\n"_s);
+        QCOMPARE(rows.first, 2);
+        QCOMPARE(rows.count, 3);
+        QCOMPARE(f.text(), u"- poniedziałek\n\t- pranie\n\t- zakupy ^inny1\n\t\t- mleko\n\t\t- [ ] chleb\n- wtorek\n"_s);
+        f.page.undo();
+        QCOMPARE(f.text(), u"- poniedziałek\n\t- pranie\n- wtorek\n"_s);
+        // At the top level, at the page's end; an id this page has already is left out.
+        Fixture g(u"- środa ^sr1\n"_s);
+        const markdown::RowRange end = g.page.insertBlocksAt({1, 0}, u"- czwartek ^sr1\n- piątek\n"_s);
+        QCOMPARE(end.first, 1);
+        QCOMPARE(end.count, 2);
+        QCOMPARE(g.text(), u"- środa ^sr1\n- czwartek\n- piątek\n"_s);
+        // Nothing to insert, a place it does not take, reading mode.
+        QCOMPARE(g.page.insertBlocksAt({0, 0}, u"  \n"_s).count, 0);
+        QCOMPARE(g.page.insertBlocksAt({0, 2}, u"- x\n"_s).count, 0);
+        g.page.setReadOnly(true);
+        QVERIFY(!g.page.canInsertBlocksAt({1, 0}));
+        QCOMPARE(g.page.insertBlocksAt({1, 0}, u"- x\n"_s).count, 0);
+    }
+
     void taskStatusesOfASelection()
     {
         Fixture f(u"- mleko\n- [x] chleb ✅ 2026-10-14\n\nAkapit\n\n# Nagłówek\n"_s);

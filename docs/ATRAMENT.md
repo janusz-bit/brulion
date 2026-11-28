@@ -1154,13 +1154,25 @@ scrolling, `tst_atrament_editor`) before the next:
    editor has none): an outline's bullet (a list item's marker, also a document's) pressed with the
    mouse and dragged past 4 px moves its block — the selection when it is in it, else the block
    alone, selected — and a finger's long press on a selected block while the grips show moves the
-   selection; a drop line (2 px of Theme.focusRing with a dot at its start, from the blocks' text
-   column to the column's right edge) shows the nearest gap between the moved blocks' siblings, none
-   over their own place; the release drops them there in one undo step
-   (`PageController::moveSelectionNextTo(sibling, after)`: Alt+↑/↓ as often as it takes; the
-   siblings in `selectionSiblings()`), the blocks staying selected; the edge scrolling as in step 3;
-   the release clicks nothing (a bullet's click without a drag still zooms). Not yet: a drop into
-   another parent (a level deeper or shallower) or across the journal's days.
+   selection; a drop line (2 px of Theme.focusRing with a dot at its start, from the bullet's column
+   of the drop's level to the column's right edge) shows where they would go — **between any two
+   rows, as deep as the pointer's x says**, as outliners do: the gap above or below the half of the
+   row under the pointer, and of the levels it allows (from the next block's, a sibling of it, to a
+   child of the block above) the one nearest the moved blocks' text column (it follows the pointer
+   from where the drag began: `PageView::dropAt`), the nearest one that takes them when that one does
+   not; none inside the blocks or over their own place. The release drops them there in one undo
+   step (`PageController::moveSelectionTo(BlockPlace)`; `canMoveSelectionTo` for the line), the
+   blocks staying selected, a folded new parent opened. The move is planned as the range's own steps
+   (`src/app/editor/blockmove.h`, pure over `BlockDocument`, `tests/app/editor/tst_editor_blockmove`:
+   `planBlockMove(doc, first, last, place)` — Alt+↑/↓ to the place's siblings, Tab into a deeper
+   parent after sliding past the child on the way, Shift+Tab out of one at the end of the siblings,
+   so it takes no sibling along — tried on a copy first, then `applyMoveStep` on the page): the
+   blocks keep their uids (the selection, folds), every byte no step touches stays, numbered lists
+   are renumbered as the steps do; refused inside the blocks or under one of them, under a block that
+   is no list item, deeper than the block above allows, where the next block's parent would change,
+   above the page's properties, outside a zoom, and for a paragraph, a heading or a table below the
+   top level. The edge scrolling as in step 3; the release clicks nothing (a bullet's click without a
+   drag still zooms). Not yet: a drop across the journal's days.
 5. **Blocks with views.** Code (the input with the code highlighter), tables, math (Brulion Math's
    glyphs through Atrament's text), charts and Mermaid (their core layouts painted as Atrament paths),
    pictures (`img`), queries, transclusions, properties. When nothing is foreign, M2's gate is

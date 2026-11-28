@@ -61,6 +61,7 @@
 #pragma once
 
 #include "blocklistmodel.h"
+#include "blockmove.h"
 #include "lazyhtmlmimedata.h"
 #include "markdown/pageprops.h"
 #include "markdown/tokenedit.h"
@@ -683,15 +684,22 @@ public:
     /// Alt+↑ / Alt+↓: the selected sibling blocks move together (BlockDocument::moveRangeUp/Down).
     Q_INVOKABLE bool moveSelectionUp();
     Q_INVOKABLE bool moveSelectionDown();
-    /// Drag to move (the page drawn by Atrament, docs/ATRAMENT.md M2 step 4): the selected sibling
-    /// blocks go before (`after` false) or after the subtree of `sibling`, a sibling of theirs (the
-    /// same parent) — Alt+↑ / Alt+↓ as often as it takes, one undo step. False when nothing moved
-    /// (no selection, gaps in it, `sibling` none of their siblings or inside it, the place where they
-    /// are already, the zoomed block, above the page's properties).
-    Q_INVOKABLE bool moveSelectionNextTo(int sibling, bool after);
-    /// The siblings of the selection's top blocks (their parent's children, or the page's top-level
-    /// blocks) in order, the selected ones too; empty when it could not move (as above).
-    QList<int> selectionSiblings() const;
+    /// Drag to move (the page drawn by Atrament, docs/ATRAMENT.md M2 step 4): the selected blocks
+    /// (consecutive siblings, each with its subtree) go to `place` — between any two rows, as deep as
+    /// it says: a child of the block above, out of their parent, into another one (blockmove.h) — as
+    /// one undo step, a folded new parent opened; they stay selected. False when nothing moved (no
+    /// selection, gaps in it, a place planBlockMove() refuses or where they are, outside the zoomed
+    /// block or the zoomed block itself, reading mode).
+    bool moveSelectionTo(BlockPlace place);
+    bool canMoveSelectionTo(BlockPlace place) const;
+    /// Blocks moved here from another page (the journal stream's days, docs/ATRAMENT.md M2 step 4):
+    /// `markdown`'s blocks (blocksMarkdown(): its first block at column 0) inserted at `place`, their
+    /// nesting kept below its depth, their block ids kept — a move: the page they leave deletes them
+    /// (an id this page has already is left out) — as one undo step. The rows inserted (none: count
+    /// 0 — nothing to insert, a place placeTarget() refuses or outside the zoom, a block that is no
+    /// list item below the top level, reading mode).
+    markdown::RowRange insertBlocksAt(BlockPlace place, const QString &markdown);
+    bool canInsertBlocksAt(BlockPlace place) const;
     /// Ctrl+Enter: every visible list item and paragraph the selection spans gets the status that
     /// follows the first one's (none → todo → doing → done → none). One undo step. The rows from
     /// one end to the other — the picked blocks of a selection with gaps: a parent selected alone
@@ -1412,6 +1420,10 @@ private:
     /// with their subtrees, or the picked blocks when they leave no gap; empty when nothing is
     /// selected or the picked blocks have gaps between them.
     markdown::RowRange selectionRange() const;
+    /// moveSelectionTo()'s steps (nothing: it would not move).
+    std::optional<QList<MoveStep>> selectionMovePlan(BlockPlace place) const;
+    /// Whether `place` is inside the zoomed block, below it (always without a zoom).
+    bool placeInZoom(BlockPlace place) const;
     markdown::RowRange rangeOf(int anchor, int focus) const;
     /// The top blocks of the selection (each stands for its subtree), ascending.
     QList<int> selectionTops() const;

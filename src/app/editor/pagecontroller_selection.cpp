@@ -731,72 +731,99 @@ bool PageController::moveSelectionDown()
     return r.changed();
 }
 
-QList<int> PageController::selectionSiblings() const
+bool PageController::placeInZoom(BlockPlace place) const
 {
-    QList<int> siblings;
-    const RowRange range = selectionRange();
     const int zoom = zoomBlock();
-    if (range.count <= 0 || !m_selectionContiguous || (zoom >= range.first && zoom <= range.last()))
-        return siblings;
+    if (zoom < 0)
+        return true;
     const BlockDocument &doc = m_model->document();
-    const QList<int> tops = doc.rangeTops(range.first, range.last());
-    if (tops.isEmpty())
-        return siblings;
-    const markdown::BlockEntry &first = doc.at(tops.first());
-    // The parent's children (or the top-level blocks), each with its subtree jumped over.
-    const int parent = first.parent;
-    for (int j = parent + 1; j < doc.count(); j = doc.subtreeRange(j).last() + 1) {
-        const markdown::BlockEntry &e = doc.at(j);
-        if (parent >= 0 && e.depth <= doc.at(parent).depth)
-            break;
-        if (e.parent == parent && e.depth == first.depth && e.kind != BlockKind::Frontmatter)
-            siblings.append(j);
-    }
-    // The tops: consecutive siblings, else nothing moves (a range rising through levels).
-    const qsizetype a = siblings.indexOf(tops.first());
-    if (a < 0 || a + tops.size() > siblings.size())
-        return {};
-    for (qsizetype k = 0; k < tops.size(); ++k) {
-        if (siblings[a + k] != tops[k])
-            return {};
-    }
-    return siblings;
+    return place.gap > zoom && place.gap <= doc.subtreeRange(zoom).last() + 1 && place.depth > doc.at(zoom).depth;
 }
 
-bool PageController::moveSelectionNextTo(int sibling, bool after)
+std::optional<QList<MoveStep>> PageController::selectionMovePlan(BlockPlace place) const
+{
+    const RowRange range = selectionRange();
+    const int zoom = zoomBlock();
+    if (m_readOnly || range.count <= 0 || !m_selectionContiguous || (zoom >= range.first && zoom <= range.last())
+        || !placeInZoom(place))
+        return std::nullopt;
+    return planBlockMove(m_model->document(), range.first, range.last(), place);
+}
+
+bool PageController::canMoveSelectionTo(BlockPlace place) const
+{
+    return selectionMovePlan(place).has_value();
+}
+
+bool PageController::moveSelectionTo(BlockPlace place)
 {
     if (refusesEdit())
         return false;
-    const QList<int> siblings = selectionSiblings();
-    const qsizetype to = siblings.indexOf(sibling);
-    if (to < 0)
+    const std::optional<QList<MoveStep>> steps = selectionMovePlan(place);
+    if (!steps)
         return false;
-    const BlockDocument &doc = m_model->document();
     const RowRange range = selectionRange();
-    const QList<int> tops = doc.rangeTops(range.first, range.last());
-    const qsizetype a = siblings.indexOf(tops.first());
-    const qsizetype b = a + tops.size() - 1;
-    // The gap the range goes to: before siblings[gap] (gap == size: after the last one).
-    const qsizetype gap = after ? to + 1 : to;
-    if (gap >= a && gap <= b + 1)
-        return false; // there already (or `sibling` is one of them)
-    const quint64 firstUid = m_model->uidAt(tops.first());
-    const quint64 lastUid = m_model->uidAt(tops.last());
-    const qsizetype steps = gap < a ? a - gap : gap - (b + 1);
+    const QList<int> tops = m_model->document().rangeTops(range.first, range.last());
+    const quint64 first = m_model->uidAt(tops.first());
+    const quint64 last = m_model->uidAt(tops.last());
     beginCommand();
-    bool moved = false;
-    for (qsizetype k = 0; k < steps; ++k) {
-        const int first = m_model->rowOfUid(firstUid);
-        const int last = m_model->rowOfUid(lastUid);
-        const EditResult r = applyOp([&](BlockDocument &d) {
-            return gap < a ? d.moveRangeUp(first, last) : d.moveRangeDown(first, last);
-        });
-        if (!r.changed())
-            break;
-        moved = true;
+    for (const MoveStep step : *steps)
+        applyOp([&](BlockDocument &d) { return applyMoveStep(d, first, last, step); });
+    // Their new parent shows them.
+    const int parent = m_model->document().parent(m_model->rowOfUid(first));
+    if (parent >= 0 && m_model->isCollapsed(parent)) {
+        m_model->setCollapsed(parent, false);
+        updateSelection();
+        Q_EMIT foldStateChanged();
     }
     endCommand(currentFocus());
-    return moved;
+    return true;
+}
+
+bool PageController::canInsertBlocksAt(BlockPlace place) const
+{
+    return !m_readOnly && placeInZoom(place) && placeTarget(m_model->document(), place).has_value();
+}
+
+markdown::RowRange PageController::insertBlocksAt(BlockPlace place, const QString &markdown)
+{
+    if (refusesEdit() || !canInsertBlocksAt(place))
+        return {};
+    QString text = markdown;
+    text.replace(u"\r\n"_s, u"\n"_s).replace(u'\r', u'\n');
+    // A move: the blocks' ids go with them (only one this page has already is left out).
+    const QStringList ids = markdown::blockIdsOf(text);
+    text = withoutTakenIds(text, QSet<QString>(ids.cbegin(), ids.cend()));
+    const BlockDocument inserted(text.trimmed());
+    if (inserted.isEmpty())
+        return {};
+    // (A paragraph, a heading, a table… only at the top level.)
+    for (int k = 0; k < inserted.count() && place.depth > 0; ++k) {
+        if (inserted.at(k).kind != BlockKind::ListItem)
+            return {};
+    }
+    // Each block after the one before it (BlockDocument::insertAfter: deeper than that row is its
+    // first child, else after its ancestor's subtree at that depth) — the first one after the row
+    // before the place.
+    int last = place.gap - 1;
+    int first = -1;
+    beginCommand();
+    for (int k = 0; k < inserted.count(); ++k) {
+        const markdown::BlockEntry &e = inserted.at(k);
+        const bool listItem = e.kind == BlockKind::ListItem;
+        const QString body = listItem ? e.body : inserted.blockSource(k);
+        const EditResult r = applyOp([&](BlockDocument &d) {
+            return d.insertAfter(last, body, listItem ? place.depth + e.depth : 0, listItem);
+        });
+        if (r.focus >= 0) {
+            last = r.focus;
+            if (first < 0)
+                first = r.focus;
+        }
+    }
+    const RowRange rows = first >= 0 ? RowRange{first, last - first + 1} : RowRange{};
+    endCommand(Focus{-1, -1, rows.count > 0 ? rows.first : -1, rows.count > 0 ? rows.first : -1});
+    return rows;
 }
 
 void PageController::setSelectionTaskStatus(const QString &status)

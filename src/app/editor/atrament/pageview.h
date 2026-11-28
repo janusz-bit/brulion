@@ -31,6 +31,7 @@
 //   AtramentItem::attach(app, page)               // or a TestWindow in tests
 #pragma once
 
+#include "blockmove.h"
 #include "editstyles.h"
 #include "foreignrows.h"
 #include "pagerows.h"
@@ -1162,15 +1163,19 @@ public:
     // after a long press, a grip) or moving them (a bullet's, a selected block's long press).
     enum class DragKind : std::uint8_t { None, Select, Extend, Move };
     DragKind dragKind() const { return m_drag.active ? m_drag.kind : DragKind::None; }
-    // Where the blocks being moved would go: before or after sibling `sibling` (its subtree), the
-    // line drawn there (window px, by the last frame). Nothing when there is no such place (the
-    // pointer over the blocks' own place).
+    // Where the blocks being moved would go: a place between two rows (blockmove.h — before row
+    // `place.gap`, `place.depth` deep), the line drawn there (window px, by the last frame). Nothing
+    // when there is no such place (the pointer over the blocks' own place, inside them).
     struct DropTarget {
-        int sibling = -1;
-        bool after = false;
+        BlockPlace place;
         atrament::Rect line;
     };
     std::optional<DropTarget> dropTarget() const;
+    // The place nearest window point `p` (where the rows are now) for blocks whose text column is
+    // at window x `textX`: the gap above or below the half of the row under it, the level of the
+    // ones it allows (from the next block's to a child of the one above) nearest that column that
+    // `takes` accepts; nothing when none does.
+    std::optional<DropTarget> dropAt(atrament::Point p, float textX, const std::function<bool(BlockPlace)> &takes) const;
     // The edge scrolling's speed now (px per 16 ms; 0: none).
     float dragScrollSpeed() const { return m_edgeScroll.speed(); }
 
@@ -1192,6 +1197,15 @@ private:
     // theirs).
     bool followsPointer(atrament::PointerKind pointer) const;
     void updateDropTarget();
+    // The pointer's offset from the moved blocks' text column, taken when their drag begins.
+    void grabMovedBlocks();
+    float dragTextX() const;
+    // A Select or Extend drag's end at `row`, its other end `fixed`.
+    void selectDraggedTo(int fixed, int row);
+    // The text column of a block `depth` deep (BlockDelegate's), and the depth whose column is nearest x.
+    float depthX(int depth) const;
+    int depthAtX(float x) const;
+    void paintDropLine(DropTarget &target, atrament::Window &window);
     // The row under window point `p` for a drag (the nearest above or below the rows, the pointer
     // held into the view), as the rows are now (scrolled since the last frame: by that much).
     int dragRowAt(atrament::Point p) const;
@@ -1209,6 +1223,7 @@ private:
         quint64 uid = 0;      // Move: the pressed block; Extend: the fixed end's block
         atrament::Point start;
         atrament::Point last;
+        float grab = 0; // Move: the pointer's x minus the moved blocks' text column
         atrament::PointerKind pointer = atrament::PointerKind::Mouse;
         std::optional<DropTarget> drop;
     } m_drag;

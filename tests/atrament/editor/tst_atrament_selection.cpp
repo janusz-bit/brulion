@@ -242,7 +242,9 @@ private Q_SLOTS:
     void bulletDragMovesBlocks();
     void bulletClickStillZooms();
     void longPressOnSelectionMoves();
-    void moveSiblingsOnly();
+    void bulletDragDeeperAndShallower();
+    void dropIntoAFoldedBlockOpensIt();
+    void moveAcrossParents();
 };
 
 void TestAtramentSelection::escapeThenSelectionKeys()
@@ -764,8 +766,7 @@ void TestAtramentSelection::bulletDragMovesBlocks()
     QCOMPARE(h.controller.selectedRow(), 0);
     std::optional<PageView::DropTarget> drop = h.view().dropTarget();
     QVERIFY(drop);
-    QCOMPARE(drop->sibling, 3);
-    QVERIFY(!drop->after);
+    QCOMPARE(drop->place, (BlockPlace{3, 0}));
     QCOMPARE(drop->line.top() + 1, h.bounds(3).top());
     // Over its own place: nowhere to go.
     h.tw.simulateMouseMove({bullet.x, h.bounds(0).bottom() - 2}, at::MouseButton::Left);
@@ -773,7 +774,7 @@ void TestAtramentSelection::bulletDragMovesBlocks()
     // Below the last one: after it.
     h.tw.simulateMouseMove({bullet.x, h.bounds(3).bottom() + 20}, at::MouseButton::Left);
     drop = h.view().dropTarget();
-    QVERIFY(drop && drop->sibling == 3 && drop->after);
+    QVERIFY(drop && drop->place == (BlockPlace{4, 0}));
     h.tw.simulateMouseMove({bullet.x, h.bounds(3).top() + 2}, at::MouseButton::Left);
     h.tw.simulateMouseUp({bullet.x, h.bounds(3).top() + 2});
     QCOMPARE(h.controller.sourceText(), u"- dwa\n- trzy\n- jeden\n- cztery\n"_s);
@@ -807,38 +808,105 @@ void TestAtramentSelection::longPressOnSelectionMoves()
     // A finger held on a selected block while its grips show: it moves them.
     h.longPress(h.pointOf(1, 1));
     QCOMPARE(h.view().dragKind(), PageView::DragKind::Move);
+    // Straight down (the finger's x where it began: the blocks' level stays).
+    const float x = h.pointOf(1, 1).x;
     h.tw.simulateTouchMove(h.pointOf(2, 1));
-    h.tw.simulateTouchMove({200, h.bounds(3).bottom() + 30});
+    h.tw.simulateTouchMove({x, h.bounds(3).bottom() + 30});
     const std::optional<PageView::DropTarget> drop = h.view().dropTarget();
-    QVERIFY(drop && drop->sibling == 3 && drop->after);
-    h.tw.simulateTouchUp({200, h.bounds(3).bottom() + 30});
+    QVERIFY(drop && drop->place == (BlockPlace{4, 0}));
+    h.tw.simulateTouchUp({x, h.bounds(3).bottom() + 30});
     QCOMPARE(h.controller.sourceText(), u"- trzy\n- cztery\n- jeden\n- dwa\n"_s);
     QCOMPARE(h.controller.selectionFirstRow(), 2);
     QCOMPARE(h.controller.selectionLastRow(), 3);
     QCOMPARE(h.controller.editingRow(), -1);
 }
 
-void TestAtramentSelection::moveSiblingsOnly()
+void TestAtramentSelection::bulletDragDeeperAndShallower()
 {
-    // PageController::moveSelectionNextTo: among the range's siblings only, its children along.
+    // The pointer's x decides the level, as outliners do: the moved block's text column follows it.
+    Harness h(u"- owoce\n\t- jabłka\n\t- gruszki\n- warzywa\n\t- marchew\n- zioła\n"_s);
+    const QString before = h.controller.sourceText();
+    const float step = h.view().metrics().indentStep;
+    // "zioła" up between "jabłka" and "gruszki", a level to the right: a child of "owoce".
+    const at::Point bullet = h.bulletOf(5);
+    h.tw.simulateMouseMove(bullet);
+    h.tw.simulateMouseDown(bullet);
+    const at::Point there{bullet.x + step, h.bounds(2).top() + 2};
+    h.tw.simulateMouseMove(there, at::MouseButton::Left);
+    std::optional<PageView::DropTarget> drop = h.view().dropTarget();
+    QVERIFY(drop);
+    QCOMPARE(drop->place, (BlockPlace{2, 1}));
+    h.tw.settle();
+    drop = h.view().dropTarget();
+    // The line from the bullet's column of that level.
+    const PageMetrics &m = h.view().metrics();
+    QCOMPARE(drop->line.left(), m.contentX + m.gutter + step - m.bulletColumn);
+    // Back to the left: the gap allows only "gruszki"'s level there (the next block's), farther
+    // right a child of "jabłka" at most.
+    h.tw.simulateMouseMove({bullet.x - 3 * step, there.y}, at::MouseButton::Left);
+    QCOMPARE(h.view().dropTarget()->place, (BlockPlace{2, 1}));
+    h.tw.simulateMouseMove({bullet.x + 5 * step, there.y}, at::MouseButton::Left);
+    QCOMPARE(h.view().dropTarget()->place, (BlockPlace{2, 2}));
+    h.tw.simulateMouseMove(there, at::MouseButton::Left);
+    h.tw.simulateMouseUp(there);
+    QCOMPARE(h.controller.sourceText(), u"- owoce\n\t- jabłka\n\t- zioła\n\t- gruszki\n- warzywa\n\t- marchew\n"_s);
+    QCOMPARE(h.controller.selectedRow(), 2);
+    QCOMPARE(h.controller.editingRow(), -1);
+    // "jabłka" out of "owoce", after "warzywa"'s child, a level to the left: a sibling of "warzywa".
+    const at::Point apples = h.bulletOf(1);
+    h.tw.simulateMouseMove(apples);
+    h.tw.simulateMouseDown(apples);
+    const at::Point below{apples.x - step, h.bounds(5).bottom() + 20};
+    h.tw.simulateMouseMove(below, at::MouseButton::Left);
+    QCOMPARE(h.view().dropTarget()->place, (BlockPlace{6, 0}));
+    h.tw.simulateMouseUp(below);
+    QCOMPARE(h.controller.sourceText(), u"- owoce\n\t- zioła\n\t- gruszki\n- warzywa\n\t- marchew\n- jabłka\n"_s);
+    // One undo step each.
+    QVERIFY(h.key(u"ctrl-z"));
+    QVERIFY(h.key(u"ctrl-z"));
+    QCOMPARE(h.controller.sourceText(), before);
+}
+
+void TestAtramentSelection::dropIntoAFoldedBlockOpensIt()
+{
+    Harness h(u"- jeden\n- dwa\n\t- dwa i pół\n- trzy\n"_s);
+    h.controller.setFolded(1, true);
+    h.tw.settle();
+    const float step = h.view().metrics().indentStep;
+    // "trzy" just under the folded "dwa", a level to the right: its last child (after the hidden one).
+    const at::Point bullet = h.bulletOf(3);
+    h.tw.simulateMouseMove(bullet);
+    h.tw.simulateMouseDown(bullet);
+    const at::Point there{bullet.x + step, h.bounds(1).bottom() - 2};
+    h.tw.simulateMouseMove({bullet.x, bullet.y - 10}, at::MouseButton::Left);
+    h.tw.simulateMouseMove(there, at::MouseButton::Left);
+    QCOMPARE(h.view().dropTarget()->place, (BlockPlace{3, 1}));
+    h.tw.simulateMouseUp(there);
+    QCOMPARE(h.controller.sourceText(), u"- jeden\n- dwa\n\t- dwa i pół\n\t- trzy\n"_s);
+    QVERIFY(!h.model()->index(1).data(BlockListModel::CollapsedRole).toBool());
+    QCOMPARE(h.controller.selectedRow(), 3);
+}
+
+void TestAtramentSelection::moveAcrossParents()
+{
+    // PageController::moveSelectionTo: a place between any two rows, the children along.
     Harness h(Outline);
     h.controller.selectRange(h.rowOf(u"Skuć"_s), h.rowOf(u"Skuć"_s));
-    QVERIFY(!h.controller.moveSelectionNextTo(h.rowOf(u"Przygotowanie"_s), false)); // not a sibling
-    QVERIFY(!h.controller.moveSelectionNextTo(h.rowOf(u"Położyć"_s), false));       // where it is
-    QVERIFY(h.controller.moveSelectionNextTo(h.rowOf(u"Podlać"_s), true));
-    QCOMPARE(h.rowOf(u"Skuć"_s), h.rowOf(u"Podlać"_s) + 1);
+    QVERIFY(h.controller.moveSelectionTo({h.rowOf(u"Kupić"_s), 1})); // into "Przygotowanie"
+    QCOMPARE(h.rowOf(u"Skuć"_s), h.rowOf(u"Kupić"_s) - 1);
     QCOMPARE(h.depth(h.rowOf(u"Skuć"_s)), 1);
-    // A parent with its children before the first sibling.
+    QVERIFY(!h.controller.moveSelectionTo({h.rowOf(u"Skuć"_s), 1})); // where it is
+    // A parent with its children before the first block.
     h.controller.selectRange(h.rowOf(u"Notatki z rozmowy"_s), h.rowOf(u"Notatki z rozmowy"_s));
-    QVERIFY(h.controller.moveSelectionNextTo(h.rowOf(u"Przygotowanie"_s), false));
+    QVERIFY(h.controller.moveSelectionTo({0, 0}));
     QCOMPARE(h.rowOf(u"Notatki z rozmowy"_s), 0);
     QCOMPARE(h.rowOf(u"Ekipa może"_s), 1);
     QVERIFY(h.controller.sourceText().startsWith(u"- Notatki z rozmowy z ekipą\n\t- Ekipa może"_s));
     // Picked blocks with gaps: never.
     h.controller.toggleSelected(h.rowOf(u"Zmierzyć"_s));
     h.controller.toggleSelected(h.rowOf(u"Zadzwonić"_s));
-    QVERIFY(h.controller.selectionSiblings().isEmpty());
-    QVERIFY(!h.controller.moveSelectionNextTo(h.rowOf(u"Kupić"_s), true));
+    QVERIFY(!h.controller.canMoveSelectionTo({0, 0}));
+    QVERIFY(!h.controller.moveSelectionTo({0, 0}));
 }
 
 QTEST_MAIN(TestAtramentSelection)

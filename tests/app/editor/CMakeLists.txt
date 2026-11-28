@@ -35,6 +35,12 @@ brulion_add_test(tst_editor_calc
 brulion_add_test(tst_editor_selection
     SOURCES tst_editor_selection.cpp
     LIBS brulion_editor brulion_core_markdown)
+# Moving blocks to another place of their page (blockmove.h: drag to move's drop between any two
+# rows, deeper or shallower): the plan of range steps applied as content in → content out, what it
+# refuses.
+brulion_add_test(tst_editor_blockmove
+    SOURCES tst_editor_blockmove.cpp
+    LIBS brulion_editor brulion_core_markdown)
 # A selection over several days of the journal stream (StreamSelection): each day's part, keys,
 # taps, drags across the days' edges, days destroyed and created again, the copy with day links.
 brulion_add_test(tst_editor_streamselection
