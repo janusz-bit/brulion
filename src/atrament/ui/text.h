@@ -93,9 +93,14 @@ struct TextLink {
     // The link's own menu (a chip's, a tag's): a right-click or a finger held on it, at that point
     // — the row's right-click and long press around it do not run.
     using MenuListener = Fn<void(Point, Window &, App &)>;
+    // The mouse pointer came onto the link (`on`, at that window point) or left it: a preview's
+    // cue. Of two links, the one it came onto is told before the one it left — who keeps the
+    // hovered link ignores a leave of another one. A finger hovers nothing.
+    using HoverListener = Fn<void(bool on, Point at, Window &, App &)>;
     Range range;
     ClickListener onClick;
     MenuListener onMenu = {};
+    HoverListener onHover = {};
 };
 
 // The paragraph a Text laid out, shared with code outside the frame (`trackLayout`): where a
@@ -134,7 +139,8 @@ public:
     // Spans apply in order over the inherited style.
     Text &&spans(std::span<const TextSpan> spans) &&;
     Text &&span(Range range, TextStyleRefinement style) &&;
-    Text &&link(Range range, TextLink::ClickListener onClick, TextLink::MenuListener onMenu = {}) &&;
+    Text &&link(Range range, TextLink::ClickListener onClick, TextLink::MenuListener onMenu = {},
+                TextLink::HoverListener onHover = {}) &&;
     // Shares the layout of every frame with a handle (above).
     Text &&trackLayout(const TextLayoutHandle &handle) &&
     {
@@ -187,6 +193,7 @@ private:
     ArenaVector<Object> m_objects; // the inline objects laid out, in text order
     struct LinkState;
     LinkState *m_linkState = nullptr;
+    void tellHover(int onto, int left, Point at, Window &w, App &app) const;
     ArenaVector<FontRun> m_runs;
     ArenaVector<TextPaintStyle> m_paint;
     ElementId m_id;

@@ -16,6 +16,7 @@
 #include <QGuiApplication>
 #include <QTest>
 
+#include <cmath>
 #include <memory>
 
 using namespace brulion::editor;
@@ -97,6 +98,7 @@ private Q_SLOTS:
     void headingsAndLists();
     void taskForScreenReaders();
     void linksAndTaskBoxesClick();
+    void linkHovered();
     void longPageLaysOutWhatIsShown();
     void foldAboveKeepsTheScreen();
     void narrowerWindowReflows();
@@ -288,6 +290,44 @@ void TestAtramentEditor::linksAndTaskBoxesClick()
     QVERIFY2(href.contains(u"projekt"_s), qPrintable(href));
     h.tw.simulateClick(box->bounds.center());
     QCOMPARE(toggled, 1);
+}
+
+// The pointer onto a link of a block's text: the page told the link's href and the pointer's
+// place (BlockText's LinkPreviews.hover); onto the next link, that one; off the links, an empty
+// href once.
+void TestAtramentEditor::linkHovered()
+{
+    Harness h(u"Zobacz [[Strona główna]] i #projekt\n- [ ] Zadzwonić do Łucji\n"_s);
+    QStringList hovers;
+    at::Point last;
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &) {
+        v.onLinkHover = [&](int row, const QString &href, const QString &fromPath, at::Point p) {
+            hovers.append(u"%1 %2|%3"_s.arg(row).arg(href, fromPath));
+            last = p;
+        };
+    });
+    h.window->setAccessibilityEnabled(true);
+    h.tw.settle();
+    const at::AccessibilityNode *page = nullptr;
+    const at::AccessibilityNode *tag = nullptr;
+    for (const at::AccessibilityNode *n : h.window->accessibilityTree().nodes()) {
+        if (n->role == at::Role::Link && n->name.find(u"Strona") != std::u16string_view::npos)
+            page = n;
+        if (n->role == at::Role::Link && n->name.find(u"projekt") != std::u16string_view::npos)
+            tag = n;
+    }
+    QVERIFY(page && tag);
+    const at::Point onPage{std::floor(page->bounds.center().x), std::floor(page->bounds.center().y)};
+    h.tw.simulateMouseMove(onPage);
+    QCOMPARE(hovers.size(), 1);
+    QVERIFY2(hovers.last().startsWith(u"0 page:"_s) && hovers.last().contains(u"Strona"_s) && hovers.last().endsWith(u"|"_s),
+             qPrintable(hovers.last()));
+    QCOMPARE(last, onPage);
+    h.tw.simulateMouseMove(tag->bounds.center());
+    QVERIFY2(hovers.last().contains(u"projekt"_s), qPrintable(hovers.join(u", "_s)));
+    h.tw.simulateMouseMove({page->bounds.left() - 30, page->bounds.center().y + 200});
+    QCOMPARE(hovers.last(), u"0 |"_s);
+    QCOMPARE(hovers.count(u"0 |"_s), 1);
 }
 
 void TestAtramentEditor::longPageLaysOutWhatIsShown()

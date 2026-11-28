@@ -318,6 +318,27 @@ AtramentView {
         if (root.editor && !root.editor.openDateMenu(row, link, root, x, y))
             root.editor.openBlockLinkMenu(row, link, root, x, y)
     }
+    // The mouse pointer on a link of the page (a block's, a cell's, an embedded block's, a query
+    // result's): its preview (LinkPreviews, docs/UI.md "Link previews"); "" when it left the link.
+    onLinkHovered: (row, link, fromPath, x, y) => {
+        const controller = root.editor ? root.editor.controller : null
+        LinkPreviews.hover(root, link, fromPath, controller ? controller.host : null, x, y)
+    }
+    // A table cell's tooltip (its formula's error, its text cut short: TableBlockView's), over it.
+    onToolTipRequested: (tip, tipX, tipY, tipWidth, tipHeight) => {
+        cellTipAnchor.x = tipX
+        cellTipAnchor.y = tipY
+        cellTipAnchor.width = tipWidth
+        cellTipAnchor.height = tipHeight
+        cellTip.text = tip
+    }
+    Item {
+        id: cellTipAnchor
+        BToolTip {
+            id: cellTip
+            visible: text !== ""
+        }
+    }
     onTaskMenuRequested: (row, x, y) => {
         if (root.editor)
             root.editor.openTaskStatusMenu(row, root, x, y)

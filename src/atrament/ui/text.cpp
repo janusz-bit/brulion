@@ -40,16 +40,34 @@ Text &&Text::spans(std::span<const TextSpan> spans) &&
     return std::move(*this);
 }
 
+namespace {
+
+// A finger's press, move or release (it hovers nothing: no preview's cue).
+bool fromFinger(const PlatformInput &input)
+{
+    return std::visit(
+            [](const auto &e) {
+                if constexpr (requires { e.pointer; })
+                    return e.pointer != PointerKind::Mouse;
+                return false;
+            },
+            input);
+}
+
+} // namespace
+
 // Which link is hovered and pressed, kept across frames.
 struct Text::LinkState {
     int hovered = -1;
+    int told = -1; // the link whose hover listener was told it came onto (the mouse's)
     int pressed = -1;
     MouseDownEvent down;
 };
 
-Text &&Text::link(Range range, TextLink::ClickListener onClick, TextLink::MenuListener onMenu) &&
+Text &&Text::link(Range range, TextLink::ClickListener onClick, TextLink::MenuListener onMenu,
+                  TextLink::HoverListener onHover) &&
 {
-    m_links.push_back(TextLink{range, onClick, onMenu});
+    m_links.push_back(TextLink{range, onClick, onMenu, onHover});
     return std::move(*this);
 }
 
@@ -330,6 +348,11 @@ void Text::paint(Rect bounds, Window &window, App &)
                 st.hovered = under;
                 w.refresh();
             }
+            if (under != st.told && !fromFinger(input)) {
+                const int left = st.told;
+                st.told = under;
+                self->tellHover(under, left, positionOf(input), w, app);
+            }
             return;
         }
         if (const auto *down = std::get_if<MouseDownEvent>(&input)) {
@@ -355,6 +378,18 @@ void Text::paint(Rect bounds, Window &window, App &)
             w.stopPropagation(); // the link takes the click, not the row around it
         }
     });
+}
+
+// The hover listeners of the link the pointer came onto (`onto`) and of the one it left (`left`, a
+// link of the last frame: maybe no longer one), in that order.
+void Text::tellHover(int onto, int left, Point at, Window &w, App &app) const
+{
+    auto tell = [&](int link, bool on) {
+        if (link >= 0 && std::size_t(link) < m_links.size() && m_links[std::size_t(link)].onHover)
+            m_links[std::size_t(link)].onHover(on, at, w, app);
+    };
+    tell(onto, true);
+    tell(left, false);
 }
 
 } // namespace brulion::atrament

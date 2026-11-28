@@ -25,7 +25,8 @@ import Brulion
 // gestures on chips, tags, links and task boxes (also in reading mode); the edited text's menu (a
 // right-click in it: Copy, Cut, Paste, Select all, Highlight…, a misspelled word's corrections; on
 // a phone what Android's selection handles and floating toolbar give it through the input method);
-// the menus of chips and links inside an embedded block and a query result.
+// the menus of chips and links inside an embedded block and a query result; a link's preview while
+// the mouse pointer rests on it.
 // Steps run on the playground's step runner (EditorPlayground.runSteps).
 QtObject {
     id: test
@@ -755,6 +756,17 @@ QtObject {
                                          "the same gesture on a #tag opens the link menu")
         if (window.at()) test.linkMenu().close()
         if (window.at()) window.waitStep(!test.linkMenuOpen(), "the link menu closes")
+        // The mouse pointer resting on the [[link]]: its preview (LinkPreviews), closed when it leaves.
+        if (!window.touchRun) {
+            if (window.at()) {
+                test.findLink(1, "page:")
+                window.taskEvents.mouseMove(test.view(), test.spot.x, test.spot.y, -1, Qt.NoButton, Qt.NoModifier)
+            }
+            if (window.at()) window.waitStep(LinkPreviews.shown && Js.indexOf(LinkPreviews.href, "Inna") >= 0,
+                                             "the mouse pointer resting on a [[link]] opens its preview: " + LinkPreviews.href)
+            if (window.at()) window.taskEvents.mouseMove(test.view(), test.spot.x, test.spot.y + 160, -1, Qt.NoButton, Qt.NoModifier)
+            if (window.at()) window.waitStep(!LinkPreviews.shown, "and the preview closes when the pointer leaves the link")
+        }
         if (window.at()) {
             test.navigationsBefore = test.navigations
             test.findLink(1, "page:")

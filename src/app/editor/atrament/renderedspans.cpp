@@ -129,4 +129,19 @@ std::vector<at::TextSpan> renderedSpans(const markdown::RenderedText &text, cons
     return spans;
 }
 
+std::vector<RenderedLink> renderedLinks(const markdown::RenderedText &text)
+{
+    std::vector<RenderedLink> links;
+    const auto &runs = text.runs;
+    for (qsizetype i = 0; i < runs.size();) {
+        qsizetype j = i + 1;
+        while (j < runs.size() && runs[j].href == runs[i].href && runs[j].from == runs[j - 1].to)
+            ++j;
+        if (!runs[i].href.isEmpty())
+            links.push_back({atrament::Range{int(runs[i].from), int(runs[j - 1].to)}, runs[i].href});
+        i = j;
+    }
+    return links;
+}
+
 } // namespace brulion::editor::atr

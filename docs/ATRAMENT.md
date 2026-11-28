@@ -1305,8 +1305,10 @@ scrolling, `tst_atrament_editor`) before the next:
      `AtramentView.editTableRow` is a row). The tools are `PageView::nextCell`, `undoInCell`,
      `closeCell`, `onCellEditingChanged`.
    A wide table's sideways scroll bar is dragged with the mouse as any Atrament scroll view's
-   ("Views and entities"). **Not yet** for tables: tooltips (a formula's error, a truncated
-   cell's text, link previews).
+   ("Views and entities"). The mouse pointer resting on a cell whose formula failed shows the
+   error as a tooltip, on a cell cut short ("…") its whole text (TableBlockView's BToolTip:
+   `PageView::onToolTip` → `AtramentView.toolTipRequested` → EditorAtramentPage's BToolTip over the
+   cell), and on a link of a cell its preview as everywhere on the page (below).
    **Pictures, files, embedded blocks and query results** (2026-11-27; `PageView::setDrawsMedia`,
    `src/app/editor/atrament/mediarows.cpp`, `queryrows.cpp`, `picturecache.h`; `AtramentView.
    drawsPictures` / `drawsFiles` / `drawsTransclusions` / `drawsQueries`, all on, and `mediaLook`).
@@ -1383,10 +1385,20 @@ scrolling, `tst_atrament_editor`) before the next:
    and going on; the spinner; a picture from the internet's placeholder and its buttons; a
    drawing's preview from a provider, its dark version) and `tst_atrament_picturecache`. **Not
    yet** (the QML delegate's rows): sounds and videos, Obsidian bases and database views (`view:`,
-   ```base), a PDF's thumbnail being drawn or failed. Nor: link previews on hover, BIcon's icons
+   ```base). Nor: BIcon's icons
    for files' chips and the transclusions' headers (Atrament's own glyphs there), an animation's
    loop count (every animation loops), Theme.reducedMotion for the spinner, the pen badge's
    hover look.
+   * **Link previews** (2026-11-28): the mouse pointer coming onto a link of the page — a block's
+     text, a table cell, an embedded block, a query result — tells the page its href and the file
+     it is written in (`TextLink::onHover`, Atrament's: the link it came onto told before the one
+     it left, none for a finger; `PageView::onLinkHover`, which keeps the link told last so a late
+     leave of another is not told, and resolves a day chip to its day's page as BlockText's
+     `previewLink` does) → `AtramentView.linkHovered` → `LinkPreviews.hover` on the view, which
+     opens the preview after its delay and closes it when the pointer leaves (an empty href).
+     Tested by `tst_atrament_links` (`hoverComesAndGoes`), `tst_atrament_editor` (`linkHovered`),
+     `tst_atrament_tables` (`linkInACellHovered`, `cellToolTips`) and the self-test (the preview
+     opening and closing over a `[[link]]`).
    * **Menus inside embedded blocks and results** (2026-11-27): a right-click or a finger held on
      a chip or a link of an embedded block's text or of a query result's opens its own menu, not the
      block's (`onEmbeddedLinkMenu`, `onQueryLinkMenu` → `AtramentView.embeddedLinkMenuRequested` /

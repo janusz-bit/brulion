@@ -874,6 +874,15 @@ void AtramentView::connectPageSignals(const PageHandle &handle)
                         if (guard)
                             Q_EMIT guard->linkMenuRequested(row, href, p.x, p.y);
                     };
+                    // (Hovering activates no day of the journal: the link and its file come resolved.)
+                    page.onLinkHover = [guard](int row, const QString &href, const QString &fromPath, at::Point p) {
+                        if (guard)
+                            Q_EMIT guard->linkHovered(row, href, fromPath, p.x, p.y);
+                    };
+                    page.onToolTip = [guard](const QString &text, at::Rect r) {
+                        if (guard)
+                            Q_EMIT guard->toolTipRequested(text, r.left(), r.top(), r.width(), r.height());
+                    };
                     page.onToggleTask = [guard, act](int row) {
                         act();
                         if (guard)

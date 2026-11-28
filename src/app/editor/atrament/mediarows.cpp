@@ -1161,31 +1161,24 @@ at::AnyElement PageView::transclusionsPart(std::size_t row, quint64 uid, const Q
                 const int line = e.line;
                 const QString raw = e.raw;
                 PartText &part = partText(row, -1);
-                for (qsizetype i = 0; i < rt.runs.size();) {
-                    const QString &link = rt.runs[i].href;
-                    qsizetype j = i + 1;
-                    while (j < rt.runs.size() && rt.runs[j].href == link && rt.runs[j].from == rt.runs[j - 1].to)
-                        ++j;
-                    if (!link.isEmpty()) {
-                        const at::Range range{int(rt.runs[i].from), int(rt.runs[j - 1].to)};
-                        // Its menu (a chip's in the block's own file, a link's): TransclusionView's.
-                        at::TextLink::MenuListener menu;
-                        if (onEmbeddedLinkMenu)
-                            menu = [self, row, link, path, line, raw](at::Point p, at::Window &, at::App &) {
-                                if (self->onEmbeddedLinkMenu)
-                                    self->onEmbeddedLinkMenu(int(row), link, path, line, raw, p);
-                            };
-                        std::move(t).link(range,
-                                          [self, row, link, path, line, raw](const at::ClickEvent &, at::Window &, at::App &) {
-                                              if (self->onEmbeddedLink)
-                                                  self->onEmbeddedLink(int(row), link, path, line, raw);
-                                              else if (self->onLink)
-                                                  self->onLink(int(row), link);
-                                          },
-                                          std::move(menu));
-                        part.links.emplace_back(range, link);
-                    }
-                    i = j;
+                for (const RenderedLink &l : renderedLinks(rt)) {
+                    const QString &link = l.href;
+                    // Its menu (a chip's in the block's own file, a link's): TransclusionView's.
+                    at::TextLink::MenuListener menu;
+                    if (onEmbeddedLinkMenu)
+                        menu = [self, row, link, path, line, raw](at::Point p, at::Window &, at::App &) {
+                            if (self->onEmbeddedLinkMenu)
+                                self->onEmbeddedLinkMenu(int(row), link, path, line, raw, p);
+                        };
+                    std::move(t).link(l.range,
+                                      [self, row, link, path, line, raw](const at::ClickEvent &, at::Window &, at::App &) {
+                                          if (self->onEmbeddedLink)
+                                              self->onEmbeddedLink(int(row), link, path, line, raw);
+                                          else if (self->onLink)
+                                              self->onLink(int(row), link);
+                                      },
+                                      std::move(menu), linkHover(int(row), kEmbedPart, l, path));
+                    part.links.emplace_back(l.range, link);
                 }
                 std::move(t).trackLayout(part.handle);
                 std::move(body).child(std::move(t));

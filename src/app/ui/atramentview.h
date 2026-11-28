@@ -432,6 +432,14 @@ Q_SIGNALS:
     // A right-click or a finger held on a link of row `row` (a chip, a tag, a page): its menu at
     // (x, y) of this item (BlockEditor.openDateMenu / openBlockLinkMenu), not the block's.
     void linkMenuRequested(int row, const QString &link, qreal x, qreal y);
+    // The mouse pointer came onto a link of row `row` at (x, y) of this item: its preview
+    // (LinkPreviews.hover) — `link` previewed (a day chip's: its day's page) and the file it is
+    // written in; "" for both: it left the link.
+    void linkHovered(int row, const QString &link, const QString &fromPath, qreal x, qreal y);
+    // The pointer rests on a table cell whose formula failed or whose text is cut short: `text`
+    // (the error, else the whole text) as a tooltip over the cell's (x, y, width, height) of this
+    // item; "": none (TableBlockView's BToolTip).
+    void toolTipRequested(const QString &text, qreal x, qreal y, qreal width, qreal height);
     void taskToggled(int row);
     // A right-click or a finger held on a task's box at (x, y) of this item: its status menu
     // (BlockEditor.openTaskStatusMenu).

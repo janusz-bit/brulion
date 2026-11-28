@@ -1,17 +1,20 @@
 // Links in text (Text::link, docs/ATRAMENT.md M2 "Hit regions in text"): a range of a paragraph
 // clicked with the mouse or tapped runs its listener and not the click of the element around it,
 // the pointing hand over it, the underline while hovered, a link across a line break, link nodes
-// for screen readers (named by their text, activated through the tree).
+// for screen readers (named by their text, activated through the tree), a link told when the
+// pointer comes onto it and leaves it (a preview's cue).
 #include "text/fonts.h"
 #include "ui/atrament.h"
 #include "ui/testplatform.h"
 
 #include <QtTest>
 
+#include <cmath>
 #include <memory>
 #include <string>
 
 using namespace brulion::atrament;
+using namespace Qt::StringLiterals;
 
 namespace {
 
@@ -105,6 +108,32 @@ struct Menus {
     }
 };
 
+// Two links that log the pointer coming onto them ("Główna on 12,30") and leaving them.
+struct Hovers {
+    QStringList log;
+    AnyElement render(Window &, Context<Hovers> &cx)
+    {
+        App *app = &cx.app();
+        const EntityId id = cx.entityId();
+        auto hover = [app, id](const char *name) {
+            return [app, id, name](bool on, Point p, Window &, App &) {
+                app->updateEntity<Hovers>(id, [&](Hovers &h, Context<Hovers> &) {
+                    h.log.append(on ? QStringLiteral("%1 on %2,%3").arg(QString::fromUtf8(name)).arg(p.x).arg(p.y)
+                                    : QStringLiteral("%1 off").arg(QString::fromUtf8(name)));
+                });
+            };
+        };
+        auto none = [](const ClickEvent &, Window &, App &) {};
+        return div().sizeFull().bg(white()).p(10).child(div().w(400)
+                                                                .textSize(16)
+                                                                .textColor(black())
+                                                                .fontFamily(u"Brulion Inter")
+                                                                .child(text(kText)
+                                                                               .link({14, 20}, none, {}, hover("Główna"))
+                                                                               .link({33, 44}, none, {}, hover("Inną"))));
+    }
+};
+
 const AccessibilityNode *linkNode(const AccessibilityTree &tree, std::u16string_view name)
 {
     for (const AccessibilityNode *n : tree.nodes())
@@ -126,6 +155,7 @@ private Q_SLOTS:
     void clickHoverAndAccessibility();
     void linkAcrossALineBreak();
     void linkMenuBeforeTheRows();
+    void hoverComesAndGoes();
 };
 
 void TestAtramentLinks::clickHoverAndAccessibility()
@@ -238,6 +268,44 @@ void TestAtramentLinks::linkMenuBeforeTheRows()
     h.tw.simulateTouchUp(beside);
     QCOMPARE(menus.read(h.app).rowHeld, 1);
     QCOMPARE(menus.read(h.app).linkMenu, 2);
+}
+
+// The pointer onto a link: its hover listener with the pointer's place; moving along it, nothing
+// more; onto the text beside it, onto the other link (the link it came onto told first, then the
+// one it left: who keeps the hovered link ignores a leave of another), out of the window: its
+// leave. A finger hovers nothing.
+void TestAtramentLinks::hoverComesAndGoes()
+{
+    Harness h({500, 120});
+    Entity<Hovers> hovers = h.app.newEntity<Hovers>();
+    Window &w = h.app.openWindow(h.tw, hovers);
+    w.setAccessibilityEnabled(true);
+    h.tw.settle();
+    const Rect main = linkNode(w.accessibilityTree(), u"Główna")->bounds;
+    const Rect other = linkNode(w.accessibilityTree(), u"Inną stronę")->bounds;
+    const Point onMain{std::floor(main.left()) + 3, std::floor(centre(main).y)};
+    const Point onOther{std::floor(other.left()) + 3, onMain.y};
+    auto log = [&] { return hovers.read(h.app).log; };
+    auto at = [](Point p) { return QStringLiteral("%1,%2").arg(p.x).arg(p.y); };
+
+    h.tw.simulateMouseMove({15, onMain.y});
+    QCOMPARE(log(), QStringList());
+    h.tw.simulateMouseMove(onMain);
+    QCOMPARE(log(), QStringList{u"Główna on "_s + at(onMain)});
+    h.tw.simulateMouseMove({onMain.x + 2, onMain.y});
+    QCOMPARE(log().size(), 1);
+    h.tw.simulateMouseMove({15, onMain.y});
+    QCOMPARE(log().last(), u"Główna off"_s);
+    h.tw.simulateMouseMove(onOther);
+    QCOMPARE(log().last(), u"Inną on "_s + at(onOther));
+    h.tw.simulateMouseMove(onMain);
+    QCOMPARE(log().mid(log().size() - 2), (QStringList{u"Główna on "_s + at(onMain), u"Inną off"_s}));
+    h.tw.simulateMouseExit();
+    QCOMPARE(log().last(), u"Główna off"_s);
+    const qsizetype before = log().size();
+    h.tw.simulateTap(onOther);
+    h.tw.settle();
+    QCOMPARE(log().size(), before);
 }
 
 QTEST_GUILESS_MAIN(TestAtramentLinks)

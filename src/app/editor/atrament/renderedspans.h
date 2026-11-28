@@ -50,6 +50,13 @@ atrament::Color cssColor(const QString &css, atrament::Color fallback);
 // object per page icon.
 std::vector<atrament::TextSpan> renderedSpans(const markdown::RenderedText &text, const PagePalette &palette);
 
+// A link of a rendered text: its range and href (adjacent runs of one href are one link).
+struct RenderedLink {
+    atrament::Range range;
+    QString href;
+};
+std::vector<RenderedLink> renderedLinks(const markdown::RenderedText &text);
+
 // A page icon's room, in ems of the text's size: the three no-break spaces of the body font it
 // replaces (Inter's), its middle where the QML editor centres its icon (RichTextPills' "icon").
 constexpr atrament::InlineObjectSize kPageIconSize{0.84f, 0.784f, 0.056f, true};

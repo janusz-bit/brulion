@@ -301,17 +301,9 @@ at::AnyElement PageView::queryRow(std::size_t row, const QModelIndex &index, flo
                 }
                 at::Text t = at::text(u16View(shown)).spans(spans).maxLines(4);
                 PartText &part = partText(row, i);
-                for (qsizetype a = 0; a < rt.runs.size();) {
-                    const QString &href = rt.runs[a].href;
-                    qsizetype b = a + 1;
-                    while (b < rt.runs.size() && rt.runs[b].href == href && rt.runs[b].from == rt.runs[b - 1].to)
-                        ++b;
-                    if (!href.isEmpty()) {
-                        const at::Range range{int(rt.runs[a].from), int(rt.runs[b - 1].to)};
-                        std::move(t).link(range, linkClick(href), linkMenu(href));
-                        part.links.emplace_back(range, href);
-                    }
-                    a = b;
+                for (const RenderedLink &l : renderedLinks(rt)) {
+                    std::move(t).link(l.range, linkClick(l.href), linkMenu(l.href), linkHover(int(row), i, l, path));
+                    part.links.emplace_back(l.range, l.href);
                 }
                 if (!suffix.isEmpty()) {
                     // (The item's page: no menu of its own, the block's.)

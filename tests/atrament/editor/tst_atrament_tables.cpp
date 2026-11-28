@@ -202,6 +202,8 @@ private Q_SLOTS:
     void columnAlignment();
     void wideTableScrollsSideways();
     void linkInACellClicked();
+    void cellToolTips();
+    void linkInACellHovered();
     void clickEditsTheCellAtTheCharacter();
     void typingWritesTheFile();
     void tabAndEnterBetweenCells();
@@ -438,6 +440,65 @@ void TestAtramentTables::linkInACellClicked()
     const int tag = int(h.shown(2, 0).indexOf(u"zakupy"_s));
     h.clickCell(2, 0, tag + 2);
     QVERIFY2(h.links.size() == 2 && h.links.back().startsWith(u"tag:"_s), qPrintable(h.links.join(u' ')));
+}
+
+// The pointer resting on a cell whose formula failed: its tooltip, the error; on a cell cut short
+// ("…"): its whole text; on a cell shown whole: none (TableBlockView's BToolTip). Over the cell;
+// gone when the pointer leaves it, the next cell's coming first or not.
+void TestAtramentTables::cellToolTips()
+{
+    const QString longText = u"Bardzo długi opis pozycji, który na pewno nie zmieści się w jednej linii kolumny tabeli"_s;
+    Harness h(u"| Opis | Wynik |\n| --- | --- |\n| "_s + longText + u" | =1+ |\n| Klej | 4 |\n"_s);
+    QStringList tips;
+    QList<at::Rect> over;
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &) {
+        v.onToolTip = [&](const QString &text, at::Rect cell) {
+            tips.append(text);
+            over.append(cell);
+        };
+    });
+    const TableGrid grid = readTableGrid(h.model()->index(0).data(BlockListModel::TableDataRole).toMap());
+    const QString error = grid.cell(0, 1)->error;
+    QVERIFY(!error.isEmpty());
+    h.tw.simulateMouseMove(h.cell(0, 0, 0).center());
+    QCOMPARE(tips.size(), 1);
+    QCOMPARE(tips.last(), longText);
+    QCOMPARE(over.last().left(), h.cell(0, 0, 0).left());
+    QCOMPARE(over.last().bottom(), h.cell(0, 0, 0).bottom());
+    h.tw.simulateMouseMove(h.cell(0, 1, 0).center());
+    QCOMPARE(tips.last(), error);
+    QCOMPARE(over.last().left(), h.cell(0, 1, 0).left());
+    h.tw.simulateMouseMove(h.cell(1, 0, 0).center());
+    QCOMPARE(tips.last(), QString());
+    h.tw.simulateMouseMove(h.cell(0, 1, 0).center());
+    QCOMPARE(tips.last(), error);
+    h.tw.simulateMouseExit();
+    QCOMPARE(tips.last(), QString());
+    // A header shown whole and a plain cell: none told at all.
+    tips.clear();
+    h.tw.simulateMouseMove(h.cell(-1, 0, 0).center());
+    h.tw.simulateMouseMove(h.cell(1, 1, 0).center());
+    QVERIFY2(tips.isEmpty() || tips == QStringList{QString()}, qPrintable(tips.join(u'|')));
+}
+
+// The pointer onto a link of a cell: the page told its href (a preview's cue, LinkPreviews) with
+// the pointer's place; off it, an empty href.
+void TestAtramentTables::linkInACellHovered()
+{
+    Harness h;
+    QStringList hovers;
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &) {
+        v.onLinkHover = [&](int row, const QString &href, const QString &fromPath, at::Point) {
+            hovers.append(u"%1 %2 %3"_s.arg(row).arg(href, fromPath));
+        };
+    });
+    const int k = int(h.shown(0, 0).indexOf(u"Castorama"_s));
+    h.tw.simulateMouseMove(h.pointOf(0, 0, k + 3));
+    QCOMPARE(hovers.size(), 1);
+    QVERIFY2(hovers.last().startsWith(u"1 page:"_s) && hovers.last().contains(u"Castorama"_s), qPrintable(hovers.last()));
+    QVERIFY2(hovers.last().endsWith(u" "_s + PagePath), qPrintable(hovers.last())); // written in the page
+    h.tw.simulateMouseMove(h.cell(0, 1).center());
+    QCOMPARE(hovers.last(), u"1  "_s);
 }
 
 void TestAtramentTables::clickEditsTheCellAtTheCharacter()

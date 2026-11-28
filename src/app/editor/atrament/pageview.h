@@ -203,6 +203,16 @@ public:
     // A right-click or a finger held on a link of row `row` (a chip's, a tag's, a page's): its
     // menu at the window point, instead of the block's menu or the touch selection mode.
     std::function<void(int row, const QString &href, atrament::Point at)> onLinkMenu;
+    // The mouse pointer came onto a link of row `row` at a window point — its preview's cue
+    // (LinkPreviews.hover): its href (a day chip's: its day's page, PageController::dateChipUrl)
+    // and the file it is written in (the page's, an embedded block's, a query result's). An empty
+    // href (and path): it left the link told last. Any link of the page: its blocks' texts, table
+    // cells, embedded blocks, query results.
+    std::function<void(int row, const QString &href, const QString &fromPath, atrament::Point at)> onLinkHover;
+    // The mouse pointer rests on a table cell whose formula failed or whose text is cut short ("…"):
+    // the tooltip's text (the error, else the whole text) over the cell (window px); empty text: it
+    // left the cell told last (TableBlockView's BToolTip).
+    std::function<void(const QString &text, atrament::Rect cell)> onToolTip;
     std::function<void(int row)> onToggleTask;
     // A right-click or a finger held on row `row`'s task box: its status menu at the window point
     // (BlockEditor.openTaskStatusMenu), instead of the block's menu or the selection mode.
@@ -935,6 +945,29 @@ private:
     std::vector<PartText> m_partTexts;
     // A text of an embedded block or a query result recorded for the frame (partTexts()).
     PartText &partText(std::size_t row, int item);
+    // --- Hover cues: links' previews and cells' tooltips (onLinkHover, onToolTip). A link or a cell
+    // is known by its row, the text of the row it is in (`part`) and where it starts; a leave of
+    // another than the one told last (the next one's coming told first) is not told.
+    struct HoverKey {
+        int row = -1; // −1: none
+        int part = 0; // kOwnText, kEmbedPart, a query result's index, cellPart()
+        int at = 0;   // the link's start in its text; a cell: 0
+        bool operator==(const HoverKey &) const = default;
+    };
+    static constexpr int kOwnText = -2;
+    static constexpr int kEmbedPart = -1;
+    static constexpr int cellPart(int tableRow, int column) { return (tableRow + 2) << 16 | column; }
+    // The hover listener of a link of `row`.
+    atrament::TextLink::HoverListener linkHover(int row, int part, const RenderedLink &link, const QString &fromPath);
+    void linkHovered(HoverKey key, const QString &href, const QString &fromPath, atrament::Point at);
+    // A cell's error and the text it shows; none: the pointer left it.
+    struct CellTip {
+        QString error;
+        QString shown;
+    };
+    void cellHovered(std::size_t row, int r, int c, std::optional<CellTip> on);
+    HoverKey m_hoveredLink;
+    HoverKey m_toolTipCell;
     // --- The edited text's spell marks, reminder chips and Vim keys; code blocks' line numbers
     // (pagespell.cpp, pagechips.cpp, pagevim.cpp, pagecode.cpp; docs/ATRAMENT.md M2 step 2's and
     // step 5's entries — what InlineEditor, MarkdownHighlighter, spellmarks.h and CodeBlockView do).

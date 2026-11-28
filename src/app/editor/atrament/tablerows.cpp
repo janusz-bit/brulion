@@ -520,32 +520,32 @@ at::AnyElement PageView::renderTableCell(std::size_t row, quint64 uid, const Tab
     }
     if (!cell.error.isEmpty())
         std::move(d).textColor(look.error);
+    // Its tooltip while the pointer rests on it: the formula's error, a text cut short whole.
+    std::move(d).onHover([self, row, r, c, error = cell.error, shown = cell.display](bool on, at::Window &, at::App &) {
+        self->cellHovered(row, r, c, on ? CellTip{error, shown} : std::optional<CellTip>());
+    });
     std::vector<at::TextSpan> spans = renderedSpans(rendered, m_palette);
     appendFindSpans(rendered.text, spans);
     at::Text text = at::text(u16View(rendered.text)).id(u"text").spans(spans).trackLayout(frame.text);
-    // Each link a hit region (adjacent runs of one href are one link), as in a block's text.
-    for (qsizetype i = 0; i < rendered.runs.size();) {
-        const QString &href = rendered.runs[i].href;
-        qsizetype j = i + 1;
-        while (j < rendered.runs.size() && rendered.runs[j].href == href && rendered.runs[j].from == rendered.runs[j - 1].to)
-            ++j;
-        if (!href.isEmpty())
-            std::move(text).link(at::Range{int(rendered.runs[i].from), int(rendered.runs[j - 1].to)},
-                                 [selfId, row, r, c, href](const at::ClickEvent &click, at::Window &, at::App &a) {
-                                     a.updateEntity<PageView>(selfId, [&](PageView &v, at::Context<PageView> &cx) {
-                                         v.cellLinkClicked(row, r, c, href, click.up.position, cx);
-                                     });
-                                 },
-                                 // Its menu: a right-click, a finger held on it (a date chip's, a link's).
-                                 [selfId, row, r, c, href](at::Point p, at::Window &, at::App &a) {
-                                     a.updateEntity<PageView>(selfId, [&](PageView &v, at::Context<PageView> &) {
-                                         if (v.m_touchGrips && v.onLongPressRow)
-                                             v.onLongPressRow(int(row)); // (the selection mode: the row's)
-                                         else if (v.onCellLinkMenu)
-                                             v.onCellLinkMenu(int(row), r, c, href, p);
-                                     });
+    // Each link a hit region, as in a block's text.
+    for (const RenderedLink &l : renderedLinks(rendered)) {
+        const QString &href = l.href;
+        std::move(text).link(l.range,
+                             [selfId, row, r, c, href](const at::ClickEvent &click, at::Window &, at::App &a) {
+                                 a.updateEntity<PageView>(selfId, [&](PageView &v, at::Context<PageView> &cx) {
+                                     v.cellLinkClicked(row, r, c, href, click.up.position, cx);
                                  });
-        i = j;
+                             },
+                             // Its menu: a right-click, a finger held on it (a date chip's, a link's).
+                             [selfId, row, r, c, href](at::Point p, at::Window &, at::App &a) {
+                                 a.updateEntity<PageView>(selfId, [&](PageView &v, at::Context<PageView> &) {
+                                     if (v.m_touchGrips && v.onLongPressRow)
+                                         v.onLongPressRow(int(row)); // (the selection mode: the row's)
+                                     else if (v.onCellLinkMenu)
+                                         v.onCellLinkMenu(int(row), r, c, href, p);
+                                 });
+                             },
+                             linkHover(int(row), cellPart(r, c), l, QString()));
     }
     std::move(body).child(std::move(text));
     std::move(d).child(std::move(body));
@@ -1074,6 +1074,27 @@ bool PageView::tableKey(const at::Keystroke &k, at::Window &, at::Context<PageVi
         return true;
     }
     return false;
+}
+
+void PageView::cellHovered(std::size_t row, int r, int c, std::optional<CellTip> on)
+{
+    if (!onToolTip)
+        return;
+    const HoverKey key{int(row), cellPart(r, c), 0};
+    if (!on) {
+        if (m_toolTipCell == key) {
+            m_toolTipCell = {};
+            onToolTip(QString(), {});
+        }
+        return;
+    }
+    const atrament::TextLayoutHandle *text = cellText(int(row), r, c);
+    const bool cut = text && text->layout() && text->layout()->truncated();
+    const QString tip = !on->error.isEmpty() ? on->error : cut ? on->shown : QString();
+    const bool told = m_toolTipCell.row >= 0;
+    m_toolTipCell = tip.isEmpty() ? HoverKey{} : key;
+    if (!tip.isEmpty() || told)
+        onToolTip(tip, cellBounds(int(row), r, c).value_or(at::Rect{}));
 }
 
 } // namespace brulion::editor::atr
