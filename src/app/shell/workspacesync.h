@@ -437,6 +437,12 @@ private:
     void rebuild();
     /// The engine and the scheduler over m_client (rebuild()).
     void startEngine(qint64 intervalMs, qint64 debounceMs, bool needsNetwork);
+    /// A plain setting's sync held until the server folder shows no key file (workspacesync.cpp).
+    void checkNotEncrypted();
+    /// The check asked of the server, the first time a run is wanted.
+    void askKeyCheck();
+    /// The check holds the runs (not answered yet, or the folder is encrypted).
+    bool syncBlocked() const;
     void teardown();
     void rebuildSyncthing();
     void refreshConflicts();
@@ -502,6 +508,10 @@ private:
     bool m_appActive = true;
     int m_testing = 0;
     int m_encryptionBusy = 0;
+    /// checkNotEncrypted(): None (not needed), Waiting (held until a run is wanted), Asking, Done.
+    enum class KeyCheck { None, Waiting, Asking, Done };
+    KeyCheck m_keyCheck = KeyCheck::None;
+    bool m_encryptedElsewhere = false; ///< the plain setting's folder has a key file: locked()
     QVariantMap m_syncthingStatus;
     QString m_syncthingFolderId;
     QVariantList m_conflicts;

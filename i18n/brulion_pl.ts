@@ -48458,69 +48458,69 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::shell::WorkspaceSync</name>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="612"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="620"/>
         <location filename="../src/app/shell/workspacesyncruns.cpp" line="222"/>
         <source>Wrong user name or app password.</source>
         <translation>Nieprawidłowa nazwa użytkownika lub hasło aplikacji.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="614"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="622"/>
         <source>The server refused access to the folder.</source>
         <translation>Serwer odmówił dostępu do folderu.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="616"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="624"/>
         <source>The folder was not found on the server.</source>
         <translation>Nie znaleziono folderu na serwerze.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="618"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="626"/>
         <source>Cannot reach the server. Check the address and the connection.</source>
         <translation>Nie można połączyć się z serwerem. Sprawdź adres i połączenie.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="620"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="628"/>
         <source>The server did not answer in time.</source>
         <translation>Serwer nie odpowiedział na czas.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="622"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="630"/>
         <source>This address does not lead to a WebDAV folder. Check the server address.</source>
         <translation>Ten adres nie prowadzi do folderu WebDAV. Sprawdź adres serwera.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="624"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="632"/>
         <location filename="../src/app/shell/workspacesyncruns.cpp" line="200"/>
         <source>There is no space left on the server.</source>
         <translation>Na serwerze zabrakło miejsca.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="629"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="637"/>
         <source>The server reported an error. Brulion will try again later.</source>
         <translation>Serwer zgłosił błąd. Brulion spróbuje ponownie później.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="631"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="639"/>
         <source>The server stopped answering, so the sync was stopped. Brulion will try again.</source>
         <translation>Serwer przestał odpowiadać, więc synchronizację przerwano. Brulion spróbuje ponownie.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="633"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="641"/>
         <source>Sync paused: the notebook folder looks empty although it was synced before.</source>
         <translation>Synchronizacja wstrzymana: folder notatnika wygląda na pusty, choć wcześniej był synchronizowany.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="635"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="643"/>
         <source>Sync paused: the folder on the server is empty although it was synced before.</source>
         <translation>Synchronizacja wstrzymana: folder na serwerze jest pusty, choć wcześniej był synchronizowany.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="637"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="645"/>
         <source>The notebook folder is not available (an unmounted card or drive?).</source>
         <translation>Folder notatnika jest niedostępny (odmontowana karta lub dysk?).</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacesync.cpp" line="645"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="653"/>
         <source>%n file(s) would be deleted. Confirm in the sync center.</source>
         <translation>
             <numerusform>%n plik zostałby usunięty. Potwierdź w centrum synchronizacji.</numerusform>
@@ -48529,7 +48529,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacesync.cpp" line="643"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="651"/>
         <source>%n file(s) could not be synced.</source>
         <translation>
             <numerusform>Nie udało się zsynchronizować %n pliku.</numerusform>
@@ -48538,217 +48538,222 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="626"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="634"/>
         <source>The server sent more data than Brulion accepts, so the sync was stopped. Check the folder on the server.</source>
         <translation>Serwer przysłał więcej danych, niż Brulion przyjmuje, więc synchronizacja została przerwana. Sprawdź folder na serwerze.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="647"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="655"/>
         <source>Sync failed.</source>
         <translation>Synchronizacja nie powiodła się.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="652"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="660"/>
         <source>Not syncing: the notebook “%1” on this device syncs with the same server folder “%2”. Choose another folder for one of them in the Nextcloud settings.</source>
         <translation>Synchronizacja wstrzymana: notatnik „%1” na tym urządzeniu synchronizuje się z tym samym folderem na serwerze („%2”). W ustawieniach Nextcloud wybierz inny folder dla jednego z nich.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="671"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="679"/>
         <source>Nextcloud is not set up completely</source>
         <translation>Nextcloud nie jest w pełni skonfigurowany</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="668"/>
         <location filename="../src/app/shell/workspacesync.cpp" line="676"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="686"/>
         <source>No notebook open</source>
         <translation>Nie otwarto notatnika</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="598"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="606"/>
         <source>Brulion no longer has access to the folder “%1”. Choose it again in Settings → Sync.</source>
         <translation>Brulion nie ma już dostępu do folderu „%1”. Wybierz go ponownie w Ustawieniach → Synchronizacja.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="600"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="608"/>
         <source>The folder “%1” is gone. Choose it again in Settings → Sync.</source>
         <translation>Folderu „%1” już nie ma. Wybierz go ponownie w Ustawieniach → Synchronizacja.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="602"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="610"/>
         <source>The folder “%1” cannot be reached (a memory card taken out?). Brulion will try again later.</source>
         <translation>Folder „%1” jest niedostępny (wyjęta karta pamięci?). Brulion spróbuje ponownie później.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="605"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="613"/>
         <source>The folder “%1” stopped answering, so the sync was stopped. Brulion will try again.</source>
         <translation>Folder „%1” przestał odpowiadać, więc synchronizację przerwano. Brulion spróbuje ponownie.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="607"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="615"/>
         <source>Sync paused: the folder “%1” is empty although it was synced before.</source>
         <translation>Synchronizacja wstrzymana: folder „%1” jest pusty, choć był już synchronizowany.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="609"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="617"/>
         <source>There is no space left on the storage of the folder “%1”.</source>
         <translation>Brak miejsca w pamięci, w której jest folder „%1”.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="667"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="675"/>
         <source>This device cannot reach the folder “%1”.</source>
         <translation>To urządzenie nie ma dostępu do folderu „%1”.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="674"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="682"/>
+        <source>The server folder is encrypted: turn on “Encrypt on the server” in the sync settings and enter its password</source>
+        <translation>Folder na serwerze jest zaszyfrowany: włącz „Szyfruj na serwerze” w ustawieniach synchronizacji i wpisz jego hasło</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacesync.cpp" line="684"/>
         <source>The server folder is encrypted: enter its password in the sync settings</source>
         <translation>Folder na serwerze jest zaszyfrowany: wpisz jego hasło w ustawieniach synchronizacji</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="681"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="691"/>
         <source>Stopping: the server is not answering…</source>
         <translation>Przerywanie: serwer nie odpowiada…</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="681"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="691"/>
         <source>Stopping: the folder is not answering…</source>
         <translation>Zatrzymywanie: folder nie odpowiada…</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="683"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="693"/>
         <source>The folder has not answered for %1…</source>
         <translation>Folder nie odpowiada od %1…</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="684"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="694"/>
         <source>The server has not answered for %1…</source>
         <translation>Serwer nie odpowiada od %1…</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="687"/>
-        <location filename="../src/app/shell/workspacesync.cpp" line="689"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="697"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="699"/>
         <source>Connecting…</source>
         <translation>Łączenie…</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="691"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="701"/>
         <source>Checking files in the folder “%1”…</source>
         <translation>Sprawdzanie plików w folderze „%1”…</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="692"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="702"/>
         <source>Checking files on the server…</source>
         <translation>Sprawdzanie plików na serwerze…</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="693"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="703"/>
         <source>Checking files on this device…</source>
         <translation>Sprawdzanie plików na tym urządzeniu…</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="694"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="704"/>
         <source>Comparing changes…</source>
         <translation>Porównywanie zmian…</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="697"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="707"/>
         <source>Syncing… %1 of %2 checked</source>
         <translation>Synchronizacja… sprawdzono %1 z %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="698"/>
-        <location filename="../src/app/shell/workspacesync.cpp" line="700"/>
-        <location filename="../src/app/shell/workspacesync.cpp" line="702"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="708"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="710"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="712"/>
         <source>Syncing…</source>
         <translation>Synchronizowanie…</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="699"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="709"/>
         <source>Saving the sync state…</source>
         <translation>Zapisywanie stanu synchronizacji…</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="704"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="714"/>
         <source>Offline — will sync later</source>
         <translation>Offline — synchronizacja później</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="711"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="721"/>
         <source>Synced %1</source>
         <translation>Zsynchronizowano %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="711"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="721"/>
         <source>Not synced yet</source>
         <translation>Jeszcze nie zsynchronizowano</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="854"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="897"/>
         <source>Nextcloud is not set up completely: server, user and app password are needed.</source>
         <translation>Nextcloud nie jest w pełni skonfigurowany: potrzebne są serwer, użytkownik i hasło aplikacji.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="874"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="917"/>
         <source>The list of files to delete has changed. Check it again.</source>
         <translation>Lista plików do usunięcia się zmieniła. Sprawdź ją ponownie.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="901"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="944"/>
         <source>Enter the server address and the user name.</source>
         <translation>Wpisz adres serwera i nazwę użytkownika.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="909"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="952"/>
         <source>Enter an app password.</source>
         <translation>Wpisz hasło aplikacji.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="923"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="966"/>
         <source>Connected. This folder is encrypted: turn on “Encrypt on the server” and enter its password.</source>
         <translation>Połączono. Ten folder jest zaszyfrowany: włącz „Szyfruj na serwerze” i wpisz jego hasło.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="926"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="969"/>
         <source>Connected. The folder is ready for syncing.</source>
         <translation>Połączono. Folder jest gotowy do synchronizacji.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="935"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="978"/>
         <source>Connected. The folder will be created by the first sync.</source>
         <translation>Połączono. Folder utworzy pierwsza synchronizacja.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="970"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="1013"/>
         <source>Shared with Syncthing. Add its API key to see the sync status.</source>
         <translation>Udostępniony w Syncthing. Dodaj klucz API, aby widzieć stan synchronizacji.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="1002"/>
-        <location filename="../src/app/shell/workspacesync.cpp" line="1039"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="1045"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="1082"/>
         <source>Syncthing is not running on this device.</source>
         <translation>Syncthing nie działa na tym urządzeniu.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="1004"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="1047"/>
         <source>Syncthing reports errors in this folder.</source>
         <translation>Syncthing zgłasza błędy w tym folderze.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="1006"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="1049"/>
         <source>Syncthing is syncing (%1 %).</source>
         <translation>Syncthing synchronizuje (%1%).</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="1008"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="1051"/>
         <source>Syncthing is scanning the folder.</source>
         <translation>Syncthing skanuje folder.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="1010"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="1053"/>
         <source>Up to date. No other device is connected right now.</source>
         <translation>Aktualne. Żadne inne urządzenie nie jest teraz połączone.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacesync.cpp" line="1012"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="1055"/>
         <source>Up to date with %n device(s).</source>
         <translation>
             <numerusform>Aktualne z %n urządzeniem.</numerusform>
@@ -48757,28 +48762,28 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="1014"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="1057"/>
         <source>Up to date.</source>
         <translation>Aktualne.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="1038"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="1081"/>
         <source>Syncthing refused the API key.</source>
         <translation>Syncthing odrzucił klucz API.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="1040"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="1083"/>
         <source>This notebook folder is not shared in Syncthing.</source>
         <translation>Folder tego notatnika nie jest udostępniony w Syncthing.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="1133"/>
-        <location filename="../src/app/shell/workspacesync.cpp" line="1151"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="1176"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="1194"/>
         <source>Could not save %1: %2</source>
         <translation>Nie udało się zapisać %1: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="1163"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="1206"/>
         <source>Could not move the conflict copy to the trash: %1</source>
         <translation>Nie udało się przenieść kopii konfliktu do kosza: %1</translation>
     </message>
@@ -49420,7 +49425,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Trwa %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesync.cpp" line="639"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="647"/>
         <source>The background check is syncing this notebook right now. Brulion will try again shortly.</source>
         <translation>Sprawdzanie w tle właśnie synchronizuje ten notatnik. Brulion spróbuje ponownie za chwilę.</translation>
     </message>

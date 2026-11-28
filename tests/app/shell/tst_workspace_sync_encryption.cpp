@@ -264,6 +264,34 @@ private Q_SLOTS:
         QCOMPARE(byNew.key, made.key);
         QCOMPARE(setUp(phone->sync(), server, made.recovery).key, made.key);
     }
+
+    void aPlainSettingNeverSyncsAnEncryptedFolder()
+    {
+        FakeWebDavServer server(synctest::serverOptions(m_clock));
+        auto laptop = open(&server, {{u"tajne.md"_s, u"tajne\n"_s}});
+        const Answer made = setUp(laptop->sync(), server, kPassword);
+        QVERIFY(made.ok);
+        laptop->sync()->setNextcloud(encrypted(server, made));
+        QVERIFY(syncAndWait(laptop->sync()));
+        const QMap<QString, QString> before = server.files(kFolder);
+
+        // Another device set up with the folder but without encryption: when it is first asked to
+        // sync it looks for the key file, and stops (nothing is asked before: settings being typed).
+        auto other = open(&server, {{u"jawna.md"_s, u"jawna\n"_s}});
+        server.clearLog();
+        other->sync()->setNextcloud(account(server));
+        QCOMPARE(server.logSize(), 0);
+        other->sync()->syncNow();
+        QTRY_VERIFY(other->sync()->locked());
+        QCOMPARE(other->sync()->state(), u"locked"_s);
+        QVERIFY(other->sync()->statusText().contains(u"Encrypt on the server"_s));
+        other->sync()->syncNow();
+        QTest::qWait(100);
+        QCOMPARE(server.requests().size(), 1); // the one look, nothing else
+        QCOMPARE(server.files(kFolder), before); // nothing uploaded in plain text, nothing deleted
+        QVERIFY(other->readFile(u"README.txt"_s).isEmpty()); // nothing of it downloaded
+        QCOMPARE(other->readFile(u"jawna.md"_s), u"jawna\n"_s);
+    }
 };
 
 QTEST_MAIN(TestWorkspaceSyncEncryption)

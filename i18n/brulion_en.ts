@@ -3308,7 +3308,7 @@
 <context>
     <name>brulion::shell::WorkspaceSync</name>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacesync.cpp" line="645"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="653"/>
         <source>%n file(s) would be deleted. Confirm in the sync center.</source>
         <translation>
             <numerusform>%n file would be deleted. Confirm in the sync center.</numerusform>
@@ -3316,7 +3316,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacesync.cpp" line="643"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="651"/>
         <source>%n file(s) could not be synced.</source>
         <translation>
             <numerusform>%n file could not be synced.</numerusform>
@@ -3324,7 +3324,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacesync.cpp" line="1012"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="1055"/>
         <source>Up to date with %n device(s).</source>
         <translation>
             <numerusform>Up to date with %n device.</numerusform>

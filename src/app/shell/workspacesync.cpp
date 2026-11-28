@@ -183,6 +183,7 @@ WorkspaceSync::WorkspaceSync(QObject *parent) : QObject(parent)
     m_startTimer.setSingleShot(true);
     m_startTimer.setInterval(StartDelayMs);
     connect(&m_startTimer, &QTimer::timeout, this, [this] {
+        askKeyCheck();
         if (m_scheduler && m_automatic)
             m_scheduler->start(); // the first sync right away, then periodically
     });
@@ -363,6 +364,8 @@ void WorkspaceSync::teardown()
     m_engine.reset();
     m_client.reset();
     m_encrypting.reset();
+    m_keyCheck = KeyCheck::None;
+    m_encryptedElsewhere = false;
     m_folderTransport.reset(); // (waits for the folder's operation in progress)
     suspendPdfReaders(false); // (a run abandoned: no runFinished)
     holdReadyIfIdle();
@@ -445,6 +448,7 @@ void WorkspaceSync::rebuild()
         toServer = m_encrypting.get();
     }
     m_client = std::make_unique<sync::WebDavClient>(base, m_nextcloud.user.trimmed(), m_nextcloud.password, toServer);
+    const bool plain = !m_encrypting;
     startEngine(m_nextcloud.intervalMinutes > 0 ? qint64(m_nextcloud.intervalMinutes) * 60'000 : kDailyMs, 0, true);
     // Which account and folder (never the password): the first lines to look at in a log.
     const QUrl server = QUrl::fromUserInput(m_nextcloud.url.trimmed());
@@ -454,6 +458,8 @@ void WorkspaceSync::rebuild()
             defaultFolder(m_nextcloud.folder),
             m_nextcloud.intervalMinutes > 0 ? u"%1 min"_s.arg(m_nextcloud.intervalMinutes) : u"day"_s,
             m_encrypting ? u", end-to-end encrypted"_s : QString());
+    if (plain)
+        checkNotEncrypted();
 }
 
 void WorkspaceSync::startEngine(qint64 intervalMs, qint64 debounceMs, bool needsNetwork)
@@ -563,7 +569,9 @@ QString WorkspaceSync::davUrlFor(const QString &url, const QString &user, const 
 
 bool WorkspaceSync::locked() const
 {
-    return m_vault && !usesDeviceFolder() && m_nextcloud.isComplete() && m_nextcloud.encrypted && !m_encrypting;
+    if (!m_vault || usesDeviceFolder() || !m_nextcloud.isComplete())
+        return false;
+    return m_nextcloud.encrypted ? !m_encrypting : m_encryptedElsewhere;
 }
 
 QString WorkspaceSync::state() const
@@ -670,6 +678,8 @@ QString WorkspaceSync::statusText() const
     } else if (!m_nextcloud.isComplete()) {
         return m_nextcloud.enabled ? tr("Nextcloud is not set up completely") : QString();
     }
+    if (locked() && m_encryptedElsewhere)
+        return tr("The server folder is encrypted: turn on “Encrypt on the server” in the sync settings and enter its password");
     if (locked())
         return tr("The server folder is encrypted: enter its password in the sync settings");
     if (!m_scheduler)
@@ -819,6 +829,33 @@ QVariantMap WorkspaceSync::appStatus() const
 
 // ---- actions ------------------------------------------------------------------------------------
 
+void WorkspaceSync::checkNotEncrypted()
+{
+    // Nothing syncs until the folder is known not to be another device's encrypted notebook:
+    // its encrypted names would come down as files, this device's notes go up in plain text.
+    // Asked when the first run is wanted (askKeyCheck()), not while the settings are typed.
+    m_keyCheck = KeyCheck::Waiting;
+    m_scheduler->setHeld(true);
+}
+
+void WorkspaceSync::askKeyCheck()
+{
+    if (m_keyCheck != KeyCheck::Waiting || !m_client)
+        return;
+    m_keyCheck = KeyCheck::Asking;
+    m_client->stat(QString(sync::encryption::KeyFilePath), [this](const sync::StatResult &key) {
+        m_keyCheck = KeyCheck::Done;
+        m_encryptedElsewhere = key.entry.has_value();
+        if (m_encryptedElsewhere)
+            qCWarning(logging::lcSync).noquote()
+                    << u"Nextcloud sync stopped: the server folder is end-to-end encrypted, and encryption is off here"_s;
+        else if (m_scheduler)
+            m_scheduler->setHeld(m_held); // (an unanswered check: the run fails or works as it would)
+        Q_EMIT configurationChanged();
+        Q_EMIT statusChanged();
+    });
+}
+
 void WorkspaceSync::holdSync(std::function<void()> ready)
 {
     m_held = true;
@@ -840,11 +877,17 @@ void WorkspaceSync::releaseSync()
     m_held = false;
     m_holdReady = {};
     if (m_scheduler)
-        m_scheduler->setHeld(false);
+        m_scheduler->setHeld(syncBlocked());
+}
+
+bool WorkspaceSync::syncBlocked() const
+{
+    return (m_keyCheck == KeyCheck::Waiting || m_keyCheck == KeyCheck::Asking) || m_encryptedElsewhere;
 }
 
 void WorkspaceSync::syncNow()
 {
+    askKeyCheck();
     if (!m_scheduler) {
         // Not even by hand while another notebook syncs with the folder: a confirmation would be
         // one click from mixing two notebooks for good; another folder is one step away.

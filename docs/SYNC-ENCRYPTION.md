@@ -3,8 +3,8 @@
 Status (2026-11-28): design decided and built — the formats, the key file and the encrypting
 transport (core `sync`), the setting in the sync settings (`SyncEncryptionCard`,
 `WorkspaceSync::setUpEncryption()`, `changeEncryptionPassword()`), the guide's page. Left
-(TODO.md "Privacy and security"): the note in the old folder, a sync refusing to start where the
-setting is off but the folder encrypted, turning it off. This page says what is encrypted, how,
+(TODO.md "Privacy and security"): the note in the old folder, turning it off. A device whose
+setting is off looks for the key file before its first run and stays locked when there is one. This page says what is encrypted, how,
 what is not, and why each choice was made. docs/ARCHITECTURE.md "Security" is the overview of
 what protects what; this page is the sync's part of it.
 
