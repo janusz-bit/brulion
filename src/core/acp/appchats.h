@@ -14,15 +14,24 @@
 //        poll); `detail` is the conversation P's (its answer being written, tools, plan, question)
 //   GET  chats/page?path=P           → {path, text} the conversation's page as the computer has it (the
 //                                      phone's copy may lag behind the notebook's sync)
-//   POST chats/send   {path, text, mode: "" | "queue" | "steer"} → {path}
-//   POST chats/start  {project, text, partner?, worktree?, branch?} → {path} a new thread in the app
+//   POST chats/send   {path, text, mode: "" | "queue" | "steer", pictures?} → {path}
+//   POST chats/start  {project, text, partner?, worktree?, branch?, pictures?} → {path} a new thread
+//                                    in the app
 //   POST chats/stop   {path}         → {stopped}
 //   POST chats/answer {path, option} → {answered} — one of its question's options
+//   POST chats/option {path, option, value} → {path} — one of its agent's options (detail's `options`)
+//   POST chats/resume {path}         → {resumed} — the messages held after its turn stopped or failed
+//                                      go on (detail's `held`)
+//
+// `pictures`: [{name, data}] — each a picture's file name and its bytes (base64), as the device
+// prepared it for the model (at most MaxRemotePictures, MaxRemotePictureBytes each,
+// MaxRemotePicturesBytes in all); the app stores them in its notebook and sends them with the text.
 //
 // The host offers them (GET info's features: ChatsFeature) only while the app that started it
 // answers (its agent sharing: `acp serve` with the app's grant in its environment). Errors are the
 // host's (RemoteError): 503 "app_unavailable" when the app does not answer, 404 "not_found", 409
-// "busy" (a turn runs: send with mode "queue"), 409 "no_question", 400 "bad_option".
+// "busy" (a turn runs: send with mode "queue"), 409 "no_question", 409 "not_held", 400 "bad_option",
+// 400 "bad_pictures".
 //
 // Pure (QtCore): the types, their JSON (ChatControl writes it, acp serve passes it on, the phone reads
 // it, each bounding what it takes), the device's requests over sync::HttpTransport as remote.h's.
@@ -30,7 +39,10 @@
 #include "acp/codehost.h"
 #include "acp/remote.h"
 
+#include <QByteArray>
+#include <QJsonArray>
 #include <QJsonObject>
+#include <QJsonValue>
 #include <QLatin1StringView>
 #include <QList>
 #include <QString>
@@ -59,6 +71,14 @@ inline constexpr int MaxQuestionOptions = 8;
 inline constexpr int RecentChatMinutes = 10;
 /// The longest page chats/page gives (a longer one: 413).
 inline constexpr qsizetype MaxRemotePageBytes = 4 * 1024 * 1024;
+/// The agent's options a detail lists at most, and the choices of one.
+inline constexpr int MaxLiveOptions = 20;
+inline constexpr int MaxOptionChoices = 100;
+/// The pictures one message takes at most: how many, the bytes of one, of all (a device sends them
+/// as it prepared them for the model: ai::Image, at most 1568 pixels a side).
+inline constexpr int MaxRemotePictures = 8;
+inline constexpr qsizetype MaxRemotePictureBytes = 4 * 1024 * 1024;
+inline constexpr qsizetype MaxRemotePicturesBytes = 8 * 1024 * 1024;
 
 /// A conversation of the app (its turn runs, waits, asks — or it ended lately).
 struct RemoteChat {
@@ -77,6 +97,7 @@ struct RemoteChat {
     QString branch;
     int messages = 0; ///< the messages of its page there
     int waiting = 0;  ///< messages written while it runs, waiting for its turn to end
+    bool held = false; ///< they wait for chats/resume: the turn before them stopped or failed
     QString ended;    ///< when its turn ended, ISO ("" one that runs)
     bool active() const { return state == u"running" || state == u"queued" || state == u"asking"; }
     friend bool operator==(const RemoteChat &, const RemoteChat &) = default;
@@ -108,6 +129,32 @@ struct RemoteChatStep {
     friend bool operator==(const RemoteChatStep &, const RemoteChatStep &) = default;
 };
 
+/// One of the agent's options for the conversation (a model, a mode, a reasoning effort …: ACP's
+/// session config options), as the app on the computer has it now.
+struct RemoteChatChoice {
+    QString value;
+    QString name;
+    QString group; ///< "" none
+    friend bool operator==(const RemoteChatChoice &, const RemoteChatChoice &) = default;
+};
+struct RemoteChatOption {
+    QString id;
+    QString name;
+    QString description;
+    bool boolean = false; ///< on or off ("true" / "false"), no choices
+    QString current;      ///< its value now
+    QString currentName;  ///< … in words
+    QList<RemoteChatChoice> choices;
+    friend bool operator==(const RemoteChatOption &, const RemoteChatOption &) = default;
+};
+
+/// A picture sent with a message: its file name ("photo.jpg") and bytes.
+struct RemotePicture {
+    QString name;
+    QByteArray data;
+    friend bool operator==(const RemotePicture &, const RemotePicture &) = default;
+};
+
 /// One conversation as it is now, in full (GET chats with `path`).
 struct RemoteChatDetail {
     QString path;
@@ -121,6 +168,8 @@ struct RemoteChatDetail {
     QList<RemoteChatStep> plan;
     RemoteChatQuestion question;
     QStringList waiting; ///< the messages waiting for its turn to end, oldest first
+    bool held = false;   ///< … held: they go on with chats/resume (its turn stopped or failed)
+    QList<RemoteChatOption> options; ///< its agent's options ([] none: no agent, or none offered)
     int messages = 0;
     friend bool operator==(const RemoteChatDetail &, const RemoteChatDetail &) = default;
 };
@@ -142,6 +191,15 @@ QJsonObject toJson(const RemoteChat &chat);
 QJsonObject toJson(const RemoteChatDetail &detail);
 std::optional<RemoteChat> remoteChatFromJson(const QJsonObject &o);
 std::optional<RemoteChatDetail> remoteChatDetailFromJson(const QJsonObject &o);
+QJsonObject toJson(const RemoteChatOption &option);
+std::optional<RemoteChatOption> remoteChatOptionFromJson(const QJsonObject &o);
+/// chats/send's and chats/start's `pictures`.
+QJsonArray toJson(const QList<RemotePicture> &pictures);
+/// … read where they come in: nullopt (`*why` says why) for anything but a list of at most
+/// MaxRemotePictures pictures — each a file name of a picture's extension (its folders dropped) and
+/// bytes in base64, MaxRemotePictureBytes at most, MaxRemotePicturesBytes in all. Undefined or null:
+/// none.
+std::optional<QList<RemotePicture>> remotePicturesFromJson(const QJsonValue &value, QString *why = nullptr);
 /// `text` cut to its last `max` characters (a surrogate pair kept whole): an answer's end.
 QString keepEnd(const QString &text, qsizetype max, bool *cut = nullptr);
 /// A path a device may name: a page of the notebook's AI folder ("AI/…​.md"), relative, no "..".
@@ -159,13 +217,15 @@ void fetchRemoteChats(sync::HttpTransport *transport, const QUrl &base, const QS
 /// GET chats/page?path=: the conversation's page there.
 void fetchRemoteChatPage(sync::HttpTransport *transport, const QUrl &base, const QString &token, const QString &path,
                          std::function<void(const QString &text, const RemoteError &error)> done);
-/// POST chats/send.
+/// POST chats/send (with `pictures`, none: []).
 void sendRemoteChat(sync::HttpTransport *transport, const QUrl &base, const QString &token, const QString &path,
-                    const QString &text, SendMode mode, std::function<void(const RemoteError &error)> done);
+                    const QString &text, SendMode mode, const QList<RemotePicture> &pictures,
+                    std::function<void(const RemoteError &error)> done);
 /// POST chats/start: a new thread of `project` in the app there ("" worktree: the project's folder);
 /// `done` gets its page's path.
 void startRemoteThread(sync::HttpTransport *transport, const QUrl &base, const QString &token, const QString &project,
                        const QString &text, const QString &partner, const QString &worktree, const QString &branch,
+                       const QList<RemotePicture> &pictures,
                        std::function<void(const QString &path, const RemoteError &error)> done);
 /// POST chats/stop.
 void stopRemoteChat(sync::HttpTransport *transport, const QUrl &base, const QString &token, const QString &path,
@@ -173,5 +233,17 @@ void stopRemoteChat(sync::HttpTransport *transport, const QUrl &base, const QStr
 /// POST chats/answer.
 void answerRemoteChat(sync::HttpTransport *transport, const QUrl &base, const QString &token, const QString &path,
                       const QString &option, std::function<void(const RemoteError &error)> done);
+/// POST chats/option: the agent's option `option` of the conversation set to `value` (a choice's
+/// value; "true" / "false" for one that is boolean).
+void setRemoteChatOption(sync::HttpTransport *transport, const QUrl &base, const QString &token, const QString &path,
+                         const QString &option, const QString &value,
+                         std::function<void(const RemoteError &error)> done);
+/// POST `endpoint` (chats/stop, chats/answer, chats/option, chats/resume) with `body`, as the functions
+/// above do: `done` gets the host's error (none: it was done).
+void postRemoteChat(sync::HttpTransport *transport, const QUrl &base, const QString &token, const QString &endpoint,
+                    const QJsonObject &body, std::function<void(const RemoteError &error)> done);
+/// POST chats/resume: its held messages go on.
+void resumeRemoteChat(sync::HttpTransport *transport, const QUrl &base, const QString &token, const QString &path,
+                      std::function<void(const RemoteError &error)> done);
 
 } // namespace brulion::acp

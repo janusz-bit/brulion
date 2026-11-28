@@ -4,7 +4,8 @@
 // texts bounded (an answer kept by its end, a surrogate pair never split, options at most
 // MaxQuestionOptions and none twice) — and the device's requests: the long poll's address and time,
 // a path in the query percent-encoded, the modes of sending, the host's errors (503 app_unavailable,
-// 409 busy) and answers that are not the API's.
+// 409 busy) and answers that are not the API's; the agent's options and held messages of a detail,
+// pictures sent with a message (bounded, their names only file names), chats/option and chats/resume.
 #include "acp/appchats.h"
 
 #include <QJsonArray>
@@ -81,6 +82,8 @@ RemoteChats sample()
     running.messages = 3;
     running.waiting = 1;
     RemoteChat ended;
+    ended.held = true; // (stopped there: its message waits)
+    ended.waiting = 1;
     ended.path = u"AI/2026-11-25 Plan wyjazdu.md"_s;
     ended.name = u"Plan wyjazdu"_s;
     ended.state = u"idle"_s;
@@ -102,6 +105,20 @@ RemoteChats sample()
     detail.question.oldText = u"int a;\n"_s;
     detail.question.newText = u"int a = 0;\n"_s;
     detail.waiting = {u"A potem zrób commit"_s};
+    detail.held = true;
+    RemoteChatOption model;
+    model.id = u"model"_s;
+    model.name = u"Model"_s;
+    model.description = u"Który model odpowiada"_s;
+    model.current = u"opus"_s;
+    model.currentName = u"Opus 5.5"_s;
+    model.choices = {{u"opus"_s, u"Opus 5.5"_s, u"Claude"_s}, {u"sonnet"_s, u"Sonnet 5.5"_s, QString()}};
+    RemoteChatOption fast;
+    fast.id = u"fast"_s;
+    fast.name = u"Szybko"_s;
+    fast.boolean = true;
+    fast.current = u"false"_s;
+    detail.options = {model, fast};
     detail.messages = 3;
     chats.detail = detail;
     return chats;
@@ -318,7 +335,7 @@ private Q_SLOTS:
         QFETCH(QString, expected);
         FakeHost host;
         std::optional<RemoteError> error;
-        sendRemoteChat(&host, Base, u"bat_x"_s, Path, u"A teraz commit, proszę"_s, SendMode(mode),
+        sendRemoteChat(&host, Base, u"bat_x"_s, Path, u"A teraz commit, proszę"_s, SendMode(mode), {},
                        [&](const RemoteError &e) { error = e; });
         FakeHost::Pending p = host.take();
         QCOMPARE(p.request.method, "POST"_ba);
@@ -326,6 +343,7 @@ private Q_SLOTS:
         QCOMPARE(p.body().value(u"path"_s).toString(), Path);
         QCOMPARE(p.body().value(u"text"_s).toString(), u"A teraz commit, proszę"_s);
         QCOMPARE(p.body().value(u"mode"_s).toString(), expected);
+        QVERIFY(!p.body().contains(u"pictures"_s)); // (none: not named)
         p.done(FakeHost::error(409, u"busy"_s, u"Its turn runs"_s));
         QVERIFY(error);
         QCOMPARE(error->kind, RemoteError::Kind::Refused);
@@ -338,7 +356,7 @@ private Q_SLOTS:
         QString path;
         std::optional<RemoteError> error;
         startRemoteThread(&host, Base, u"bat_x"_s, u"brulion"_s, u"Napraw testy"_s, u"acp:claude"_s, QString(),
-                          QString(), [&](const QString &p, const RemoteError &e) {
+                          QString(), {}, [&](const QString &p, const RemoteError &e) {
                               path = p;
                               error = e;
                           });
@@ -351,7 +369,7 @@ private Q_SLOTS:
         QCOMPARE(path, Path);
         QVERIFY(!error->failed());
         // A path that is no conversation's: refused as malformed.
-        startRemoteThread(&host, Base, u"bat_x"_s, u"brulion"_s, u"x"_s, QString(), u"/w"_s, u"t3/x"_s,
+        startRemoteThread(&host, Base, u"bat_x"_s, u"brulion"_s, u"x"_s, QString(), u"/w"_s, u"t3/x"_s, {},
                           [&](const QString &p, const RemoteError &e) {
                               path = p;
                               error = e;
@@ -376,6 +394,127 @@ private Q_SLOTS:
         QCOMPARE(p.body(), (QJsonObject{{u"path"_s, Path}, {u"option"_s, u"Allow once"_s}}));
         p.done(FakeHost::error(409, u"no_question"_s, u"Nothing is asked"_s));
         QCOMPARE(error->code, u"no_question"_s);
+    }
+
+    void optionsBounded()
+    {
+        // An option without an id is none; one of no choices and not boolean is none too; choices
+        // at most MaxOptionChoices, none twice; options at most MaxLiveOptions.
+        QJsonArray choices;
+        for (int i = 0; i < MaxOptionChoices + 5; ++i)
+            choices.append(QJsonObject{{u"value"_s, u"m%1"_s.arg(i % (MaxOptionChoices + 2))}, {u"name"_s, u"Model %1"_s.arg(i)}});
+        choices.append(QJsonObject{{u"name"_s, u"bez wartości"_s}});
+        QJsonArray options;
+        options.append(QJsonObject{{u"name"_s, u"Bez id"_s}, {u"choices"_s, choices}});
+        options.append(QJsonObject{{u"id"_s, u"pusta"_s}, {u"name"_s, u"Pusta"_s}});
+        for (int i = 0; i < MaxLiveOptions + 3; ++i)
+            options.append(QJsonObject{{u"id"_s, u"o%1"_s.arg(i)}, {u"name"_s, u"Opcja\n%1"_s.arg(i)}, {u"choices"_s, choices}});
+        const std::optional<RemoteChatDetail> d = remoteChatDetailFromJson(
+                QJsonObject{{u"path"_s, Path}, {u"state"_s, u"idle"_s}, {u"options"_s, options}});
+        QVERIFY(d);
+        QCOMPARE(d->options.size(), MaxLiveOptions);
+        QCOMPARE(d->options.first().id, u"o0"_s);
+        QCOMPARE(d->options.first().name, u"Opcja 0"_s); // (one line)
+        QCOMPARE(d->options.first().choices.size(), MaxOptionChoices);
+        QVERIFY(!remoteChatOptionFromJson(QJsonObject{{u"id"_s, u"x"_s}}));
+        QVERIFY(remoteChatOptionFromJson(QJsonObject{{u"id"_s, u"x"_s}, {u"boolean"_s, true}}));
+    }
+
+    void pictures_data()
+    {
+        QTest::addColumn<QJsonValue>("value");
+        QTest::addColumn<int>("count"); // -1: refused
+        const QString jpeg = QString::fromLatin1(QByteArray("\xff\xd8\xff zdjęcie").toBase64());
+        const auto one = [](const QString &name, const QJsonValue &data) {
+            return QJsonObject{{u"name"_s, name}, {u"data"_s, data}};
+        };
+        QTest::newRow("none") << QJsonValue() << 0;
+        QTest::newRow("null") << QJsonValue(QJsonValue::Null) << 0;
+        QTest::newRow("empty list") << QJsonValue(QJsonArray()) << 0;
+        QTest::newRow("one") << QJsonValue(QJsonArray{one(u"Paragon żabki.jpg"_s, jpeg)}) << 1;
+        QTest::newRow("png upper case") << QJsonValue(QJsonArray{one(u"EKRAN.PNG"_s, jpeg)}) << 1;
+        QTest::newRow("not a list") << QJsonValue(u"x"_s) << -1;
+        QTest::newRow("no object") << QJsonValue(QJsonArray{u"a.jpg"_s}) << -1;
+        QTest::newRow("no picture") << QJsonValue(QJsonArray{one(u"skrypt.sh"_s, jpeg)}) << -1;
+        QTest::newRow("no name") << QJsonValue(QJsonArray{one(QString(), jpeg)}) << -1;
+        QTest::newRow("no data") << QJsonValue(QJsonArray{one(u"a.jpg"_s, QString())}) << -1;
+        QTest::newRow("data no string") << QJsonValue(QJsonArray{one(u"a.jpg"_s, 7)}) << -1;
+        QTest::newRow("not base64") << QJsonValue(QJsonArray{one(u"a.jpg"_s, u"!!!*"_s)}) << -1;
+        QJsonArray many;
+        for (int i = 0; i <= MaxRemotePictures; ++i)
+            many.append(one(u"a%1.jpg"_s.arg(i), jpeg));
+        QTest::newRow("too many") << QJsonValue(many) << -1;
+        const QString big = QString::fromLatin1(QByteArray(MaxRemotePictureBytes + 1, 'x').toBase64());
+        QTest::newRow("one too large") << QJsonValue(QJsonArray{one(u"a.jpg"_s, big)}) << -1;
+        const QString half = QString::fromLatin1(QByteArray(MaxRemotePictureBytes, 'x').toBase64());
+        QTest::newRow("two at the limit") << QJsonValue(QJsonArray{one(u"a.jpg"_s, half), one(u"b.jpg"_s, half)}) << 2;
+        QTest::newRow("all too large")
+                << QJsonValue(QJsonArray{one(u"a.jpg"_s, half), one(u"b.jpg"_s, half), one(u"c.jpg"_s, jpeg)}) << -1;
+    }
+    void pictures()
+    {
+        QFETCH(QJsonValue, value);
+        QFETCH(int, count);
+        QString why;
+        const std::optional<QList<RemotePicture>> read = remotePicturesFromJson(value, &why);
+        QCOMPARE(read ? int(read->size()) : -1, count);
+        QCOMPARE(why.isEmpty(), count >= 0);
+    }
+
+    void picturesRoundTrip()
+    {
+        const QList<RemotePicture> sent{{u"Paragon żabki.jpg"_s, QByteArray("\xff\xd8\xff\x00\x01", 5)},
+                                        {u"ekran.png"_s, QByteArray("\x89PNG")}};
+        QCOMPARE(remotePicturesFromJson(toJson(sent)), std::optional(sent));
+        // A name's folders are dropped: only its file name is taken.
+        const QJsonArray odd{QJsonObject{{u"name"_s, u"../../.ssh/id.jpg"_s},
+                                         {u"data"_s, QString::fromLatin1(QByteArray("x").toBase64())}},
+                             QJsonObject{{u"name"_s, u"C:\\Users\\a.jpg"_s},
+                                         {u"data"_s, QString::fromLatin1(QByteArray("y").toBase64())}}};
+        const std::optional<QList<RemotePicture>> read = remotePicturesFromJson(odd);
+        QVERIFY(read);
+        QCOMPARE(read->at(0).name, u"id.jpg"_s);
+        QCOMPARE(read->at(1).name, u"a.jpg"_s);
+    }
+
+    void sendWithPictures()
+    {
+        FakeHost host;
+        std::optional<RemoteError> error;
+        const QList<RemotePicture> pictures{{u"zdjęcie.jpg"_s, QByteArray("\xff\xd8")}};
+        sendRemoteChat(&host, Base, u"bat_x"_s, Path, u"Co tu widać?"_s, SendMode::Queue, pictures,
+                       [&](const RemoteError &e) { error = e; });
+        FakeHost::Pending p = host.take();
+        QCOMPARE(remotePicturesFromJson(p.body().value(u"pictures"_s)), std::optional(pictures));
+        QCOMPARE(p.body().value(u"mode"_s).toString(), u"queue"_s);
+        p.done(FakeHost::json(200, QJsonObject{{u"path"_s, Path}}));
+        QVERIFY(!error->failed());
+        startRemoteThread(&host, Base, u"bat_x"_s, u"brulion"_s, u"Jak na zdjęciu"_s, QString(), QString(), QString(),
+                          pictures, [&](const QString &, const RemoteError &e) { error = e; });
+        p = host.take();
+        QCOMPARE(p.endpoint(), u"chats/start"_s);
+        QCOMPARE(remotePicturesFromJson(p.body().value(u"pictures"_s)), std::optional(pictures));
+    }
+
+    void optionAndResume()
+    {
+        FakeHost host;
+        std::optional<RemoteError> error;
+        setRemoteChatOption(&host, Base, u"bat_x"_s, Path, u"model"_s, u"sonnet"_s,
+                            [&](const RemoteError &e) { error = e; });
+        FakeHost::Pending p = host.take();
+        QCOMPARE(p.request.method, "POST"_ba);
+        QCOMPARE(p.endpoint(), u"chats/option"_s);
+        QCOMPARE(p.body(), (QJsonObject{{u"path"_s, Path}, {u"option"_s, u"model"_s}, {u"value"_s, u"sonnet"_s}}));
+        p.done(FakeHost::error(400, u"bad_option"_s, u"No such option"_s));
+        QCOMPARE(error->code, u"bad_option"_s);
+
+        resumeRemoteChat(&host, Base, u"bat_x"_s, Path, [&](const RemoteError &e) { error = e; });
+        p = host.take();
+        QCOMPARE(p.endpoint(), u"chats/resume"_s);
+        QCOMPARE(p.body(), (QJsonObject{{u"path"_s, Path}}));
+        p.done(FakeHost::json(200, QJsonObject{{u"resumed"_s, true}}));
+        QVERIFY(!error->failed());
     }
 };
 

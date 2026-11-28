@@ -1,6 +1,7 @@
 #include "acp/appchats.h"
 
 #include "chat/chat.h"
+#include "util/paths.h"
 
 #include <QJsonArray>
 #include <QJsonValue>
@@ -59,6 +60,14 @@ RemoteError errorOf(const sync::HttpResponse &response, QJsonObject *object = nu
     return remoteErrorOf(response, object);
 }
 
+/// POST `endpoint` with `body`; `done` gets the host's error (none: it was done).
+void post(sync::HttpTransport *transport, const QUrl &base, const QString &token, const QString &endpoint,
+          const QJsonObject &body, const std::function<void(const RemoteError &)> &done)
+{
+    transport->send(remoteRequest("POST", base, endpoint, token, &body),
+                    [done](const sync::HttpResponse &response) { done(errorOf(response)); });
+}
+
 } // namespace
 
 QString keepEnd(const QString &text, qsizetype max, bool *cut)
@@ -103,6 +112,8 @@ QJsonObject toJson(const RemoteChat &c)
     put(u"ended"_s, c.ended);
     if (c.waiting > 0)
         o.insert(u"waiting"_s, c.waiting);
+    if (c.held)
+        o.insert(u"held"_s, true);
     return o;
 }
 
@@ -125,6 +136,7 @@ std::optional<RemoteChat> remoteChatFromJson(const QJsonObject &o)
     c.ended = line(o, "ended"_L1, 40);
     c.messages = count(o, "messages"_L1);
     c.waiting = count(o, "waiting"_L1);
+    c.held = o.value(u"held"_s).toBool() && c.waiting > 0;
     if (c.name.isEmpty())
         c.name = c.path.section(u'/', -1).chopped(3);
     return c;
@@ -173,7 +185,134 @@ QJsonObject toJson(const RemoteChatDetail &d)
     }
     if (!d.waiting.isEmpty())
         o.insert(u"waiting"_s, QJsonArray::fromStringList(d.waiting));
+    if (d.held)
+        o.insert(u"held"_s, true);
+    if (!d.options.isEmpty()) {
+        QJsonArray options;
+        for (const RemoteChatOption &option : d.options)
+            options.append(acp::toJson(option));
+        o.insert(u"options"_s, options);
+    }
     return o;
+}
+
+QJsonObject toJson(const RemoteChatOption &option)
+{
+    QJsonObject o{{u"id"_s, option.id}, {u"name"_s, option.name}, {u"current"_s, option.current}};
+    if (!option.description.isEmpty())
+        o.insert(u"description"_s, option.description);
+    if (!option.currentName.isEmpty())
+        o.insert(u"currentName"_s, option.currentName);
+    if (option.boolean)
+        o.insert(u"boolean"_s, true);
+    if (!option.choices.isEmpty()) {
+        QJsonArray choices;
+        for (const RemoteChatChoice &c : option.choices) {
+            QJsonObject choice{{u"value"_s, c.value}, {u"name"_s, c.name}};
+            if (!c.group.isEmpty())
+                choice.insert(u"group"_s, c.group);
+            choices.append(choice);
+        }
+        o.insert(u"choices"_s, choices);
+    }
+    return o;
+}
+
+std::optional<RemoteChatOption> remoteChatOptionFromJson(const QJsonObject &o)
+{
+    RemoteChatOption option;
+    option.id = line(o, "id"_L1);
+    option.boolean = o.value(u"boolean"_s).toBool();
+    for (const QJsonValue &v : o.value(u"choices"_s).toArray()) {
+        const QJsonObject c = v.toObject();
+        RemoteChatChoice choice{line(c, "value"_L1), line(c, "name"_L1), line(c, "group"_L1)};
+        const bool twice = std::ranges::any_of(option.choices,
+                                               [&choice](const RemoteChatChoice &k) { return k.value == choice.value; });
+        if (choice.value.isEmpty() || twice)
+            continue;
+        if (choice.name.isEmpty())
+            choice.name = choice.value;
+        option.choices.append(choice);
+        if (option.choices.size() >= MaxOptionChoices)
+            break;
+    }
+    if (option.id.isEmpty() || (!option.boolean && option.choices.isEmpty()))
+        return std::nullopt;
+    option.name = line(o, "name"_L1);
+    if (option.name.isEmpty())
+        option.name = option.id;
+    option.description = line(o, "description"_L1, 500);
+    option.current = line(o, "current"_L1);
+    option.currentName = line(o, "currentName"_L1);
+    return option;
+}
+
+QJsonArray toJson(const QList<RemotePicture> &pictures)
+{
+    QJsonArray list;
+    for (const RemotePicture &p : pictures)
+        list.append(QJsonObject{{u"name"_s, p.name}, {u"data"_s, QString::fromLatin1(p.data.toBase64())}});
+    return list;
+}
+
+namespace {
+
+/// One picture of chats/send's `pictures` ("" `*why`: taken).
+std::optional<RemotePicture> pictureFromJson(const QJsonValue &value, QString *why)
+{
+    const QJsonObject o = value.toObject();
+    const QJsonValue data = o.value(u"data"_s);
+    // (Only its file name: whatever folders it names.)
+    const QString name = o.value(u"name"_s).toString().section(u'/', -1).section(u'\\', -1).trimmed();
+    if (!value.isObject() || name.isEmpty() || !paths::isPicturePath(name)) {
+        *why = u"each picture is {name, data}: a picture's file name"_s;
+        return std::nullopt;
+    }
+    // (Base64 of MaxRemotePictureBytes at most: refused before it is decoded.)
+    if (!data.isString() || data.toString().size() > (MaxRemotePictureBytes + 2) / 3 * 4) {
+        *why = u"a picture's data is base64 of %1 bytes at most"_s.arg(MaxRemotePictureBytes);
+        return std::nullopt;
+    }
+    const auto decoded = QByteArray::fromBase64Encoding(data.toString().toLatin1(),
+                                                        QByteArray::AbortOnBase64DecodingErrors);
+    if (!decoded || decoded.decoded.isEmpty() || decoded.decoded.size() > MaxRemotePictureBytes) {
+        *why = u"a picture's data is base64 of its bytes, %1 at most"_s.arg(MaxRemotePictureBytes);
+        return std::nullopt;
+    }
+    return RemotePicture{name, decoded.decoded};
+}
+
+} // namespace
+
+std::optional<QList<RemotePicture>> remotePicturesFromJson(const QJsonValue &value, QString *why)
+{
+    QString reason;
+    QList<RemotePicture> pictures;
+    if (value.isUndefined() || value.isNull())
+        return pictures;
+    if (!value.isArray()) {
+        reason = u"pictures is a list"_s;
+    } else if (value.toArray().size() > MaxRemotePictures) {
+        reason = u"%1 pictures at most"_s.arg(MaxRemotePictures);
+    } else {
+        qsizetype total = 0;
+        for (const QJsonValue &v : value.toArray()) {
+            const std::optional<RemotePicture> picture = pictureFromJson(v, &reason);
+            if (!picture)
+                break;
+            total += picture->data.size();
+            if (total > MaxRemotePicturesBytes) {
+                reason = u"the pictures are %1 bytes at most in all"_s.arg(MaxRemotePicturesBytes);
+                break;
+            }
+            pictures.append(*picture);
+        }
+    }
+    if (reason.isEmpty())
+        return pictures;
+    if (why)
+        *why = reason;
+    return std::nullopt;
 }
 
 std::optional<RemoteChatDetail> remoteChatDetailFromJson(const QJsonObject &o)
@@ -234,6 +373,18 @@ std::optional<RemoteChatDetail> remoteChatDetailFromJson(const QJsonObject &o)
             continue;
         d.waiting.append(message);
         if (d.waiting.size() >= MaxLiveWaiting)
+            break;
+    }
+    d.held = o.value(u"held"_s).toBool() && !d.waiting.isEmpty();
+    for (const QJsonValue &v : o.value(u"options"_s).toArray()) {
+        std::optional<RemoteChatOption> option = remoteChatOptionFromJson(v.toObject());
+        const bool twice = option && std::ranges::any_of(d.options, [&option](const RemoteChatOption &k) {
+                               return k.id == option->id;
+                           });
+        if (!option || twice)
+            continue;
+        d.options.append(std::move(*option));
+        if (d.options.size() >= MaxLiveOptions)
             break;
     }
     return d;
@@ -317,19 +468,22 @@ void fetchRemoteChatPage(sync::HttpTransport *transport, const QUrl &base, const
 }
 
 void sendRemoteChat(sync::HttpTransport *transport, const QUrl &base, const QString &token, const QString &path,
-                    const QString &text, SendMode mode, std::function<void(const RemoteError &)> done)
+                    const QString &text, SendMode mode, const QList<RemotePicture> &pictures,
+                    std::function<void(const RemoteError &)> done)
 {
     QJsonObject body{{u"path"_s, path}, {u"text"_s, text}};
     if (mode == SendMode::Queue)
         body.insert(u"mode"_s, u"queue"_s);
     else if (mode == SendMode::Steer)
         body.insert(u"mode"_s, u"steer"_s);
-    transport->send(remoteRequest("POST", base, u"chats/send"_s, token, &body),
-                    [done](const sync::HttpResponse &response) { done(errorOf(response)); });
+    if (!pictures.isEmpty())
+        body.insert(u"pictures"_s, toJson(pictures));
+    post(transport, base, token, u"chats/send"_s, body, done);
 }
 
 void startRemoteThread(sync::HttpTransport *transport, const QUrl &base, const QString &token, const QString &project,
                        const QString &text, const QString &partner, const QString &worktree, const QString &branch,
+                       const QList<RemotePicture> &pictures,
                        std::function<void(const QString &, const RemoteError &)> done)
 {
     QJsonObject body{{u"project"_s, project}, {u"text"_s, text}};
@@ -339,6 +493,8 @@ void startRemoteThread(sync::HttpTransport *transport, const QUrl &base, const Q
         body.insert(u"worktree"_s, worktree);
     if (!branch.isEmpty())
         body.insert(u"branch"_s, branch);
+    if (!pictures.isEmpty())
+        body.insert(u"pictures"_s, toJson(pictures));
     transport->send(remoteRequest("POST", base, u"chats/start"_s, token, &body),
                     [done](const sync::HttpResponse &response) {
                         QJsonObject o;
@@ -351,20 +507,36 @@ void startRemoteThread(sync::HttpTransport *transport, const QUrl &base, const Q
                     });
 }
 
+
 void stopRemoteChat(sync::HttpTransport *transport, const QUrl &base, const QString &token, const QString &path,
                     std::function<void(const RemoteError &)> done)
 {
-    const QJsonObject body{{u"path"_s, path}};
-    transport->send(remoteRequest("POST", base, u"chats/stop"_s, token, &body),
-                    [done](const sync::HttpResponse &response) { done(errorOf(response)); });
+    post(transport, base, token, u"chats/stop"_s, {{u"path"_s, path}}, done);
 }
 
 void answerRemoteChat(sync::HttpTransport *transport, const QUrl &base, const QString &token, const QString &path,
                       const QString &option, std::function<void(const RemoteError &)> done)
 {
-    const QJsonObject body{{u"path"_s, path}, {u"option"_s, option}};
-    transport->send(remoteRequest("POST", base, u"chats/answer"_s, token, &body),
-                    [done](const sync::HttpResponse &response) { done(errorOf(response)); });
+    post(transport, base, token, u"chats/answer"_s, {{u"path"_s, path}, {u"option"_s, option}}, done);
+}
+
+void setRemoteChatOption(sync::HttpTransport *transport, const QUrl &base, const QString &token, const QString &path,
+                         const QString &option, const QString &value, std::function<void(const RemoteError &)> done)
+{
+    post(transport, base, token, u"chats/option"_s, {{u"path"_s, path}, {u"option"_s, option}, {u"value"_s, value}},
+         done);
+}
+
+void postRemoteChat(sync::HttpTransport *transport, const QUrl &base, const QString &token, const QString &endpoint,
+                    const QJsonObject &body, std::function<void(const RemoteError &)> done)
+{
+    post(transport, base, token, endpoint, body, done);
+}
+
+void resumeRemoteChat(sync::HttpTransport *transport, const QUrl &base, const QString &token, const QString &path,
+                      std::function<void(const RemoteError &)> done)
+{
+    post(transport, base, token, u"chats/resume"_s, {{u"path"_s, path}}, done);
 }
 
 } // namespace brulion::acp
