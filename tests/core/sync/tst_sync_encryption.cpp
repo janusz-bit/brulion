@@ -5,6 +5,9 @@
 // same formats over OpenSSL (Python's `cryptography`) before they were written here.
 #include "sync/encryption.h"
 
+#include "crypto/aead.h"
+#include "crypto/hash.h"
+
 #include <QCryptographicHash>
 #include <QRandomGenerator>
 #include <QTest>
@@ -322,6 +325,30 @@ private Q_SLOTS:
         QVERIFY(decryptor.add(QByteArrayView(sealed).first(HeaderSize + Chunk + TagSize + 1)) == std::nullopt);
         QVERIFY(!decryptor.add(QByteArrayView(sealed).sliced(HeaderSize + Chunk + TagSize + 1)));
         QVERIFY(!decryptor.finish());
+    }
+
+    void anEmptyChunkAfterAFullOneIsRefused()
+    {
+        // Made by hand from the format (docs/SYNC-ENCRYPTION.md): a full first chunk that is not
+        // the last, then an empty last one — what an encoder that does not hold a full chunk back
+        // would write; only an empty file may end in an empty chunk.
+        const Keys keys = Keys::fromNotebookKey(notebookKey());
+        const QByteArray header = QByteArray("BRLN\x01\x10\x00\x00", 8) + QByteArray(24, '\x07');
+        const crypto::SecureBytes fileKey =
+                crypto::hkdf(crypto::Hash::Sha256, keys.content.view(), header.sliced(8), "brulion-sync file v1", 32);
+        auto nonce = [](int index, bool last) {
+            QByteArray n(12, '\0');
+            n[10] = char(index);
+            n[11] = last ? 1 : 0;
+            return n;
+        };
+        const QByteArray plain = pattern(Chunk, 5);
+        const QByteArray file = header + crypto::aesgcm::seal(fileKey.view(), nonce(0, false), header, plain)
+                                + crypto::aesgcm::seal(fileKey.view(), nonce(1, true), header, {});
+        QVERIFY(!open(keys, file));
+        // The same chunk as the last one is the file, as Encryptor writes it.
+        const QByteArray one = header + crypto::aesgcm::seal(fileKey.view(), nonce(0, true), header, plain);
+        QCOMPARE(open(keys, one)->toByteArray(), plain);
     }
 };
 

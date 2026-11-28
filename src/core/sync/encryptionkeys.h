@@ -47,6 +47,8 @@ struct Unlocked {
     UnlockError error = UnlockError::None;
 };
 
+/// PBKDF2's rounds a key file may have: 1 to MaxIterations.
+bool isIterationCountAcceptable(qint64 iterations);
 /// The password is long enough for a key file (MinPasswordLength).
 bool isPasswordAcceptable(QStringView password);
 /// A new notebook key and its key file; nullopt for a password that is not acceptable.

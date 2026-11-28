@@ -117,6 +117,11 @@ QJsonObject passwordSection(QStringView password, const crypto::SecureBytes &not
 
 } // namespace
 
+bool isIterationCountAcceptable(qint64 iterations)
+{
+    return iterations >= 1 && iterations <= MaxIterations;
+}
+
 bool isPasswordAcceptable(QStringView password)
 {
     return password.trimmed().size() >= MinPasswordLength;
@@ -124,7 +129,7 @@ bool isPasswordAcceptable(QStringView password)
 
 std::optional<NewNotebook> createKeyFile(QStringView password, const crypto::RandomSource &random, quint32 iterations)
 {
-    if (!isPasswordAcceptable(password) || iterations == 0 || iterations > MaxIterations)
+    if (!isPasswordAcceptable(password) || !isIterationCountAcceptable(iterations))
         return std::nullopt;
     crypto::SecureBytes notebookKey(crypto::randomBytes(KeySize, random));
     const crypto::SecureBytes recovery(crypto::randomBytes(KeySize, random));
@@ -144,7 +149,7 @@ Unlocked unlockWithPassword(QByteArrayView keyFile, QStringView password)
     const QJsonObject section = o->value(u"password"_s).toObject();
     const qint64 iterations = section.value(u"iterations"_s).toInteger();
     const std::optional<QByteArray> salt = bytesOf(section, u"salt"_s, 0);
-    if (section.value(u"kdf"_s).toString() != u"pbkdf2-sha512" || iterations < 1 || iterations > MaxIterations || !salt)
+    if (section.value(u"kdf"_s).toString() != u"pbkdf2-sha512" || !isIterationCountAcceptable(iterations) || !salt)
         return {{}, UnlockError::Malformed};
     return openKey(passwordKey(password, *salt, quint32(iterations)), section, PasswordAad);
 }
@@ -170,7 +175,7 @@ std::optional<QByteArray> changePassword(QByteArrayView keyFile, const crypto::S
 {
     UnlockError error = UnlockError::None;
     std::optional<QJsonObject> o = parseKeyFile(keyFile, &error);
-    if (!o || !isPasswordAcceptable(newPassword) || iterations == 0 || iterations > MaxIterations
+    if (!o || !isPasswordAcceptable(newPassword) || !isIterationCountAcceptable(iterations)
         || o->value(u"keyId"_s).toString() != keyIdFor(notebookKey))
         return std::nullopt;
     o->insert(u"password"_s, passwordSection(newPassword, notebookKey, random, iterations));

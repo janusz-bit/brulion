@@ -64,6 +64,7 @@ public:
         note();
         return m_inner.readInto(path, maxBytes, [this, &sink](QByteArrayView piece) {
             largestPiece = std::max(largestPiece.load(), qint64(piece.size()));
+            ++piecesRead;
             return sink(piece);
         });
     }
@@ -110,6 +111,7 @@ public:
     bool streaming = true; ///< false: as a storage that reads and writes files whole
     std::atomic<qint64> largestWhole{0}; ///< the largest file read or written whole
     std::atomic<qint64> largestPiece{0}; ///< the largest piece read or written
+    std::atomic<int> piecesRead{0};
     int moves = 0;
     std::atomic<int> calls{0};
     std::atomic<int> offThread{0};
@@ -829,6 +831,7 @@ private Q_SLOTS:
         QTest::qWait(50);
         QCOMPARE(pieces, handed); // nothing after the transport has gone
         QCOMPARE(answered, 0);
+        QVERIFY2(storage->piecesRead.load() <= 2, qPrintable(QString::number(storage->piecesRead.load()))); // (the worker stopped: not 16)
     }
 
     void aStorageThatDoesNotStreamAnswersPiecesToo()
@@ -852,6 +855,13 @@ private Q_SLOTS:
         QCOMPARE(received, photo);
         QCOMPARE(largest, HttpRequest::StreamPieceBytes);
         QCOMPARE(storage.largestWhole.load(), photo.size());
+        // A file of whole pieces: one call per piece, no empty one after them.
+        QVERIFY(writeFileBehind(tmp.path(), u"równo.bin"_s, pattern(2 * HttpRequest::StreamPieceBytes, 3)));
+        int calls = 0;
+        HttpRequest even = request("GET", u"równo.bin"_s);
+        even.bodySink = [&calls](QByteArrayView piece) { ++calls; return !piece.isEmpty(); };
+        QCOMPARE(ask(storage, even).status, 200);
+        QCOMPARE(calls, 2);
         r.bodySink = [](QByteArrayView) { return false; };
         QVERIFY(!ask(storage, r).networkError.isEmpty());
 

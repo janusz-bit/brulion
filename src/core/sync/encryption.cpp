@@ -153,8 +153,7 @@ QByteArray Encryptor::add(QByteArrayView plain)
 QByteArray Encryptor::finish()
 {
     const QByteArray last = sealChunk(m_pending.view().first(m_pendingSize), true);
-    m_pending.clear();
-    m_pendingSize = 0;
+    m_pending.clear(); // (wiped: an Encryptor is finished once)
     return last;
 }
 
@@ -166,8 +165,8 @@ Decryptor::Decryptor(const Keys &keys)
 bool Decryptor::readHeader()
 {
     const QByteArrayView header = QByteArrayView(m_buffer).first(HeaderSize);
-    if (header.first(4) != QByteArrayView(Magic, 4) || header.at(4) != Version || header.at(5) != ChunkLog2
-        || header.at(6) != 0 || header.at(7) != 0)
+    // (The two reserved bytes need no check: the header is every chunk's associated data.)
+    if (header.first(4) != QByteArrayView(Magic, 4) || header.at(4) != Version || header.at(5) != ChunkLog2)
         return false;
     m_header = header.toByteArray();
     m_key = fileKey(m_content, m_header);
@@ -222,7 +221,6 @@ std::optional<QByteArray> Decryptor::finish()
         return std::nullopt;
     }
     const std::optional<QByteArray> last = openChunk(m_buffer, true);
-    m_buffer.clear();
     m_failed = true; // (nothing may follow the last chunk)
     return last;
 }

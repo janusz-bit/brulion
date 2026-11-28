@@ -8,10 +8,13 @@
 #include "synctest.h"
 
 #include "sync/encryptingtransport.h"
+#include "sync/davxml.h"
 #include "sync/encryption.h"
 
 #include <QBuffer>
 #include <QTest>
+
+#include <utility>
 
 using namespace synctest;
 namespace encryption = brulion::sync::encryption;
@@ -101,6 +104,52 @@ bool serverHolds(const FakeWebDavServer &server, const QByteArray &bytes)
 QString serverPathOf(const QString &plain, const QByteArray &key = notebookKey())
 {
     return kFolder + u'/' + *encryption::encryptPath(encryption::Keys::fromNotebookKey(key), plain);
+}
+
+/// An inner transport that answers every request with `answer` (after recording it).
+class Canned : public brulion::sync::HttpTransport {
+public:
+    HttpResponse answer;
+    QList<HttpRequest> sent;
+    bool streaming = false;
+    void send(const HttpRequest &request, brulion::sync::HttpCallback done) override
+    {
+        sent.append(request);
+        if (request.bodySink && answer.status >= 200 && answer.status < 300) {
+            HttpResponse r = answer;
+            const QByteArray body = std::exchange(r.body, {});
+            for (qsizetype at = 0; at < body.size(); at += 1000) {
+                if (!request.bodySink(QByteArrayView(body).sliced(at, std::min<qsizetype>(1000, body.size() - at)))) {
+                    HttpResponse stopped;
+                    stopped.networkError = u"stopped by the sink"_s;
+                    done(stopped);
+                    return;
+                }
+            }
+            done(r);
+            return;
+        }
+        done(answer);
+    }
+    bool streams() const override { return streaming; }
+};
+
+const QString kBase = u"https://chmura.example.pl/remote.php/dav/files/jan/Notatki"_s;
+
+HttpRequest requestFor(const QByteArray &method, const QString &path)
+{
+    HttpRequest r;
+    r.method = method;
+    r.url = QUrl(kBase + u'/' + path);
+    return r;
+}
+
+/// `request` sent through `transport`, its answer (synchronous inner transports only).
+HttpResponse ask(brulion::sync::EncryptingTransport &transport, const HttpRequest &request)
+{
+    HttpResponse answer;
+    transport.send(request, [&answer](const HttpResponse &r) { answer = r; });
+    return answer;
 }
 
 } // namespace
@@ -221,6 +270,7 @@ private Q_SLOTS:
         QCOMPARE(report.errors.size(), 1);
         QCOMPARE(report.errors.first().path, u"a.md"_s);
         QVERIFY2(report.errors.first().message.contains(u"cannot be decrypted"_s), qPrintable(report.errors.first().message));
+        QCOMPARE(report.errors.first().code, u"http"_s); // (one file's error: never "locked", never the network)
         QCOMPARE(b.device.files().keys(), QStringList{u"b.md"_s});
         // … and A, which has the file, keeps its own version.
         const SyncReport again = a.sync();
@@ -240,6 +290,7 @@ private Q_SLOTS:
         QCOMPARE(report.errors.size(), 1);
         QCOMPARE(report.errors.first().path, longName);
         QVERIFY2(report.errors.first().message.contains(u"too long to encrypt"_s), qPrintable(report.errors.first().message));
+        QCOMPARE(report.errors.first().code, u"http"_s);
     }
 
     void anotherKeySeesAnEmptyFolder()
@@ -300,6 +351,7 @@ private Q_SLOTS:
         QIODevice &device = *sent->bodyDevice;
         QVERIFY(device.isSequential());
         QCOMPARE(device.size(), encryption::encryptedSize(film.size())); // the Content-Length
+        QCOMPARE(device.bytesAvailable(), qint64(encryption::HeaderSize)); // the header is ready at once
         QByteArray body;
         while (!device.atEnd()) {
             const QByteArray piece = device.read(1000);
@@ -354,6 +406,99 @@ private Q_SLOTS:
         QCOMPARE(report.errors.first().path, u"film.mov"_s);
         QCOMPARE(b.device.files().keys(), QStringList{u"notatka.md"_s});
         QCOMPARE(b.device.trash(), QStringList()); // (no partial file anywhere)
+    }
+
+    void aListingIsRewritten()
+    {
+        const encryption::Keys keys = encryption::Keys::fromNotebookKey(notebookKey());
+        const QString base = u"/remote.php/dav/files/jan/Notatki"_s;
+        auto resource = [](const QString &href, bool dir, qint64 size) {
+            brulion::sync::DavResource r;
+            r.href = href;
+            r.isCollection = dir;
+            r.size = size;
+            r.etag = u"e1"_s;
+            return r;
+        };
+        Canned inner;
+        inner.answer.status = 207;
+        inner.answer.body = brulion::sync::writeMultistatus({
+                resource(base + u"/"_s, true, 0),
+                resource(base + u"/"_s + *encryption::encryptName(keys, u"Łódź"_s) + u"/"_s, true, 0),
+                resource(base + u"/"_s + *encryption::encryptName(keys, u"a.md"_s), false, encryption::encryptedSize(5)),
+                resource(base + u"/"_s + *encryption::encryptName(keys, u"zły rozmiar.md"_s), false, 47), // no file has it
+                resource(base + u"/README.txt"_s, false, 10),
+                resource(u"/remote.php/dav/files/jan/Inny/x"_s, false, 49),                              // outside
+        });
+        brulion::sync::EncryptingTransport transport(&inner, kBase, encryption::Keys::fromNotebookKey(notebookKey()));
+        const HttpResponse answer = ask(transport, requestFor("PROPFIND", QString()));
+        QCOMPARE(answer.status, 207);
+        const brulion::sync::MultistatusResult listed = brulion::sync::parseMultistatus(answer.body);
+        QVERIFY(listed.ok());
+        QStringList hrefs;
+        for (const brulion::sync::DavResource &r : listed.resources)
+            hrefs.append(r.href + u' ' + QString::number(r.size));
+        QCOMPARE(hrefs, (QStringList{base + u"/ 0"_s, base + u"/%C5%81%C3%B3d%C5%BA/ 0"_s, base + u"/a.md 5"_s}));
+        // Answers that are not listings go back as they came.
+        inner.answer = {};
+        inner.answer.status = 404;
+        QCOMPARE(ask(transport, requestFor("PROPFIND", u"Brak"_s)).status, 404);
+        inner.answer.status = 207;
+        inner.answer.body = "<html>login</html>";
+        QCOMPARE(ask(transport, requestFor("PROPFIND", QString())).body, QByteArray("<html>login</html>"));
+    }
+
+    void requestLimitsAndRefusals()
+    {
+        Canned inner;
+        inner.answer.status = 201;
+        brulion::sync::EncryptingTransport transport(&inner, kBase, encryption::Keys::fromNotebookKey(notebookKey()));
+        HttpResponse refusal;
+        HttpRequest get = requestFor("GET", u"a.md"_s);
+        get.maxBodyBytes = 1000;
+        QCOMPARE(transport.encrypted(get, &refusal)->maxBodyBytes, encryption::encryptedSize(1000));
+        HttpRequest list = requestFor("PROPFIND", QString());
+        list.maxBodyBytes = 1000;
+        QCOMPARE(transport.encrypted(list, &refusal)->maxBodyBytes, 3000);
+        // A MOVE whose destination cannot be encrypted goes nowhere.
+        HttpRequest move = requestFor("MOVE", u"a.md"_s);
+        move.headers = {{"Destination", (kBase + u'/' + QString(150, u'x')).toUtf8()}};
+        const HttpResponse moved = ask(transport, move);
+        QCOMPARE(moved.status, 400);
+        QVERIFY(moved.reason.contains(u"too long"_s));
+        QVERIFY(inner.sent.isEmpty());
+        // A DELETE goes with its path encrypted, its answer as it came.
+        QCOMPARE(ask(transport, requestFor("DELETE", u"a.md"_s)).status, 201);
+        QVERIFY(!inner.sent.last().url.toString().contains(u"a.md"_s));
+        // No transport behind it: a network error.
+        brulion::sync::EncryptingTransport alone(nullptr, kBase, encryption::Keys::fromNotebookKey(notebookKey()));
+        QVERIFY(!ask(alone, requestFor("GET", u"a.md"_s)).networkError.isEmpty());
+    }
+
+    void streamedDownloadsRefusedOrFailed()
+    {
+        const encryption::Keys keys = encryption::Keys::fromNotebookKey(notebookKey());
+        Canned inner;
+        inner.streaming = true;
+        inner.answer.status = 200;
+        inner.answer.body = encryption::seal(keys, pattern(5000, 9));
+        brulion::sync::EncryptingTransport transport(&inner, kBase, encryption::Keys::fromNotebookKey(notebookKey()));
+        QVERIFY(transport.streams());
+        // The client's sink refuses a piece: the download stops.
+        HttpRequest get = requestFor("GET", u"a.md"_s);
+        int pieces = 0;
+        get.bodySink = [&pieces](QByteArrayView) { return ++pieces < 1; };
+        QVERIFY(!ask(transport, get).networkError.isEmpty());
+        // A failed answer goes back as it came, nothing handed to the sink.
+        inner.answer = {};
+        inner.answer.status = 500;
+        QByteArray received;
+        get.bodySink = [&received](QByteArrayView piece) { received.append(piece); return true; };
+        QCOMPARE(ask(transport, get).status, 500);
+        QVERIFY(received.isEmpty());
+        // A whole download of a failed answer, too.
+        get.bodySink = nullptr;
+        QCOMPARE(ask(transport, get).status, 500);
     }
 };
 

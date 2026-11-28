@@ -17,6 +17,7 @@
 #include <optional>
 
 class QFile;
+class QIODevice;
 class QSaveFile;
 
 namespace brulion::sync {
@@ -72,6 +73,11 @@ using PieceSink = std::function<bool(QByteArrayView piece)>;
 /// The next piece of a file to write (FolderStorage::writeFrom): an empty one at its end,
 /// std::nullopt when the source failed (then nothing is written).
 using PieceSource = std::function<std::optional<QByteArray>()>;
+
+/// `in` (an open file) handed to `sink` in pieces of HttpRequest::StreamPieceBytes until its end:
+/// Failed (naming `file`) when it cannot be read, grows past `maxBytes` or a piece is refused.
+/// What readInto() does with a file of the storage once it is open.
+FolderError readPieces(QIODevice &in, const QString &file, qint64 maxBytes, const PieceSink &sink);
 
 /// The folder, reached by relative paths: "Dziennik/2026-11-22.md", "" for the folder itself;
 /// '/' between names, never "." or ".." (FolderDavTransport refuses them before asking).

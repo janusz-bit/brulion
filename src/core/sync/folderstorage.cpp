@@ -156,22 +156,27 @@ FolderReadResult LocalFolderStorage::read(const QString &path, qint64 maxBytes)
     return {std::move(data), {}};
 }
 
+FolderError readPieces(QIODevice &in, const QString &file, qint64 maxBytes, const PieceSink &sink)
+{
+    QByteArray piece(HttpRequest::StreamPieceBytes, Qt::Uninitialized);
+    for (qint64 total = 0;;) {
+        const qint64 n = in.read(piece.data(), piece.size());
+        if (n <= 0)
+            return n < 0 ? failed(u"Read"_s, file, in.errorString()) : FolderError();
+        total += n;
+        if (total > maxBytes)
+            return failed(u"Read"_s, file, u"it grew past %1 bytes"_s.arg(maxBytes));
+        if (!sink(QByteArrayView(piece.constData(), n)))
+            return failed(u"Read"_s, file, u"the piece read was not kept"_s);
+    }
+}
+
 FolderError LocalFolderStorage::readInto(const QString &path, qint64 maxBytes, const PieceSink &sink)
 {
     QFile f;
     if (const FolderError error = openToRead(path, maxBytes, f); error.isError())
         return error;
-    QByteArray piece(HttpRequest::StreamPieceBytes, Qt::Uninitialized);
-    for (qint64 total = 0;;) {
-        const qint64 n = f.read(piece.data(), piece.size());
-        if (n <= 0)
-            return n < 0 ? failed(u"Read"_s, f.fileName(), f.errorString()) : FolderError();
-        total += n;
-        if (total > maxBytes)
-            return failed(u"Read"_s, f.fileName(), u"it grew past %1 bytes"_s.arg(maxBytes));
-        if (!sink(QByteArrayView(piece.constData(), n)))
-            return failed(u"Read"_s, f.fileName(), u"the piece read was not kept"_s);
-    }
+    return readPieces(f, f.fileName(), maxBytes, sink);
 }
 
 FolderStatResult LocalFolderStorage::write(const QString &path, const QByteArray &data)
@@ -203,10 +208,8 @@ FolderStatResult LocalFolderStorage::writeFrom(const QString &path, const PieceS
     if (const FolderError error = openToWrite(path, f); error.isError())
         return {std::nullopt, error};
     for (std::optional<QByteArray> piece = source(); !piece || !piece->isEmpty(); piece = source()) {
-        if (!piece) {
-            f.cancelWriting();
+        if (!piece) // (never committed: QSaveFile drops what it wrote, the file stays as it was)
             return {std::nullopt, failed(u"Write"_s, f.fileName(), u"its body could not be read"_s)};
-        }
         if (f.write(*piece) != piece->size())
             return {std::nullopt, failed(u"Write"_s, f.fileName(), f.errorString())};
     }

@@ -185,6 +185,28 @@ private Q_SLOTS:
         QFETCH(int, error);
         QCOMPARE(int(unlockWithPassword(json, kPassword).error), error);
     }
+
+    void roundsAKeyFileMayHave()
+    {
+        QVERIFY(!isIterationCountAcceptable(0));
+        QVERIFY(isIterationCountAcceptable(1));
+        QVERIFY(isIterationCountAcceptable(MaxIterations));
+        QVERIFY(!isIterationCountAcceptable(qint64(MaxIterations) + 1));
+        QVERIFY(!createKeyFile(kPassword, {}, MaxIterations + 1));
+        QVERIFY(!createKeyFile(kPassword, {}, 0));
+    }
+
+    void recoveryOfMalformedFiles()
+    {
+        const std::optional<NewNotebook> made = createKeyFile(kPassword, {}, Fast);
+        QVERIFY(made);
+        QCOMPARE(unlockWithRecoveryKey("{", made->recoveryKey).error, UnlockError::Malformed);
+        QJsonObject o = parse(made->keyFile);
+        QJsonObject recovery = o.value(u"recovery"_s).toObject();
+        recovery.insert(u"kdf"_s, u"md5"_s);
+        o.insert(u"recovery"_s, recovery);
+        QCOMPARE(unlockWithRecoveryKey(write(o), made->recoveryKey).error, UnlockError::Malformed);
+    }
 };
 
 QTEST_GUILESS_MAIN(TestSyncEncryptionKeys)

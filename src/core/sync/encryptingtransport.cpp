@@ -42,7 +42,10 @@ bool isSuccess(const HttpResponse &response)
 class EncryptingDevice : public QIODevice {
 public:
     EncryptingDevice(std::shared_ptr<QIODevice> plain, const encryption::Keys &keys)
-        : m_plain(std::move(plain)), m_encryptor(keys), m_size(encryption::encryptedSize(m_plain->size()))
+        : m_plain(std::move(plain))
+        , m_encryptor(keys)
+        , m_plainSize(m_plain->size())
+        , m_size(encryption::encryptedSize(m_plainSize))
     {
         m_buffer = m_encryptor.header();
         open(QIODevice::ReadOnly);
@@ -71,13 +74,15 @@ private:
         m_buffer.clear();
         m_at = 0;
         while (m_buffer.isEmpty() && !m_finished) {
-            const QByteArray plain = m_plain->read(HttpRequest::StreamPieceBytes);
+            const QByteArray plain = m_plain->read(std::min(HttpRequest::StreamPieceBytes, m_plainSize - m_read));
             if (plain.isEmpty()) {
-                // (A file shorter than its size makes a body shorter than the Content-Length.)
-                m_failed = m_plain->bytesAvailable() > 0 || (!m_plain->isSequential() && !m_plain->atEnd());
+                // A file that shrank since its size was taken: a read error, never a short body
+                // sent as if it were all of it (the Content-Length is the size taken).
+                m_failed = m_read != m_plainSize;
                 m_buffer = m_encryptor.finish();
                 m_finished = true;
             } else {
+                m_read += plain.size();
                 m_buffer = m_encryptor.add(plain);
             }
         }
@@ -86,6 +91,8 @@ private:
 
     std::shared_ptr<QIODevice> m_plain;
     encryption::Encryptor m_encryptor;
+    qint64 m_plainSize; ///< the plain file's size when the upload began (its Content-Length's base)
+    qint64 m_read = 0;
     qint64 m_size;
     QByteArray m_buffer;
     qint64 m_at = 0;

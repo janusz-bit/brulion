@@ -291,6 +291,7 @@ void TestCrypto::hkdfVectors()
 void TestCrypto::hkdfEdges()
 {
     QVERIFY(hkdf(Hash::Sha256, "k", {}, {}, 0).isEmpty());
+    QCOMPARE(hkdf(Hash::Sha256, "k", {}, {}, 1).size(), 1);
     QCOMPARE(hkdf(Hash::Sha256, "k", {}, {}, 255 * 32).size(), 255 * 32);
     QVERIFY(hkdf(Hash::Sha256, "k", {}, {}, 255 * 32 + 1).isEmpty()); // (RFC 5869: at most 255 blocks)
     QCOMPARE(hkdf(Hash::Sha512, "k", {}, {}, 255 * 64).size(), 255 * 64);
@@ -346,6 +347,11 @@ void TestCrypto::sivVectors_data()
     QTest::newRow("aes-256-siv: a Polish name") << k64 << QList<QByteArray>{} << "Zażółć gęślą jaźń.md"_ba
                                                 << hex("062cb74d90ba1d388c5c52d4aa4a2891158767ea18459e8cb47c3d13a3ba90633"
                                                        "57c87e4d528411964855b314d");
+    QTest::newRow("aes-256-siv: a block exactly (xorend)") << k64 << QList<QByteArray>{"ad"_ba} << "0123456789abcdef"_ba
+                                                           << hex("3e7f0b1fa39851234c9a5b5cc27787563b13557be0263ceafd2aade26b9c4318");
+    QTest::newRow("aes-256-siv: a byte short of a block (padded)")
+            << k64 << QList<QByteArray>{"ad"_ba} << "0123456789abcde"_ba
+            << hex("4250554a6e90ced7d2612c721e843df71161389b082183bc9b294e3232d200");
     QTest::newRow("aes-256-siv: one byte") << k64 << QList<QByteArray>{} << "x"_ba
                                            << hex("315fc8b42454cb95e5a7eb7a7da0cb02de");
 }

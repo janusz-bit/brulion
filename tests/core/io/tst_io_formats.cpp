@@ -462,6 +462,8 @@ private Q_SLOTS:
             const QList<FileEntry> read = readTarFile(saved(work, u"zły.tar"_s, bad), &warnings, o);
             QCOMPARE(iotest::entryPaths(read).first(), u"a.md"_s);
             QCOMPARE(warnings.size(), 1);
+            QVERIFY2(warnings.first().contains(u"truncated"_s) || warnings.first().contains(u"damaged"_s),
+                     qPrintable(warnings.first())); // (never taken for a full disk)
             // (Only what was read whole stays staged: the cut film is gone.)
             const qsizetype staged = std::ranges::count_if(read, [](const FileEntry &e) { return e.onDisk(); });
             QCOMPARE(QDir(staging2.path()).entryList(QDir::Files).size(), staged);
@@ -469,6 +471,47 @@ private Q_SLOTS:
         warnings.clear();
         QVERIFY(readTarFile(work.filePath(u"brak.tar"_s), &warnings).isEmpty());
         QCOMPARE(warnings.size(), 1);
+    }
+
+    void tarFileBoundaries()
+    {
+        QTemporaryDir work;
+        QTemporaryDir staging;
+        // No end blocks, an empty file last: its header ends the file and is still read.
+        QByteArray tar = iotest::tarArchive({{"a.md", "aaa", '0', {}}, {"pusty.md", {}, '0', {}}});
+        tar.chop(1024);
+        QCOMPARE(iotest::entryPaths(readTarFile(saved(work, u"bez-końca.tar"_s, tar))),
+                 (QStringList{u"a.md"_s, u"pusty.md"_s}));
+        // The limits are inclusive: a total of exactly maxTotalSize is read, one byte more is not.
+        const QByteArray three = iotest::tarArchive({{"1.md", QByteArray(600, '1'), '0', {}},
+                                                     {"2.md", QByteArray(400, '2'), '0', {}},
+                                                     {"3.md", QByteArray(10, '3'), '0', {}}});
+        const QString file = saved(work, u"trzy.tar"_s, three);
+        ZipReadOptions limits;
+        limits.maxTotalSize = 1000;
+        QStringList warnings;
+        QCOMPARE(iotest::entryPaths(readTarFile(file, &warnings, limits)), (QStringList{u"1.md"_s, u"2.md"_s}));
+        QCOMPARE(warnings.size(), 1);
+        limits.maxTotalSize = 1010;
+        QCOMPARE(readTarFile(file, nullptr, limits).size(), 3);
+        limits.maxEntries = 2;
+        warnings.clear();
+        QCOMPARE(readTarFile(file, &warnings, limits).size(), 2);
+        QCOMPARE(warnings.size(), 1);
+        // Staged only above stageAbove; a last piece of one byte is copied too.
+        const QByteArray film = pattern(256 * 1024 + 1, 9);
+        const QString films = saved(work, u"filmy.tar"_s, iotest::tarArchive({{"równo.mp4", QByteArray(100, 'r'), '0', {}},
+                                                                               {"film.mp4", film, '0', {}}}));
+        ZipReadOptions staged;
+        staged.stagingFolder = staging.path();
+        staged.stageAbove = 100;
+        warnings.clear();
+        const QList<FileEntry> read = readTarFile(films, &warnings, staged);
+        QVERIFY2(warnings.isEmpty(), qPrintable(warnings.join(u'\n')));
+        QCOMPARE(read.size(), 2);
+        QVERIFY(!read.at(0).onDisk()); // exactly stageAbove: in memory
+        QVERIFY(read.at(1).onDisk());
+        QCOMPARE(bytesOf(read.at(1)), film);
     }
 
     void tarMalformed()
