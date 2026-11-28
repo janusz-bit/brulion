@@ -3787,6 +3787,24 @@ formula's layouts are larger than a paragraph's). The text page's view keeps not
 over passes: +263 B per block in the second pass are a warm-up (a third pass: +2 B), the model's
 caches after a first pass 6.5 kB per block.
 
+Measured again on 2026-11-28 with the machine nearly quiet (load 4–9: no other build running; three
+runs, `taskset -c 0-11` on the performance cores), after the M2 closure (the journal stream's drags
+and drops, table tooltips, link previews, PDF tiles): the times above were upper bounds indeed —
+the model and the view take what they took, the frames a third of it.
+
+| | three runs |
+|---|---:|
+| the model, per block | 2.25–2.28 kB |
+| the view opened | +0.92 MB |
+| after the wheel through the whole page, per block | +5.2–5.5 kB |
+| a second and a third pass, per block | +0–2 B |
+| a scroll step: the frame's scene, median / p95 / max (second pass) | 0.38 / 0.42–0.44 / 0.58–0.61 ms |
+| … with the CPU renderer at 1280 × 800 | 0.83–0.85 / 0.90–0.97 / 1.01–1.30 ms |
+| … the first pass | 0.99 / 1.08–1.16 / 1.16–1.38 ms |
+| a keystroke in block 500 | 0.41 / 0.56–0.57 / 0.85–0.88 ms |
+| every kind of block, 1 000 rows: foreign rows; per row after a pass | 0; 16.8 kB |
+| … a scroll step with the CPU renderer | 0.80–0.81 / 0.90–0.93 / 0.99–1.07 ms |
+
 ### Atrament's journal stream: a long day laid out where it shows (2026-11-28)
 
 `tests/bench/bench_atrament_journal` (Release, Clang, the machine shared with two other builds —
