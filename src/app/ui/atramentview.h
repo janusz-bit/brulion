@@ -119,9 +119,9 @@ class AtramentView : public brulion::atrament::AtramentItem {
     Q_PROPERTY(QString view READ view WRITE setView NOTIFY viewChanged FINAL)
     // "page": the editor's BlockListModel (a PageController's `blocks`), set before the view.
     Q_PROPERTY(QObject *pageModel READ pageModel WRITE setPageModel NOTIFY pageModelChanged FINAL)
-    // A view other than the editor's ("tasks": a TaskListModel; docs/ATRAMENT.md "The views in
-    // Atrament (M3)"), set before the view is shown; its look ("tasks": TasksLook's fields by name —
-    // colours, sizes, uiFamily).
+    // A view other than the editor's ("tasks": a TaskListModel, "search": a SearchResultModel;
+    // docs/ATRAMENT.md "The views in Atrament (M3)"), set before the view is shown; its look
+    // (TasksLook's, SearchLook's fields by name — colours, sizes, uiFamily).
     Q_PROPERTY(QObject *viewModel READ viewModel WRITE setViewModel NOTIFY viewModelChanged FINAL)
     Q_PROPERTY(QVariantMap viewLook READ viewLook WRITE setViewLook NOTIFY viewLookChanged FINAL)
     // "page": the editor's look (BlockEditor's metrics and Theme colours).
@@ -314,7 +314,7 @@ public:
     void setViewLook(const QVariantMap &look);
     // Where row `row`'s part ("row", "box", "text") of a view other than the editor's was drawn, in
     // this item (empty: not drawn) — self-tests click there; the row its keys made current (−1:
-    // none); the next frame showing a row.
+    // none); the next frame showing a row (a search result: the current one).
     Q_INVOKABLE QRectF viewPartRect(int row, const QString &part) const;
     Q_INVOKABLE int viewCurrentRow() const;
     Q_INVOKABLE void viewRevealRow(int row);
@@ -604,8 +604,11 @@ private:
     QString m_view;
     bool m_attached = false;
     QPointer<QObject> m_pageModel;
+public:
     // The views other than the editor's (atramentviews.cpp; shared: Views is defined there).
     struct Views;
+
+private:
     std::shared_ptr<Views> m_views;
     QPointer<QObject> m_viewModel;
     QVariantMap m_viewLook;

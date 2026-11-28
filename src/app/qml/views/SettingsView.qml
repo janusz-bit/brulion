@@ -1283,8 +1283,8 @@ Item {
             SettingSwitch {
                 objectName: "settingsViewsAtrament"
                 visible: DeviceInfo.atrament
-                text: qsTr("Draw the task list with Atrament")
-                description: qsTr("Experimental: Brulion's own renderer draws the Tasks view's list instead of Qt.")
+                text: qsTr("Draw the task list and search results with Atrament")
+                description: qsTr("Experimental: Brulion's own renderer draws the Tasks view's list and the search results instead of Qt.")
                 checked: AppSettings.viewsAtrament
                 onToggled: AppSettings.viewsAtrament = checked
             }

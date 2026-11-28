@@ -55,4 +55,15 @@ void setPageIconFolder(const QString &folder)
     icons().byName.clear();
 }
 
+atrament::AnyElement iconElement(const QString &name, float size, atrament::Color color)
+{
+    std::shared_ptr<const atrament::VectorIcon> icon = pageIcon(name);
+    return atrament::canvas([icon, color](atrament::Rect b, atrament::Window &w, atrament::App &) {
+               if (icon)
+                   w.paintIcon(*icon, b, color);
+           })
+            .size(size)
+            .flexShrink0();
+}
+
 } // namespace brulion::editor::atr

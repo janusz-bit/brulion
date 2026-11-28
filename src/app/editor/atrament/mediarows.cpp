@@ -155,18 +155,6 @@ QSizeF drawingShown(QSize file)
     return {std::floor(file.width() * s), std::floor(file.height() * s)};
 }
 
-// One of the app's icons (BIcon's: pageicons.h) `size` px square in `color`; nothing where the
-// icons are not (tests).
-at::AnyElement iconElement(const QString &name, float size, at::Color color)
-{
-    std::shared_ptr<const at::VectorIcon> icon = pageIcon(name);
-    return at::canvas([icon, color](at::Rect b, at::Window &w, at::App &) {
-               if (icon)
-                   w.paintIcon(*icon, b, color);
-           })
-            .size(size)
-            .flexShrink0();
-}
 
 constexpr std::chrono::milliseconds kSpinnerStep{33}; // a spinner's frames (30 a second)
 

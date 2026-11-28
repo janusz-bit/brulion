@@ -1,26 +1,119 @@
-// AtramentView's views other than the editor's (docs/ATRAMENT.md "The views in Atrament (M3)"):
-// `view: "tasks"` — TasksView over the TaskListModel in `viewModel`, its look from `viewLook` and
-// the item's colours, its rows' requests as `viewAction` (x, y in this item: the Atrament window's
+// AtramentView's views other than the editor's (docs/ATRAMENT.md "The views in Atrament (M3)"),
+// each a kind of kKinds: `view: "tasks"` — TasksView over the TaskListModel in `viewModel` —,
+// `view: "search"` — SearchResultsView over the SearchResultModel —; their look from `viewLook` and
+// the item's colours, their rows' requests as `viewAction` (x, y in this item: the Atrament window's
 // coordinates are the item's).
 #include "atramentview.h"
 
 #ifdef BRULION_HAS_ATRAMENT_VIEWS
+#include "dateshelper.h"
+#include "searchmodel.h"
+#include "searchview.h"
 #include "tasklistmodel.h"
 #include "tasksview.h"
+
+#include <QQmlEngine>
 #endif
 
 #include <QDebug>
 
+#include <algorithm>
+
 using namespace Qt::StringLiterals;
 namespace at = brulion::atrament;
+namespace views = brulion::views::atr;
 
-#ifdef BRULION_HAS_ATRAMENT_VIEWS
+// A view other than the editor's as AtramentView drives it: its look, where its rows' parts are, its
+// current row.
 struct AtramentView::Views {
-    at::Entity<brulion::views::atr::TasksView> tasks;
+    virtual ~Views() = default;
+    virtual at::AnyView view() const = 0;
+    virtual void setLook(const QVariantMap &look) = 0;
+    virtual std::optional<at::Rect> partBounds(int row, const QString &part) const = 0;
+    virtual int currentRow() const = 0;
+    virtual void setCurrentRow(int row) = 0;
 };
 
-#else
-struct AtramentView::Views {};
+#ifdef BRULION_HAS_ATRAMENT_VIEWS
+namespace {
+
+// One of views/atrament's views: its entity, made over its model, its requests the item's
+// viewAction; its look from the map, its parts by name, its current row.
+template<class View>
+struct EntityViews final : AtramentView::Views {
+    at::App &app;
+    at::Entity<View> entity;
+    template<class Model>
+    EntityViews(at::App &a, Model *model, QPointer<AtramentView> item)
+        : app(a)
+        , entity(a.newEntity<View>(model))
+    {
+        entity.update(app, [item](View &v, at::Context<View> &) {
+            v.onAction = [item](const QString &action, const QVariantMap &args) {
+                if (item)
+                    Q_EMIT item->viewAction(action, args);
+            };
+        });
+    }
+    at::AnyView view() const override { return at::AnyView{entity.id(), &at::renderView<View>}; }
+    void setLook(const QVariantMap &map) override
+    {
+        const typename View::Look look = View::Look::fromMap(map);
+        entity.update(app, [&look](View &v, at::Context<View> &cx) { v.setLook(look, cx); });
+    }
+    std::optional<at::Rect> partBounds(int row, const QString &part) const override
+    {
+        return entity.read(app).partBounds(row, View::partNamed(part));
+    }
+    int currentRow() const override { return entity.read(app).currentRow(); }
+    void setCurrentRow(int row) override
+    {
+        entity.update(app, [row](View &v, at::Context<View> &cx) { v.revealRow(row, cx); });
+    }
+};
+
+// A daily note's date in words, as the app's QML says it (its DatesHelper).
+std::function<QString(const QString &)> dateWords(QQmlEngine *engine)
+{
+    QPointer<brulion::ui::DatesHelper> dates = engine ? qobject_cast<brulion::ui::DatesHelper *>(engine->singletonInstance<QObject *>("Brulion", "DatesHelper"))
+                                         : nullptr;
+    return [dates](const QString &date) { return dates ? dates->formatLong(date) : date; };
+}
+
+// What a view needs from the app beside its model (its hooks).
+void configure(views::TasksView &, QQmlEngine *) { }
+void configure(views::SearchResultsView &v, QQmlEngine *engine)
+{
+    v.formatDate = dateWords(engine);
+}
+
+// A view's kind: its name (AtramentView.view) and how it is made over `viewModel` (null: the model
+// is not its kind's).
+using Maker = std::shared_ptr<AtramentView::Views> (*)(at::App &, QObject *, QPointer<AtramentView>, QQmlEngine *);
+template<class View, class Model>
+std::shared_ptr<AtramentView::Views> make(at::App &app, QObject *model, QPointer<AtramentView> item, QQmlEngine *engine)
+{
+    auto *m = qobject_cast<Model *>(model);
+    if (!m)
+        return nullptr;
+    auto made = std::make_shared<EntityViews<View>>(app, m, item);
+    made->entity.update(app, [engine](View &v, at::Context<View> &) { configure(v, engine); });
+    return made;
+}
+struct Kind {
+    QStringView name;
+    Maker make;
+};
+const Kind kKinds[] = {{u"tasks", &make<views::TasksView, brulion::planning::TaskListModel>},
+                       {u"search", &make<views::SearchResultsView, brulion::content::SearchResultModel>}};
+
+const Kind *kindNamed(const QString &name)
+{
+    const auto it = std::find_if(std::begin(kKinds), std::end(kKinds), [&name](const Kind &k) { return k.name == name; });
+    return it != std::end(kKinds) ? it : nullptr;
+}
+
+} // namespace
 #endif
 
 void AtramentView::setViewModel(QObject *model)
@@ -40,26 +133,17 @@ void AtramentView::setViewLook(const QVariantMap &look)
 bool AtramentView::attachOtherView()
 {
 #ifdef BRULION_HAS_ATRAMENT_VIEWS
-    if (m_view != u"tasks")
+    const Kind *kind = kindNamed(m_view);
+    if (!kind)
         return false;
-    auto *model = qobject_cast<brulion::planning::TaskListModel *>(m_viewModel.data());
-    if (!model) {
+    m_views = kind->make(atramentApp(), m_viewModel.data(), this, qmlEngine(this));
+    if (!m_views) {
         if (m_viewModel)
-            qWarning() << "AtramentView: the tasks view needs a TaskListModel as viewModel";
+            qWarning() << "AtramentView: the" << m_view << "view needs its model as viewModel";
         return true; // (attached once the model is set)
     }
-    at::App &app = atramentApp();
-    m_views = std::make_shared<Views>();
-    m_views->tasks = app.newEntity<brulion::views::atr::TasksView>(model);
-    QPointer<AtramentView> guard = this;
-    m_views->tasks.update(app, [guard](brulion::views::atr::TasksView &v, at::Context<brulion::views::atr::TasksView> &) {
-        v.onAction = [guard](const QString &action, const QVariantMap &args) {
-            if (guard)
-                Q_EMIT guard->viewAction(action, args);
-        };
-    });
     applyViewLook();
-    attach(app, at::AnyView{m_views->tasks.id(), &at::renderView<brulion::views::atr::TasksView>});
+    attach(atramentApp(), m_views->view());
     m_attached = true;
     return true;
 #else
@@ -69,50 +153,27 @@ bool AtramentView::attachOtherView()
 
 void AtramentView::applyViewLook()
 {
-#ifdef BRULION_HAS_ATRAMENT_VIEWS
-    if (!m_views || !m_views->tasks)
+    if (!m_views)
         return;
     QVariantMap look = m_viewLook;
-    look.insert({{u"text"_s, m_textColor}, {u"muted"_s, m_mutedColor}, {u"link"_s, m_linkColor}});
-    const brulion::views::atr::TasksLook tasks = brulion::views::atr::TasksLook::fromMap(look);
-    m_views->tasks.update(atramentApp(), [&tasks](brulion::views::atr::TasksView &v, at::Context<brulion::views::atr::TasksView> &cx) {
-        v.setLook(tasks, cx);
-    });
-#endif
+    if (!look.contains(u"text"_s))
+        look.insert({{u"text"_s, m_textColor}, {u"muted"_s, m_mutedColor}, {u"link"_s, m_linkColor}});
+    m_views->setLook(look);
 }
 
 QRectF AtramentView::viewPartRect(int row, const QString &part) const
 {
-#ifdef BRULION_HAS_ATRAMENT_VIEWS
-    if (!m_views || !m_views->tasks)
-        return {};
-    const std::optional<at::Rect> b =
-            m_views->tasks.read(atramentApp()).partBounds(row, brulion::views::atr::TasksView::partNamed(part));
+    const std::optional<at::Rect> b = m_views ? m_views->partBounds(row, part) : std::nullopt;
     return b ? QRectF(b->left(), b->top(), b->width(), b->height()) : QRectF();
-#else
-    Q_UNUSED(row)
-    Q_UNUSED(part)
-    return {};
-#endif
 }
 
 void AtramentView::viewRevealRow(int row)
 {
-#ifdef BRULION_HAS_ATRAMENT_VIEWS
-    if (m_views && m_views->tasks)
-        m_views->tasks.update(atramentApp(), [row](brulion::views::atr::TasksView &v, at::Context<brulion::views::atr::TasksView> &cx) {
-            v.revealRow(row, cx);
-        });
-#else
-    Q_UNUSED(row)
-#endif
+    if (m_views)
+        m_views->setCurrentRow(row);
 }
 
 int AtramentView::viewCurrentRow() const
 {
-#ifdef BRULION_HAS_ATRAMENT_VIEWS
-    return m_views && m_views->tasks ? m_views->tasks.read(atramentApp()).currentRow() : -1;
-#else
-    return -1;
-#endif
+    return m_views ? m_views->currentRow() : -1;
 }

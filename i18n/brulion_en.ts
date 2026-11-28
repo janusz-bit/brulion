@@ -1765,7 +1765,7 @@
 <context>
     <name>SearchView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SearchView.qml" line="289"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="322"/>
         <source>%1 of %n result(s)</source>
         <translation>
             <numerusform>%1 of %n result</numerusform>
@@ -1773,7 +1773,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SearchView.qml" line="290"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="323"/>
         <source>%n result(s)</source>
         <translation>
             <numerusform>%n result</numerusform>
@@ -1781,7 +1781,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SearchView.qml" line="416"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="481"/>
         <source>%n more slide(s) match</source>
         <translation>
             <numerusform>%n more slide matches</numerusform>
@@ -1789,7 +1789,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SearchView.qml" line="417"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="482"/>
         <source>%n more part(s) match</source>
         <translation>
             <numerusform>%n more part matches</numerusform>
@@ -1797,7 +1797,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SearchView.qml" line="420"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="485"/>
         <source>%n more page(s) match</source>
         <translation>
             <numerusform>%n more page matches</numerusform>
@@ -1805,7 +1805,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SearchView.qml" line="555"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="620"/>
         <source>The filters hide %n result(s).</source>
         <translation>
             <numerusform>The filters hide %n result.</numerusform>

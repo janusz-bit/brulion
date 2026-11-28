@@ -1,5 +1,7 @@
 #include "tasksview.h"
 
+#include "lookmap.h"
+
 #include "markdown/renderedtext.h"
 #include "pageicons.h"
 #include "tasklistmodel.h"
@@ -108,24 +110,14 @@ TasksView::TasksView(at::Context<TasksView> &cx, TaskListModel *model)
     // The model's changes: the list follows its rows, the windows draw again (rows gone — the
     // current task ticked off into Done, a filter —: the task now at its place is current, as a
     // ListView's currentIndex stays).
-    at::App *app = &cx.app();
-    const at::EntityId id = m_id;
-    m_rows.follow(model, [app, id](bool rowsWent) {
-        app->updateEntity<TasksView>(id, [rowsWent](TasksView &v, at::Context<TasksView> &c) {
-            if (rowsWent)
-                v.m_current = v.nearestTask(v.m_current);
-            c.notify();
-        });
-    });
+    m_rows.followFor(model, cx, [](TasksView &v) { v.m_current = v.nearestTask(v.m_current); });
 }
 
 TasksView::~TasksView() = default;
 
 void TasksView::setLook(TasksLook look, at::Context<TasksView> &cx)
 {
-    m_look = std::move(look);
-    m_rows.remeasure();
-    cx.notify();
+    m_rows.restyle(m_look, std::move(look), cx);
 }
 
 TasksView::RowData TasksView::rowData(int row) const
@@ -174,8 +166,7 @@ TasksView::RowData TasksView::rowData(int row) const
 
 at::AnyElement TasksView::render(at::Window &, at::Context<TasksView> &cx)
 {
-    m_drawn.clear();
-    m_drawnRows = 0;
+    m_parts.clear();
     if (!m_focus)
         m_focus = cx.newFocusHandle();
     TasksView *self = this;
@@ -205,18 +196,6 @@ at::AnyElement TasksView::renderRow(std::size_t row)
     return d.header ? headerRow(int(row), d) : taskRow(int(row), d);
 }
 
-at::AnyElement TasksView::tracker(int row, Part part)
-{
-    TasksView *self = this;
-    return at::canvas({})
-            .onPrepaint([self, row, part](at::Rect b, at::Window &, at::App &) {
-                self->m_drawn.push_back({row, part, b});
-                self->m_drawnRows += part == Part::Row ? 1 : 0;
-            })
-            .absolute()
-            .inset(0);
-}
-
 // A section's header: its label and count (TasksView.qml's sectionHeader); a click folds it.
 at::AnyElement TasksView::headerRow(int row, const RowData &d)
 {
@@ -243,11 +222,7 @@ at::AnyElement TasksView::headerRow(int row, const RowData &d)
             .onClick([self, section](const at::ClickEvent &, at::Window &, at::App &) {
                 self->act(u"toggleSection"_s, {{u"section"_s, section}});
             })
-            .child(at::canvas([icon = d.collapsed ? u"chevron-right"_s : u"chevron-down"_s,
-                               ink = m_look.header](at::Rect b, at::Window &w, at::App &) {
-                       if (const auto i = editor::atr::pageIcon(icon))
-                           w.paintIcon(*i, b, ink);
-                   }).size(14))
+            .child(editor::atr::iconElement(d.collapsed ? u"chevron-right"_s : u"chevron-down"_s, 14, m_look.header))
             .child(at::text(u16View(label)))
             .child(tracker(row, Part::Row));
 }
@@ -449,14 +424,6 @@ void TasksView::menuAt(const QString &action, QVariantMap args, at::Point at) co
     act(action, args);
 }
 
-std::optional<at::Rect> TasksView::partBounds(int row, Part part) const
-{
-    for (const Drawn &d : m_drawn)
-        if (d.row == row && d.part == part)
-            return d.bounds;
-    return std::nullopt;
-}
-
 TasksView::Part TasksView::partNamed(const QString &name)
 {
     static const QHash<QString, Part> parts{{u"box"_s, Part::Box}, {u"text"_s, Part::Text}, {u"chip"_s, Part::Chip}};
@@ -465,32 +432,25 @@ TasksView::Part TasksView::partNamed(const QString &name)
 
 namespace {
 
-at::Color colorAt(const QVariantMap &look, const QString &key, at::Color fallback)
-{
-    const QColor c = look.value(key).value<QColor>();
-    return c.isValid() ? at::Color{float(c.redF()), float(c.greenF()), float(c.blueF()), float(c.alphaF())} : fallback;
-}
+constexpr ColorField<TasksLook> kColors[] = {
+        {"background", &TasksLook::background}, {"hover", &TasksLook::hover},   {"current", &TasksLook::current},
+        {"header", &TasksLook::header},         {"faint", &TasksLook::faint},   {"box", &TasksLook::box},
+        {"accent", &TasksLook::accent},         {"danger", &TasksLook::danger}, {"chip", &TasksLook::chip},
+        {"chipText", &TasksLook::chipText},     {"dangerChip", &TasksLook::dangerChip}};
+constexpr SizeField<TasksLook> kSizes[] = {{"textSize", &TasksLook::textSize},
+                                           {"lineHeight", &TasksLook::lineHeight},
+                                           {"smallSize", &TasksLook::smallSize},
+                                           {"sideMargin", &TasksLook::sideMargin},
+                                           {"indent", &TasksLook::indent}};
 
 } // namespace
 
 TasksLook TasksLook::fromMap(const QVariantMap &look)
 {
-    TasksLook t;
+    TasksLook t = lookFrom(look, kColors, kSizes);
     t.text.text = colorAt(look, u"text"_s, t.text.text);
     t.text.muted = colorAt(look, u"muted"_s, t.text.muted);
     t.text.link = colorAt(look, u"link"_s, t.text.link);
-    for (const auto &[key, color] : {std::pair{u"background"_s, &t.background}, std::pair{u"hover"_s, &t.hover},
-                                     std::pair{u"current"_s, &t.current}, std::pair{u"header"_s, &t.header},
-                                     std::pair{u"faint"_s, &t.faint}, std::pair{u"box"_s, &t.box},
-                                     std::pair{u"accent"_s, &t.accent}, std::pair{u"danger"_s, &t.danger},
-                                     std::pair{u"chip"_s, &t.chip}, std::pair{u"chipText"_s, &t.chipText},
-                                     std::pair{u"dangerChip"_s, &t.dangerChip}})
-        *color = colorAt(look, key, *color);
-    for (const auto &[key, size] : {std::pair{u"textSize"_s, &t.textSize}, std::pair{u"lineHeight"_s, &t.lineHeight},
-                                    std::pair{u"smallSize"_s, &t.smallSize}, std::pair{u"sideMargin"_s, &t.sideMargin},
-                                    std::pair{u"indent"_s, &t.indent}})
-        *size = look.value(key, *size).toFloat();
-    t.uiFamily = look.value(u"uiFamily"_s).toString().toStdU16String();
     return t;
 }
 

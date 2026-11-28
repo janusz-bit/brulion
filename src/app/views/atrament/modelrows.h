@@ -6,6 +6,7 @@
 // gone).
 #pragma once
 
+#include "ui/atrament.h"
 #include "ui/measuredlist.h"
 
 #include <QAbstractItemModel>
@@ -28,6 +29,21 @@ public:
     ModelRows &operator=(const ModelRows &) = delete;
 
     void follow(QAbstractItemModel *model, std::function<void(bool rowsWent)> changed);
+    // follow() for the view entity `cx` is: each change draws it again, `rowsWent(view)` first when
+    // rows went (a current row may be gone).
+    template<class View, class F>
+    void followFor(QAbstractItemModel *model, atrament::Context<View> &cx, F rowsWent)
+    {
+        atrament::App *app = &cx.app();
+        const atrament::EntityId id = cx.entityId();
+        follow(model, [app, id, rowsWent](bool went) {
+            app->updateEntity<View>(id, [&](View &v, atrament::Context<View> &c) {
+                if (went)
+                    rowsWent(v);
+                c.notify();
+            });
+        });
+    }
     atrament::RowHeights &heights() { return m_heights; }
     const atrament::RowHeights &heights() const { return m_heights; }
     atrament::ListHandle &list() { return m_list; }
@@ -35,6 +51,14 @@ public:
     bool reveal(int row);
     // Every height an estimate again (another look).
     void remeasure() { m_heights.markAllEstimated(); }
+    // A view's new look: its rows measured again, the view drawn again.
+    template<class Look, class Cx>
+    void restyle(Look &field, Look look, Cx &cx)
+    {
+        field = std::move(look);
+        remeasure();
+        cx.notify();
+    }
 
 private:
     void shifted(int first, int last, bool in);

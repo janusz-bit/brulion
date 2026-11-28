@@ -31,6 +31,38 @@ FocusScope {
     property var route: ({})
     readonly property int maximumWidth: 860
     readonly property real sideMargin: Math.max(Theme.compact ? Theme.space3 : Theme.space6, (width - maximumWidth) / 2)
+    /// The results drawn by Atrament (Settings → Editor, AppSettings.viewsAtrament, or
+    /// `--atrament-views`; where Atrament is built): SearchAtramentList in the ListView's place
+    /// (docs/ATRAMENT.md "The views in Atrament (M3)").
+    readonly property bool usesAtrament: DeviceInfo.atrament && (AppSettings.viewsAtrament || DevTools.atramentViews)
+    /// The current result (↑ / ↓ in the field, Enter opens it) — the ListView's currentIndex, or the
+    /// Atrament list's.
+    property int currentResult: 0
+    /// The ListView (its rows unless they are Atrament's) and the self-test's values.
+    readonly property ListView listView: list
+    property var selfTestValues: ({})
+    function setCurrentResult(row: int): void {
+        root.currentResult = row
+        if (root.usesAtrament && atramentResults.item !== null)
+            QmlCall.call1(atramentResults.item, "viewRevealRow", row)
+        else
+            list.currentIndex = row
+    }
+    /// A result drawn by Atrament clicked (views/atrament/searchview.h's "open"): as its delegate's
+    /// click does.
+    MapHolder { id: actionInfo }
+    function atramentAction(action: string, args: var): void {
+        actionInfo.map = args
+        const row = 0 + AppController.routeInt(actionInfo.map, "row", -1)
+        const target = "" + AppController.routeText(actionInfo.map, "target")
+        const modifiers = 0 + AppController.routeInt(actionInfo.map, "modifiers", 0)
+        if (action === "open" && row >= 0)
+            root.openAtramentResult(row, target, modifiers)
+    }
+    function openAtramentResult(row: int, target: string, modifiers: int): void {
+        root.setCurrentResult(row)
+        root.openResult(row, false, target !== "" ? target : OpenIn.clickTarget(Qt.LeftButton, modifiers))
+    }
     property list<string> recent: []
     /// No highlighted matches (a daily note's title).
     readonly property list<var> noMatches: []
@@ -116,13 +148,14 @@ FocusScope {
     /// Open the current result (the side panel with `newPane`).
     function openCurrent(newPane: bool): void {
         if (results.count > 0)
-            openResult(Math.max(0, list.currentIndex), newPane, "")
+            openResult(Math.max(0, root.currentResult), newPane, "")
     }
     function move(delta: int): void {
         if (results.count === 0)
             return
-        list.currentIndex = Math.max(0, Math.min(results.count - 1, list.currentIndex + delta))
-        list.positionViewAtIndex(list.currentIndex, ListView.Contain)
+        root.setCurrentResult(Math.max(0, Math.min(results.count - 1, root.currentResult + delta)))
+        if (!root.usesAtrament)
+            list.positionViewAtIndex(list.currentIndex, ListView.Contain)
     }
     function applyQuery(q: string): void {
         field.text = q
@@ -182,12 +215,12 @@ FocusScope {
         // row kept by the diff would otherwise stay current).
         property bool fresh: false
         onQueryChanged: {
-            list.currentIndex = 0
+            root.setCurrentResult(0)
             fresh = true
         }
         onRefreshed: {
             if (fresh)
-                list.currentIndex = 0
+                root.setCurrentResult(0)
             fresh = false
         }
     }
@@ -366,14 +399,46 @@ FocusScope {
         }
 
         // ---- Results -----------------------------------------------------------------------------------
+        // Dev: the self-test of the results drawn by Atrament (ctest tst_views_qml_atrament_search),
+        // loaded from its file in developer builds only.
+        Loader {
+            id: atramentSelfTest
+            active: DevTools.editorScript === "search-atrament-selftest" && atramentResults.item !== null
+            onActiveChanged: {
+                if (!atramentSelfTest.active)
+                    return
+                root.selfTestValues = { searchView: root, model: results, list: atramentResults.item }
+                atramentSelfTest.setSource(Qt.resolvedUrl("../dev/SearchAtramentSelfTest.qml"), root.selfTestValues)
+            }
+        }
+        // Drawn by Atrament (usesAtrament): loaded by file name — it exists only where Atrament is
+        // built; the ListView below stays, without rows, for its empty state.
+        Loader {
+            id: atramentResults
+            active: root.usesAtrament
+            visible: active && root.query !== "" && results.count > 0
+            Layout.fillWidth: true
+            Layout.fillHeight: visible
+            source: active ? "../content/SearchAtramentList.qml" : ""
+            onLoaded: {
+                QmlCall.set(atramentResults.item, "searchView", root)
+                QmlCall.set(atramentResults.item, "viewModel", results)
+            }
+            Binding {
+                target: atramentResults.item
+                property: "sideMargin"
+                value: root.sideMargin
+                when: atramentResults.item !== null
+            }
+        }
         ListView {
             id: list
             TouchFlick.enabled: true
-            visible: root.query !== ""
+            visible: root.query !== "" && !atramentResults.visible
             Layout.fillWidth: true
             Layout.fillHeight: true
             clip: true
-            model: results
+            model: root.usesAtrament ? null : results
             currentIndex: 0
             reuseItems: true
             boundsBehavior: Flickable.StopAtBounds

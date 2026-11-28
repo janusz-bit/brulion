@@ -1525,10 +1525,11 @@ the chrome around them, until the view's route shows no QML item ("No QML in the
   notebook as `tests/app/planning` builds it): sections and counts drawn, a click on the checkbox
   asking for "toggle" with the task's path and line, Enter and a click opening, a section folded,
   rows moving when the model changes with the anchor kept, the chips' menus, the accessibility tree
-  (a list, its items, checkboxes with their state). Likewise `tst_atrament_search` and
-  `tst_atrament_calendar` as their steps land.
+  (a list, its items, checkboxes with their state). Likewise `tst_atrament_search` (step 2) and
+  `tst_atrament_calendar` as its step lands.
 * The in-app self-test `tasks-atrament-selftest` (qml/dev/TasksAtramentSelfTest.qml, ctest
-  `tst_views_qml_atrament`; Search's and Calendar's as theirs land): TasksView, SearchView and CalendarView with
+  `tst_views_qml_atrament`; Search's `search-atrament-selftest`, qml/dev/SearchAtramentSelfTest.qml,
+  ctest `tst_views_qml_atrament_search`; Calendar's as it lands): TasksView, SearchView and CalendarView with
   `--atrament-views`, real clicks and keys on the rows (`viewPartRect`), the toggle's toast and undo,
   a token menu, a query typed and a result opened — the QML around the view and the view together.
 * A gate measured as M2's: a 1 000-task view's memory per row, a scroll step's scene and CPU-renderer
@@ -1561,6 +1562,28 @@ the chrome around them, until the view's route shows no QML item ("No QML in the
    dependency problem and "Blocks n tasks" chips, a done task's text struck through, the header
    items drawn by Atrament (they stay QML above the list), touch's long press for the menus, the
    gate's measurements.
+2. **Search** (2026-11-28; `src/app/views/atrament/searchview.h`, `qml/content/SearchAtramentList.qml`,
+   the same `viewsAtrament`; docs/UI.md "The task list drawn by Atrament"). SearchView's results are
+   Atrament's in its ListView's place (the ListView stays, without rows, for the empty state): a
+   result its kind's icon, its title (a daily note's date in words, `formatDate` from DatesHelper)
+   and its excerpt (two lines at most) with the model's matched characters in the accent and bold
+   (one span per matched word; on the current row the text's colour, as the delegate), its folder
+   (not a daily note's), "Close in meaning", an attachment's place (`pageInfo`: a PDF's page and how
+   many more pages match, a slide, a part, "Found by its name") and "Recognized text". A click opens
+   it (`viewAction("open", {row, modifiers})`: OpenIn.clickTarget, Ctrl a new tab), a middle click in
+   a new tab. The field keeps the keyboard: ↓ / ↑ call `viewRevealRow` (SearchView.currentResult
+   replaces the ListView's currentIndex), the current result highlighted and scrolled into view
+   (the least scroll), Enter opens it. For screen readers the list's items are the results, read as
+   their texts. A new look (zoom, theme) measures the rows again, the row at the view's top staying
+   there. `views/atrament/partrecorder.h` (the parts a frame drew, `viewPartRect`) and
+   `lookmap.h` (a look from AtramentView.viewLook by its fields' names) are shared with Tasks;
+   AtramentView's views are one template (`EntityViews`). Tested by
+   `tests/atrament/views/tst_atrament_search` (rows, a11y texts, the matches' glyphs in the accent, a
+   journal's heading, every place's words, clicks and middle clicks, the current row revealed, the
+   model's changes followed, a restyle) and the self-test `tst_views_qml_atrament_search`
+   (qml/dev/SearchAtramentSelfTest.qml: a query typed, ↓ in the field, a click opening a result).
+   **Not yet**: the field as an Atrament `TextInput` and the recent searches drawn by Atrament (they
+   stay QML), a pressed row's background (the delegate's `down`), the gate's measurements.
 
 ### After the three views
 

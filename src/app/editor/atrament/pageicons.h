@@ -6,6 +6,7 @@
 #pragma once
 
 #include "scene/vectoricon.h"
+#include "ui/div.h"
 
 #include <QString>
 
@@ -16,6 +17,9 @@ namespace brulion::editor::atr {
 // The icon called `name`; nullptr when there is none (an unknown or invalid name, a file Atrament
 // cannot read).
 std::shared_ptr<const atrament::VectorIcon> pageIcon(const QString &name);
+// The icon `name` as an element `size` px square in `color`; nothing where the icons are not
+// (tests without setPageIconFolder()).
+atrament::AnyElement iconElement(const QString &name, float size, atrament::Color color);
 // Where the SVGs are read from (":/icons" by default; tests: the source tree's assets/icons). Drops
 // the icons read so far.
 void setPageIconFolder(const QString &folder);

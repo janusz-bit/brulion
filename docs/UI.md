@@ -6950,7 +6950,7 @@ list"; `qml/editor/EditorAtramentJournal.qml`, loaded by JournalsView by its fil
 
 ### The task list drawn by Atrament
 
-With Settings → Editor → "Draw the task list with Atrament" (`AppSettings.viewsAtrament`,
+With Settings → Editor → "Draw the task list and search results with Atrament" (`AppSettings.viewsAtrament`,
 experimental, where Atrament is built; `--atrament-views` for the self-tests) the Tasks view's
 sections and tasks are rows of one Atrament list (`qml/planning/TasksAtramentList.qml` over
 `src/app/views/atrament/tasksview.h`, docs/ATRAMENT.md "The views in Atrament (M3)") instead of the
@@ -6961,6 +6961,15 @@ priority chip its token's menu, on a link its menu; a click on a `#tag` filters,
 follows it, on the row opens the task's page at its line, on a header folds its section, on the
 subtasks' chip folds them; ↓ / ↑ move through the tasks (headers skipped), Space ticks the current
 one off, Enter opens it — the task now at its place becomes current when it moves into Done.
+
+The same setting draws the Search view's results (`qml/content/SearchAtramentList.qml` over
+`src/app/views/atrament/searchview.h`) in its `ListView`'s place; the field, the recent searches and
+the empty state stay QML. A result looks as SearchView's delegate: the kind's icon, the title (a
+daily note's date in words) and the excerpt with the matched characters in the accent and bold, the
+folder, "Close in meaning", an attachment's page, slide or part ("Page 3 of 12 · 2 more pages
+match") and "Recognized text". The field keeps the keyboard: ↓ / ↑ move the current result (shown
+highlighted and scrolled into view), Enter opens it; a click opens a result (Ctrl+click, a middle
+click: in a new tab).
 
 ### Pictures hold their pixels only near the view
 

@@ -30,6 +30,7 @@
 #pragma once
 
 #include "modelrows.h"
+#include "partrecorder.h"
 #include "renderedspans.h"
 #include "ui/atrament.h"
 
@@ -77,6 +78,7 @@ struct TasksLook {
 
 class TasksView {
 public:
+    using Look = TasksLook;
     // The parts of a row the last frame drew (partBounds(); Chip: its chips that show a token, in
     // their order).
     enum class Part { Row, Box, Text, Chip };
@@ -97,9 +99,9 @@ public:
     // A part by its name ("box", "text", "chip"; anything else: the row).
     static Part partNamed(const QString &name);
     // Where the last frame drew a part of `row` (window px); nothing when it drew no such part.
-    std::optional<atrament::Rect> partBounds(int row, Part part) const;
+    std::optional<atrament::Rect> partBounds(int row, Part part) const { return m_parts.bounds(row, part); }
     // The rows the last frame drew.
-    int drawnRows() const { return m_drawnRows; }
+    int drawnRows() const { return m_parts.rows(); }
     // The task ↑ / ↓ / a click made current (−1: none).
     int currentRow() const { return m_current; }
     // Moves the current task by `step` tasks (headers skipped), shown in the view.
@@ -132,11 +134,6 @@ public:
     RowData rowData(int row) const;
 
 private:
-    struct Drawn {
-        int row;
-        Part part;
-        atrament::Rect bounds;
-    };
     atrament::AnyElement renderRow(std::size_t row);
     atrament::AnyElement headerRow(int row, const RowData &d);
     atrament::AnyElement taskRow(int row, const RowData &d);
@@ -144,8 +141,7 @@ private:
     atrament::AnyElement taskText(int row, const RowData &d);
     atrament::AnyElement chips(int row, const RowData &d);
     atrament::AnyElement chip(int row, const QString &text, bool danger, const QString &kind, const RowData &d);
-    // A canvas over its parent that records the parent's bounds as `part` of `row` (partBounds()).
-    atrament::AnyElement tracker(int row, Part part);
+    atrament::AnyElement tracker(int row, Part part) { return m_parts.tracker(row, part, part == Part::Row); }
     void act(const QString &action, const QVariantMap &args) const;
     QVariantMap taskArgs(const RowData &d) const;
     QVariantMap menuArgs(const RowData &d) const;
@@ -159,8 +155,7 @@ private:
     ModelRows m_rows;
     atrament::FocusHandle m_focus;
     int m_current = -1;
-    std::vector<Drawn> m_drawn; // the parts the frame drawn last recorded (cleared by render())
-    int m_drawnRows = 0;
+    PartRecorder<Part> m_parts;
 };
 
 } // namespace brulion::views::atr
