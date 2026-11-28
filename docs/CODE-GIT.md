@@ -213,7 +213,9 @@ toasts).
 `commitQuestion(patch)` (the AI's question for a commit message of it on this branch: `{system, prompt}`,
 `codeai::commitMessage`); `requestPullRequestQuestion(base)` (the AI's question for a pull request's title
 and description: the branch's commits — `git log base..HEAD`, their bodies too, the newest 200 —, `git diff
---stat base...HEAD` and `git diff -U2 base...HEAD`, each bounded — `codeai::pullRequest` —, against `base`
+--stat base...HEAD` and `git diff -U2 base...HEAD`, each bounded, and the repository's pull request
+template — `.github/`, the root or `docs/`, `codeai::pullRequestTemplateIn()`: the description follows its
+headings — `codeai::pullRequest` —, against `base`
 or "" the default branch, a branch the default branch's remote has by that name first:
 `pullRequestQuestionReady(system, prompt, "")`, or `("", "", why)` — no branch, a base that is none or
 looks like an option, nothing the base lacks); `pullRequestText(answer)` (the answer read,
@@ -468,8 +470,8 @@ too), the stashes (`gitStashList`: `gitStash_<i>` with `gitStashApply`, `gitStas
 
 ## Not done (yet)
 
-* A repository's pull request template or the thread's conversation in the AI's question for a pull
-  request (T3 Code sends them).
+* The thread's conversation in the AI's question for a pull request (T3 Code sends it; the
+  repository's pull request template is sent: `codeai::pullRequestTemplateIn()`).
 * Hunks of untracked, conflicted or binary files; the hunks of the other sources staged (they are
   reverted, `gitHunkRevert`), those of an added or deleted file reverted; single lines of a file that has staged changes (their numbers would be the
   index's: offered while nothing of it is staged).

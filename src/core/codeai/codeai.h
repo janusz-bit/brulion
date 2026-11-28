@@ -53,13 +53,20 @@ struct BranchRange {
     QString commits; ///< `git log base..HEAD` (a line per commit, its message's body under it)
     QString stat;    ///< `git diff --stat base...HEAD`
     QString patch;   ///< `git diff base...HEAD`
+    QString pullRequestTemplate; ///< the repository's (`.github/pull_request_template.md` …; "" none)
 };
 inline constexpr qsizetype MaxCommits = 12000;
 inline constexpr qsizetype MaxStat = 6000;
+inline constexpr qsizetype MaxTemplate = 6000;
 
 /// The title and description of a pull request of `range`: the title on the first line, then the
-/// description in Markdown ("## Summary", "## Testing") — the commits and the diff as data.
+/// description in Markdown ("## Summary", "## Testing"; the repository's template's headings when it
+/// has one) — the commits, the diff and the template as data.
 ai::Request pullRequest(const BranchRange &range);
+/// The pull request template of the work tree `root` where GitHub looks for one — .github/, the
+/// root, docs/; pull_request_template.md in either case — its first MaxTemplate + 1 characters, so
+/// pullRequest() sees it was longer ("" none).
+QString pullRequestTemplateIn(const QString &root);
 
 struct PullRequestText {
     QString title; ///< one line; "" when the answer gives none

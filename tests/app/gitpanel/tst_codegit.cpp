@@ -495,9 +495,13 @@ void TestCodeGit::questionsForTheAi()
     QVERIFY(prompt.contains(u"+RABAT = 0.05  # zniżka"_s));
     QVERIFY(!prompt.contains(u"Tylko na main"_s) && !prompt.contains(u"inne.txt"_s));
     // A base chosen by its name.
+    QVERIFY(!prompt.contains(u"Pull request template"_s));
+    // (… with the repository's pull request template, when it has one.)
+    repo.write(u".github/pull_request_template.md"_s, "## Co i dlaczego\n");
     git.requestPullRequestQuestion(u"main"_s);
     QTRY_COMPARE_WITH_TIMEOUT(ready.count(), 2, Wait);
     QVERIFY(ready.at(1).at(1).toString().contains(u"Base branch: main\n"_s));
+    QVERIFY(ready.at(1).at(1).toString().contains(u"Pull request template:\n## Co i dlaczego"_s));
     // A base that is none, one that looks like an option: said, nothing asked.
     git.requestPullRequestQuestion(u"nie-ma-takiej"_s);
     QTRY_COMPARE_WITH_TIMEOUT(ready.count(), 3, Wait);

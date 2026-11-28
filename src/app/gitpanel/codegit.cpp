@@ -766,7 +766,8 @@ void CodeGit::readPullRequestRange(const QString &ref)
         } else if (commits.isEmpty()) {
             failPullRequestQuestion(tr("The branch has no commits that %1 does not have.").arg(ref));
         } else {
-            const QVariantMap q = question(codeai::pullRequest({ref, m_branch, commits, outputOf(r.at(1)), outputOf(r.at(2))}));
+            const QVariantMap q = question(codeai::pullRequest({ref, m_branch, commits, outputOf(r.at(1)), outputOf(r.at(2)),
+                                                                     codeai::pullRequestTemplateIn(m_info.topLevel)}));
             answerPullRequestQuestion(q.value(u"system"_s).toString(), q.value(u"prompt"_s).toString(), QString());
         }
     });

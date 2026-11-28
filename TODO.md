@@ -13,7 +13,7 @@ done in the repository simply disappears from the list.
   macOS at all; t3.json read again when it changes, on Windows (CI's runner saw no change of it:
   tst_shell_codeprojects configInProject skips it there); a terminal on Windows before 10 1809;
   staging hunks of the Changes panel's other sources than Uncommitted (they are reverted alone; single lines are staged or thrown away),
-  a pull request template in the AI's question (docs/CODE-GIT.md "Not done (yet)"); for a thread of another computer's project (continued from
+  the thread's conversation in the AI's question for a pull request (docs/CODE-GIT.md "Not done (yet)"); for a thread of another computer's project (continued from
   the phone through `acp serve --projects`): committing, pushing, pull requests, reverting a turn and
   the terminal from the phone, a worktree from another base, projects of two computers with the same
   id; T3 Code's in-app browser for `previewUrl` (the

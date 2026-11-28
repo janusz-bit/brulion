@@ -6,6 +6,10 @@
 // messages a thread's title is made of (its first and newest ones, pictures left out). Polish text.
 #include "codeai/codeai.h"
 
+#include <QDir>
+#include <QFile>
+#include <QFileInfo>
+#include <QTemporaryDir>
 #include <QTest>
 
 using namespace Qt::StringLiterals;
@@ -108,7 +112,8 @@ private Q_SLOTS:
         BranchRange range{u"origin/main"_s, u"brulion/rabat"_s,
                           u"a1b2c3d Dodaj rabat dla stałych klientów\n    Rabat 5 % od trzeciego zamówienia.\n"_s,
                           u" koszyk.py | 4 ++--\n 1 file changed, 2 insertions(+), 2 deletions(-)\n"_s,
-                          u"diff --git a/koszyk.py b/koszyk.py\n+RABAT = 0.05  # zniżka\n"_s};
+                          u"diff --git a/koszyk.py b/koszyk.py\n+RABAT = 0.05  # zniżka\n"_s,
+                          {}};
         const ai::Request r = pullRequest(range);
         QVERIFY(r.system.contains(u"pull request"_s));
         QVERIFY(r.system.contains(u"## Summary"_s) && r.system.contains(u"## Testing"_s));
@@ -129,6 +134,33 @@ private Q_SLOTS:
         QCOMPARE(big.count(u"[truncated]"_s), 3);
         QVERIFY(big.size() < MaxCommits + MaxStat + MaxPatch + 1000);
         QVERIFY(big.contains(QString(MaxCommits, u'c') + u"\n[truncated]"_s));
+        QVERIFY(!big.contains(u"template"_s));
+        // The repository's pull request template: its headings to follow, as data; bounded.
+        range.patch = u"diff"_s;
+        range.pullRequestTemplate = u"## Co zmieniono\n\n## Jak sprawdzono\n"_s;
+        const ai::Request t = pullRequest(range);
+        QVERIFY2(t.system.contains(u"template"_s), qPrintable(t.system));
+        QVERIFY2(userText(t).contains(u"Pull request template:\n## Co zmieniono\n\n## Jak sprawdzono\n"_s), qPrintable(userText(t)));
+        range.pullRequestTemplate = QString(MaxTemplate * 2, u't');
+        QVERIFY(userText(pullRequest(range)).contains(QString(MaxTemplate, u't') + u"\n[truncated]"_s));
+    }
+
+    // The repository's pull request template found where GitHub looks: .github/, the root, docs/
+    // (either case); none — "".
+    void pullRequestTemplateFound()
+    {
+        QTemporaryDir dir;
+        QCOMPARE(pullRequestTemplateIn(dir.path()), QString());
+        const auto put = [&dir](const QString &rel, const QByteArray &text) {
+            QDir().mkpath(QFileInfo(dir.filePath(rel)).absolutePath());
+            QFile f(dir.filePath(rel));
+            return f.open(QIODevice::WriteOnly) && f.write(text) == text.size();
+        };
+        QVERIFY(put(u"docs/PULL_REQUEST_TEMPLATE.md"_s, "## Opis z docs\n"));
+        QCOMPARE(pullRequestTemplateIn(dir.path()), u"## Opis z docs\n"_s);
+        QVERIFY(put(u".github/pull_request_template.md"_s, "## Zmiany żółwia\n"));
+        QCOMPARE(pullRequestTemplateIn(dir.path()), u"## Zmiany żółwia\n"_s);
+        QCOMPARE(pullRequestTemplateIn(QString()), QString());
     }
 
     void readPullRequestAnswer_data()
