@@ -484,6 +484,8 @@ private:
     void checkpointThenPrompt(Stream *s, const QJsonObject &message, const QString &session);
     /// A thread's file or terminal request: the place of its session ("" folder: none — the notebook's).
     CodePlace codeSessionOf(const Stream *s, const QJsonObject &params) const;
+    /// A device's turn of a thread runs in `folder` now (its commit and revert wait for it).
+    bool turnRunsIn(const QString &folder) const;
 
     // The app's own conversations (acp/appchats.h), over the link to the app.
     /// onHeaders() of `chats/…`: refused (404, 405), or the body it may have.

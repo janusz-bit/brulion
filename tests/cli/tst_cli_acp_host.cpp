@@ -2341,7 +2341,7 @@ private Q_SLOTS:
         AcpHostOptions o = projectOptions(file);
         o.ghProgram = QString::fromUtf8(FAKE_GH);
         startHost(*m_ctx, o);
-        const QString token = pair();
+        const auto [token, device_] = pairDevice();
         const auto post = [&](const QString &endpoint, const QJsonObject &body, const QString &project = u"kod"_s) {
             return http("POST", u"projects/%1/%2"_s.arg(project, endpoint), QJsonDocument(body).toJson(),
                         bearer(token));
@@ -2475,6 +2475,32 @@ private Q_SLOTS:
         revert.checkpoint = u"abc123"_s;
         std::tie(reverted, revertError) = device(revert);
         QCOMPARE(revertError.status, 409);
+
+        // While a turn of the agent runs in the project's folder: commit and revert refused (busy) —
+        // the agent may be writing the files —, push still taken; after the turn, taken again.
+        QVERIFY(t->client->prompt(u"AI/Kod czeka.md"_s, codeTurn(u"czekaj"_s, code)));
+        QTRY_VERIFY_WITH_TIMEOUT(!t->client->sessionId(u"AI/Kod czeka.md"_s).isEmpty(), kTimeoutMs);
+        const QString busySession = t->client->sessionId(u"AI/Kod czeka.md"_s);
+        QTRY_VERIFY_WITH_TIMEOUT(m_host->turn(device_, busySession)
+                                         && m_host->turn(device_, busySession)->state == HostTurn::State::Running,
+                                 kTimeoutMs);
+        QFile busyFile(repo + u"/W trakcie.md"_s);
+        QVERIFY(busyFile.open(QIODevice::WriteOnly));
+        busyFile.write("- pisze agent\n");
+        busyFile.close();
+        acp::RemoteGitRequest busyCommit;
+        busyCommit.kind = acp::RemoteGitRequest::Kind::Commit;
+        busyCommit.message = u"Za wcześnie"_s;
+        auto [busyDone, busyError] = device(busyCommit);
+        QCOMPARE(busyError.status, 409);
+        QCOMPARE(busyError.code, u"busy"_s);
+        revert.checkpoint = checkpoint;
+        std::tie(reverted, revertError) = device(revert);
+        QCOMPARE(revertError.code, u"busy"_s);
+        acp::cancelRemoteTurn(m_transport.get(), QUrl(m_base), token, busySession);
+        QTRY_COMPARE_WITH_TIMEOUT(m_host->turn(device_, busySession)->state, HostTurn::State::Done, kTimeoutMs);
+        std::tie(busyDone, busyError) = device(busyCommit);
+        QVERIFY2(!busyError.failed(), qPrintable(busyError.detail));
 #endif
     }
 };

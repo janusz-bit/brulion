@@ -429,7 +429,8 @@ and starts new ones there.
   description, a base; the branch pushed first, `gh` of that computer opens it) and **Revert this
   turn…** (confirmed: the files back as the turn's checkpoint has them) — `POST projects/<id>/commit`,
   `…/push`, `…/pr`, `…/revert` (docs/CLI.md "Code mode's projects"). One request at a time, none
-  while the thread's turn runs; what happened (or why not: a hook, nothing to commit, gh signed out)
+  while the thread's turn runs (the computer refuses a commit or a revert itself while a turn runs in
+  that folder: 409 `busy`); what happened (or why not: a hook, nothing to commit, gh signed out)
   comes as a toast, a pull request's address with it, and the list is read again. The terminal is
   at that computer.
 

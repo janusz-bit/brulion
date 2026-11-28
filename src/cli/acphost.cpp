@@ -3170,6 +3170,20 @@ gitcli::CommitRequest commitOf(const acp::RemoteGitRequest &request, const QList
 
 } // namespace
 
+bool AcpHost::turnRunsIn(const QString &folder) const
+{
+    const QString wanted = QFileInfo(folder).canonicalFilePath();
+    if (wanted.isEmpty())
+        return false;
+    for (const HostTurn &t : m_turns) {
+        const Stream *s = t.state == HostTurn::State::Running ? m_streams.value(t.stream) : nullptr;
+        if (s && s->codeSessions.contains(t.session)
+            && QFileInfo(s->codeSessions.value(t.session).folder).canonicalFilePath() == wanted)
+            return true;
+    }
+    return false;
+}
+
 void AcpHost::gitRequest(const QString &project, const acp::RemoteGitRequest &request, const http::Reply &reply)
 {
     if (const QString code = gitRefusal(request); !code.isEmpty()) {
@@ -3183,6 +3197,14 @@ void AcpHost::gitRequest(const QString &project, const acp::RemoteGitRequest &re
                          return;
                      if (place.folder.isEmpty()) {
                          reply.send(refusal);
+                         return;
+                     }
+                     // (The agent may be writing the files: not under its feet.)
+                     const bool changes = request.kind == acp::RemoteGitRequest::Kind::Commit
+                                          || request.kind == acp::RemoteGitRequest::Kind::Revert;
+                     if (changes && self->turnRunsIn(place.folder)) {
+                         reply.send(apiError(409, u"busy"_s,
+                                             u"A turn of an agent runs in that folder: wait for it, or stop it"_s));
                          return;
                      }
                      self->git()->repository(place.folder, [self, request, reply](const gitcli::RepoInfo &info) {
