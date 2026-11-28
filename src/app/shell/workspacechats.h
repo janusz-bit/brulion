@@ -517,6 +517,10 @@ public:
     /// message (its time, else its page's last change) older than that before Workspace::now().
     /// The paths archived (autoArchived() follows when there are any).
     QStringList archiveUntouched();
+    /// Something holds the conversation `path` where it is (no settling or archiving by itself): its
+    /// turn runs, asks or failed, it is unread or on screen, messages wait in its queue, it has a
+    /// draft, a sub-conversation will wake it, it is a side chat. True while the notebook is not ready.
+    bool heldBack(const QString &path);
 
     // ---- what needs the user: unread answers, failures, questions; notifications ----------------
     /// An answer came while no chat view showed the conversation — until one shows it. Kept in the
@@ -1010,6 +1014,9 @@ private:
     QStringList m_removed; // the trash's paths of the last remove()
     /// The side chat `path` (beside a conversation of the notebook): no unread, no notification.
     bool isSideChat(const QString &path) const;
+    /// The parents a sub-conversation will wake (lower case) / heldBack() with them.
+    QSet<QString> awaitedParents() const;
+    bool heldBack(const QString &path, const QSet<QString> &awaited) const;
 
     // The sub-conversations that wake their parent (child path in lower case → the parent's path)
     // and when each parent was woken (lower case → ms since the epoch, the last hour's).

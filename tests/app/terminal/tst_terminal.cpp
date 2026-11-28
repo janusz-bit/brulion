@@ -145,6 +145,7 @@ private Q_SLOTS:
     void tabsAndSplits();
     void registryKeys();
     void registryLimits();
+    void registrySettle();
     void registryLayouts();
     void viewKeys();
     void viewTerminalKeys();
@@ -603,6 +604,57 @@ void TestTerminal::registryKeys()
     QVERIFY(other->openTab(QString(), QString()));
     registry.closeAll();
     QCOMPARE(registry.sessionCount(), 0);
+}
+
+// A thread settled (T3 Code's settling): its stopOnSettle scripts' terminals end, its idle ones too,
+// a busy one of another command stays; its runOnSettle scripts run one at a time across threads in
+// its worktree — a tab that ended with 0 closes, a failed one stays —; without a worktree none run.
+void TestTerminal::registrySettle()
+{
+    if (!m_posix)
+        QSKIP("no pseudo-terminal in this build");
+    QTemporaryDir dir, worktree;
+    TerminalRegistry registry;
+    const QString page = u"AI/2026-11-28 Rabat żółwia.md"_s;
+    TerminalThread *thread = registry.thread(page, dir.path());
+    QVERIFY(thread->openTab(QString(), QString()));
+    TerminalSession *dev = thread->openTab(u"sleep 100"_s, u"Dev"_s);
+    TerminalSession *build = thread->openTab(u"sleep 200"_s, u"Build"_s);
+    QVERIFY(dev && build);
+    QTRY_VERIFY_WITH_TIMEOUT(dev->isBusy() && build->isBusy(), Timeout);
+    QPointer<TerminalSession> devWatched = dev;
+
+    QSignalSpy ended(&registry, &TerminalRegistry::settleScriptEnded);
+    registry.settle(page, {u"sleep 100"_s}, worktree.path(),
+                    {{u"pwd > settled.txt"_s, u"Czyść"_s}, {u"exit 3"_s, u"Zły"_s}});
+    QTRY_VERIFY(devWatched.isNull());
+    // (The idle shell and the stopped dev server gone; the build and the first settle script there.)
+    QVERIFY(thread->sessions().contains(build));
+    QVERIFY(registry.settleRunning());
+    QCOMPARE(registry.settleWaiting(), 1);
+    // Another thread settled meanwhile waits for its turn.
+    registry.settle(u"AI/inny.md"_s, {}, worktree.path(), {{u"true"_s, u"Inny"_s}});
+    QCOMPARE(registry.settleWaiting(), 2);
+    QTRY_COMPARE_WITH_TIMEOUT(ended.size(), 3, Timeout);
+    QCOMPARE(ended.at(0), (QVariantList{page, u"Czyść"_s, 0}));
+    QCOMPARE(ended.at(1), (QVariantList{page, u"Zły"_s, 3}));
+    QCOMPARE(ended.at(2), (QVariantList{u"AI/inny.md"_s, u"Inny"_s, 0}));
+    // In the worktree.
+    QFile out(worktree.filePath(u"settled.txt"_s));
+    QVERIFY(out.open(QIODevice::ReadOnly));
+    QCOMPARE(QFileInfo(QString::fromUtf8(out.readAll()).trimmed()).canonicalFilePath(),
+             QFileInfo(worktree.path()).canonicalFilePath());
+    // The one that ended well closed, the failed one kept with the build.
+    QTRY_COMPARE(thread->sessionCount(), 2);
+    QVERIFY(thread->sessions().contains(build));
+    QCOMPARE(registry.find(u"AI/inny.md"_s)->sessionCount(), 0);
+    QVERIFY(!registry.settleRunning());
+    // No worktree: nothing runs (the project's own folder is left alone).
+    registry.settle(page, {}, QString(), {{u"true"_s, u"Nic"_s}});
+    QCOMPARE(registry.settleWaiting(), 0);
+    QVERIFY(!registry.settleRunning());
+    QCOMPARE(ended.size(), 3);
+    registry.closeAll();
 }
 
 void TestTerminal::registryLimits()

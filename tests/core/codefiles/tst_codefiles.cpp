@@ -515,6 +515,24 @@ private Q_SLOTS:
         QCOMPARE(mentionedPaths(QString()), QStringList());
     }
 
+    // Files dropped on a thread's row (T3 Code's "Drop files onto a thread"): pictures go with the
+    // message, the others are named — @-mentions inside the thread's folder, quoted paths outside.
+    void droppedOnAThread()
+    {
+        const QString root = QDir::tempPath() + u"/sklep"_s, other = QDir::tempPath() + u"/zdjęcia"_s;
+        const QString outside = QDir::tempPath() + u"/hosts"_s;
+        const Dropped d = droppedFiles(root, {root + u"/src/main.cpp"_s, other + u"/Żółw.PNG"_s, root + u"/docs/plan rabatu.md"_s,
+                                              outside, root + u"/src/main.cpp"_s, root + u"/logo.svg"_s, root, QString()});
+        QCOMPARE(d.pictures, (QStringList{other + u"/Żółw.PNG"_s, root + u"/logo.svg"_s}));
+        QCOMPARE(d.text, u"@src/main.cpp @\"docs/plan rabatu.md\" `%1` @./"_s.arg(outside));
+        QCOMPARE(mentionedPaths(d.text), (QStringList{u"src/main.cpp"_s, u"docs/plan rabatu.md"_s, u"./"_s}));
+        // No folder (a thread of nothing): every path as it is.
+        QCOMPARE(droppedFiles(QString(), {outside}).text, u"`%1`"_s.arg(outside));
+        QVERIFY(droppedFiles(root, {}).text.isEmpty());
+        // A backtick in a path: a longer fence around it.
+        QCOMPARE(droppedFiles(root, {outside + u"a`b"_s}).text, u"``%1a`b``"_s.arg(outside));
+    }
+
     // ---- Review comments --------------------------------------------------------------------------
 
     void reviewComments()

@@ -102,14 +102,15 @@ yet. `codeclones.cpp` over core `gitcli` (`clone.cpp`):
 
 A project's `t3.json` at its root (T3 Code's project file: `$schema`, `iconPath`,
 `defaultThreadEnvMode`, `scripts` — the fields Brulion does not use, `worktreeSubmodules`,
-`worktreeSparsePatternsPath`, `ignoreRepositories`, `worktreeLayout` and a script's `stopOnSettle`,
-`runOnSettle`, `previewUrl`, `autoOpenPreview`, are ignored) is read when the project is added or
+`worktreeSparsePatternsPath`, `ignoreRepositories` and `worktreeLayout`, are ignored) is read when the project is added or
 loaded and again when it changes (a `QFileSystemWatcher` on the project's folder and the file,
 debounced), **never written**. `parseConfig()` is pure and strict: at most 256 KB, a JSON object;
 `scripts` a list of objects with a non-empty `name` and `command` as text (a name cleaned of control
 and format characters, at most 60 characters; a command at most 4000), `icon` one of `play` (the
-default), `test`, `lint`, `configure`, `build`, `debug`, `runOnWorktreeCreate` and `async` booleans
-(anything else their defaults: false, true); a second script of a name (letter case aside), the 51st,
+default), `test`, `lint`, `configure`, `build`, `debug`, `runOnWorktreeCreate`, `async`, `stopOnSettle`,
+`runOnSettle` and `autoOpenPreview` booleans (anything else their defaults: false, true, false, false,
+false), `previewUrl` an http or https address with a host (`previewUrlOf()`; anything else is left out
+with a warning, and its `autoOpenPreview` with it); a second script of a name (letter case aside), the 51st,
 and anything malformed is left out with a warning; `iconPath` a picture (`png`, `svg`, `jpg`, `jpeg`,
 `webp`, `ico`, `gif`) inside the project — no absolute path, nothing that leaves it, no link pointing
 out of it. A file that does not read is said in `configError` and nothing of it is used.
@@ -120,13 +121,16 @@ palette or its shortcut, or makes a worktree with it set to run there.
 ### Scripts
 
 T3 Code's actions: buttons over the thread that run a command in a new tab of the thread's terminal
-(`CodeView.runScript(command, name)` → `TerminalPanel.run`). `scripts(id)` merges this device's
+(`CodeView.runProjectScript(script)` → `runScript(command, name)` → `TerminalPanel.run`). A script
+with a `previewUrl` is listed in the scripts' menu as "Open preview: Dev" (the system's browser —
+Brulion has no browser of its own), and with `autoOpenPreview` that address opens when it runs. `scripts(id)` merges this device's
 scripts (`setScripts()`, at most 50) and the file's: the device's in their order, then the file's that
 no script of the device's of the same name (letter case aside) overrides — a device's one of a file's
 name replaces it ("overrides t3.json"). Each has an `id` (a unique slug of its name), its icon in
 Brulion's set (`iconName`: play, circle-check, list-checks, sliders-horizontal, layers, eye), a Code
-mode `shortcut`, `runOnWorktreeCreate` and `wait` (T3 Code's `async: false`), its `source` (`device` |
-`t3json`). `setupScripts(id)` / `setupList(id, field, waited)`: those that run when a worktree is made.
+mode `shortcut`, `runOnWorktreeCreate` and `wait` (T3 Code's `async: false`), `stopOnSettle`,
+`runOnSettle`, `previewUrl`, `autoOpenPreview` ("Settling and snoozing" below), its `source` (`device` |
+`t3json`); `scriptFromMap()` / `scriptToMap()` the fields as kept and as QML gives them. `setupScripts(id)` / `setupList(id, field, waited)`: those that run when a worktree is made.
 
 The project dialog edits them (`CodeScriptsModel`, docs/UI.md "Code mode"); the palette lists the shown
 project's as "Run: Testy — kalkulator" (`code.script.<project>.<id>`), with their shortcuts
@@ -264,6 +268,13 @@ sub-conversations, scheduled conversations, notifications, unread marks, search.
   "failed", message)` — the same name is kept, a page renamed or gone meanwhile, a name another
   conversation has and the AI's failure say why. One question of a thread at a time
   (`regeneratingTitle(path, titleSerial)`); closing the notebook stops them.
+* **Files dropped on a thread's row** (T3 Code's "Drop files onto a thread"; CodeThreadRow's
+  `codeThreadDrop`): the thread opens and they go into its message — `CodeProjects::dropOnThread(path,
+  folder, urls)` keeps them (`codefiles::droppedFiles()`: pictures apart, the others named — `@path`
+  inside the thread's folder, quoted with a space, `@./` the folder itself, a path in a code span
+  outside it —, local files only, each once) and tells `threadDropped(path)`; CodeView takes them when
+  it shows that thread (`takeDropPictures()` → `ChatView.attachFiles`, `takeDropText()` →
+  `addToComposer`). Nothing is sent.
 * `threadsIn(folder)`: the threads that work in a folder (a deleted thread's worktree: does another one
   use it?); `runningIn(folder)`: a turn of one of them runs (no branch switch under it);
   `markUnread(path)`: the sidebar's "Mark unread"; `draftSerial`: drafts changed — a new thread's draft
@@ -284,6 +295,73 @@ sub-conversations, scheduled conversations, notifications, unread marks, search.
   — the partner when it is one, else the agent of the same id (a partner paired from a computer,
   `<computer>-claude`, finds `claude`), else the first one —, a thread of another computer's project by
   that computer's agents the same way (below).
+
+## Settling and snoozing
+
+T3 Code's sidebar sections: **Settle** ("the task is done for now"), **Snooze** ("defer until later").
+`shell/codethreads.h` (QML `Workspace.codeThreads`) over core `codethreads` (pure: a page's
+frontmatter in, its state out, edits as content in → content out). The thread's page says it —
+synced with the notebook, so every device shows the thread where another put it; the keys the same in
+every language (as `project:`), the times local wall-clock time:
+
+```markdown
+---
+project: sklep
+settled: 2026-11-28 10:15
+snoozed: 2026-11-28 18:00
+auto-settle: never
+---
+```
+
+* `settle(path)` / `unsettle(path)` (`settled:` written with Workspace::now(), a snooze taken away) →
+  `settledChanged(path, on)`; `snooze(path, preset)` ("" done, else why not) / `wake(path)` →
+  `snoozedChanged(path)`; `setNeverAutoSettle(path, never)`; `state(path)`: {settled, snoozedUntil,
+  snoozed (still ahead), never}. A page without `project:` is no thread: refused.
+* **Presets** (`codethreads::snoozeEnd()`): `1h`, `3h`, `evening` (18:00 today, else tomorrow),
+  `tomorrow` (9:00), `monday` (9:00 next Monday); anything else is read as a date in words or digits,
+  Polish or English (`dates::parseNaturalDate`: "jutro o 18", "in 2 hours", "2026-12-01 9:00"; a day
+  without a time is 9:00 of it); a time not ahead is refused. `snoozeLabel(preset)` the end in words
+  for the menu ("18:00", "tomorrow 9:00").
+* **A new message reactivates it** (T3 Code's "any new message reactivates it"): WorkspaceChats writes
+  the user's message and the agent's answer through `codethreads::reactivated()`, which takes
+  `settled:` and `snoozed:` away. A snooze whose time passed is no snooze (its line stays until the
+  next message); a thread whose turn asks the user or failed is listed as active even while snoozed or
+  settled (`codethreads::sectionOf()`: archived, then needing the user, snoozed, settled, pinned,
+  active).
+* **The list** (`ChatListModel`): sections `pinned`, `recent`, `snoozed`, `settled`, `archived`, in that
+  order; `settled` / `snoozedUntil` roles; Settled and Snoozed folded unless `showSettled`, counted in
+  `settledCount` / `snoozedCount` (a query lists them anyway); a timer rebuilds the list when the next
+  snooze ends. CodeProjectSection shows one row "3 settled · 1 snoozed" under a project's threads that
+  unfolds them; a settled row has a check, a snoozed one an alarm clock with its time.
+* **By itself**: every hour and when the notebook gets ready (`settleUntouched()`), a thread whose last
+  message (its time, else the page's last change) is `autoSettleDays` old settles — Settings →
+  Extensions → Code mode → "Settle threads untouched for" (`AppSettings.codeAutoSettle`, key
+  `code/autoSettle`: 1, 3, 7 — the default, T3 Code's —, 30 days or never; a device setting), never in
+  the documentation notebook — unless `WorkspaceChats::heldBack()` holds it (its turn runs, asks or
+  failed, it is unread, on screen, has queued messages, a draft, a sub-conversation that will wake it)
+  or its page says `auto-settle: never`. `autoSettled(paths, days)`: AppController's toast with Undo.
+  The AI chat's "Archive conversations untouched for" leaves threads alone.
+* **Its pull request, its worktree** (`tidy()`, with `settleUntouched()`): every thread with a worktree
+  of its own on this device has its branch's pull request asked of gh (`CodeProjects::pullRequestState()`
+  → `gh pr view <branch> --json …`); merged or closed, the thread settles (T3 Code's second auto-settle
+  rule; `codethreads::settlesFromPullRequest()`: not held, not `auto-settle: never`) — `autoSettled(paths,
+  0)`. Then, settled, its worktree is removed (`git worktree remove`, never `--force`: the branch and its
+  commits stay) when Settings → Extensions → Code mode → "Remove the worktrees of settled threads"
+  (`AppSettings.codeWorktreeCleanup`, key `code/worktreeCleanup`: never — the default —, merged — its
+  pull request merged —, 7 or 30 days after it settled, or merged) says so, it has no uncommitted change
+  (`CodeProjects::worktreeChanges()`, untracked files counted) and no other thread that is not settled
+  works there (`codethreads::removesWorktree()`) — `worktreeCleaned(path, folder)`: AppController's toast,
+  whose Undo makes the worktree again from its branch (`restoreWorktree()`). `tidied()` when every
+  thread was looked at.
+* **What settling does** (`terminalwiring.cpp` → `TerminalRegistry::settle()`, docs/CODE-TERMINAL.md
+  "Settling"): the thread's terminals running a script with `stopOnSettle` end, its idle ones too, and
+  its scripts with `runOnSettle` run in its worktree (none for a thread in the project's own folder, as
+  T3 Code skips main checkouts) — one at a time across every thread, a tab that ended with 0 closed, a
+  failed one kept open.
+* **The thread's menu** (CodeThreadRow): Settle / Unsettle, Snooze ▸ (CodeSnoozeMenu: the presets with
+  their times, "Until…" — CodeSidebar's `codeSnoozeDialog`, a time typed, its end shown as it is typed),
+  Wake, "Never settle by itself"; settling and snoozing show a toast whose Undo puts it back
+  (`AppController.toastUndoChatMark(…, "settled" | "snoozed", on)`).
 
 ## Threads on the phone
 
@@ -469,17 +547,17 @@ thread's files opening the viewer at their line (`CodeView.openFileInViewer(path
   waiting message taken back there; a new
   worktree there from another base than its HEAD in the UI; projects of two computers with the same id
   (the first computer's is listed).
-* t3.json's `stopOnSettle`, `runOnSettle`, `previewUrl` (no in-app browser), `worktreeSubmodules`,
-  sparse checkouts, multi-repository projects and custom worktree layouts; T3 Code's branch naming
-  modes (a semantic prefix the AI picks, the user's own instructions for it); automatic worktree
-  cleanup (by age, merged pull requests).
+* t3.json's `worktreeSubmodules`, sparse checkouts, multi-repository projects and custom worktree layouts; T3 Code's branch naming
+  modes (a semantic prefix the AI picks, the user's own instructions for it); worktrees cleaned up by
+  their age alone, whatever their threads (settled threads' worktrees are: "Settling and snoozing").
 * Cloning: other hosts' repository lists (GitLab, Forgejo, Bitbucket — their addresses clone, their
   lists are not shown), T3 Code's "Clone into host folders" (`<host>/<owner>/<repo>`), a new project
   made from nothing (`git init` with a README, a GitHub repository published for it), copying a
   project's ignored files (`.env`) to a clone on another computer, cloning on a computer that shares
   its agents from the phone.
-* Settling and snoozing threads, a title the AI gives a new thread by itself (its first message's
-  words name it; "Regenerate title" asks), dropping files on a thread's row, scratch threads without a
-  project.
+* A title
+  the AI gives a new thread by itself (its first message's words name it; "Regenerate title" asks),
+  scratch threads without a project; T3 Code's in-app browser for
+  `previewUrl` (the system's opens it).
 * Editing a project's files in the viewer, rendered Markdown, HTML and PDF files there, find within
   the file shown, mentions of threads and pull requests (docs/CODE-FILES.md "Not done").

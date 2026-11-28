@@ -549,6 +549,35 @@ AppController::AppController(const Options &options, QObject *parent)
                                 u"info"_s, tr("Undo"));
         m_autoArchiveToasts.insert(id, paths);
     });
+    // Code mode's threads untouched for a while, settled by themselves (Settings → Extensions → Code
+    // mode; CodeThreads::setAutoSettleDays): never in the documentation; a toast with Undo.
+    const auto autoSettle = [this] {
+        const bool mine = m_workspace->isOpen() && !inDocsVault();
+        m_workspace->codeThreads()->setAutoSettleDays(mine ? m_settings->codeAutoSettleDays() : 0);
+        m_workspace->codeThreads()->setWorktreeCleanup(mine ? m_settings->codeWorktreeCleanup() : u"never"_s);
+    };
+    autoSettle();
+    connect(m_settings.get(), &AppSettings::codeAutoSettleChanged, this, autoSettle);
+    connect(m_settings.get(), &AppSettings::codeWorktreeCleanupChanged, this, autoSettle);
+    connect(m_workspace.get(), &Workspace::openChanged, this, autoSettle);
+    connect(this, &AppController::inDocsVaultChanged, this, autoSettle);
+    connect(m_workspace->codeThreads(), &CodeThreads::autoSettled, this, [this](const QStringList &paths, int days) {
+        const QString text = days == 0 ? tr("Settled %n thread(s): the pull request was merged or closed", "",
+                                            int(paths.size()))
+                                       : tr("Settled %n thread(s) untouched for %1", "", int(paths.size()))
+                                                 .arg(tr("%n day(s)", "untouched for …", days));
+        m_autoSettleToasts.insert(toastWithAction(text, u"info"_s, tr("Undo")), paths);
+    });
+    // A settled thread's worktree removed by itself: Undo makes it again from its branch.
+    connect(m_workspace->codeThreads(), &CodeThreads::worktreeCleaned, this,
+            [this](const QString &path, const QString &folder) {
+                const QVariantMap place = m_workspace->chats()->threadPlace(path);
+                const int id = toastWithAction(tr("Removed the worktree of a settled thread (its branch %1 stays)")
+                                                       .arg(place.value(u"branch"_s).toString()),
+                                               u"info"_s, tr("Undo"));
+                m_worktreeToasts.insert(id, {place.value(u"project"_s).toString(), folder,
+                                             place.value(u"branch"_s).toString()});
+            });
     // The model chosen in the settings is the one Settings → Extensions → AI downloads and removes.
     m_localAi->setChosen(m_settings->aiLocalModel());
     connect(m_settings.get(), &AppSettings::aiChanged, this,
@@ -2653,6 +2682,18 @@ int AppController::toastUndoRename(const QString &text, const QString &actionTex
     return id;
 }
 
+void AppController::undoChatMark(const QString &path, const QString &mark, bool on)
+{
+    if (mark == u"pinned")
+        m_workspace->chats()->setPinned(path, !on);
+    else if (mark == u"archived")
+        m_workspace->chats()->setArchived(path, !on);
+    else if (mark == u"settled")
+        on ? m_workspace->codeThreads()->unsettle(path) : m_workspace->codeThreads()->settle(path);
+    else if (mark == u"snoozed")
+        m_workspace->codeThreads()->wake(path);
+}
+
 int AppController::toastUndoChatMark(const QString &text, const QString &actionText, const QString &path,
                                      const QString &mark, bool on)
 {
@@ -2709,15 +2750,22 @@ void AppController::hostToastActionTriggered(int hostId)
     }
     if (m_chatMarkToasts.contains(id)) {
         const auto [path, mark, on] = m_chatMarkToasts.take(id);
-        if (mark == u"pinned")
-            m_workspace->chats()->setPinned(path, !on);
-        else
-            m_workspace->chats()->setArchived(path, !on);
+        undoChatMark(path, mark, on);
         return;
     }
     if (m_autoArchiveToasts.contains(id)) {
         for (const QString &path : m_autoArchiveToasts.take(id))
             m_workspace->chats()->setArchived(path, false);
+        return;
+    }
+    if (m_worktreeToasts.contains(id)) {
+        const auto [project, folder, branch] = m_worktreeToasts.take(id);
+        m_workspace->projects()->restoreWorktree(project, folder, branch);
+        return;
+    }
+    if (m_autoSettleToasts.contains(id)) {
+        for (const QString &path : m_autoSettleToasts.take(id))
+            m_workspace->codeThreads()->unsettle(path);
         return;
     }
     Q_EMIT toastActionTriggered(id);
@@ -2734,6 +2782,8 @@ void AppController::hostToastRemoved(int hostId)
     m_rewindToasts.remove(id);
     m_chatMarkToasts.remove(id);
     m_autoArchiveToasts.remove(id);
+    m_autoSettleToasts.remove(id);
+    m_worktreeToasts.remove(id);
     m_automationToasts.remove(id);
     if (m_extensionToasts.contains(id))
         m_workspace->extensions()->forgetButton(m_extensionToasts.take(id));

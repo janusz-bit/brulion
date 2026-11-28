@@ -11,6 +11,9 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QJsonParseError>
+#include <QUrl>
+
+#include <optional>
 
 using namespace Qt::StringLiterals;
 
@@ -29,7 +32,104 @@ QString cleanLine(const QString &text)
     return out.simplified();
 }
 
+/// t3.json's defaultThreadEnvMode: "local" or "worktree", anything else left out with a warning.
+void readEnvMode(const QJsonObject &o, CodeProjects::Config &config)
+{
+    const QString mode = o.value(u"defaultThreadEnvMode"_s).toString();
+    if (mode == u"local" || mode == u"worktree")
+        config.defaultThreadEnvMode = mode;
+    else if (o.contains(u"defaultThreadEnvMode"_s))
+        config.warnings << CodeProjects::tr("defaultThreadEnvMode is neither “local” nor “worktree”: left out.");
+}
+
+/// t3.json's iconPath: a picture inside the project `folder` (no absolute path, nothing that leaves
+/// it — a link pointing out of it neither).
+void readIconPath(const QJsonObject &o, const QString &folder, CodeProjects::Config &config)
+{
+    const QJsonValue icon = o.value(u"iconPath"_s);
+    if (!icon.isString() || icon.toString().trimmed().isEmpty()) {
+        if (o.contains(u"iconPath"_s) && !icon.isString())
+            config.warnings << CodeProjects::tr("iconPath is not text: left out.");
+        return;
+    }
+    const QString relative = QDir::cleanPath(icon.toString().trimmed());
+    const QString suffix = QFileInfo(relative).suffix().toLower();
+    static const QStringList pictures{u"png"_s, u"svg"_s, u"jpg"_s, u"jpeg"_s, u"webp"_s, u"ico"_s, u"gif"_s};
+    const QString root = QFileInfo(folder).canonicalFilePath();
+    const QString real = QFileInfo(QDir(folder).filePath(relative)).canonicalFilePath();
+    if (QDir::isAbsolutePath(relative) || relative.startsWith(u".."_s) || !pictures.contains(suffix))
+        config.warnings << CodeProjects::tr("iconPath must be a picture inside the project: left out.");
+    else if (root.isEmpty() || real.isEmpty() || !QFileInfo(real).isFile())
+        config.warnings << CodeProjects::tr("iconPath names no file of the project: left out.");
+    else if (real != root && !real.startsWith(root + u'/'))
+        config.warnings << CodeProjects::tr("iconPath must be a picture inside the project: left out.");
+    else
+        config.iconPath = real;
+}
+
+/// A t3.json script's options beyond its name and command (anything that is not a boolean: its
+/// default — false, async true).
+void readScriptOptions(const QJsonObject &so, CodeProjects::Script &s, QStringList &warnings)
+{
+    static const QStringList icons{u"play"_s, u"test"_s, u"lint"_s, u"configure"_s, u"build"_s, u"debug"_s};
+    const QJsonValue icon = so.value(u"icon"_s);
+    s.icon = icon.isString() && icons.contains(icon.toString()) ? icon.toString() : u"play"_s;
+    s.onWorktree = so.value(u"runOnWorktreeCreate"_s).toBool(false);
+    s.wait = s.onWorktree && so.value(u"async"_s).isBool() && !so.value(u"async"_s).toBool();
+    s.stopOnSettle = so.value(u"stopOnSettle"_s).toBool(false);
+    s.runOnSettle = so.value(u"runOnSettle"_s).toBool(false);
+    const QJsonValue preview = so.value(u"previewUrl"_s);
+    s.previewUrl = CodeProjects::previewUrlOf(preview.toString());
+    if (!preview.isUndefined() && s.previewUrl.isEmpty())
+        warnings << CodeProjects::tr("The previewUrl of “%1” is no http or https address: left out.").arg(s.name);
+    s.autoOpenPreview = !s.previewUrl.isEmpty() && so.value(u"autoOpenPreview"_s).toBool(false);
+}
+
+/// Script `n` of t3.json's `scripts` (none, with a warning, when it is left out: not an object, no
+/// name or command as text, an empty one, a command too long, a name of `names` already).
+std::optional<CodeProjects::Script> parseScript(const QJsonValue &v, int n, const QStringList &names,
+                                                QStringList &warnings)
+{
+    if (!v.isObject()) {
+        warnings << CodeProjects::tr("Script %1 is not an object: left out.").arg(n);
+        return std::nullopt;
+    }
+    const QJsonObject so = v.toObject();
+    const QJsonValue name = so.value(u"name"_s), command = so.value(u"command"_s);
+    if (!name.isString() || !command.isString()) {
+        warnings << CodeProjects::tr("Script %1 has no name or command as text: left out.").arg(n);
+        return std::nullopt;
+    }
+    CodeProjects::Script s;
+    s.name = cleanLine(name.toString()).left(60);
+    // (The command as written: it runs through the user's shell when asked, line breaks and all.)
+    s.command = command.toString().trimmed();
+    if (s.name.isEmpty() || s.command.isEmpty()) {
+        warnings << CodeProjects::tr("Script %1 has an empty name or command: left out.").arg(n);
+        return std::nullopt;
+    }
+    if (s.command.size() > 4000) {
+        warnings << CodeProjects::tr("The command of “%1” is longer than 4000 characters: left out.").arg(s.name);
+        return std::nullopt;
+    }
+    if (names.contains(s.name.toLower())) {
+        warnings << CodeProjects::tr("A second script named “%1”: left out.").arg(s.name);
+        return std::nullopt;
+    }
+    readScriptOptions(so, s, warnings);
+    return s;
+}
+
 } // namespace
+
+QString CodeProjects::previewUrlOf(const QString &text)
+{
+    const QUrl url(text.trimmed(), QUrl::StrictMode);
+    const QString scheme = url.scheme().toLower();
+    if (!url.isValid() || url.host().isEmpty() || (scheme != u"http" && scheme != u"https"))
+        return {};
+    return url.toString();
+}
 
 CodeProjects::Config CodeProjects::parseConfig(const QByteArray &data, const QString &folder)
 {
@@ -53,78 +153,24 @@ CodeProjects::Config CodeProjects::parseConfig(const QByteArray &data, const QSt
     }
     const QJsonObject o = doc.object();
 
-    const QString mode = o.value(u"defaultThreadEnvMode"_s).toString();
-    if (mode == u"local" || mode == u"worktree")
-        config.defaultThreadEnvMode = mode;
-    else if (o.contains(u"defaultThreadEnvMode"_s))
-        config.warnings << tr("defaultThreadEnvMode is neither “local” nor “worktree”: left out.");
-
-    // The icon: a picture inside the project (no absolute path, nothing that leaves it — a link
-    // pointing out of it neither).
-    if (const QJsonValue icon = o.value(u"iconPath"_s); icon.isString() && !icon.toString().trimmed().isEmpty()) {
-        const QString relative = QDir::cleanPath(icon.toString().trimmed());
-        const QString suffix = QFileInfo(relative).suffix().toLower();
-        const QStringList pictures{u"png"_s, u"svg"_s, u"jpg"_s, u"jpeg"_s, u"webp"_s, u"ico"_s, u"gif"_s};
-        const QString root = QFileInfo(folder).canonicalFilePath();
-        const QString full = QDir(folder).filePath(relative);
-        const QString real = QFileInfo(full).canonicalFilePath();
-        if (QDir::isAbsolutePath(relative) || relative.startsWith(u".."_s) || !pictures.contains(suffix))
-            config.warnings << tr("iconPath must be a picture inside the project: left out.");
-        else if (root.isEmpty() || real.isEmpty() || !QFileInfo(real).isFile())
-            config.warnings << tr("iconPath names no file of the project: left out.");
-        else if (real != root && !real.startsWith(root + u'/'))
-            config.warnings << tr("iconPath must be a picture inside the project: left out.");
-        else
-            config.iconPath = real;
-    } else if (o.contains(u"iconPath"_s) && !icon.isString()) {
-        config.warnings << tr("iconPath is not text: left out.");
-    }
+    readEnvMode(o, config);
+    readIconPath(o, folder, config);
 
     const QJsonValue scripts = o.value(u"scripts"_s);
     if (!scripts.isUndefined() && !scripts.isArray())
         config.warnings << tr("scripts is not a list: left out.");
-    const QStringList icons{u"play"_s, u"test"_s, u"lint"_s, u"configure"_s, u"build"_s, u"debug"_s};
     QStringList names;
     int n = 0;
     for (const QJsonValue &v : scripts.toArray()) {
-        ++n;
-        if (!v.isObject()) {
-            config.warnings << tr("Script %1 is not an object: left out.").arg(n);
+        const std::optional<Script> s = parseScript(v, ++n, names, config.warnings);
+        if (!s)
             continue;
-        }
-        const QJsonObject so = v.toObject();
-        const QJsonValue name = so.value(u"name"_s), command = so.value(u"command"_s);
-        if (!name.isString() || !command.isString()) {
-            config.warnings << tr("Script %1 has no name or command as text: left out.").arg(n);
-            continue;
-        }
-        Script s;
-        s.name = cleanLine(name.toString()).left(60);
-        // (The command as written: it runs through the user's shell when asked, line breaks and all.)
-        s.command = command.toString().trimmed();
-        if (s.name.isEmpty() || s.command.isEmpty()) {
-            config.warnings << tr("Script %1 has an empty name or command: left out.").arg(n);
-            continue;
-        }
-        if (s.command.size() > 4000) {
-            config.warnings << tr("The command of “%1” is longer than 4000 characters: left out.").arg(s.name);
-            continue;
-        }
-        if (names.contains(s.name.toLower())) {
-            config.warnings << tr("A second script named “%1”: left out.").arg(s.name);
-            continue;
-        }
         if (config.scripts.size() >= MaxScripts) {
             config.warnings << tr("More than %1 scripts: the others are left out.").arg(MaxScripts);
             break;
         }
-        const QJsonValue icon = so.value(u"icon"_s);
-        s.icon = icon.isString() && icons.contains(icon.toString()) ? icon.toString() : u"play"_s;
-        // (A value that is not a boolean is its default: false, and async true — no waiting.)
-        s.onWorktree = so.value(u"runOnWorktreeCreate"_s).toBool(false);
-        s.wait = s.onWorktree && so.value(u"async"_s).isBool() && !so.value(u"async"_s).toBool();
-        names << s.name.toLower();
-        config.scripts << s;
+        names << s->name.toLower();
+        config.scripts << *s;
     }
     return config;
 }

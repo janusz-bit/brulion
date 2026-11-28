@@ -2732,6 +2732,7 @@ Item {
                 objectName: "codeSettings"
                 visible: AppSettings.acpAvailable
                 readonly property list<var> editors: Workspace.projects.editors
+                readonly property list<var> cleanupChoices: [{ value: "never", text: qsTr("Never") }, { value: "merged", text: qsTr("Merged") }, { value: "7", text: qsTr("A week") }, { value: "30", text: qsTr("30 days") }]
                 /// An editor's name of CodeProjects.editors (its id when it is not there).
                 function editorName(id: string): string {
                     for (let i = 0; i < codeGroup.editors.length; ++i)
@@ -2866,6 +2867,30 @@ Item {
                         accessibleName: qsTr("Cloned repositories")
                         inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
                         onEditingFinished: Workspace.projects.clonesRoot = text
+                    }
+                }
+                // Threads untouched for a while settled by themselves (CodeThreads, T3 Code's
+                // auto-settle; docs/CODE.md "Settling and snoozing").
+                ShellSettingRow {
+                    title: qsTr("Settle threads untouched for")
+                    description: qsTr("Checked every hour on this device: not those that run, ask you something, failed, are unread, have messages waiting or say “Never settle by itself”. Settling ends their idle terminals and runs their “When the thread settles” scripts. A toast offers Undo.")
+                    BSegmented {
+                        objectName: "codeAutoSettleSetting"
+                        accessibleName: qsTr("Settle threads untouched for")
+                        model: aiGroup.autoArchiveChoices
+                        currentValue: AppSettings.codeAutoSettle
+                        onActivated: (value) => AppSettings.codeAutoSettle = "" + value
+                    }
+                }
+                ShellSettingRow {
+                    title: qsTr("Remove the worktrees of settled threads")
+                    description: qsTr("Only a worktree without uncommitted changes that no active thread uses; its branch and commits stay, and a toast offers Undo. “Merged”: once its pull request is merged (with the GitHub CLI).")
+                    BSegmented {
+                        objectName: "codeWorktreeCleanupSetting"
+                        accessibleName: qsTr("Remove the worktrees of settled threads")
+                        model: codeGroup.cleanupChoices
+                        currentValue: AppSettings.codeWorktreeCleanup
+                        onActivated: (value) => AppSettings.codeWorktreeCleanup = "" + value
                     }
                 }
                 // Experimental: terminals drawn by Atrament, Brulion's own UI framework

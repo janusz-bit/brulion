@@ -566,6 +566,17 @@
     </message>
 </context>
 <context>
+    <name>CodeFileFindBar</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/codefiles/CodeFileFindBar.qml" line="53"/>
+        <source>%n result(s)</source>
+        <translation>
+            <numerusform>%n result</numerusform>
+            <numerusform>%n results</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>CodeFilePicker</name>
     <message numerus="yes">
         <location filename="../src/app/qml/codefiles/CodeFilePicker.qml" line="260"/>
@@ -573,6 +584,25 @@
         <translation>
             <numerusform>%n file</numerusform>
             <numerusform>%n files</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
+    <name>CodeProjectSection</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/code/CodeProjectSection.qml" line="68"/>
+        <source>%n settled</source>
+        <translation>
+            <numerusform>%n settled</numerusform>
+            <numerusform>%n settled</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/qml/code/CodeProjectSection.qml" line="69"/>
+        <source>%n snoozed</source>
+        <translation>
+            <numerusform>%n snoozed</numerusform>
+            <numerusform>%n snoozed</numerusform>
         </translation>
     </message>
 </context>
@@ -606,7 +636,7 @@
 <context>
     <name>CodeSidebar</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/code/CodeSidebar.qml" line="655"/>
+        <location filename="../src/app/qml/code/CodeSidebar.qml" line="700"/>
         <source>The worktree has uncommitted changes in %n file(s): deleting it loses them.</source>
         <translation>
             <numerusform>The worktree has uncommitted changes in %n file: deleting it loses them.</numerusform>
@@ -1805,7 +1835,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3403"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3428"/>
         <source>%n warning(s) or error(s)</source>
         <translation>
             <numerusform>%n warning or error</numerusform>
@@ -1813,7 +1843,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3268"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3293"/>
         <source>Last check %1: %n reminder(s), the sync failed.</source>
         <translation>
             <numerusform>Last check %1: %n reminder, the sync failed.</numerusform>
@@ -1853,7 +1883,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3092"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3117"/>
         <source>Type check: %n warning(s), %1</source>
         <translation>
             <numerusform>Type check: %n warning, %1</numerusform>
@@ -1861,7 +1891,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3270"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3295"/>
         <source>Last check %1: %n reminder(s).</source>
         <translation>
             <numerusform>Last check %1: %n reminder.</numerusform>
@@ -2951,6 +2981,7 @@
     </message>
     <message numerus="yes">
         <location filename="../src/app/shell/appcontroller.cpp" line="546"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="568"/>
         <source>%n day(s)</source>
         <comment>untouched for …</comment>
         <translation>
@@ -2964,6 +2995,22 @@
         <translation>
             <numerusform>Archived %n conversation untouched for %1</numerusform>
             <numerusform>Archived %n conversations untouched for %1</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/appcontroller.cpp" line="565"/>
+        <source>Settled %n thread(s): the pull request was merged or closed</source>
+        <translation>
+            <numerusform>Settled %n thread: its pull request was merged or closed</numerusform>
+            <numerusform>Settled %n threads: their pull requests were merged or closed</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/appcontroller.cpp" line="567"/>
+        <source>Settled %n thread(s) untouched for %1</source>
+        <translation>
+            <numerusform>Settled %n thread untouched for %1</numerusform>
+            <numerusform>Settled %n threads untouched for %1</numerusform>
         </translation>
     </message>
 </context>
@@ -3081,7 +3128,7 @@
 <context>
     <name>brulion::shell::WorkspaceChats</name>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacechats.cpp" line="629"/>
+        <location filename="../src/app/shell/workspacechats.cpp" line="630"/>
         <source>%n file(s) put back as they were</source>
         <translation>
             <numerusform>%n file put back as it was</numerusform>
@@ -3089,7 +3136,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacechats.cpp" line="630"/>
+        <location filename="../src/app/shell/workspacechats.cpp" line="631"/>
         <source>%n file(s) put back</source>
         <translation>
             <numerusform>%n file put back</numerusform>
@@ -3097,7 +3144,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacechats.cpp" line="631"/>
+        <location filename="../src/app/shell/workspacechats.cpp" line="632"/>
         <source>%n changed since or not known before: left as they are (their history has them)</source>
         <translation>
             <numerusform>%n changed since or not known before: left as it is (its history has it)</numerusform>
@@ -3105,7 +3152,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacechats.cpp" line="1107"/>
+        <location filename="../src/app/shell/workspacechats.cpp" line="1108"/>
         <source>The files are back as they were before that message (%n file(s) changed).</source>
         <translation>
             <numerusform>The files are back as they were before that message (%n file changed).</numerusform>
@@ -3113,7 +3160,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacechats.cpp" line="2533"/>
+        <location filename="../src/app/shell/workspacechats.cpp" line="2536"/>
         <source>%n message(s) taken out of the conversation</source>
         <translation>
             <numerusform>%n message taken out of the conversation</numerusform>

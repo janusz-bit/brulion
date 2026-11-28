@@ -47,6 +47,7 @@
 #include "workspacemodel.h"
 
 #include "markdown/inlinerenderer.h"
+#include "codethreads/codethreads.h"
 
 #include <QSet>
 #include <QString>
@@ -210,6 +211,11 @@ class ChatListModel : public WorkspaceListModel {
     /// How many are archived (with a query: of those that match it), listed or not / pinned.
     Q_PROPERTY(int archivedCount READ archivedCount NOTIFY sectionsChanged FINAL)
     Q_PROPERTY(int pinnedCount READ pinnedCount NOTIFY sectionsChanged FINAL)
+    /// Code mode's settled and snoozed threads are listed (their sections unfolded; docs/CODE.md
+    /// "Settling and snoozing") / how many there are, listed or not.
+    Q_PROPERTY(bool showSettled READ showSettled WRITE setShowSettled NOTIFY showSettledChanged FINAL)
+    Q_PROPERTY(int settledCount READ settledCount NOTIFY sectionsChanged FINAL)
+    Q_PROPERTY(int snoozedCount READ snoozedCount NOTIFY sectionsChanged FINAL)
     /// Which conversations: "" those of the notebook (no `project:` — the AI chat), "*" every
     /// thread of Code mode, a project's id its threads (docs/CODE.md).
     Q_PROPERTY(QString project READ project WRITE setProject NOTIFY projectChanged FINAL)
@@ -246,7 +252,11 @@ public:
         MatchLineRole,
         ProjectRole,
         BranchRole,
-        WorktreeRole
+        WorktreeRole,
+        /// A thread's settling time / snooze's end ("yyyy-MM-dd HH:mm"; "" none, or a snooze that
+        /// ended or that a question or failure broke).
+        SettledRole,
+        SnoozedUntilRole
     };
     explicit ChatListModel(QObject *parent = nullptr);
     QString project() const { return m_project; }
@@ -264,6 +274,10 @@ public:
     QString sortBy() const { return m_sortBy; }
     void setSortBy(const QString &sort);
     int archivedCount() const { return m_archivedCount; }
+    bool showSettled() const { return m_showSettled; }
+    void setShowSettled(bool show);
+    int settledCount() const { return m_settledCount; }
+    int snoozedCount() const { return m_snoozedCount; }
     int pinnedCount() const { return m_pinnedCount; }
 
     QVariant data(const QModelIndex &index, int role) const override;
@@ -288,6 +302,7 @@ Q_SIGNALS:
     void localeChanged();
     void queryChanged();
     void showArchivedChanged();
+    void showSettledChanged();
     void sectionsChanged();
     void projectChanged();
     void filterChanged();
@@ -313,6 +328,8 @@ private:
         /// A thread's worktree and branch ("" the project's folder).
         QString worktree;
         QString branch;
+        /// A thread's settling and snooze (its page's frontmatter).
+        codethreads::State state;
         /// When it was started (its first message's time, ms since the epoch; else its date's).
         qint64 created = 0;
         /// Its messages for a query: {first line in the page, text, the text folded}.
@@ -347,6 +364,8 @@ private:
         QString project;
         QString worktree;
         QString branch;
+        QString settled;
+        QString snoozedUntil;
         qint64 created = 0;
         bool operator==(const Row &) const = default;
     };
@@ -360,6 +379,15 @@ private:
     QString m_sortBy = QStringLiteral("activity");
     int m_archivedCount = 0;
     int m_pinnedCount = 0;
+    bool m_showSettled = false;
+    int m_settledCount = 0;
+    int m_snoozedCount = 0;
+    /// The next snooze that ends: the list again then.
+    QTimer m_wakeTimer;
+    /// Its section ("pinned", "recent", "snoozed", "settled", "archived") at `now` and the snooze shown.
+    static void placeRow(Row &r, const Entry &e, const QDateTime &now);
+    /// The earliest snooze of m_all that ends after `now`: m_wakeTimer set for it.
+    void scheduleWake(const QDateTime &now);
     QList<QMetaObject::Connection> m_turnsChanged;
     QTimer m_stateTimer;
     /// The turns' state changed: the rows' running / queued again.

@@ -513,20 +513,39 @@ bool CodeProjects::checkWorktree(const QString &folder)
 {
     if (folder.isEmpty() || !gitAvailable())
         return false;
+    worktreeChanges(folder, [this, folder](int changes, const QString &branch, const QString &error) {
+        Q_EMIT worktreeChecked(folder, changes, branch, error);
+    });
+    return true;
+}
+
+void CodeProjects::worktreeChanges(const QString &folder,
+                                   std::function<void(int, const QString &, const QString &)> done)
+{
     if (!QFileInfo(folder).isDir()) {
         // (Gone already: nothing in it to lose.)
-        QMetaObject::invokeMethod(
-                this, [this, folder] { Q_EMIT worktreeChecked(folder, 0, QString(), QString()); }, Qt::QueuedConnection);
-        return true;
+        QMetaObject::invokeMethod(this, [done] { done(0, QString(), QString()); }, Qt::QueuedConnection);
+        return;
     }
-    git()->status(folder, [this, folder](const gitcli::StatusReport &s) {
+    git()->status(folder, [done](const gitcli::StatusReport &s) {
         int changes = 0;
         for (const gitcli::FileChange &c : s.changes)
             if (c.change != gitcli::Change::Ignored)
                 ++changes;
-        Q_EMIT worktreeChecked(folder, s.ok ? changes : -1, s.status.branch.head, s.ok ? QString() : s.error);
+        done(s.ok ? changes : -1, s.status.branch.head, s.ok ? QString() : s.error);
     });
-    return true;
+}
+
+void CodeProjects::pullRequestState(const QString &folder, const QString &branch,
+                                    std::function<void(const QString &)> done)
+{
+    if (!ghAvailable() || branch.isEmpty() || !QFileInfo(folder).isDir()) {
+        QMetaObject::invokeMethod(this, [done] { done(QString()); }, Qt::QueuedConnection);
+        return;
+    }
+    git()->pullRequestFor(folder, branch, QString(), [done](const gitcli::PullRequestStatus &s) {
+        done(s.ok && s.found ? s.pr.state : QString());
+    });
 }
 
 bool CodeProjects::removeWorktree(const QString &id, const QString &folder, bool force)

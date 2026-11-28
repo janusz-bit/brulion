@@ -209,6 +209,7 @@ Workspace::Workspace(QObject *parent) : EditorHost(parent)
     m_extensions->setAiPictures([this](const QString &name, QString *why) { return aiPicture(name, why); });
     m_extensions->setPictureHost(this);
     m_chats = new WorkspaceChats(this, m_extensions, this);
+    m_codeThreads = new CodeThreads(this, m_chats, this);
     connect(m_extensions, &WorkspaceExtensions::macrosChanged, this, &EditorHost::macrosChanged);
     connect(m_extensions, &WorkspaceExtensions::appRevisionChanged, this, &Workspace::followExtensionStyles);
     m_replacing = new ReplaceSession(this);

@@ -183,6 +183,86 @@ private Q_SLOTS:
         QVERIFY(CodeProjects::parseConfig(longOne, folder).scripts.isEmpty());
     }
 
+    // T3 Code's settling options and preview address (docs/CODE.md "t3.json"): kept as read, a
+    // preview that is no web address left out with a warning (and its autoOpenPreview with it).
+    void parseConfigSettleAndPreview()
+    {
+        const auto script = [](const QString &name, const QString &command, const QJsonObject &more) {
+            QJsonObject o = more;
+            o.insert(u"name"_s, name);
+            o.insert(u"command"_s, command);
+            return o;
+        };
+        const QJsonArray scripts{
+                script(u"Dev"_s, u"pnpm dev"_s,
+                       {{u"previewUrl"_s, u"http://localhost:3000"_s}, {u"autoOpenPreview"_s, true}, {u"stopOnSettle"_s, true}}),
+                script(u"Sprzątanie"_s, u"cargo clean"_s, {{u"icon"_s, u"build"_s}, {u"runOnSettle"_s, true}}),
+                script(u"Zły"_s, u"x"_s, {{u"previewUrl"_s, u"javascript:alert(1)"_s}, {u"autoOpenPreview"_s, true}}),
+                script(u"Plik"_s, u"y"_s, {{u"previewUrl"_s, u"file:///etc/passwd"_s}}),
+                script(u"Tekst"_s, u"z"_s,
+                       {{u"stopOnSettle"_s, u"tak"_s}, {u"runOnSettle"_s, 1}, {u"previewUrl"_s, u"https://żółw.example/ścieżka"_s}}),
+        };
+        const CodeProjects::Config c = CodeProjects::parseConfig(
+                QJsonDocument(QJsonObject{{u"scripts"_s, scripts}}).toJson(), fresh(u"osiadanie"_s));
+        QCOMPARE(c.scripts.size(), 5);
+        QVERIFY(c.scripts.at(0).stopOnSettle && !c.scripts.at(0).runOnSettle);
+        QCOMPARE(c.scripts.at(0).previewUrl, u"http://localhost:3000"_s);
+        QVERIFY(c.scripts.at(0).autoOpenPreview);
+        QVERIFY(c.scripts.at(1).runOnSettle && !c.scripts.at(1).stopOnSettle);
+        QVERIFY(c.scripts.at(1).previewUrl.isEmpty() && !c.scripts.at(1).autoOpenPreview);
+        QVERIFY(c.scripts.at(2).previewUrl.isEmpty() && !c.scripts.at(2).autoOpenPreview);
+        QVERIFY(c.scripts.at(3).previewUrl.isEmpty());
+        // (Not booleans: their defaults.)
+        QVERIFY(!c.scripts.at(4).stopOnSettle && !c.scripts.at(4).runOnSettle);
+        QVERIFY(c.scripts.at(4).previewUrl.startsWith(u"https://"_s));
+        QCOMPARE(c.warnings.size(), 2);
+    }
+
+    // Files dropped on a thread's row: kept for its view, taken once — the pictures, then the text.
+    void dropOnThread()
+    {
+        CodeProjects projects;
+        QSignalSpy dropped(&projects, &CodeProjects::threadDropped);
+        const QString thread = u"AI/2026-11-28 Rabat.md"_s;
+        const QString root = QDir::tempPath() + u"/sklep"_s, picture = QDir::tempPath() + u"/żółw.png"_s;
+        projects.dropOnThread(thread, root,
+                              {QUrl::fromLocalFile(root + u"/src/a.cpp"_s), QUrl::fromLocalFile(picture),
+                               QUrl(u"https://example.com/x.png"_s)});
+        QCOMPARE(dropped.size(), 1);
+        QCOMPARE(dropped.last().at(0).toString(), thread);
+        QVERIFY(projects.hasThreadDrop(thread));
+        QCOMPARE(projects.takeDropPictures(thread), QList<QUrl>{QUrl::fromLocalFile(picture)});
+        QCOMPARE(projects.takeDropPictures(thread), QList<QUrl>());
+        QCOMPARE(projects.takeDropText(thread), u"@src/a.cpp"_s);
+        QVERIFY(!projects.hasThreadDrop(thread));
+        QCOMPARE(projects.takeDropText(thread), QString());
+        // Nothing local, or no thread: nothing kept.
+        projects.dropOnThread(thread, u"/x"_s, {QUrl(u"https://example.com/a"_s)});
+        projects.dropOnThread(QString(), root, {QUrl::fromLocalFile(root + u"/a"_s)});
+        QCOMPARE(dropped.size(), 1);
+        QVERIFY(!projects.hasThreadDrop(thread));
+    }
+
+    void previewUrlOf_data()
+    {
+        QTest::addColumn<QString>("text");
+        QTest::addColumn<QString>("kept");
+        QTest::newRow("localhost") << u"http://localhost:5173/"_s << u"http://localhost:5173/"_s;
+        QTest::newRow("https, spaces") << u"  https://example.com/a?b=1  "_s << u"https://example.com/a?b=1"_s;
+        QTest::newRow("upper scheme") << u"HTTP://127.0.0.1:8080"_s << u"http://127.0.0.1:8080"_s;
+        QTest::newRow("no host") << u"http://"_s << QString();
+        QTest::newRow("relative") << u"localhost:3000"_s << QString();
+        QTest::newRow("javascript") << u"javascript:alert(1)"_s << QString();
+        QTest::newRow("file") << u"file:///etc/passwd"_s << QString();
+        QTest::newRow("empty") << QString() << QString();
+    }
+    void previewUrlOf()
+    {
+        QFETCH(QString, text);
+        QFETCH(QString, kept);
+        QCOMPARE(CodeProjects::previewUrlOf(text), kept);
+    }
+
     void iconPath_data()
     {
         QTest::addColumn<QString>("icon");
@@ -308,6 +388,17 @@ private Q_SLOTS:
         QCOMPARE(s.value(u"icon"_s).toString(), u"play"_s);
         QVERIFY(!s.value(u"wait"_s).toBool());
         QCOMPARE(s.value(u"shortcut"_s).toString(), u"Ctrl+Alt+Y"_s);
+        // The settling options and the preview kept over storage; a preview that is no web address dropped.
+        projects.setScripts(id, {QVariantMap{{u"name"_s, u"Dev"_s}, {u"command"_s, u"pnpm dev"_s}, {u"stopOnSettle"_s, true},
+                                             {u"previewUrl"_s, u"http://localhost:3000"_s}, {u"autoOpenPreview"_s, true}},
+                                 QVariantMap{{u"name"_s, u"Czyść"_s}, {u"command"_s, u"cargo clean"_s}, {u"runOnSettle"_s, true},
+                                             {u"previewUrl"_s, u"ftp://x"_s}, {u"autoOpenPreview"_s, true}}});
+        const QVariantMap dev = projects.scripts(id).at(0).toMap(), clean = projects.scripts(id).at(1).toMap();
+        QVERIFY(dev.value(u"stopOnSettle"_s).toBool() && !dev.value(u"runOnSettle"_s).toBool());
+        QCOMPARE(dev.value(u"previewUrl"_s).toString(), u"http://localhost:3000"_s);
+        QVERIFY(dev.value(u"autoOpenPreview"_s).toBool());
+        QVERIFY(clean.value(u"runOnSettle"_s).toBool() && !clean.value(u"stopOnSettle"_s).toBool());
+        QVERIFY(clean.value(u"previewUrl"_s).toString().isEmpty() && !clean.value(u"autoOpenPreview"_s).toBool());
         // At most MaxScripts.
         QVariantList many;
         for (int i = 0; i < 70; ++i)
@@ -385,6 +476,27 @@ private Q_SLOTS:
         scripts = projects.scripts(id);
         QCOMPARE(byName(scripts, u"Lint"_s).value(u"command"_s).toString(), u"eslint ."_s);
         QCOMPARE(byName(scripts, u"Lint"_s).value(u"source"_s).toString(), u"t3json"_s);
+        // T3 Code's settling options and the preview, edited and kept; a preview that is no web
+        // address is dropped when saved, its opening with it.
+        m.setFlag(0, u"stopOnSettle"_s, true);
+        m.setFlag(0, u"runOnSettle"_s, true);
+        m.setText(0, u"previewUrl"_s, u"  http://localhost:5173  "_s);
+        m.setFlag(0, u"autoOpenPreview"_s, true);
+        m.setFlag(0, u"nieznane"_s, true);
+        QVERIFY(m.data(m.index(0), CodeScriptsModel::StopOnSettleRole).toBool());
+        QVERIFY(m.data(m.index(0), CodeScriptsModel::RunOnSettleRole).toBool());
+        QVERIFY(m.data(m.index(0), CodeScriptsModel::AutoOpenPreviewRole).toBool());
+        QCOMPARE(text(0, CodeScriptsModel::PreviewUrlRole), u"http://localhost:5173"_s);
+        m.setFlag(0, u"runOnSettle"_s, false);
+        m.save();
+        QVariantMap first = projects.scripts(id).at(0).toMap();
+        QVERIFY(first.value(u"stopOnSettle"_s).toBool() && !first.value(u"runOnSettle"_s).toBool());
+        QCOMPARE(first.value(u"previewUrl"_s).toString(), u"http://localhost:5173"_s);
+        QVERIFY(first.value(u"autoOpenPreview"_s).toBool());
+        m.setText(0, u"previewUrl"_s, u"localhost"_s);
+        m.save();
+        first = projects.scripts(id).at(0).toMap();
+        QVERIFY(first.value(u"previewUrl"_s).toString().isEmpty() && !first.value(u"autoOpenPreview"_s).toBool());
         // Never written to the file.
         QFile f(folder + u"/t3.json"_s);
         QVERIFY(f.open(QIODevice::ReadOnly));

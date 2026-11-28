@@ -12,6 +12,7 @@ qt_target_qml_sources(brulion
         qml/code/CodeRemoteChanges.qml
         qml/code/CodeProjectSection.qml
         qml/code/CodeThreadRow.qml
+        qml/code/CodeSnoozeMenu.qml
         qml/code/CodeScriptsEditor.qml
         qml/code/CodeBranchPicker.qml
         qml/code/CodePullRequestDialog.qml

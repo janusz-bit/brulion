@@ -43,6 +43,11 @@ public:
         OverridesRole,
         /// The script's id (as CodeProjects::scripts() gives it).
         ScriptIdRole,
+        /// T3 Code's settling options and preview (docs/CODE.md "t3.json").
+        StopOnSettleRole,
+        RunOnSettleRole,
+        PreviewUrlRole,
+        AutoOpenPreviewRole,
     };
 
     explicit CodeScriptsModel(QObject *parent = nullptr);
@@ -68,7 +73,8 @@ public:
     Q_INVOKABLE bool remove(int row);
     /// Moves a row of the device's by `delta` among the device's rows (the file's stay after them).
     Q_INVOKABLE bool moveRow(int row, int delta);
-    /// Sets "name", "command", "icon" or "shortcut" of `row` / "runOnWorktreeCreate" or "wait".
+    /// Sets "name", "command", "icon", "shortcut" or "previewUrl" of `row` / "runOnWorktreeCreate",
+    /// "wait", "stopOnSettle", "runOnSettle" or "autoOpenPreview".
     Q_INVOKABLE void setText(int row, const QString &field, const QString &value);
     Q_INVOKABLE void setFlag(int row, const QString &field, bool value);
     /// A row can be moved up / down (a device's row with another of the device's there).
@@ -85,6 +91,9 @@ Q_SIGNALS:
     void dirtyChanged();
 
 private:
+    /// Sets the boolean option `field` ("stopOnSettle", "runOnSettle", "autoOpenPreview") of `s`;
+    /// false for another field.
+    static bool setOption(CodeProjects::Script &s, const QString &field, bool value);
     struct Row {
         CodeProjects::Script script;
         bool fromFile = false;

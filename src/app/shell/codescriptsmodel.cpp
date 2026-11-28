@@ -47,6 +47,10 @@ QVariant CodeScriptsModel::data(const QModelIndex &index, int role) const
     case ShortcutRole: return r.script.shortcut;
     case OnWorktreeRole: return r.script.onWorktree;
     case WaitRole: return r.script.wait;
+    case StopOnSettleRole: return r.script.stopOnSettle;
+    case RunOnSettleRole: return r.script.runOnSettle;
+    case PreviewUrlRole: return r.script.previewUrl;
+    case AutoOpenPreviewRole: return r.script.autoOpenPreview;
     case SourceRole: return r.fromFile ? u"t3json"_s : u"device"_s;
     case OverridesRole: return r.overrides;
     case ScriptIdRole: return r.id;
@@ -63,6 +67,10 @@ QHash<int, QByteArray> CodeScriptsModel::roleNames() const
             {ShortcutRole, "shortcut"},
             {OnWorktreeRole, "runOnWorktreeCreate"},
             {WaitRole, "wait"},
+            {StopOnSettleRole, "stopOnSettle"},
+            {RunOnSettleRole, "runOnSettle"},
+            {PreviewUrlRole, "previewUrl"},
+            {AutoOpenPreviewRole, "autoOpenPreview"},
             {SourceRole, "source"},
             {OverridesRole, "overrides"},
             {ScriptIdRole, "scriptId"}};
@@ -76,12 +84,7 @@ void CodeScriptsModel::reload()
         for (const QVariant &v : m_projects->scripts(m_project)) {
             const QVariantMap m = v.toMap();
             Row r;
-            r.script = {m.value(u"name"_s).toString(),
-                        m.value(u"command"_s).toString(),
-                        m.value(u"icon"_s).toString(),
-                        m.value(u"shortcut"_s).toString(),
-                        m.value(u"runOnWorktreeCreate"_s).toBool(),
-                        m.value(u"wait"_s).toBool()};
+            r.script = CodeProjects::scriptFromMap(m);
             r.fromFile = m.value(u"source"_s).toString() == u"t3json";
             r.overrides = m.value(u"overrides"_s).toBool();
             r.id = m.value(u"id"_s).toString();
@@ -218,6 +221,8 @@ void CodeScriptsModel::setText(int row, const QString &field, const QString &val
         s.icon = value;
     else if (field == u"shortcut")
         s.shortcut = value.trimmed();
+    else if (field == u"previewUrl")
+        s.previewUrl = value.trimmed(); // (as typed: kept as a web address only, scriptFromMap())
     else
         return;
     if (s == m_rows.at(row).script)
@@ -239,7 +244,7 @@ void CodeScriptsModel::setFlag(int row, const QString &field, bool value)
             s.wait = false;
     } else if (field == u"wait") {
         s.wait = value && s.onWorktree;
-    } else {
+    } else if (!setOption(s, field, value)) {
         return;
     }
     if (s == m_rows.at(row).script)
@@ -247,6 +252,19 @@ void CodeScriptsModel::setFlag(int row, const QString &field, bool value)
     row = own(row);
     m_rows[row].script = s;
     changed(row);
+}
+
+bool CodeScriptsModel::setOption(CodeProjects::Script &s, const QString &field, bool value)
+{
+    if (field == u"stopOnSettle")
+        s.stopOnSettle = value;
+    else if (field == u"runOnSettle")
+        s.runOnSettle = value;
+    else if (field == u"autoOpenPreview")
+        s.autoOpenPreview = value;
+    else
+        return false;
+    return true;
 }
 
 bool CodeScriptsModel::nameTaken(int row) const
@@ -267,12 +285,7 @@ void CodeScriptsModel::save()
     for (const Row &r : std::as_const(m_rows)) {
         if (r.fromFile)
             continue;
-        out << QVariantMap{{u"name"_s, r.script.name},
-                           {u"command"_s, r.script.command},
-                           {u"icon"_s, r.script.icon},
-                           {u"shortcut"_s, r.script.shortcut},
-                           {u"runOnWorktreeCreate"_s, r.script.onWorktree},
-                           {u"wait"_s, r.script.wait}};
+        out << CodeProjects::scriptToMap(r.script);
     }
     m_projects->setScripts(m_project, out);
     reload();

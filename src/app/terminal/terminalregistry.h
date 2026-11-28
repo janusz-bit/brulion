@@ -88,6 +88,22 @@ public:
     Q_INVOKABLE void closeIdle(const QString &key);
     /// A program runs in a terminal of `key`.
     Q_INVOKABLE bool isBusy(const QString &key) const;
+
+    /// A script to run when a thread settles (T3 Code's runOnSettle).
+    struct SettleScript {
+        QString command;
+        QString label;
+    };
+    /// The thread `key` settled (T3 Code's settling, docs/CODE-TERMINAL.md "Settling"): its terminals
+    /// running one of `stopCommands` end (its scripts with stopOnSettle — a dev server), then those in
+    /// which no program runs; then each of `run` runs in a new tab of it in `folder` (its worktree),
+    /// one script at a time across every thread — one that ends with exit code 0 has its tab closed,
+    /// one that fails keeps it open (settleScriptEnded()).
+    void settle(const QString &key, const QStringList &stopCommands, const QString &folder,
+                const QList<SettleScript> &run);
+    /// Settle scripts that wait for their turn, and whether one runs now.
+    int settleWaiting() const { return int(m_settleQueue.size()); }
+    bool settleRunning() const { return !m_settleSession.isNull(); }
     /// Ends every terminal: every program hung up on at once, the sessions deleted later.
     Q_INVOKABLE void closeAll();
     /// SIGHUP to every program at once, the sessions kept (the app quits — its layouts saved just
@@ -127,6 +143,8 @@ Q_SIGNALS:
     void busyKeysChanged();
     /// Whether a program runs in the terminals of `key` changed.
     void busyChanged(const QString &key, bool busy);
+    /// A settle script of `key` ended with `exitCode` (-1: it did not start).
+    void settleScriptEnded(const QString &key, const QString &label, int exitCode);
 
 private:
     void touch(const QString &key);
@@ -148,6 +166,19 @@ private:
     QStringList m_savedOrder;
     std::function<void(const QByteArray &)> m_save;
     QTimer m_saveTimer;
+    /// Settle scripts waiting (key, folder, script) and the one that runs.
+    struct SettleRun {
+        QString key;
+        QString folder;
+        SettleScript script;
+    };
+    QList<SettleRun> m_settleQueue;
+    QPointer<TerminalSession> m_settleSession;
+    QString m_settleKey;
+    QString m_settleLabel;
+    /// The next settle script started when none runs.
+    void runNextSettle();
+    void settleEnded(int exitCode);
 };
 
 } // namespace brulion::terminal

@@ -316,6 +316,15 @@ again; the registry is not.
   automatic archiving of untouched threads) — `closeIdle()`, as T3 Code's settling closes a thread's
   idle terminals; the app quitting (`aboutToQuit`) — `hangUpAll()`: SIGHUP to every program at once,
   and the application's end deletes the registry (its child), which reaps them; the waits overlap.
+* **Settling** (docs/CODE.md "Settling and snoozing"): `settle(key, stopCommands, folder, run)` — the
+  wiring calls it on `CodeThreads::settledChanged(path, true)` with the commands of the project's
+  scripts that have `stopOnSettle`, the thread's worktree ("" for a thread in the project's own folder)
+  and its scripts with `runOnSettle`. Its terminals whose `command` is one of `stopCommands` end (a dev
+  server started from its button), then those in which nothing runs (as archiving), then each `run`
+  script opens a tab of the thread in `folder` — one script at a time across every thread
+  (`settleWaiting()`, `settleRunning()`); one that ends with exit code 0 has its tab closed, one that
+  fails (or does not start: -1) keeps it open for the user to read; `settleScriptEnded(key, label,
+  exitCode)` after each.
 * **Layouts over a restart**: what each thread had — its tabs, their splits and focus, every
   terminal's folder (where its shell is now), label and command; not the programs — is written to
   this device's settings (`code/terminalLayouts`, through `setLayoutStorage()` in the wiring) 2 s

@@ -765,7 +765,8 @@ public:
                                     const QString &oldTitle);
     /// A "success" toast whose button sets the AI chat's conversation `path` back — unpinned or
     /// pinned again (`mark` "pinned"), unarchived or archived again ("archived") as it was before
-    /// `on` (WorkspaceChats::setPinned / setArchived), also once the chat view is gone: its id.
+    /// `on` (WorkspaceChats::setPinned / setArchived), a Code mode thread unsettled or settled again
+    /// ("settled"), woken ("snoozed": CodeThreads) — also once the view is gone: its id.
     Q_INVOKABLE int toastUndoChatMark(const QString &text, const QString &actionText, const QString &path,
                                       const QString &mark, bool on);
     /// Main.qml: toast `id` of toastWithAction() is shown by the window's toast host as `hostId`.
@@ -864,6 +865,8 @@ private Q_SLOTS:
     void onFirstFrame();
 
 private:
+    /// toastUndoChatMark()'s button: `path`'s `mark` set back from `on`.
+    void undoChatMark(const QString &path, const QString &mark, bool on);
     void setStatus(const QString &status, const QString &error = {});
     /// Opens the vault a turn later — after the window's first frame (the splash) while it has
     /// not shown one yet: scanning a big vault must not keep the window blank.
@@ -1028,6 +1031,8 @@ private:
     QHash<int, QStringList> m_restoreToasts; ///< toastRestore()'s ids → the trash paths
     QHash<int, std::pair<QString, QString>> m_renameToasts; ///< toastUndoRename()'s ids → {path, old title}
     QHash<int, std::tuple<QString, QString, bool>> m_chatMarkToasts; ///< toastUndoChatMark()'s → {path, mark, on}
+    QHash<int, std::tuple<QString, QString, QString>> m_worktreeToasts; ///< {project, folder, branch} to restore
+    QHash<int, QStringList> m_autoSettleToasts;  ///< the threads settled by themselves, for Undo
     QHash<int, QStringList> m_autoArchiveToasts; ///< the conversations archived by themselves, for Undo
     QHash<int, QString> m_chatToasts; ///< an AI agent's question off screen: the toast's id → its conversation
     QHash<int, QString> m_openToasts; ///< toastOpen()'s ids → the page or conversation its Open shows

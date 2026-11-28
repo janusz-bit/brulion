@@ -346,6 +346,58 @@ void TerminalRegistry::archived(const QString &path, bool on)
     }
 }
 
+// ---- A thread settled ----------------------------------------------------------------------------
+
+void TerminalRegistry::settle(const QString &key, const QStringList &stopCommands, const QString &folder,
+                              const QList<SettleScript> &run)
+{
+    if (TerminalThread *thread = m_threads.value(key)) {
+        for (TerminalSession *session : thread->sessions())
+            if (!session->command().isEmpty() && stopCommands.contains(session->command()))
+                thread->closeSession(session, false);
+    }
+    archived(key, true);
+    if (folder.isEmpty())
+        return;
+    for (const SettleScript &script : run)
+        m_settleQueue.append({key, folder, script});
+    runNextSettle();
+}
+
+void TerminalRegistry::runNextSettle()
+{
+    while (m_settleSession.isNull() && !m_settleQueue.isEmpty()) {
+        const SettleRun next = m_settleQueue.takeFirst();
+        TerminalThread *thread = this->thread(next.key, next.folder);
+        TerminalSession *session = thread ? thread->openTab(next.script.command, next.script.label) : nullptr;
+        if (!session) {
+            Q_EMIT settleScriptEnded(next.key, next.script.label, -1);
+            continue;
+        }
+        m_settleSession = session;
+        m_settleKey = next.key;
+        m_settleLabel = next.script.label;
+        connect(session, &TerminalSession::exited, this, &TerminalRegistry::settleEnded, Qt::SingleShotConnection);
+        // (Its tab closed meanwhile, its thread deleted: the next one.)
+        connect(session, &QObject::destroyed, this, [this] { QTimer::singleShot(0, this, &TerminalRegistry::runNextSettle); });
+    }
+}
+
+void TerminalRegistry::settleEnded(int exitCode)
+{
+    TerminalSession *session = m_settleSession;
+    const QString key = m_settleKey, label = m_settleLabel;
+    m_settleSession.clear();
+    if (session) {
+        disconnect(session, &QObject::destroyed, this, nullptr);
+        if (exitCode == 0)
+            if (TerminalThread *thread = find(key))
+                thread->closeSession(session, false);
+    }
+    Q_EMIT settleScriptEnded(key, label, exitCode);
+    runNextSettle();
+}
+
 // ---- Layouts kept over a restart --------------------------------------------------------------
 
 void TerminalRegistry::setLayoutStorage(std::function<QByteArray()> load,

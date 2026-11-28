@@ -23,19 +23,6 @@ namespace brulion::shell {
 
 namespace {
 
-/// A script's fields as kept and as QML gives them.
-CodeProjects::Script scriptFrom(const QVariantMap &m)
-{
-    CodeProjects::Script s;
-    s.name = m.value(u"name"_s).toString().simplified().left(60);
-    s.command = m.value(u"command"_s).toString().trimmed().left(4000);
-    s.icon = m.value(u"icon"_s).toString().trimmed();
-    s.shortcut = m.value(u"shortcut"_s).toString().trimmed().left(40);
-    s.onWorktree = m.value(u"runOnWorktreeCreate"_s).toBool();
-    s.wait = s.onWorktree && m.value(u"wait"_s).toBool();
-    return s;
-}
-
 QJsonObject scriptJson(const CodeProjects::Script &s)
 {
     QJsonObject o{{u"name"_s, s.name}, {u"command"_s, s.command}, {u"icon"_s, s.icon}};
@@ -45,6 +32,14 @@ QJsonObject scriptJson(const CodeProjects::Script &s)
         o.insert(u"runOnWorktreeCreate"_s, true);
     if (s.wait)
         o.insert(u"wait"_s, true);
+    if (s.stopOnSettle)
+        o.insert(u"stopOnSettle"_s, true);
+    if (s.runOnSettle)
+        o.insert(u"runOnSettle"_s, true);
+    if (!s.previewUrl.isEmpty())
+        o.insert(u"previewUrl"_s, s.previewUrl);
+    if (s.autoOpenPreview)
+        o.insert(u"autoOpenPreview"_s, true);
     return o;
 }
 
@@ -67,6 +62,25 @@ const QStringList &t3Icons()
 }
 
 } // namespace
+
+/// A script's fields as kept and as QML gives them.
+CodeProjects::Script CodeProjects::scriptFromMap(const QVariantMap &m)
+{
+    CodeProjects::Script s;
+    s.name = m.value(u"name"_s).toString().simplified().left(60);
+    s.command = m.value(u"command"_s).toString().trimmed().left(4000);
+    s.icon = m.value(u"icon"_s).toString().trimmed();
+    s.shortcut = m.value(u"shortcut"_s).toString().trimmed().left(40);
+    s.onWorktree = m.value(u"runOnWorktreeCreate"_s).toBool();
+    s.wait = s.onWorktree && m.value(u"wait"_s).toBool();
+    s.stopOnSettle = m.value(u"stopOnSettle"_s).toBool();
+    s.runOnSettle = m.value(u"runOnSettle"_s).toBool();
+    s.previewUrl = previewUrlOf(m.value(u"previewUrl"_s).toString());
+    s.autoOpenPreview = !s.previewUrl.isEmpty() && m.value(u"autoOpenPreview"_s).toBool();
+    return s;
+}
+
+QVariantMap CodeProjects::scriptToMap(const Script &s) { return scriptJson(s).toVariantMap(); }
 
 CodeProjects::CodeProjects(QObject *parent) : QObject(parent)
 {
@@ -383,7 +397,7 @@ void CodeProjects::setScripts(const QString &id, const QVariantList &scripts)
     QList<Script> out;
     QStringList names;
     for (const QVariant &v : scripts) {
-        Script s = scriptFrom(v.toMap());
+        Script s = scriptFromMap(v.toMap());
         if (s.command.isEmpty())
             continue;
         if (s.name.isEmpty())
@@ -460,6 +474,10 @@ QVariantList CodeProjects::scripts(const QString &id) const
                            {u"shortcut"_s, s.shortcut},
                            {u"runOnWorktreeCreate"_s, s.onWorktree},
                            {u"wait"_s, s.wait},
+                           {u"stopOnSettle"_s, s.stopOnSettle},
+                           {u"runOnSettle"_s, s.runOnSettle},
+                           {u"previewUrl"_s, s.previewUrl},
+                           {u"autoOpenPreview"_s, s.autoOpenPreview},
                            {u"source"_s, source == u"t3json" ? u"t3json"_s : u"device"_s},
                            {u"overrides"_s, source == u"override"}};
     }
@@ -599,7 +617,7 @@ void CodeProjects::load()
             p.name = p.id;
         QStringList names;
         for (const QJsonValue &sv : o.value(u"scripts"_s).toArray()) {
-            Script s = scriptFrom(sv.toObject().toVariantMap());
+            Script s = scriptFromMap(sv.toObject().toVariantMap());
             if (s.command.isEmpty() || p.scripts.size() >= MaxScripts)
                 continue;
             if (s.name.isEmpty())

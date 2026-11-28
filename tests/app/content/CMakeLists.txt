@@ -21,6 +21,12 @@ brulion_add_test(tst_content_semantic SOURCES tst_content_semantic.cpp
 brulion_add_test(tst_content_chat SOURCES tst_content_chat.cpp ../fakeaiserver.h
     LIBS brulion_content brulion_shell brulion_platform brulion_core_vault brulion_core_ai brulion_core_aireport Qt6::Gui Qt6::Network)
 
+# Code mode's threads settled and snoozed on a real Workspace (tst_content_codethreads.cpp): the
+# page's lines written, the sidebar's sections and counts, a snooze ended by the clock or a failure,
+# a new message taking both away, threads settled by themselves after a week.
+brulion_add_test(tst_content_codethreads SOURCES tst_content_codethreads.cpp
+    LIBS brulion_content brulion_shell brulion_core_ai Qt6::Gui)
+
 # The views in their real QML (qml-smoke.sh): every content view (journals, a page with its side
 # panel and dialogs, all pages, tags, a tag, search, trash, history) at desktop and phone sizes
 # with the sample notebook; QML warnings from the content files fail the test, and so does a run

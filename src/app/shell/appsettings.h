@@ -171,6 +171,15 @@ class AppSettings : public QObject {
     /// setAutoArchiveDays): "never" (the default), or the days as a number — "1", "3", "7", "30".
     Q_PROPERTY(QString aiChatAutoArchive READ aiChatAutoArchive WRITE setAiChatAutoArchive NOTIFY
                        aiChatAutoArchiveChanged FINAL)
+    /// "Settle threads untouched for" (key `code/autoSettle`; CodeThreads::setAutoSettleDays, docs/CODE.md
+    /// "Settling and snoozing"): the days as a number — "1", "3", "7" (the default, T3 Code's), "30" —
+    /// or "never".
+    Q_PROPERTY(QString codeAutoSettle READ codeAutoSettle WRITE setCodeAutoSettle NOTIFY codeAutoSettleChanged FINAL)
+    /// "Remove the worktrees of settled threads" (key `code/worktreeCleanup`; CodeThreads::
+    /// setWorktreeCleanup): "never" (the default), "merged" (once its pull request is merged), "1",
+    /// "3", "7" or "30" (also that many days after it settled).
+    Q_PROPERTY(QString codeWorktreeCleanup READ codeWorktreeCleanup WRITE setCodeWorktreeCleanup NOTIFY
+                       codeWorktreeCleanupChanged FINAL)
     /// "Tool calls in chat" (key `ai/chatToolCalls`; docs/UI.md "AI agents (ACP)"): "all" (default:
     /// every call of an agent's turn), "hideFinished" (a call shows while it runs and stays only if
     /// it failed), "hideAll" (only failed ones; the status line says the agent works). Questions,
@@ -467,6 +476,12 @@ public:
     void setAiChatAutoArchive(const QString &days);
     /// aiChatAutoArchive() in days (0: never).
     int aiChatAutoArchiveDays() const;
+    QString codeAutoSettle() const;
+    void setCodeAutoSettle(const QString &days);
+    /// codeAutoSettle() in days (0: never).
+    int codeAutoSettleDays() const;
+    QString codeWorktreeCleanup() const;
+    void setCodeWorktreeCleanup(const QString &when);
     QString chatToolCalls() const;
     void setChatToolCalls(const QString &shown);
     bool acpAvailable() const;
@@ -749,6 +764,8 @@ Q_SIGNALS:
     void extensionsNotifyChanged();
     void appModeChanged();
     void aiChatAutoArchiveChanged();
+    void codeAutoSettleChanged();
+    void codeWorktreeCleanupChanged();
     void chatToolCallsChanged();
     void editorLineSpacingChanged();
     void editorFontChanged();

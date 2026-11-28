@@ -286,6 +286,42 @@ private Q_SLOTS:
         QCOMPARE(s.aiChatAutoArchiveDays(), 0);
     }
 
+    void codeModeSettling()
+    {
+        // "Settle threads untouched for": a week by default (T3 Code's); "Remove the worktrees of
+        // settled threads": never by default, merged or days; anything else never.
+        const QString file = nextFile();
+        {
+            AppSettings s(file, m_tmp.path());
+            QCOMPARE(s.codeAutoSettle(), u"7"_s);
+            QCOMPARE(s.codeAutoSettleDays(), 7);
+            QCOMPARE(s.codeWorktreeCleanup(), u"never"_s);
+            QSignalSpy settle(&s, &AppSettings::codeAutoSettleChanged);
+            QSignalSpy cleanup(&s, &AppSettings::codeWorktreeCleanupChanged);
+            s.setCodeAutoSettle(u"never"_s);
+            s.setCodeAutoSettle(u"never"_s);
+            QCOMPARE(settle.size(), 1);
+            QCOMPARE(s.codeAutoSettleDays(), 0);
+            s.setCodeWorktreeCleanup(u"merged"_s);
+            s.setCodeWorktreeCleanup(u"merged"_s);
+            QCOMPARE(cleanup.size(), 1);
+        }
+        {
+            AppSettings s(file, m_tmp.path());
+            QCOMPARE(s.codeAutoSettle(), u"never"_s);
+            QCOMPARE(s.codeWorktreeCleanup(), u"merged"_s);
+            s.setCodeWorktreeCleanup(u"30"_s);
+            QCOMPARE(s.codeWorktreeCleanup(), u"30"_s);
+            s.setCodeWorktreeCleanup(u"po scaleniu"_s);
+            QCOMPARE(s.codeWorktreeCleanup(), u"never"_s);
+            s.setCodeAutoSettle(u"3"_s);
+            QCOMPARE(s.codeAutoSettleDays(), 3);
+        }
+        QSettings(file, QSettings::IniFormat).setValue(u"code/autoSettle"_s, u"tydzień"_s);
+        AppSettings s(file, m_tmp.path());
+        QCOMPARE(s.codeAutoSettleDays(), 0);
+    }
+
     void followsOutsideLinksPersists()
     {
         // Device-local: in this device's settings, never in the synced .brulion/config.json.

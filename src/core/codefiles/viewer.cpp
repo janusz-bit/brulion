@@ -277,6 +277,54 @@ QString relativeInside(const QString &folder, const QString &path)
     return cleanRelativePath(QStringView(full).sliced(prefix.size()));
 }
 
+namespace {
+/// "@path", quoted when it has a space.
+QString mentionToken(const QString &path)
+{
+    return path.contains(u' ') ? QString(u"@\""_s + path + u'"') : QString(u'@' + path);
+}
+
+/// `text` in a code span: a fence of one more backtick than its longest run.
+QString codeSpan(const QString &text)
+{
+    int longest = 0, run = 0;
+    for (const QChar c : text) {
+        run = c == u'`' ? run + 1 : 0;
+        longest = std::max(longest, run);
+    }
+    const QString fence(longest + 1, u'`');
+    return fence + text + fence;
+}
+
+bool isPicturePath(const QString &path)
+{
+    static const QStringList pictures{u"png"_s, u"jpg"_s, u"jpeg"_s, u"gif"_s, u"webp"_s, u"bmp"_s, u"svg"_s};
+    return pictures.contains(QFileInfo(path).suffix().toLower());
+}
+} // namespace
+
+Dropped droppedFiles(const QString &folder, const QStringList &paths)
+{
+    Dropped out;
+    QStringList named;
+    for (const QString &path : paths) {
+        if (path.isEmpty())
+            continue;
+        if (isPicturePath(path)) {
+            if (!out.pictures.contains(path))
+                out.pictures << path;
+            continue;
+        }
+        const bool itself = !folder.isEmpty() && QDir::cleanPath(path) == QDir::cleanPath(folder);
+        const QString inside = relativeInside(folder, path);
+        const QString token = itself ? u"@./"_s : !inside.isEmpty() ? mentionToken(inside) : codeSpan(path);
+        if (!named.contains(token))
+            named << token;
+    }
+    out.text = named.join(u' ');
+    return out;
+}
+
 MentionAt mentionAt(QStringView text, int caret)
 {
     if (caret < 0 || caret > text.size())
@@ -296,7 +344,7 @@ QString withMention(QStringView text, int caret, QStringView path)
     const QString p = path.trimmed().toString();
     if (m.start < 0 || p.isEmpty())
         return {};
-    const QString written = p.contains(u' ') ? QString(u"@\""_s + p + u'"') : QString(u'@' + p);
+    const QString written = mentionToken(p);
     QStringView rest = text.sliced(caret);
     // (The rest of a word the caret was in belongs to the mention: replaced too.)
     qsizetype skip = 0;

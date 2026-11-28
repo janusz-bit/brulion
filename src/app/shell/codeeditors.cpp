@@ -7,6 +7,8 @@
 
 #include "codeprojects.h"
 
+#include "codefiles/viewer.h"
+
 #include <QDesktopServices>
 #include <QDir>
 #include <QFileInfo>
@@ -328,5 +330,28 @@ QString CodeProjects::batchCommandLine(const QString &batch, const QStringList &
     }
     return line + u'"';
 }
+
+void CodeProjects::dropOnThread(const QString &path, const QString &folder, const QList<QUrl> &files)
+{
+    QStringList local;
+    for (const QUrl &url : files)
+        if (url.isLocalFile())
+            local << QDir::cleanPath(url.toLocalFile());
+    const codefiles::Dropped dropped = codefiles::droppedFiles(folder, local);
+    if (path.isEmpty() || (dropped.pictures.isEmpty() && dropped.text.isEmpty()))
+        return;
+    QList<QUrl> pictures;
+    for (const QString &picture : dropped.pictures)
+        pictures << QUrl::fromLocalFile(picture);
+    m_drops.insert(path, {pictures, dropped.text});
+    Q_EMIT threadDropped(path);
+}
+
+QList<QUrl> CodeProjects::takeDropPictures(const QString &path)
+{
+    return m_drops.contains(path) ? std::exchange(m_drops[path].first, {}) : QList<QUrl>();
+}
+
+QString CodeProjects::takeDropText(const QString &path) { return m_drops.take(path).second; }
 
 } // namespace brulion::shell

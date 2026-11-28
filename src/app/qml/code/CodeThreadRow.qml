@@ -10,7 +10,9 @@ import Brulion
 // press or "⋯" its menu: rename, regenerate its title (T3 Code's: the AI names it anew from its
 // messages, when the AI is set up — WorkspaceChats.regenerateTitle), pin, mark unread, copy its path,
 // branch or link, a new thread in this worktree (or in the project's folder), open in the editor,
-// archive, move to the trash.
+// settle (T3 Code's "done for now": the Settled section), snooze until a time (presets, or one typed:
+// snoozeRequested), wake, never settle by itself, archive, move to the trash (docs/CODE.md "Settling
+// and snoozing"). A settled thread shows a check, a snoozed one the time it wakes.
 Item {
     id: thread
 
@@ -26,6 +28,9 @@ Item {
     required property bool pinned
     required property string branch
     required property string worktree
+    /// When it was settled / until when it is snoozed ("" not).
+    required property string settled
+    required property string snoozedUntil
     /// Its project (the section's): its folder is the thread's without a worktree.
     property string projectId
     property string projectPath
@@ -48,6 +53,25 @@ Item {
     signal renameRequested(string path, string title)
     signal deleteRequested(string path, string title, string worktree, string branch)
     signal copyRequested(string text, string what)
+    /// "Snooze → Until…": a time typed in a dialog of the sidebar's.
+    signal snoozeRequested(string path, string title)
+
+    /// Settles it (or takes it out of Settled), with Undo.
+    function toggleSettled(): void {
+        const on = thread.settled === ""
+        const done = on ? Workspace.codeThreads.settle(thread.path) : Workspace.codeThreads.unsettle(thread.path)
+        if (done)
+            AppController.toastUndoChatMark(on ? qsTr("Thread settled") : qsTr("Thread back among the active ones"),
+                                            qsTr("Undo"), thread.path, "settled", on)
+    }
+    /// Snoozes it until `preset` ends (CodeThreads.snooze), with Undo.
+    function snooze(preset: string): void {
+        const why = Workspace.codeThreads.snooze(thread.path, preset)
+        if (why !== "")
+            AppController.toast(why, "error")
+        else
+            AppController.toastUndoChatMark(qsTr("Thread snoozed"), qsTr("Undo"), thread.path, "snoozed", true)
+    }
 
     objectName: "codeThread"
     Layout.fillWidth: true
@@ -64,6 +88,28 @@ Item {
         color: thread.current ? Theme.bgSelected : threadHover.hovered ? Theme.bgHover : "transparent"
     }
     HoverHandler { id: threadHover; enabled: !Theme.touchUi }
+    // Files dropped on it (T3 Code's "Drop files onto a thread"): it opens, they go into its message.
+    DropArea {
+        id: fileDrop
+        objectName: "codeThreadDrop"
+        anchors.fill: parent
+        keys: ["text/uri-list"]
+        onDropped: (event) => {
+            Workspace.projects.dropOnThread(thread.path, thread.folder, event.urls)
+            event.acceptProposedAction()
+            thread.navigate({ view: "code", path: thread.path })
+        }
+    }
+    Rectangle {
+        anchors.fill: parent
+        anchors.leftMargin: Theme.space1
+        anchors.rightMargin: Theme.space1
+        visible: fileDrop.containsDrag
+        radius: Theme.radius
+        color: "transparent"
+        border.color: Theme.accent
+        border.width: 2
+    }
     TapHandler {
         acceptedButtons: Qt.LeftButton
         onTapped: thread.navigate({ view: "code", path: thread.path })
@@ -110,9 +156,27 @@ Item {
         BText {
             Layout.fillWidth: true
             text: thread.title
-            color: thread.archived ? Theme.fgMuted : Theme.fg
+            color: thread.archived || thread.settled !== "" || thread.snoozedUntil !== "" ? Theme.fgMuted : Theme.fg
             font.weight: thread.unread || thread.current ? Theme.weightSemiBold : Theme.weightNormal
             elide: Text.ElideRight
+        }
+        BIcon {
+            objectName: "codeThreadSettled"
+            visible: thread.settled !== ""
+            name: "circle-check"
+            size: Theme.iconSizeSm
+            color: Theme.fgFaint
+            BToolTip { visible: settledHover.hovered; text: qsTr("Settled %1").arg(thread.settled) }
+            HoverHandler { id: settledHover; enabled: !Theme.touchUi }
+        }
+        BIcon {
+            objectName: "codeThreadSnoozed"
+            visible: thread.snoozedUntil !== ""
+            name: "alarm-clock"
+            size: Theme.iconSizeSm
+            color: Theme.fgFaint
+            BToolTip { visible: snoozedHover.hovered; text: qsTr("Snoozed until %1").arg(thread.snoozedUntil) }
+            HoverHandler { id: snoozedHover; enabled: !Theme.touchUi }
         }
         BIcon {
             visible: thread.pinned
@@ -231,6 +295,31 @@ Item {
             text: qsTr("Copy link")
             iconName: "link"
             onTriggered: thread.copyRequested(AppController.pageAutomationLink(thread.path, "", ""), qsTr("Link copied"))
+        }
+        BMenuSeparator {}
+        BMenuItem {
+            objectName: "codeThreadSettle"
+            text: thread.settled !== "" ? qsTr("Unsettle") : qsTr("Settle")
+            iconName: "circle-check"
+            onTriggered: thread.toggleSettled()
+        }
+        CodeSnoozeMenu {
+            onPicked: (preset) => thread.snooze(preset)
+            onCustom: thread.snoozeRequested(thread.path, thread.title)
+        }
+        BMenuItem {
+            objectName: "codeThreadWake"
+            visible: thread.snoozedUntil !== ""
+            text: qsTr("Wake")
+            iconName: "sun"
+            onTriggered: Workspace.codeThreads.wake(thread.path)
+        }
+        BMenuItem {
+            objectName: "codeThreadNeverSettle"
+            readonly property bool never: threadMenu.opened && AppController.routeFlag(Workspace.codeThreads.state(thread.path), "never")
+            text: qsTr("Never settle by itself")
+            iconName: never ? "check" : "circle"
+            onTriggered: Workspace.codeThreads.setNeverAutoSettle(thread.path, !never)
         }
         BMenuSeparator {}
         BMenuItem {

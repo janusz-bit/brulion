@@ -22,14 +22,15 @@ done in the repository simply disappears from the list.
   id; for a turn the desktop app runs, followed from the phone (docs/CODE.md "The computer's own turns
   on the phone"): pictures sent to it, its agent's options changed from the phone, a message held there
   after Stop shown and resumed on the phone, its conversations that ended before the app shared them;
-  t3.json's `stopOnSettle`, `runOnSettle`, `previewUrl`, `worktreeSubmodules`, sparse checkouts,
+  t3.json's `worktreeSubmodules`, sparse checkouts, T3 Code's in-app browser for `previewUrl` (the
+  system's opens it),
   multi-repository projects and custom worktree layouts; T3 Code's branch naming modes (the AI names
-  a new worktree's branch: a semantic prefix it picks, the user's own instructions); automatic worktree
-  cleanup (by age, merged pull requests); settling and snoozing threads, a new thread's title written
-  by the AI by itself ("Regenerate title" is there), files dropped on a thread's row, scratch threads
+  a new worktree's branch: a semantic prefix it picks, the user's own instructions); worktrees cleaned
+  up by their age alone, whatever their threads (a settled thread's is, after its merge or some days:
+  docs/CODE.md "Settling and snoozing"); a new thread's title written
+  by the AI by itself ("Regenerate title" is there), scratch threads
   without a project; in the file
-  viewer (docs/CODE-FILES.md): editing files, rendered Markdown / HTML / CSV / PDF / ZIP files, find
-  within the file shown, the index following the disk through a file watcher; in a thread's composer:
+  viewer (docs/CODE-FILES.md): editing files, rendered Markdown / HTML / CSV / PDF / ZIP files, the index following the disk through a file watcher; in a thread's composer:
   mentions of threads, models and pull requests (`#`), review comments as chips instead of text.
 
 * **AI: what is still missing** — extensions can ask a model (`b.ai` with tools and pictures,

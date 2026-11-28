@@ -129,6 +129,13 @@ public:
         bool onWorktree = false;
         /// … and the thread's first message waits for it to end (T3 Code's `async: false`).
         bool wait = false;
+        /// Its terminal ends when the thread settles (T3 Code's stopOnSettle: a dev server) …
+        bool stopOnSettle = false;
+        /// … it runs in the thread's worktree whenever the thread settles (runOnSettle: a clean-up).
+        bool runOnSettle = false;
+        /// The address it serves ("" none; http or https only), opened when it runs if autoOpenPreview.
+        QString previewUrl{};
+        bool autoOpenPreview = false;
         bool operator==(const Script &) const = default;
     };
     struct Project {
@@ -242,6 +249,12 @@ public:
     /// The t3.json of `data` (the file's bytes) of the project in `folder` (iconPath is checked
     /// against it): pure, no other file read but the icon's existence.
     static Config parseConfig(const QByteArray &data, const QString &folder);
+    /// A script's previewUrl as kept: an http or https address with a host ("" anything else).
+    static QString previewUrlOf(const QString &text);
+    /// A script from its fields as kept and as QML gives them (cleaned: a name of one line, the
+    /// preview a web address, waiting only for a worktree's) / its fields as kept.
+    static Script scriptFromMap(const QVariantMap &fields);
+    static QVariantMap scriptToMap(const Script &script);
     /// What was read of the project's t3.json ({} none read).
     Config config(const QString &id) const { return m_configs.value(id); }
     /// Reads the project's t3.json again now (the watcher does it by itself).
@@ -324,8 +337,22 @@ public:
     /// how it went (the worktree's folder, "" in the project's folder; its branch; the pull
     /// request's title where gh told it).
     Q_INVOKABLE bool checkoutPullRequest(const QString &id, int number, bool inWorktree);
+    /// Files dropped on the thread `path`'s row whose folder is `folder` (T3 Code's "Drop files onto
+    /// a thread"): kept for its view (threadDropped(path)), which takes them — the pictures to send
+    /// with the message, the text naming the others (codefiles::droppedFiles()). Only local files.
+    Q_INVOKABLE void dropOnThread(const QString &path, const QString &folder, const QList<QUrl> &files);
+    Q_INVOKABLE bool hasThreadDrop(const QString &path) const { return m_drops.contains(path); }
+    /// What was dropped on `path`, once: its pictures (the drop's text stays for takeDropText()) …
+    Q_INVOKABLE QList<QUrl> takeDropPictures(const QString &path);
+    /// … and the text naming the other files (the drop forgotten).
+    Q_INVOKABLE QString takeDropText(const QString &path);
     /// The uncommitted changes of `folder`: worktreeChecked(folder, changes, branch, error).
     Q_INVOKABLE bool checkWorktree(const QString &folder);
+    /// checkWorktree()'s answer to `done(changes, branch, error)` (C++: CodeThreads' cleanup).
+    void worktreeChanges(const QString &folder, std::function<void(int, const QString &, const QString &)> done);
+    /// gh's state of `branch`'s pull request in `folder`: done("open" | "draft" | "merged" | "closed";
+    /// "" none, no gh, gh failed).
+    void pullRequestState(const QString &folder, const QString &branch, std::function<void(const QString &)> done);
     /// `git worktree remove [--force] <folder>` (the project's worktree; its branch stays):
     /// worktreeRemoved(folder, ok, message).
     Q_INVOKABLE bool removeWorktree(const QString &id, const QString &folder, bool force);
@@ -443,6 +470,7 @@ Q_SIGNALS:
     void pullRequestCheckedOut(const QString &project, int number, const QString &folder, const QString &branch,
                                const QString &title, const QString &error);
     /// checkWorktree(): how many files have uncommitted changes (-1 unknown: `error`), its branch.
+    void threadDropped(const QString &path);
     void worktreeChecked(const QString &folder, int changes, const QString &branch, const QString &error);
     void worktreeRemoved(const QString &folder, bool ok, const QString &message);
     void worktreeRestored(const QString &folder, bool ok, const QString &message);
@@ -473,6 +501,8 @@ private:
     QFileSystemWatcher *m_watcher = nullptr;
     QTimer m_configTimer;
     QStringList m_configDue;
+    /// dropOnThread()'s files not taken yet, by thread: {pictures, text}.
+    QHash<QString, std::pair<QList<QUrl>, QString>> m_drops;
     mutable gitcli::Client *m_git = nullptr;
     /// The editors found: {id, program}.
     mutable QList<std::pair<QString, QString>> m_found;

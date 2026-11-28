@@ -21,6 +21,7 @@
 #include "ai/local.h"
 #include "aireport/aireport.h"
 #include "chat/chat.h"
+#include "codethreads/codethreads.h"
 #include "gitcli/client.h"
 #include "log/categories.h"
 #include "markdown/frontmatter.h"
@@ -1340,7 +1341,8 @@ QString WorkspaceChats::sendMessage(const QString &path, const QString &text, co
         bool ok = false;
         const QString content = m_workspace->read(target, &ok);
         if (!ok
-            || !m_workspace->write(target, chat::appendMessage(content, chat::Role::User, markdown, now, language))) {
+            || !m_workspace->write(target, codethreads::reactivated(chat::appendMessage(content, chat::Role::User,
+                                                                                        markdown, now, language)))) {
             setFailure(turn(target), tr("The conversation could not be saved."));
             return {};
         }
@@ -1471,8 +1473,9 @@ void WorkspaceChats::answered(const QString &key, const QString &text)
     const QString path = t->m_path;
     bool ok = false;
     const QString content = m_workspace->exists(path) ? m_workspace->read(path, &ok) : QString();
-    const QString next = ok ? chat::appendMessage(content, chat::Role::Assistant, text, m_workspace->now(),
-                                                  m_extensions->language())
+    // (A new message takes a thread's settling and snooze away: codethreads::reactivated().)
+    const QString next = ok ? codethreads::reactivated(chat::appendMessage(content, chat::Role::Assistant, text,
+                                                                           m_workspace->now(), m_extensions->language()))
                             : QString();
     if (!ok || !m_workspace->write(path, next)) {
         qCWarning(logging::lcApp) << "AI chat: the answer could not be written to" << path;
@@ -2961,6 +2964,31 @@ void WorkspaceChats::setAutoArchiveDays(int days)
         archiveUntouched();
 }
 
+QSet<QString> WorkspaceChats::awaitedParents() const
+{
+    QSet<QString> awaited;
+    for (const QString &parent : std::as_const(m_wakes))
+        awaited.insert(parent.toLower());
+    return awaited;
+}
+
+bool WorkspaceChats::heldBack(const QString &path, const QSet<QString> &awaited) const
+{
+    const QString key = path.toLower();
+    return isRunning(path) || asking(path) || !failureOf(path).isEmpty() || isUnread(path) || isShown(path)
+           || !m_queued.value(key).isEmpty() || awaited.contains(key)
+           || !storedDraft(m_workspace->vault()->store(), path).isEmpty() || isSideChat(path);
+}
+
+bool WorkspaceChats::heldBack(const QString &path)
+{
+    if (!m_workspace->ready() || !m_workspace->vault())
+        return true;
+    loadQueue();
+    loadWakes();
+    return heldBack(path, awaitedParents());
+}
+
 QStringList WorkspaceChats::archiveUntouched()
 {
     QStringList out;
@@ -2971,21 +2999,18 @@ QStringList WorkspaceChats::archiveUntouched()
     const QDateTime now = m_workspace->now();
     const QDateTime before = now.addDays(-m_autoArchiveDays);
     // (The parents a sub-conversation will wake: not untouched.)
-    QSet<QString> awaited;
-    for (const QString &parent : std::as_const(m_wakes))
-        awaited.insert(parent.toLower());
+    const QSet<QString> awaited = awaitedParents();
     for (const FileStat &f : m_workspace->vault()->markdownFiles()) {
         if (!chat::inFolder(f.path))
             continue;
-        const QString key = f.path.toLower();
-        if (isRunning(f.path) || asking(f.path) || !failureOf(f.path).isEmpty() || isUnread(f.path) || isShown(f.path)
-            || !m_queued.value(key).isEmpty() || awaited.contains(key)
-            || !storedDraft(m_workspace->vault()->store(), f.path).isEmpty() || isSideChat(f.path))
+        if (heldBack(f.path, awaited))
             continue;
         bool ok = false;
         const QString content = m_workspace->read(f.path, &ok);
         const chat::Conversation conversation = ok ? chat::parse(content) : chat::Conversation();
-        if (conversation.messages.isEmpty() || conversation.pinned || conversation.archived)
+        // (A thread of Code mode settles instead: CodeThreads::settleUntouched().)
+        if (conversation.messages.isEmpty() || conversation.pinned || conversation.archived
+            || !conversation.project.isEmpty())
             continue;
         // Its last message's time; a page written without times: its last change.
         const QDateTime last = conversation.messages.last().time.isValid() ? conversation.messages.last().time

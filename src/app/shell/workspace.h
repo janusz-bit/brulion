@@ -49,6 +49,7 @@
 
 #include "attachmentindexer.h"
 #include "codeprojects.h"
+#include "codethreads.h"
 #include "drawing/excalidrawmd.h"
 #include "editorhost.h"
 #include "notebook/indexcachekeeper.h"
@@ -159,6 +160,8 @@ class Workspace : public EditorHost, public QueryHost {
     /// The projects of Code mode: folders of this device AI agents work in (codeprojects.h;
     /// docs/CODE.md).
     Q_PROPERTY(brulion::shell::CodeProjects *projects READ projects CONSTANT FINAL)
+    /// Code mode's threads settled and snoozed (codethreads.h; docs/CODE.md "Settling and snoozing").
+    Q_PROPERTY(brulion::shell::CodeThreads *codeThreads READ codeThreads CONSTANT FINAL)
     /// Find and replace in the whole notebook (replacesession.h).
     Q_PROPERTY(brulion::shell::ReplaceSession *replacing READ replacing CONSTANT FINAL)
     /// Encrypted notes: fragments, `.mdenc` pages and the session's passwords (workspaceencryption.h).
@@ -256,6 +259,7 @@ public:
     WorkspaceChats *chats() const { return m_chats; }
     NotificationCenter *notifications() const { return m_notifications; }
     CodeProjects *projects() const { return m_projects; }
+    CodeThreads *codeThreads() const { return m_codeThreads; }
     ReplaceSession *replacing() const { return m_replacing; }
     WorkspaceEncryption *encryption() const { return m_encryption; }
     /// The threads for looking through notes (indexworkers.h); none on WebAssembly.
@@ -952,6 +956,7 @@ private:
     WorkspaceChats *m_chats = nullptr;
     NotificationCenter *m_notifications = nullptr;
     CodeProjects *m_projects = nullptr;
+    CodeThreads *m_codeThreads = nullptr;
     ReplaceSession *m_replacing = nullptr;
     WorkspaceEncryption *m_encryption = nullptr;
     std::function<QDateTime()> m_clock;

@@ -82,6 +82,16 @@ int mentionEnd(QStringView text, int caret, QStringView path);
 /// ":", ";", ")", "!" or "?" is no part of one.
 QStringList mentionedPaths(QStringView message);
 
+/// Files dropped on a thread (absolute paths): the pictures (png, jpg, jpeg, gif, webp, bmp, svg —
+/// any letter case) go with the message, the others are named in its text, each once, separated
+/// by spaces: "@path" for one inside `folder` (quoted with a space: `@"a b.md"`; the folder itself
+/// "@./"), else the path in a code span.
+struct Dropped {
+    QStringList pictures;
+    QString text;
+};
+Dropped droppedFiles(const QString &folder, const QStringList &paths);
+
 /// The composer's text for a review comment on lines `from` … `to` (1-based) of `path`:
 ///
 ///     src/a.cpp:12-14

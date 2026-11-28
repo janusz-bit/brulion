@@ -83,6 +83,8 @@ constexpr auto kChatHooksPort = "ai/hooksPort"_L1;
 constexpr auto kChatHooksPublicUrl = "ai/hooksPublicUrl"_L1;
 constexpr auto kAiChatNotify = "ai/chatNotify"_L1;
 constexpr auto kAiChatAutoArchive = "ai/chatAutoArchive"_L1;
+constexpr auto kCodeAutoSettle = "code/autoSettle"_L1;
+constexpr auto kCodeWorktreeCleanup = "code/worktreeCleanup"_L1;
 constexpr auto kAiDefaultPartner = "ai/defaultPartner"_L1;
 constexpr auto kAiAgentNotify = "ai/agentNotify"_L1;
 constexpr auto kExtensionsNotify = "extensions/notify"_L1;
@@ -778,23 +780,45 @@ void AppSettings::setExtensionsNotify(bool on)
         Q_EMIT extensionsNotifyChanged();
 }
 
-QString AppSettings::aiChatAutoArchive() const
+namespace {
+/// A choice of "… untouched for": "1", "3", "7", "30" days or "never" (anything else).
+QString dayChoice(const QString &days)
 {
-    const QString days = m_settings->value(kAiChatAutoArchive).toString();
     return days == u"1" || days == u"3" || days == u"7" || days == u"30" ? days : u"never"_s;
 }
+int daysOf(const QString &choice) { return choice == u"never" ? 0 : choice.toInt(); }
+} // namespace
+
+QString AppSettings::aiChatAutoArchive() const { return dayChoice(m_settings->value(kAiChatAutoArchive).toString()); }
 
 void AppSettings::setAiChatAutoArchive(const QString &days)
 {
-    const QString value = days == u"1" || days == u"3" || days == u"7" || days == u"30" ? days : u"never"_s;
-    if (store(kAiChatAutoArchive, value, aiChatAutoArchive()))
+    if (store(kAiChatAutoArchive, dayChoice(days), aiChatAutoArchive()))
         Q_EMIT aiChatAutoArchiveChanged();
 }
 
-int AppSettings::aiChatAutoArchiveDays() const
+int AppSettings::aiChatAutoArchiveDays() const { return daysOf(aiChatAutoArchive()); }
+
+QString AppSettings::codeAutoSettle() const { return dayChoice(m_settings->value(kCodeAutoSettle, u"7"_s).toString()); }
+
+void AppSettings::setCodeAutoSettle(const QString &days)
 {
-    const QString days = aiChatAutoArchive();
-    return days == u"never" ? 0 : days.toInt();
+    if (store(kCodeAutoSettle, dayChoice(days), codeAutoSettle()))
+        Q_EMIT codeAutoSettleChanged();
+}
+
+int AppSettings::codeAutoSettleDays() const { return daysOf(codeAutoSettle()); }
+
+QString AppSettings::codeWorktreeCleanup() const
+{
+    const QString when = m_settings->value(kCodeWorktreeCleanup).toString();
+    return when == u"merged" ? when : dayChoice(when);
+}
+
+void AppSettings::setCodeWorktreeCleanup(const QString &when)
+{
+    if (store(kCodeWorktreeCleanup, when == u"merged" ? when : dayChoice(when), codeWorktreeCleanup()))
+        Q_EMIT codeWorktreeCleanupChanged();
 }
 
 QString AppSettings::chatToolCalls() const

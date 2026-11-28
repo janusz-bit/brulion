@@ -284,11 +284,28 @@ FocusScope {
         root.pendingNames = Js.appendedString(root.pendingNames, name)
         root.runPending()
     }
+    /// A script of the project run (its button, the menu, its shortcut), with its preview opened when
+    /// it says so (T3 Code's autoOpenPreview — in the system's browser: Brulion has none of its own).
     function runScriptById(id: string): void {
-        const command = root.scriptField(id, "command")
-        const name = root.scriptField(id, "name")
-        if (command !== "")
-            root.runScript(command, name)
+        const preview = root.scriptField(id, "autoOpenPreview") === "true" ? root.scriptField(id, "previewUrl") : ""
+        root.runProjectScript(root.scriptField(id, "command"), root.scriptField(id, "name"), preview)
+    }
+    /// A script of the project serves a preview (its address in the scripts' menu).
+    function hasPreview(): bool {
+        for (let i = 0; i < root.scripts.length; ++i)
+            if (AppController.routeText(root.scripts[i], "previewUrl") !== "")
+                return true
+        return false
+    }
+    /// A script of root.scripts run (its button, the menu, its shortcut): `preview` (previewOf()) opened
+    /// too when it says so (T3 Code's autoOpenPreview — in the system's browser: Brulion has none of its
+    /// own).
+    function runProjectScript(command: string, name: string, preview: string): void {
+        if (command === "")
+            return
+        root.runScript(command, name)
+        if (preview !== "")
+            Qt.openUrlExternally(preview)
     }
     function scriptField(id: string, field: string): string {
         return Workspace.projects.scriptField(root.project, id, field)
@@ -539,7 +556,25 @@ FocusScope {
         changes.git.refresh()
     }
 
-    onPathChanged: root.refreshPlace()
+    onPathChanged: {
+        root.refreshPlace()
+        root.takeDrop()
+    }
+    /// Files dropped on this thread's row in the sidebar (CodeProjects.dropOnThread): its pictures go
+    /// with the message, the other files are named in it.
+    function takeDrop(): void {
+        if (root.path === "" || !Workspace.projects.hasThreadDrop(root.path))
+            return
+        chat.attachFiles(Workspace.projects.takeDropPictures(root.path))
+        chat.addToComposer(Workspace.projects.takeDropText(root.path))
+    }
+    Connections {
+        target: Workspace.projects
+        function onThreadDropped(path: string) {
+            if (path === root.path)
+                root.takeDrop()
+        }
+    }
     onProjectChanged: {
         if (root.path === "" && root.project !== "")
             AppSettings.setValue("code/lastProject", root.project)
@@ -799,6 +834,7 @@ FocusScope {
                         readonly property var script: root.scripts[scriptButton.index]
                         readonly property string scriptCommand: AppController.routeText(scriptButton.script, "command")
                         readonly property string scriptName: AppController.routeText(scriptButton.script, "name")
+                        readonly property string scriptId: AppController.routeText(scriptButton.script, "id")
                         objectName: "codeScript_" + scriptButton.index
                         size: "small"
                         variant: "secondary"
@@ -806,13 +842,13 @@ FocusScope {
                         text: scriptButton.scriptName
                         enabled: root.folder !== ""
                         Accessible.description: scriptButton.scriptCommand
-                        onClicked: root.runScript(scriptButton.scriptCommand, scriptButton.scriptName)
+                        onClicked: root.runScriptById(scriptButton.scriptId)
                     }
                 }
                 BIconButton {
                     id: scriptsMore
                     objectName: "codeScriptsMenuButton"
-                    visible: (root.scripts.length > 3 || (root.narrow && root.scripts.length > 0)) && !root.remote
+                    visible: (root.scripts.length > 3 || (root.narrow && root.scripts.length > 0) || root.hasPreview()) && !root.remote
                     size: "small"
                     iconName: "play"
                     label: qsTr("Scripts")
@@ -1172,9 +1208,27 @@ FocusScope {
                 text: AppController.routeText(scriptItem.modelData, "name")
                 hint: AppController.routeText(scriptItem.modelData, "shortcut")
                 iconName: AppController.routeText(scriptItem.modelData, "iconName")
-                onTriggered: root.runScript(AppController.routeText(scriptItem.modelData, "command"), scriptItem.text)
+                readonly property string scriptId: AppController.routeText(scriptItem.modelData, "id")
+                onTriggered: root.runScriptById(scriptItem.scriptId)
             }
             onObjectAdded: (index, object) => scriptsMenu.insertItem(index, object as Item)
+            onObjectRemoved: (index, object) => scriptsMenu.removeItem(object as Item)
+        }
+        // T3 Code's previewUrl: the address a script serves, opened in the system's browser.
+        Instantiator {
+            model: root.scripts
+            delegate: BMenuItem {
+                id: previewItem
+                required property var modelData
+                readonly property string url: AppController.routeText(previewItem.modelData, "previewUrl")
+                objectName: "codeScriptPreview"
+                visible: previewItem.url !== ""
+                text: qsTr("Open preview: %1").arg(AppController.routeText(previewItem.modelData, "name"))
+                hint: previewItem.url
+                iconName: "globe"
+                onTriggered: Qt.openUrlExternally(previewItem.url)
+            }
+            onObjectAdded: (index, object) => scriptsMenu.addItem(object as Item)
             onObjectRemoved: (index, object) => scriptsMenu.removeItem(object as Item)
         }
     }

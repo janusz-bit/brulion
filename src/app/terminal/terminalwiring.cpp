@@ -4,6 +4,8 @@
 
 #include "appcontroller.h"
 #include "appsettings.h"
+#include "codeprojects.h"
+#include "codethreads.h"
 #include "workspace.h"
 #include "workspacechats.h"
 
@@ -29,6 +31,22 @@ namespace {
 } // namespace
 #endif
 
+static void settleThread(shell::Workspace *workspace, TerminalRegistry *registry, const QString &path)
+{
+    const QVariantMap place = workspace->chats()->threadPlace(path);
+    QStringList stop;
+    QList<TerminalRegistry::SettleScript> run;
+    for (const QVariant &v : workspace->projects()->scripts(place.value(u"project"_s).toString())) {
+        const QVariantMap script = v.toMap();
+        if (script.value(u"stopOnSettle"_s).toBool())
+            stop << script.value(u"command"_s).toString();
+        if (script.value(u"runOnSettle"_s).toBool())
+            run << TerminalRegistry::SettleScript{script.value(u"command"_s).toString(), script.value(u"name"_s).toString()};
+    }
+    const QString worktree = place.value(u"worktree"_s).toString();
+    registry->settle(path, stop, place.value(u"exists"_s).toBool() ? worktree : QString(), run);
+}
+
 TerminalRegistry *registryForQml()
 {
     TerminalRegistry *registry = TerminalRegistry::instance();
@@ -44,6 +62,14 @@ TerminalRegistry *registryForQml()
     QObject::connect(workspace, &shell::Workspace::pathRemoved, registry, &TerminalRegistry::pathRemoved);
     if (shell::WorkspaceChats *chats = workspace->chats())
         QObject::connect(chats, &shell::WorkspaceChats::archivedChanged, registry, &TerminalRegistry::archived);
+    // Settled (docs/CODE.md "Settling and snoozing"): its scripts with stopOnSettle end, its idle
+    // terminals too, and its scripts with runOnSettle run in its worktree (never in a project's own
+    // folder, as T3 Code skips main checkouts).
+    QObject::connect(workspace->codeThreads(), &shell::CodeThreads::settledChanged, registry,
+                     [workspace, registry](const QString &path, bool on) {
+                         if (on)
+                             settleThread(workspace, registry, path);
+                     });
     // Each thread's layout (tabs, splits, folders, commands) over a restart: this device's.
     const QPointer<shell::AppSettings> settings = app->settings();
     registry->setLayoutStorage(

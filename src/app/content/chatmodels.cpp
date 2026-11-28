@@ -565,6 +565,8 @@ ChatListModel::ChatListModel(QObject *parent)
     m_stateTimer.setSingleShot(true);
     m_stateTimer.setInterval(0);
     connect(&m_stateTimer, &QTimer::timeout, this, &ChatListModel::rebuild);
+    m_wakeTimer.setSingleShot(true);
+    connect(&m_wakeTimer, &QTimer::timeout, this, &ChatListModel::rebuild);
     connect(this, &WorkspaceListModel::workspaceChanged, this, [this] {
         for (const QMetaObject::Connection &c : std::as_const(m_turnsChanged))
             disconnect(c);
@@ -704,6 +706,8 @@ void ChatListModel::refresh()
             e.project = conversation.project;
             e.worktree = conversation.worktree;
             e.branch = conversation.worktree.isEmpty() ? QString() : conversation.branch;
+            if (!conversation.project.isEmpty())
+                e.state = codethreads::readState(content);
             const QDateTime started = conversation.messages.first().time.isValid()
                                               ? conversation.messages.first().time
                                               : QDateTime(QDate::fromString(date, Qt::ISODate), QTime(0, 0));
@@ -731,7 +735,8 @@ void ChatListModel::rebuild()
         return std::ranges::all_of(terms, [&folded](const QString &t) { return folded.contains(t); });
     };
     QList<Row> next;
-    int archived = 0, pinned = 0;
+    int archived = 0, pinned = 0, settled = 0, snoozed = 0;
+    const QDateTime now = ws ? ws->now() : QDateTime::currentDateTime();
     for (const Entry &e : std::as_const(m_all)) {
         // The notebook's conversations, or Code mode's threads (of one project).
         if (m_project.isEmpty() ? !e.project.isEmpty()
@@ -769,11 +774,18 @@ void ChatListModel::rebuild()
                 r.matchLine = found->line;
             }
         }
-        if (e.archived)
-            ++archived;
-        else if (e.pinned)
-            ++pinned;
-        if (e.archived && !m_showArchived && !searching)
+        if (chats) {
+            r.asking = chats->asking(e.path);
+            r.failure = chats->failureOf(e.path).section(u'\n', 0, 0).trimmed();
+        }
+        placeRow(r, e, now);
+        archived += r.section == u"archived";
+        pinned += r.section == u"pinned";
+        settled += r.section == u"settled";
+        snoozed += r.section == u"snoozed";
+        if (r.section == u"archived" && !m_showArchived && !searching)
+            continue;
+        if ((r.section == u"settled" || r.section == u"snoozed") && !m_showSettled && !searching)
             continue;
         r.path = e.path;
         r.title = e.title;
@@ -788,18 +800,18 @@ void ChatListModel::rebuild()
         r.worktree = e.worktree;
         r.branch = e.branch;
         r.created = e.created;
-        r.section = e.archived ? u"archived"_s : e.pinned ? u"pinned"_s : u"recent"_s;
         if (chats) {
-            r.asking = chats->asking(e.path);
             r.question = r.asking ? chats->questionText(e.path).section(u'\n', 0, 0).trimmed() : QString();
-            r.failure = chats->failureOf(e.path).section(u'\n', 0, 0).trimmed();
             r.unread = chats->isUnread(e.path);
             r.cameBack =
                     r.asking || !r.failure.isEmpty() || r.unread ? std::max<qint64>(chats->cameBack(e.path), 1) : 0;
         }
         next.append(r);
     }
-    const auto rank = [](const Row &r) { return r.archived ? 2 : r.pinned ? 0 : 1; };
+    const auto rank = [](const Row &r) {
+        static const QStringList order{u"pinned"_s, u"recent"_s, u"snoozed"_s, u"settled"_s, u"archived"_s};
+        return order.indexOf(r.section);
+    };
     const bool byCreation = m_sortBy == u"created";
     std::sort(next.begin(), next.end(), [&rank, byCreation](const Row &a, const Row &b) {
         if (rank(a) != rank(b))
@@ -815,11 +827,49 @@ void ChatListModel::rebuild()
     });
     const qsizetype before = m_rows.size();
     applyRows(m_rows, next, [](const Row &r) { return r.path; }, [](const Row &a, const Row &b) { return a == b; });
-    if (archived != m_archivedCount || pinned != m_pinnedCount || before != m_rows.size()) {
+    scheduleWake(now);
+    if (archived != m_archivedCount || pinned != m_pinnedCount || settled != m_settledCount
+        || snoozed != m_snoozedCount || before != m_rows.size()) {
         m_archivedCount = archived;
         m_pinnedCount = pinned;
+        m_settledCount = settled;
+        m_snoozedCount = snoozed;
         Q_EMIT sectionsChanged();
     }
+}
+
+void ChatListModel::placeRow(Row &r, const Entry &e, const QDateTime &now)
+{
+    const codethreads::Facts facts{e.pinned, e.archived, r.asking || !r.failure.isEmpty()};
+    const codethreads::Section section = codethreads::sectionOf(e.state, facts, now);
+    // (The notebook's conversations and Active threads: "recent", as the AI chat has always said.)
+    r.section = section == codethreads::Section::Active ? u"recent"_s : codethreads::sectionName(section);
+    r.settled = section == codethreads::Section::Settled ? codethreads::formatTime(e.state.settled) : QString();
+    r.snoozedUntil =
+            section == codethreads::Section::Snoozed ? codethreads::formatTime(e.state.snoozedUntil) : QString();
+}
+
+void ChatListModel::scheduleWake(const QDateTime &now)
+{
+    QDateTime next;
+    for (const Entry &e : std::as_const(m_all))
+        if (e.state.snoozedUntil > now && (!next.isValid() || e.state.snoozedUntil < next))
+            next = e.state.snoozedUntil;
+    if (!next.isValid()) {
+        m_wakeTimer.stop();
+        return;
+    }
+    // (At most a day ahead at a time: a clock changed meanwhile is caught up with.)
+    m_wakeTimer.start(int(std::clamp<qint64>(now.msecsTo(next) + 500, 500, 24 * 3600 * 1000)));
+}
+
+void ChatListModel::setShowSettled(bool show)
+{
+    if (m_showSettled == show)
+        return;
+    m_showSettled = show;
+    Q_EMIT showSettledChanged();
+    rebuild();
 }
 
 QVariant ChatListModel::data(const QModelIndex &index, int role) const
@@ -863,6 +913,8 @@ QVariant ChatListModel::data(const QModelIndex &index, int role) const
     case ProjectRole: return r.project;
     case BranchRole: return r.branch;
     case WorktreeRole: return r.worktree;
+    case SettledRole: return r.settled;
+    case SnoozedUntilRole: return r.snoozedUntil;
     default: return {};
     }
 }
@@ -891,7 +943,9 @@ QHash<int, QByteArray> ChatListModel::roleNames() const
             {MatchLineRole, "matchLine"},
             {ProjectRole, "project"},
             {BranchRole, "branch"},
-            {WorktreeRole, "worktree"}};
+            {WorktreeRole, "worktree"},
+            {SettledRole, "settled"},
+            {SnoozedUntilRole, "snoozedUntil"}};
 }
 
 int ChatListModel::rowOf(const QString &path) const

@@ -78,6 +78,10 @@ ColumnLayout {
             required property string shortcut
             required property bool runOnWorktreeCreate
             required property bool wait
+            required property bool stopOnSettle
+            required property bool runOnSettle
+            required property string previewUrl
+            required property bool autoOpenPreview
             required property string source
             required property bool overrides
             required property string scriptId
@@ -243,6 +247,43 @@ ColumnLayout {
                     variant: "small"
                     color: editor.shortcutError !== "" ? Theme.dangerText : Theme.fgMuted
                     wrapMode: Text.Wrap
+                }
+                // T3 Code's settling options (docs/CODE.md "Settling and snoozing") and its preview.
+                Flow {
+                    Layout.fillWidth: true
+                    spacing: Theme.space2
+                    BSwitch {
+                        objectName: "codeScriptStopOnSettle_" + row.index
+                        text: qsTr("Stop it when the thread settles")
+                        checked: row.stopOnSettle
+                        onToggled: scripts.setFlag(row.index, "stopOnSettle", checked)
+                    }
+                    BSwitch {
+                        objectName: "codeScriptRunOnSettle_" + row.index
+                        text: qsTr("Run it in the worktree when the thread settles")
+                        checked: row.runOnSettle
+                        onToggled: scripts.setFlag(row.index, "runOnSettle", checked)
+                    }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Theme.space2
+                    BTextField {
+                        objectName: "codeScriptPreview_" + row.index
+                        Layout.fillWidth: true
+                        text: row.previewUrl
+                        placeholderText: qsTr("Preview address, e.g. %1").arg("http://localhost:3000")
+                        accessibleName: qsTr("Preview address")
+                        inputMethodHints: Qt.ImhUrlCharactersOnly | Qt.ImhNoAutoUppercase
+                        onEditingFinished: scripts.setText(row.index, "previewUrl", text)
+                    }
+                    BSwitch {
+                        objectName: "codeScriptAutoPreview_" + row.index
+                        enabled: row.previewUrl !== ""
+                        text: qsTr("Open it when the script runs")
+                        checked: row.autoOpenPreview
+                        onToggled: scripts.setFlag(row.index, "autoOpenPreview", checked)
+                    }
                 }
             }
         }

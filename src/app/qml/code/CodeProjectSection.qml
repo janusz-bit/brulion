@@ -45,6 +45,7 @@ ColumnLayout {
     signal renameThread(string path, string title)
     signal deleteThread(string path, string title, string worktree, string branch, string project)
     signal copyRequested(string text, string what)
+    signal snoozeRequested(string path, string title)
     signal dragStarted()
     signal dragMoved(real dy)
     signal dragEnded()
@@ -60,6 +61,13 @@ ColumnLayout {
         if (!section.open)
             return []
         return threads.paths()
+    }
+
+    /// "3 settled · 1 snoozed".
+    function settledText(): string {
+        const settled = threads.settledCount > 0 ? qsTr("%n settled", "", threads.settledCount) : ""
+        const snoozed = threads.snoozedCount > 0 ? qsTr("%n snoozed", "", threads.snoozedCount) : ""
+        return settled !== "" && snoozed !== "" ? settled + " · " + snoozed : settled + snoozed
     }
 
     Layout.fillWidth: true
@@ -257,6 +265,43 @@ ColumnLayout {
             onRenameRequested: (path, title) => section.renameThread(path, title)
             onDeleteRequested: (path, title, worktree, branch) => section.deleteThread(path, title, worktree, branch, section.projectId)
             onCopyRequested: (text, what) => section.copyRequested(text, what)
+            onSnoozeRequested: (path, title) => section.snoozeRequested(path, title)
+        }
+    }
+    // Its settled and snoozed threads, folded under one row (T3 Code's Settled and Snoozed sections).
+    Item {
+        objectName: "codeSettledToggle_" + section.projectId
+        visible: section.open && threads.settledCount + threads.snoozedCount > 0
+        Layout.fillWidth: true
+        Layout.preferredHeight: Theme.listItemHeight
+        Accessible.role: Accessible.Button
+        Accessible.name: section.settledText()
+        Rectangle {
+            anchors.fill: parent
+            anchors.leftMargin: Theme.space1
+            anchors.rightMargin: Theme.space1
+            radius: Theme.radius
+            color: settledHover.hovered ? Theme.bgHover : "transparent"
+        }
+        HoverHandler { id: settledHover; enabled: !Theme.touchUi }
+        TapHandler { onTapped: threads.showSettled = !threads.showSettled }
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: Theme.space8
+            anchors.rightMargin: Theme.space3
+            spacing: Theme.space2
+            BIcon {
+                name: threads.showSettled ? "chevron-down" : "chevron-right"
+                size: Theme.iconSizeSm
+                color: Theme.fgFaint
+            }
+            BText {
+                Layout.fillWidth: true
+                text: section.settledText()
+                variant: "small"
+                color: Theme.fgMuted
+                elide: Text.ElideRight
+            }
         }
     }
     BText {

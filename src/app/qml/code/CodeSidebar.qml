@@ -339,6 +339,7 @@ Rectangle {
                                                                              projectSection.projectPath, projectSection.projectPinned,
                                                                              projectSection.index, item, x, y)
                         onRenameThread: (path, title) => renameDialog.openFor(path, title)
+                        onSnoozeRequested: (path, title) => snoozeDialog.openFor(path, title)
                         onDeleteThread: (path, title, worktree, branch, project) => sidebar.deleteThread(path, title, worktree, branch, project)
                         onCopyRequested: (text, what) => {
                             if (pageTools.copyText(text))
@@ -600,6 +601,50 @@ Rectangle {
             Layout.fillWidth: true
             accessibleName: qsTr("The thread's name")
             onAccepted: renameDialog.tryAccept()
+        }
+    }
+
+    // ---- a thread snoozed until a time typed ("jutro o 18", "in 2 hours", "2026-12-01 9:00") ----------
+    BDialog {
+        id: snoozeDialog
+        objectName: "codeSnoozeDialog"
+        property string path
+        function openFor(path: string, title: string): void {
+            snoozeDialog.path = path
+            snoozeDialog.threadTitle = title
+            snoozeField.text = ""
+            snoozeDialog.open()
+        }
+        property string threadTitle
+        readonly property string ends: Workspace.codeThreads.snoozeLabel(snoozeField.text)
+        parent: T.Overlay.overlay
+        title: qsTr("Snooze “%1”").arg(snoozeDialog.threadTitle)
+        iconName: "alarm-clock"
+        acceptText: qsTr("Snooze")
+        acceptEnabled: snoozeDialog.ends !== ""
+        initialFocusItem: snoozeField
+        onAccepted: {
+            const why = Workspace.codeThreads.snooze(snoozeDialog.path, snoozeField.text)
+            if (why !== "")
+                AppController.toast(why, "error")
+            else
+                AppController.toastUndoChatMark(qsTr("Thread snoozed"), qsTr("Undo"), snoozeDialog.path, "snoozed", true)
+        }
+        BTextField {
+            id: snoozeField
+            objectName: "codeSnoozeField"
+            Layout.fillWidth: true
+            accessibleName: qsTr("Until when")
+            placeholderText: qsTr("tomorrow at 9, in 2 hours, 2026-12-01 18:00")
+            onAccepted: snoozeDialog.tryAccept()
+        }
+        BText {
+            Layout.fillWidth: true
+            text: snoozeDialog.ends !== "" ? qsTr("Wakes %1").arg(snoozeDialog.ends)
+                  : snoozeField.text !== "" ? qsTr("No time ahead in that.") : qsTr("It comes back earlier when it asks something or fails.")
+            variant: "small"
+            color: Theme.fgMuted
+            wrapMode: Text.Wrap
         }
     }
 
