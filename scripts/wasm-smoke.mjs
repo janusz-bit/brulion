@@ -6,7 +6,7 @@
 //       [--loads 2] [--selftest] [--expect-first N] [--notify] [--glyphs] [--extensions] [--keyboard] [--keyboard-phone] \
 //       [--two-tabs] [--share] [--pick-files] [--lang pl-PL] \
 //       [--index-notes N [--cache-quota]] [--copy] [--screenshot shot.png] [--loader-screenshot loading.png] \
-//       [--timeout 120]
+//       [--timeout 120] [--headed]
 //
 // Opens the page `--loads` times in one browser (reloads), each time waiting until the app
 // has replaced the loading screen. With --selftest the page runs `?selftest=storage`
@@ -74,6 +74,9 @@
 // --loader-screenshot throttles the first download and captures the loading screen. Exit code 0 =
 // all checks passed.
 //
+// --headed runs a real browser window instead of headless Chromium (under xvfb-run on a machine
+// whose screen should stay alone: `env -u WAYLAND_DISPLAY -u DISPLAY xvfb-run -a node …`) — the
+// checks are the same, the browser the one people use (its own compositor, GPU process, window).
 // Chromium: $CHROME or chromium/chromium-browser/google-chrome on PATH. WebGL 2 comes from
 // SwiftShader (software). Set BRULION_CHROME_NO_SANDBOX=1 (or CI=true) where the sandbox
 // cannot start (containers, GitHub Actions on Ubuntu 24.04).
@@ -98,6 +101,7 @@ function parseArgs(argv) {
     else if (a === '--notify') args.notify = true;
     else if (a === '--glyphs') args.glyphs = true;
     else if (a === '--extensions') args.extensions = true;
+    else if (a === '--headed') args.headed = true;
     else if (a === '--keyboard') args.keyboard = true;
     else if (a === '--keyboard-phone') args.keyboardPhone = true;
     else if (a === '--two-tabs') args.twoTabs = true;
@@ -293,7 +297,7 @@ async function main() {
 
   const noSandbox = process.env.BRULION_CHROME_NO_SANDBOX === '1' || process.env.CI === 'true';
   const chromeArgs = [
-    '--headless=new',
+    ...(args.headed ? [] : ['--headless=new']),
     `--user-data-dir=${args.profile}`,
     '--remote-debugging-port=0',
     '--no-first-run',

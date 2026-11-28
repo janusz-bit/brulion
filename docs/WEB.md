@@ -259,6 +259,14 @@ Other options:
   and `navigator.clipboard.read()` — Brulion's HTML (`text/html` with the `generator` marker). With
   `--screenshot` a `…-copy.png` screenshot is added. The result and the click position depend on the page layout
   1280×800 (the first line of the day about 153 px from the top; the script tries several heights).
+* `--headed` — a browser window instead of headless Chromium: the same checks in the browser people
+  use (its own compositor, GPU process and window). Where the screen should stay alone, under
+  `xvfb-run`: `env -u WAYLAND_DISPLAY -u DISPLAY xvfb-run -a node scripts/wasm-smoke.mjs --headed …`.
+  With `--extensions` it passed in Chromium 158's window on 2026-11-28 (CI's site of 0154a9ef); so
+  did Firefox 157 (Gecko: no DevTools Protocol for this script — a page Playwright opens at
+  `?selftest=extensions`, waiting for `window.brulionExtensionsSelfTest`, with the cached Playwright
+  Firefox's GTK/X11 libraries and Mesa's software GL from `LD_LIBRARY_PATH` on NixOS and
+  `webgl.force-enabled`: without WebGL 2 the app stops at "Brulion needs WebGL 2").
 
 Drawings in the app's theme are checked by a separate script, `tests/app/drawing/wasm-drawing-check.mjs`
 (the same minimal DevTools client, no changes to `wasm-smoke.mjs`): it writes to IndexedDB
