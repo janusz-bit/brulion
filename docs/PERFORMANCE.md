@@ -3456,8 +3456,8 @@ button was pressed (now `toastRemoved(id)` ends the wait, `tst_shell_scripting`,
 `tst_shell_navigation`); the automation toasts' routes and the paths of the PDFs asked for
 thumbnails were kept after their toast or notebook had gone.
 
-Found on the way, not changed here (TODO.md): a photo turned by its EXIF orientation is shown as
-stored in notes and the picture view; and 60 % of the GUI thread's instructions while that album
+Found on the way, not changed here: a photo turned by its EXIF orientation was shown as stored in
+notes and the picture view (since turned upright: `Image.autoTransform`, `editor::pictureSize`); and 60 % of the GUI thread's instructions while that album
 scrolls go into `QQuickItemPrivate::transformChanged` walking from the list to every empty `Text`
 of its rows — in `main` as now ("Pitfalls" below; gone since "Scrolling: empty texts no longer
 walked", 2026-11-28).

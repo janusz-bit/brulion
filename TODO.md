@@ -248,12 +248,10 @@ done in the repository simply disappears from the list.
 
 ## Views and data
 
-* **Photos turned by their EXIF orientation** — a photo a phone stored sideways with an
-  orientation tag is shown as stored in a note and in the picture view (`Image.autoTransform` is
-  off), while exports, OCR and the pictures an AI gets turn it upright. Turning it needs the
-  header size turned too (`picturesize.h`: the frame of a note's picture has its final height at
-  creation) and the picture view's OCR frames mapped the other way (`AttachmentIndexer` maps them
-  onto the file's own pixels today).
+* **Photos turned by their EXIF orientation: the Atrament editor** — the Qt Quick views show a
+  photo stored sideways upright and `editor::pictureSize` gives its upright size, but the Atrament
+  editor's `PictureCache` still decodes the file's own pixels (`setAutoTransform(false)`) into that
+  upright frame, stretched.
 * **Database views: what remains** — dragging cards on a board and a calendar was tested with the
   mouse and the offscreen self-test, not yet with a finger on a real phone nor in the browser
   build; Bases' map view (Obsidian's Maps plugin) is a table; a database view's table has keys

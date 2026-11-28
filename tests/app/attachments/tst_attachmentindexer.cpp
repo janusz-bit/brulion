@@ -14,11 +14,15 @@
 #include "pdfrenderpool.h"
 
 #include "testtiming.h"
+#include "exifjpeg.h"
 #include "attachments/documenttext.h"
+#include "attachments/manifest.h"
+#include "attachments/record.h"
 #include "io/zip.h"
 #include "text/text.h"
 #include "vault/vault.h"
 
+#include <QBuffer>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
@@ -343,51 +347,69 @@ private Q_SLOTS:
 
     void orientations_data()
     {
-        QTest::addColumn<int>("transformation");
-        using T = QImageIOHandler::Transformation;
-        QTest::newRow("none") << int(T::TransformationNone);
-        QTest::newRow("mirror") << int(T::TransformationMirror);
-        QTest::newRow("flip") << int(T::TransformationFlip);
-        QTest::newRow("rotate180") << int(T::TransformationRotate180);
-        QTest::newRow("rotate90") << int(T::TransformationRotate90);
-        QTest::newRow("mirrorAndRotate90") << int(T::TransformationMirrorAndRotate90);
-        QTest::newRow("flipAndRotate90") << int(T::TransformationFlipAndRotate90);
-        QTest::newRow("rotate270") << int(T::TransformationRotate270);
+        QTest::addColumn<int>("orientation");
+        for (int exif = 1; exif <= 8; ++exif)
+            QTest::addRow("EXIF %d", exif) << exif;
     }
     void orientations()
     {
-        // A 5 × 3 picture with one marked pixel, turned the way Qt's reader turns a picture with that
-        // EXIF orientation (mirror / flip, then 90° clockwise; 270° alone): the marked pixel's place
-        // in the turned picture maps back onto its place in the file.
-        QFETCH(int, transformation);
-        const auto t = QImageIOHandler::Transformations::fromInt(transformation);
-        QImage raw(5, 3, QImage::Format_RGB32);
+        // A 5 × 3 grid of 16-pixel cells with one red cell, stored as a JPEG with that EXIF
+        // orientation and read upright by Qt's reader (as a note and the picture view show it):
+        // the red cell's box on the file's pixels lands where the shown picture has it.
+        QFETCH(int, orientation);
+        constexpr int Cell = 16;
+        QImage raw(5 * Cell, 3 * Cell, QImage::Format_RGB32);
         raw.fill(Qt::white);
-        raw.setPixel(1, 0, qRgb(255, 0, 0));
-        QImage shown = raw;
-        if (t == QImageIOHandler::TransformationRotate270) {
-            shown = raw.transformed(QTransform().rotate(270));
-        } else {
-            shown = shown.flipped(
-                    (t.testFlag(QImageIOHandler::TransformationMirror) ? Qt::Horizontal : Qt::Orientations())
-                    | (t.testFlag(QImageIOHandler::TransformationFlip) ? Qt::Vertical : Qt::Orientations()));
-            if (t.testFlag(QImageIOHandler::TransformationRotate90))
-                shown = shown.transformed(QTransform().rotate(90));
-        }
-        QPoint at(-1, -1);
-        for (int y = 0; y < shown.height(); ++y) {
-            for (int x = 0; x < shown.width(); ++x) {
-                if (shown.pixel(x, y) == qRgb(255, 0, 0))
-                    at = QPoint(x, y);
+        QPainter(&raw).fillRect(QRect(1 * Cell, 0, Cell, Cell), Qt::red);
+        QBuffer jpeg;
+        jpeg.setData(brulion::test::exifOrientedJpeg(raw, quint16(orientation)));
+        jpeg.open(QIODevice::ReadOnly);
+        QImageReader reader(&jpeg, "jpeg");
+        reader.setAutoTransform(true);
+        const QImage shown = reader.read();
+        QVERIFY(!shown.isNull());
+        QCOMPARE(reader.transformation() == QImageIOHandler::TransformationNone, orientation == 1);
+        const int columns = shown.width() / Cell;
+        const int rows = shown.height() / Cell;
+        QPoint red(-1, -1);
+        for (int y = 0; y < rows; ++y) {
+            for (int x = 0; x < columns; ++x) {
+                if (qGreen(shown.pixel(x * Cell + Cell / 2, y * Cell + Cell / 2)) < 128)
+                    red = QPoint(x, y);
             }
         }
-        QVERIFY(at.x() >= 0);
-        const QRectF box(qreal(at.x()) / shown.width(), qreal(at.y()) / shown.height(), 1.0 / shown.width(),
-                         1.0 / shown.height());
-        const QRectF back = unorientedBox(box, transformation);
-        QVERIFY2(qAbs(back.left() - 1.0 / 5) < 1e-9 && qAbs(back.top()) < 1e-9 && qAbs(back.width() - 1.0 / 5) < 1e-9
-                         && qAbs(back.height() - 1.0 / 3) < 1e-9,
-                 qPrintable(u"%1,%2 %3×%4"_s.arg(back.left()).arg(back.top()).arg(back.width()).arg(back.height())));
+        QVERIFY(red.x() >= 0);
+        const QRectF box =
+                orientedBox(QRectF(1.0 / 5, 0, 1.0 / 5, 1.0 / 3), int(reader.transformation().toInt()));
+        const QRectF expected(qreal(red.x()) / columns, qreal(red.y()) / rows, 1.0 / columns, 1.0 / rows);
+        QVERIFY2(qAbs(box.left() - expected.left()) < 1e-9 && qAbs(box.top() - expected.top()) < 1e-9
+                         && qAbs(box.width() - expected.width()) < 1e-9
+                         && qAbs(box.height() - expected.height()) < 1e-9,
+                 qPrintable(u"%1,%2 %3×%4"_s.arg(box.left()).arg(box.top()).arg(box.width()).arg(box.height())));
+    }
+
+    void olderRecordsUpgraded()
+    {
+        // Version 1 kept a picture's OCR boxes on the file's own pixels: turned, as the picture
+        // shows; a PDF's boxes and text stay. The current version is left as it is.
+        attachments::Word word{0, 4, QRectF(0.1, 0.2, 0.3, 0.1)};
+        attachments::Record picture;
+        picture.kind = attachments::Kind::Picture;
+        picture.extractor = 1;
+        picture.pageCount = 1;
+        picture.pages = {attachments::Page{attachments::PageSource::Ocr, u"łąka"_s, u"pol"_s, {word}}};
+        const int quarter = int(QImageIOHandler::TransformationRotate90);
+        const attachments::Record upgraded = upgradedRecord(picture, quarter);
+        QCOMPARE(upgraded.extractor, AttachmentIndexer::ExtractorVersion);
+        QCOMPARE(upgraded.pages.constFirst().text, u"łąka"_s);
+        QCOMPARE(upgraded.pages.constFirst().words.constFirst().box, orientedBox(word.box, quarter));
+        QVERIFY(upgraded.pages.constFirst().words.constFirst().box != word.box);
+        attachments::Record pdf = picture;
+        pdf.kind = attachments::Kind::Pdf;
+        const attachments::Record pdfUpgraded = upgradedRecord(pdf, quarter);
+        QCOMPARE(pdfUpgraded.extractor, AttachmentIndexer::ExtractorVersion);
+        QCOMPARE(pdfUpgraded.pages, pdf.pages);
+        QCOMPARE(upgradedRecord(upgraded, quarter), upgraded);
     }
 
     void textLayer()
@@ -604,16 +626,59 @@ private Q_SLOTS:
         const QString photo = u"zdjęcia/obrocone.jpg"_s;
         QVERIFY(m_vault->writeBinary(photo, bytesOf(data(u"attachments/obrocone.jpg"_s))));
         QVERIFY(waitFor([&] { return hitFor(m_indexer->search(u"pitagorasa"_s, 10), photo) != nullptr; }, 300000));
-        // The first line of the upright picture lies along the file's left edge, bottom up: its box
-        // in the file's own pixels (which the picture view shows) is tall and narrow, at the left.
+        // The file stores the page sideways (its first line along the left edge, bottom up) with an
+        // EXIF orientation: the box is on the picture as shown, upright — a wide one at the top.
         const QVariantList rects = m_indexer->matchRects(photo, 1, u"notatki"_s);
         QVERIFY2(!rects.isEmpty(), qPrintable(m_indexer->recognizedText(photo)));
         const QVariantMap r = rects.first().toMap();
-        QVERIFY2(r.value(u"x"_s).toReal() < 0.3 && r.value(u"height"_s).toReal() > r.value(u"width"_s).toReal(),
+        QVERIFY2(r.value(u"y"_s).toReal() < 0.3 && r.value(u"width"_s).toReal() > r.value(u"height"_s).toReal(),
                  qPrintable(u"%1 %2 %3 %4"_s.arg(r.value(u"x"_s).toReal())
                                     .arg(r.value(u"y"_s).toReal())
                                     .arg(r.value(u"width"_s).toReal())
                                     .arg(r.value(u"height"_s).toReal())));
+    }
+
+    void olderRecordOfSidewaysPhotoTurned()
+    {
+        // A record version 1 wrote for a photo stored sideways (EXIF orientation 6): its OCR boxes
+        // on the file's own pixels. Found in the cache, it is turned onto the picture as shown —
+        // without OCR reading the photo again (its words stay the record's own).
+        if (!m_indexer)
+            openIndexer();
+        QVERIFY(waitProbed());
+        if (!ocrHere())
+            QSKIP("Tesseract with Polish and English models is not available here");
+        m_indexer->setOcrEnabled(true);
+        const QByteArray bytes = bytesOf(data(u"attachments/obrocone.jpg"_s)) + "\n"; // (a content of its own)
+        QBuffer content;
+        content.setData(bytes);
+        content.open(QIODevice::ReadOnly);
+        const std::optional<QByteArray> hash = attachments::hashFile(content);
+        QVERIFY(hash);
+        const QRectF stored(0.05, 0.6, 0.1, 0.3); // along the file's left edge, tall
+        attachments::Record old;
+        old.kind = attachments::Kind::Picture;
+        old.extractor = 1;
+        old.pageCount = 1;
+        old.pages = {attachments::Page{attachments::PageSource::Ocr, u"żółw stary"_s, m_indexer->ocrLanguages(),
+                                       {attachments::Word{0, 4, stored}, attachments::Word{5, 5, stored}}}};
+        QDir().mkpath(m_cache);
+        QFile record(QDir(m_cache).filePath(attachments::recordFileName(*hash)));
+        QVERIFY(record.open(QIODevice::WriteOnly));
+        record.write(attachments::encodeRecord(old));
+        record.close();
+        const QString photo = u"zdjęcia/stare obrócone.jpg"_s;
+        QVERIFY(m_vault->writeBinary(photo, bytes));
+        QVERIFY(waitFor([&] { return hitFor(m_indexer->search(u"stary"_s, 10), photo) != nullptr; }, 60000));
+        QVERIFY(waitIdle());
+        const QVariantList rects = m_indexer->matchRects(photo, 1, u"żółw"_s);
+        QCOMPARE(rects.size(), 1);
+        const QRectF box = rects.first().toMap().value(u"box"_s).toRectF();
+        const QRectF shown = orientedBox(stored, int(QImageIOHandler::TransformationRotate90));
+        QVERIFY2(qAbs(box.left() - shown.left()) < 0.02 && qAbs(box.top() - shown.top()) < 0.02
+                         && qAbs(box.right() - shown.right()) < 0.02 && qAbs(box.bottom() - shown.bottom()) < 0.02,
+                 qPrintable(u"%1,%2 %3×%4"_s.arg(box.left()).arg(box.top()).arg(box.width()).arg(box.height())));
+        QCOMPARE(m_indexer->recognizedText(photo), u"żółw stary"_s);
     }
 
     void largePdf()
@@ -763,6 +828,34 @@ private Q_SLOTS:
             again.setPaused(true);
         }
         again.detach();
+    }
+
+    void ocrInterruptedGoesOn()
+    {
+        // OCR paused in the middle of a page reads that page again once resumed; a new file's
+        // text, waiting while OCR reads, comes first and OCR goes on after it. Every page is read.
+        if (!m_indexer)
+            openIndexer();
+        QVERIFY(waitProbed());
+        if (!ocrHere())
+            QSKIP("Tesseract with Polish and English models is not available here");
+        m_indexer->setOcrEnabled(true);
+        QVERIFY(waitIdle(300000));
+        m_indexer->clearCache();
+        QVERIFY(waitFor([&] { return m_indexer->state() == u"recognizing"_s; }, 300000));
+        m_indexer->setPaused(true);
+        QVERIFY(waitFor([&] { return m_indexer->state() == u"paused"_s; }, 60000));
+        m_indexer->setPaused(false);
+        QVERIFY(waitFor([&] { return m_indexer->state() == u"recognizing"_s; }, 300000));
+        const QString copy = u"assets/kopia wykładu.pdf"_s;
+        QVERIFY(m_vault->writeBinary(copy, bytesOf(m_root + u'/' + Lecture)));
+        QVERIFY(waitIdle(300000));
+        QVERIFY(hitFor(m_indexer->search(u"tablica"_s, 10), Board));
+        QVERIFY(hitFor(m_indexer->search(u"powoli"_s, 10), Board));
+        QCOMPARE(m_indexer->page(Lecture, 2)->source, attachments::PageSource::Ocr);
+        QCOMPARE(m_indexer->page(copy, 2)->source, attachments::PageSource::Ocr);
+        QVERIFY(m_vault->remove(copy));
+        QVERIFY(waitIdle(300000));
     }
 
     void clearCache()

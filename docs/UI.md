@@ -4020,8 +4020,8 @@ offline. User guide: the documentation's page
   text (`PdfViewModel::setOcrLookup`, set by `Workspace`: the record's page when the cache was made
   from the file's very size and time) and places the hits by OCR's word boxes. A picture opens with
   `search`: `ContentPictureView` frames the places of the words on the picture (accent frames over
-  the picture at any size; `Workspace.attachments.matchRects` — OCR's boxes on the file's own pixels:
-  a photo turned upright by its EXIF orientation for OCR is framed where the view shows it),
+  the picture at any size; `Workspace.attachments.matchRects` — OCR's boxes on the picture as shown:
+  a photo stored sideways is shown and read by OCR upright, by its EXIF orientation),
   "2 places" with × in the bar (wide views), and **Recognized text** shows what OCR read, read-only and
   selectable ("It may hold mistakes"). A document opens its file the way any other attachment does
   (PageView `fileRoute`, "Other attachments": read-only, **Open in another app**); the row's excerpt is
@@ -6346,8 +6346,9 @@ or agenda row) follows these; the reasons are below.
    a `revision` the Repeater bumps on `itemAdded` / `itemRemoved`. What a block shows from
    elsewhere is there when it is created: a model's first run in `componentComplete`
    (`QQmlParserStatus`, as `QueryResultModel`), not a `Qt.callLater` / `QTimer` later; a
-   picture's size from its file's header (`picturesize.h`), not from the loaded image — which is
-   loaded only near the view ("Pictures hold their pixels only near the view" below).
+   picture's size from its file's header (`picturesize.h`; a photo stored sideways with an EXIF
+   orientation upright, as every `Image` showing the notebook's pictures has `autoTransform`), not
+   from the loaded image — which is loaded only near the view ("Pictures hold their pixels only near the view" below).
 2. **Nothing changes a row's height while the user only scrolls or points.** No room that
    appears on hover or under the resting mouse pointer: hover controls take no room or keep
    theirs (the query header's edit button); room that comes and goes belongs to a user's action

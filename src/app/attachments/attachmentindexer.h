@@ -72,10 +72,15 @@ class IndexerWorker;
 /// The files read: PDFs, documents (DOCX, PPTX, ODT, EPUB) and pictures with text worth reading (no
 /// SVG, GIF, icons).
 bool isSearchableAttachment(const QString &path);
-/// Where an OCR picture's box (fractions of the picture as it was read: its EXIF orientation applied)
-/// lies on the file's own pixels (fractions) — the picture view shows those. `transformation`:
-/// QImageIOHandler::Transformations as int.
-QRectF unorientedBox(const QRectF &box, int transformation);
+/// Where a box on a picture's own pixels (fractions of the file's stored picture) lies on the picture
+/// as its EXIF orientation shows it (fractions) — what the picture view and a note show, and the
+/// boxes OCR's words keep. `transformation`: QImageIOHandler::Transformations as int.
+QRectF orientedBox(const QRectF &box, int transformation);
+/// A record an older extractor wrote, brought up to ExtractorVersion without reading the file
+/// again: version 1 kept an OCR picture's word boxes on the file's own pixels, which turn by the
+/// picture's EXIF orientation `transformation` (QImageIOHandler::Transformations as int) onto the
+/// picture as shown. A record of any other version comes back unchanged.
+attachments::Record upgradedRecord(attachments::Record record, int transformation);
 /// The pixel size a PDF page of `points` is drawn at for OCR: about 300 dpi, the long side 1000…4200
 /// px (a small slide gets enough pixels, a poster no more than that).
 QSize ocrPagePixels(QSizeF points);
@@ -120,7 +125,9 @@ class AttachmentIndexer : public QObject {
 public:
     /// Bump when what is read from a file changes (the text rules, OCR's input): every record of
     /// an older one is read again.
-    static constexpr quint32 ExtractorVersion = 1;
+    /// (2: an OCR picture's word boxes on the picture as its EXIF orientation shows it —
+    /// upgradedRecord() turns version 1's.)
+    static constexpr quint32 ExtractorVersion = 2;
     /// A PDF page with fewer letters and digits of its own is read by OCR: a scan (none, or a page
     /// number), a slide that is one picture. Its own few words stay searchable with OCR's.
     static constexpr int MinTextLayerLetters = 8;
@@ -219,7 +226,7 @@ public:
                                                                       qint64 mtime, int page)>;
     PageLookup pageLookup() const;
 
-    /// The boxes (fractions of the file's own pixels: {x, y, width, height, box — the same as a
+    /// The boxes (fractions of the picture as shown, its EXIF orientation applied: {x, y, width, height, box — the same as a
     /// rect, for typed delegates}) of the places of `query` on page `page` of `path` that OCR read
     /// (the picture view's highlights; [] without) — the query as a phrase, else its words.
     Q_INVOKABLE QVariantList matchRects(const QString &path, int page, const QString &query);

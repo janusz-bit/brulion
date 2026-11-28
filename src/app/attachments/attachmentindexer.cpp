@@ -131,10 +131,9 @@ bool writeRecordFile(const QString &file, const Record &record)
     return out.commit();
 }
 
-/// The words OCR read as a page: fractions of the picture, mapped by `place` (a picture's own
-/// pixels; identity for a PDF page).
-Page pageFromOcr(const platform::OcrResult &result, QSize picture, const QString &languages,
-                 const std::function<QRectF(const QRectF &)> &place)
+/// The words OCR read as a page: fractions of the picture it read (a picture as its EXIF orientation
+/// shows it, a PDF page).
+Page pageFromOcr(const platform::OcrResult &result, QSize picture, const QString &languages)
 {
     Page page;
     page.ocrLanguages = languages;
@@ -152,14 +151,21 @@ Page pageFromOcr(const platform::OcrResult &result, QSize picture, const QString
         lines.append(w.line);
         blocks.append(w.block);
         attachments::Word word;
-        const QRectF box(qreal(w.box.left()) / picture.width(), qreal(w.box.top()) / picture.height(),
-                         qreal(w.box.width()) / picture.width(), qreal(w.box.height()) / picture.height());
-        word.box = place ? place(box) : box;
+        word.box = QRectF(qreal(w.box.left()) / picture.width(), qreal(w.box.top()) / picture.height(),
+                          qreal(w.box.width()) / picture.width(), qreal(w.box.height()) / picture.height());
         words.append(word);
     }
     page.text = attachments::joinOcrWords(texts, lines, blocks, words);
     page.words = std::move(words);
     return page;
+}
+
+/// The EXIF orientation of the picture `file` as QImageIOHandler::Transformations (its header only).
+int exifTransformation(const QString &file)
+{
+    QImageReader reader(file);
+    reader.setDecideFormatFromContent(true);
+    return int(reader.transformation().toInt());
 }
 
 } // namespace
@@ -170,26 +176,35 @@ bool isSearchableAttachment(const QString &path)
            && (paths::isPdfPath(path) || isOcrPicture(path) || attachments::documentFormatOf(path).has_value());
 }
 
-QRectF unorientedBox(const QRectF &box, int transformation)
+QRectF orientedBox(const QRectF &box, int transformation)
 {
     using T = QImageIOHandler::Transformation;
     const auto t = QImageIOHandler::Transformations::fromInt(transformation);
-    // Where a point of the shown picture was on the file's pixels (Qt: mirror / flip first, then
-    // rotate 90° clockwise; Rotate270 alone is a turn the other way).
-    const auto back = [t](QPointF p) {
-        if (t == QImageIOHandler::TransformationRotate270)
-            return QPointF(1 - p.y(), p.x());
-        if (t.testFlag(T::TransformationRotate90))
-            p = QPointF(p.y(), 1 - p.x());
+    // Qt's reader: mirror / flip first, then a quarter turn clockwise (Rotate270 is all three).
+    const auto shown = [t](QPointF p) {
         if (t.testFlag(T::TransformationMirror))
             p.setX(1 - p.x());
         if (t.testFlag(T::TransformationFlip))
             p.setY(1 - p.y());
+        if (t.testFlag(T::TransformationRotate90))
+            p = QPointF(1 - p.y(), p.x());
         return p;
     };
-    if (t == QImageIOHandler::TransformationNone)
-        return box;
-    return QRectF(back(box.topLeft()), back(box.bottomRight())).normalized();
+    return QRectF(shown(box.topLeft()), shown(box.bottomRight())).normalized();
+}
+
+attachments::Record upgradedRecord(attachments::Record record, int transformation)
+{
+    if (record.extractor != 1)
+        return record;
+    record.extractor = 2;
+    if (record.kind != Kind::Picture)
+        return record;
+    for (Page &page : record.pages) {
+        for (attachments::Word &word : page.words)
+            word.box = orientedBox(word.box, transformation);
+    }
+    return record;
 }
 
 QSize ocrPagePixels(QSizeF points)
@@ -216,6 +231,8 @@ public:
         bool ocr = false;
         QString languages;
     };
+    /// OCR is on, in some language.
+    static bool ocrWanted(const Settings &settings) { return settings.ocr && !settings.languages.isEmpty(); }
 
     IndexerWorker(AttachmentIndexer *owner, quint64 generation, QString cacheDir, Settings settings)
         : m_owner(owner), m_generation(generation), m_cacheDir(std::move(cacheDir)), m_settings(std::move(settings))
@@ -276,7 +293,37 @@ private:
     void processOcr(OcrJob job);
     std::optional<Record> extract(const AttachmentIndexer::FileJob &job, Kind kind);
     std::optional<QByteArray> hashOf(const QString &file);
-    QImage ocrPicture(const OcrJob &job, int page, int *dpi, int *transformation);
+    QImage ocrPicture(const OcrJob &job, int page, int *dpi);
+    /// The manifest's entry of `job`'s file while its size and time are the same (nullopt: read it).
+    std::optional<ManifestEntry> knownEntry(const AttachmentIndexer::FileJob &job) const;
+    /// The record of the file of content `hash`: the cache's (an older extractor's brought up to
+    /// date), else read now and cached (nullopt: stopping).
+    std::optional<Record> recordOf(const AttachmentIndexer::FileJob &job, Kind kind, const QByteArray &hash);
+    /// The record of content `hash` in the cache (version 1's brought up to date: upgradedRecord()).
+    std::optional<Record> cachedRecord(const AttachmentIndexer::FileJob &job, Kind kind, const QByteArray &hash);
+    void writeRecord(const QByteArray &hash, const Record &record);
+    /// One page of an OCR job: recognized, not a page of the file, or the job stops or waits.
+    enum class OcrStep : quint8 { Done, Skipped, Later, Again, Stop };
+    /// The job's pages from this one go back to the queue (Later: at its back, Again: at its front).
+    static bool putsTheRestBack(OcrStep step) { return step == OcrStep::Later || step == OcrStep::Again; }
+    OcrStep ocrStep(const OcrJob &job, qsizetype i, Record &record, const QString &languages, quint64 generation);
+    /// `job`'s record written after OCR read pages (the indexer told).
+    void writeOcrRecord(const OcrJob &job, const Record &record, quint64 generation);
+    /// Page `page` OCR read, handed to the indexer's search at once (unless the notebook of
+    /// `generation` has gone since).
+    void publishPage(const QString &path, int page, const Page &read, quint64 generation);
+    /// The pages of `job` from the `from`-th back in the queue (`first`: at its front), unless stopping.
+    void requeueRest(const OcrJob &job, qsizetype from, bool first);
+    /// `job` in the OCR queue: at its front (`first`) or at its back.
+    void requeueOcr(OcrJob job, bool first);
+    /// OCR is on and its engine is there.
+    bool ocrReady(const Settings &settings);
+    /// The OCR engine for `languages` is there (made when they changed; false: none, said once).
+    bool engineFor(const QString &languages);
+    /// Files wait for their text (which comes before OCR).
+    bool textWaiting();
+    /// Page `page` of `job` read by OCR, with its own words (`before`); nullopt: cancelled.
+    std::optional<Page> recognizePage(const OcrJob &job, int page, const Page &before, const QString &languages);
     void post(std::function<void(AttachmentIndexer *)> apply);
     void postPrepared(const QString &path, const ManifestEntry &entry, AttachmentSearch::Prepared prepared);
     void progress(const QString &state, bool force = false);
@@ -519,6 +566,110 @@ void IndexerWorker::postPrepared(const QString &path, const ManifestEntry &entry
     }
 }
 
+namespace {
+
+/// The record of a file that is not read, only its name searched (nullopt: it is read): a document
+/// too large to read (a hostile or a huge file); a picture without OCR, in a format this device
+/// cannot decode, or huge (no reading, no hash).
+std::optional<Record> nameOnlyRecord(const QString &file, const QString &path, Kind kind, bool known, bool ocr)
+{
+    if (known)
+        return std::nullopt;
+    Record name;
+    name.kind = kind;
+    if (attachments::isDocumentKind(kind) && QFileInfo(file).size() > attachments::DocumentLimits().maxFileBytes)
+        return name;
+    if (kind != Kind::Picture)
+        return std::nullopt;
+    name.pageCount = 1;
+    if (!ocr || !decodable(path) || QFileInfo(file).size() > AttachmentIndexer::MaxPictureBytes)
+        return name;
+    return std::nullopt;
+}
+
+/// The pages of `record` OCR still reads in `languages`.
+QList<int> pagesForOcr(const Record &record, const QString &languages)
+{
+    QList<int> wanted;
+    if (record.locked || record.unreadable)
+        return wanted;
+    for (qsizetype i = 0; i < record.pages.size(); ++i) {
+        if (wantsOcr(record.pages.at(i), languages))
+            wanted.append(int(i + 1));
+    }
+    return wanted;
+}
+
+/// OCR's page `read` with the page's own few words (`before`: a title, a page number) after OCR's
+/// text when OCR missed them.
+Page withOwnWords(Page read, const Page &before)
+{
+    const QString own = before.source == PageSource::NeedsOcr ? before.text.trimmed() : QString();
+    if (!own.isEmpty() && !text::foldKey(read.text).contains(text::foldKey(own)))
+        read.text += (read.text.isEmpty() ? u""_s : u"\n\n"_s) + own;
+    return read;
+}
+
+/// The picture `file` for OCR: the way up it was taken (its EXIF orientation), at most 4200 px and
+/// MaxOcrPixels, a small one (a screenshot) twice the size — small text reads better so.
+QImage ocrPictureOf(const QString &file)
+{
+    QImageReader reader(file);
+    reader.setDecideFormatFromContent(true);
+    reader.setAutoTransform(true);
+    const QSize raw = reader.size();
+    if (raw.isValid()) {
+        const double scale =
+                std::min({1.0, 4200.0 / std::max(raw.width(), raw.height()),
+                          std::sqrt(double(platform::MaxOcrPixels) / (double(raw.width()) * raw.height()))});
+        if (scale < 1.0)
+            reader.setScaledSize((QSizeF(raw) * scale).toSize());
+    }
+    QImage image = reader.read();
+    if (!image.isNull() && std::max(image.width(), image.height()) < 1500)
+        image = image.scaled(image.size() * 2, Qt::KeepAspectRatio, Qt::SmoothTransformation);
+    return image;
+}
+
+} // namespace
+
+std::optional<ManifestEntry> IndexerWorker::knownEntry(const AttachmentIndexer::FileJob &job) const
+{
+    const std::lock_guard lock(m_owner->m_shared->lock);
+    const auto it = m_owner->m_shared->manifest.constFind(job.path);
+    if (it != m_owner->m_shared->manifest.constEnd() && it->size == job.size && it->mtime == job.mtime)
+        return *it;
+    return std::nullopt;
+}
+
+void IndexerWorker::writeRecord(const QByteArray &hash, const Record &record)
+{
+    if (writeRecordFile(recordPath(hash), record))
+        m_written = true;
+}
+
+std::optional<Record> IndexerWorker::cachedRecord(const AttachmentIndexer::FileJob &job, Kind kind,
+                                                  const QByteArray &hash)
+{
+    std::optional<Record> record = readRecordFile(recordPath(hash));
+    if (record && record->extractor == 1) {
+        record = upgradedRecord(*record, kind == Kind::Picture ? exifTransformation(job.file) : 0);
+        writeRecord(hash, *record);
+    }
+    return record;
+}
+
+std::optional<Record> IndexerWorker::recordOf(const AttachmentIndexer::FileJob &job, Kind kind, const QByteArray &hash)
+{
+    std::optional<Record> record = cachedRecord(job, kind, hash);
+    if (record && record->extractor == AttachmentIndexer::ExtractorVersion && record->kind == kind)
+        return record;
+    record = extract(job, kind);
+    if (record)
+        writeRecord(hash, *record);
+    return record; // (nullopt: stopping)
+}
+
 void IndexerWorker::processText(const AttachmentIndexer::FileJob &job)
 {
     // A link to a file elsewhere is never read (Vault::reaches()).
@@ -530,91 +681,46 @@ void IndexerWorker::processText(const AttachmentIndexer::FileJob &job)
     m_currentPages = 0;
     progress(u"reading"_s);
     Settings settings;
-    std::optional<ManifestEntry> known;
     {
         const std::lock_guard lock(m_mutex);
         settings = m_settings;
     }
-    {
-        const std::lock_guard lock(m_owner->m_shared->lock);
-        const auto it = m_owner->m_shared->manifest.constFind(job.path);
-        if (it != m_owner->m_shared->manifest.constEnd() && it->size == job.size && it->mtime == job.mtime)
-            known = *it;
-    }
-    const bool ocr = settings.ocr && !settings.languages.isEmpty() && platform::ocrAvailable();
-    // A document too large to read (a hostile or a huge file): only its name is searched.
-    if (attachments::isDocumentKind(kind) && !known && QFileInfo(job.file).size() > attachments::DocumentLimits().maxFileBytes) {
-        Record name;
-        name.kind = kind;
-        postPrepared(job.path, ManifestEntry{}, AttachmentSearch::prepare(job.path, name));
+    const std::optional<ManifestEntry> known = knownEntry(job);
+    const bool ocr = ocrWanted(settings) && platform::ocrAvailable();
+    if (const std::optional<Record> name = nameOnlyRecord(job.file, job.path, kind, known.has_value(), ocr)) {
+        postPrepared(job.path, ManifestEntry{}, AttachmentSearch::prepare(job.path, *name));
         return;
     }
-    // A picture is read only for OCR: without it — or in a format this device cannot decode, or huge —
-    // only its name is searched (no reading, no hash).
-    if (kind == Kind::Picture && !known
-        && (!ocr || !decodable(job.path) || QFileInfo(job.file).size() > AttachmentIndexer::MaxPictureBytes)) {
-        Record name;
-        name.kind = Kind::Picture;
-        name.pageCount = 1;
-        postPrepared(job.path, ManifestEntry{}, AttachmentSearch::prepare(job.path, name));
-        return;
-    }
+    const std::optional<QByteArray> hash = known ? std::optional<QByteArray>(known->hash) : hashOf(job.file);
+    if (!hash)
+        return; // (gone, unreadable, or stopping)
     ManifestEntry entry;
     entry.size = job.size;
     entry.mtime = job.mtime;
-    if (known) {
-        entry.hash = known->hash;
-    } else {
-        const std::optional<QByteArray> hash = hashOf(job.file);
-        if (!hash)
-            return; // (gone, unreadable, or stopping)
-        entry.hash = *hash;
-    }
-    std::optional<Record> record = readRecordFile(recordPath(entry.hash));
-    if (!record || record->extractor != AttachmentIndexer::ExtractorVersion || record->kind != kind) {
-        record = extract(job, kind);
-        if (!record)
-            return; // stopping
-        if (writeRecordFile(recordPath(entry.hash), *record))
-            m_written = true;
-    }
-    QList<int> wanted;
-    if (ocr && !record->locked && !record->unreadable) {
-        for (qsizetype i = 0; i < record->pages.size(); ++i) {
-            if (wantsOcr(record->pages.at(i), settings.languages))
-                wanted.append(int(i + 1));
-        }
-    }
+    entry.hash = *hash;
+    const std::optional<Record> record = recordOf(job, kind, entry.hash);
+    if (!record)
+        return; // stopping
+    const QList<int> wanted = ocr ? pagesForOcr(*record, settings.languages) : QList<int>();
     postPrepared(job.path, entry, AttachmentSearch::prepare(job.path, *record));
-    if (!wanted.isEmpty()) {
-        const std::lock_guard lock(m_mutex);
-        m_ocr.push_back(OcrJob{job, entry.hash, kind, wanted});
-    }
+    if (!wanted.isEmpty())
+        requeueOcr(OcrJob{job, entry.hash, kind, wanted}, false);
 }
 
-QImage IndexerWorker::ocrPicture(const OcrJob &job, int page, int *dpi, int *transformation)
+void IndexerWorker::requeueOcr(OcrJob job, bool first)
+{
+    const std::lock_guard lock(m_mutex);
+    if (first)
+        m_ocr.push_front(std::move(job));
+    else
+        m_ocr.push_back(std::move(job));
+}
+
+QImage IndexerWorker::ocrPicture(const OcrJob &job, int page, int *dpi)
 {
     *dpi = 0;
-    *transformation = 0;
-    if (job.kind == Kind::Picture) {
-        QImageReader reader(job.job.file);
-        reader.setDecideFormatFromContent(true);
-        reader.setAutoTransform(true); // a phone's photo, the way up it was taken
-        const QSize raw = reader.size();
-        if (raw.isValid()) {
-            const double scale =
-                    std::min({1.0, 4200.0 / std::max(raw.width(), raw.height()),
-                              std::sqrt(double(platform::MaxOcrPixels) / (double(raw.width()) * raw.height()))});
-            if (scale < 1.0)
-                reader.setScaledSize((QSizeF(raw) * scale).toSize());
-        }
-        QImage image = reader.read();
-        *transformation = int(reader.transformation().toInt());
-        // Small text (a screenshot) reads better twice the size.
-        if (!image.isNull() && std::max(image.width(), image.height()) < 1500)
-            image = image.scaled(image.size() * 2, Qt::KeepAspectRatio, Qt::SmoothTransformation);
-        return image;
-    }
+    if (job.kind == Kind::Picture)
+        return ocrPictureOf(job.job.file);
     const QString version = fileVersion(job.job.size, job.job.mtime);
     // (As extract(): not kept open once the page is drawn — a page takes seconds to recognize.)
     const auto letGo = qScopeGuard([&job] { pdfview::PdfReaderPool::instance().forget(job.job.file); });
@@ -629,6 +735,102 @@ QImage IndexerWorker::ocrPicture(const OcrJob &job, int page, int *dpi, int *tra
     return lease->render(page, pixels);
 }
 
+bool IndexerWorker::ocrReady(const Settings &settings)
+{
+    return ocrWanted(settings) && engineFor(settings.languages);
+}
+
+bool IndexerWorker::engineFor(const QString &languages)
+{
+    if (m_engine && m_engineLanguages == languages)
+        return true;
+    m_engine.reset();
+    QString error;
+    m_engine = platform::OcrEngine::create(languages, &error);
+    m_engineLanguages = languages;
+    if (!m_engine) {
+        if (!m_engineFailed)
+            qCWarning(logging::lcIndex).noquote() << u"OCR: no engine for %1: %2"_s.arg(languages, error);
+        m_engineFailed = true;
+        return false;
+    }
+    m_engineFailed = false;
+    return true;
+}
+
+bool IndexerWorker::textWaiting()
+{
+    const std::lock_guard lock(m_mutex);
+    return m_textQueued;
+}
+
+std::optional<Page> IndexerWorker::recognizePage(const OcrJob &job, int page, const Page &before,
+                                                 const QString &languages)
+{
+    int dpi = 0;
+    const QImage image = ocrPicture(job, page, &dpi);
+    platform::OcrResult result;
+    if (!image.isNull())
+        result = m_engine->recognize(image, dpi, [this] { return cancelled(); });
+    if (result.cancelled)
+        return std::nullopt;
+    const Page read = withOwnWords(pageFromOcr(result, image.size(), languages), before);
+    if (read.source == PageSource::OcrFailed)
+        qCInfo(logging::lcIndex).noquote() << u"OCR: page %1 of %2 not read: %3"_s.arg(page).arg(
+                job.job.path, image.isNull() ? u"no picture"_s : result.error);
+    return read;
+}
+
+void IndexerWorker::writeOcrRecord(const OcrJob &job, const Record &record, quint64 generation)
+{
+    if (!writeRecordFile(recordPath(job.hash), record))
+        return;
+    m_written = true;
+    // The pages read from the cache before are stale now.
+    post([generation, path = job.job.path](AttachmentIndexer *owner) { owner->recordSaved(generation, path); });
+}
+
+void IndexerWorker::publishPage(const QString &path, int page, const Page &read, quint64 generation)
+{
+    AttachmentSearch::PreparedPage prepared = AttachmentSearch::preparePage(page, read);
+    // The page itself too: until the record is written, excerpts and highlights take it.
+    post([generation, path, page, prepared = std::move(prepared), read](AttachmentIndexer *owner) mutable {
+        owner->applyPages(generation, path, {std::move(prepared)});
+        if (generation == owner->m_generation)
+            owner->m_pages.insert(path + u'\n' + QString::number(page), new Page(read), int(1 + read.text.size() / 4096));
+    });
+}
+
+void IndexerWorker::requeueRest(const OcrJob &job, qsizetype from, bool first)
+{
+    if (!stopped())
+        requeueOcr(OcrJob{job.job, job.hash, job.kind, job.pages.mid(from)}, first);
+}
+
+IndexerWorker::OcrStep IndexerWorker::ocrStep(const OcrJob &job, qsizetype i, Record &record, const QString &languages,
+                                              quint64 generation)
+{
+    // New files' text comes first: the rest of this file's pages wait at the back.
+    if (stopped() || textWaiting())
+        return OcrStep::Later;
+    if (!waitUntilFree())
+        return OcrStep::Stop;
+    const int page = job.pages.at(i);
+    if (page < 1 || page > record.pages.size())
+        return OcrStep::Skipped;
+    m_currentPage = page;
+    m_ocrLeft = int(job.pages.size() - i);
+    progress(u"recognizing"_s, true);
+    const std::optional<Page> read = recognizePage(job, page, record.pages.at(page - 1), languages);
+    // Paused (or stopping) in the middle of the page: read again from this page.
+    if (!read)
+        return OcrStep::Again;
+    record.pages[page - 1] = *read;
+    ++m_ocrDone;
+    publishPage(job.job.path, page, *read, generation);
+    return OcrStep::Done;
+}
+
 void IndexerWorker::processOcr(OcrJob job)
 {
     // (Pages not done go back to the queue, where they are counted.)
@@ -638,100 +840,31 @@ void IndexerWorker::processOcr(OcrJob job)
         const std::lock_guard lock(m_mutex);
         settings = m_settings;
     }
-    if (!settings.ocr || settings.languages.isEmpty())
+    if (!ocrReady(settings))
         return;
-    if (!m_engine || m_engineLanguages != settings.languages) {
-        m_engine.reset();
-        QString error;
-        m_engine = platform::OcrEngine::create(settings.languages, &error);
-        m_engineLanguages = settings.languages;
-        if (!m_engine) {
-            if (!m_engineFailed)
-                qCWarning(logging::lcIndex).noquote() << u"OCR: no engine for %1: %2"_s.arg(settings.languages, error);
-            m_engineFailed = true;
-            return;
-        }
-        m_engineFailed = false;
-    }
     std::optional<Record> record = readRecordFile(recordPath(job.hash));
     if (!record)
         return;
     m_currentFile = job.job.path;
     m_currentPages = record->pageCount;
-    int sinceSave = 0;
-    bool changed = false;
     const quint64 generation = m_generation;
-    const QString path = job.job.path;
+    int unsaved = 0;
     const auto save = [&] {
-        if (changed && writeRecordFile(recordPath(job.hash), *record)) {
-            m_written = true;
-            // The pages read from the cache before are stale now.
-            post([generation, path](AttachmentIndexer *owner) { owner->recordSaved(generation, path); });
-        }
-        changed = false;
-        sinceSave = 0;
+        if (unsaved > 0)
+            writeOcrRecord(job, *record, generation);
+        unsaved = 0;
     };
     for (qsizetype i = 0; i < job.pages.size(); ++i) {
-        const int page = job.pages.at(i);
-        bool textWaiting = false;
-        {
-            const std::lock_guard lock(m_mutex);
-            textWaiting = m_textQueued;
-        }
-        if (stopped() || textWaiting) {
-            // New files' text comes first: the rest of this file's pages wait at the back.
+        const OcrStep step = ocrStep(job, i, *record, settings.languages, generation);
+        if (step == OcrStep::Stop)
+            return;
+        if (putsTheRestBack(step)) {
             save();
-            if (!stopped()) {
-                const std::lock_guard lock(m_mutex);
-                m_ocr.push_back(OcrJob{job.job, job.hash, job.kind, job.pages.mid(i)});
-            }
+            requeueRest(job, i, step == OcrStep::Again);
             return;
         }
-        if (!waitUntilFree())
-            return;
-        if (page < 1 || page > record->pages.size())
-            continue;
-        m_currentPage = page;
-        m_ocrLeft = int(job.pages.size() - i);
-        progress(u"recognizing"_s, true);
-        int dpi = 0;
-        int transformation = 0;
-        const QImage image = ocrPicture(job, page, &dpi, &transformation);
-        platform::OcrResult result;
-        if (!image.isNull())
-            result = m_engine->recognize(image, dpi, [this] { return cancelled(); });
-        if (result.cancelled) {
-            // Paused (or stopping) in the middle of the page: read again from this page.
-            save();
-            if (!stopped()) {
-                const std::lock_guard lock(m_mutex);
-                m_ocr.push_front(OcrJob{job.job, job.hash, job.kind, job.pages.mid(i)});
-            }
-            return;
-        }
-        const auto place = [transformation](const QRectF &box) { return unorientedBox(box, transformation); };
-        Page read = pageFromOcr(result, image.size(), settings.languages, place);
-        // The page's own few words (a title, a page number) stay, after OCR's when it missed them.
-        const QString own = record->pages.at(page - 1).source == PageSource::NeedsOcr
-                                    ? record->pages.at(page - 1).text.trimmed()
-                                    : QString();
-        if (!own.isEmpty() && !text::foldKey(read.text).contains(text::foldKey(own)))
-            read.text += (read.text.isEmpty() ? u""_s : u"\n\n"_s) + own;
-        if (read.source == PageSource::OcrFailed)
-            qCInfo(logging::lcIndex).noquote() << u"OCR: page %1 of %2 not read: %3"_s.arg(page).arg(
-                    job.job.path, image.isNull() ? u"no picture"_s : result.error);
-        record->pages[page - 1] = read;
-        changed = true;
-        ++m_ocrDone;
-        AttachmentSearch::PreparedPage prepared = AttachmentSearch::preparePage(page, read);
-        // The page itself too: until the record is written, excerpts and highlights take it.
-        post([generation, path, page, prepared = std::move(prepared), read](AttachmentIndexer *owner) mutable {
-            owner->applyPages(generation, path, {std::move(prepared)});
-            if (generation == owner->m_generation)
-                owner->m_pages.insert(path + u'\n' + QString::number(page), new Page(read),
-                                      int(1 + read.text.size() / 4096));
-        });
-        if (++sinceSave >= OcrPagesPerSave)
+        unsaved += step == OcrStep::Done ? 1 : 0;
+        if (unsaved >= OcrPagesPerSave)
             save();
     }
     save();
