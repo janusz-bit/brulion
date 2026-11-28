@@ -499,7 +499,8 @@ const QList<MethodSpec> &controlMethods()
                     {param(u"text"_s, ParamType::String, true), param(u"partner"_s, ParamType::String),
                      param(u"page"_s, ParamType::String), param(u"parent"_s, ParamType::String),
                      param(u"wake"_s, ParamType::Bool), param(u"project"_s, ParamType::String),
-                     param(u"worktree"_s, ParamType::String), param(u"branch"_s, ParamType::String)}),
+                     param(u"worktree"_s, ParamType::String), param(u"branch"_s, ParamType::String),
+                     param(u"pictures"_s, ParamType::Json)}),
              true);
         chat(method(u"chatSend"_s,
                     u"Send a message into a conversation whose turn does not run (mode queue: in line after it; "
@@ -507,7 +508,19 @@ const QList<MethodSpec> &controlMethods()
                     u"conversation)"_s,
                     {param(u"path"_s, ParamType::String, true), param(u"text"_s, ParamType::String, true),
                      param(u"queue"_s, ParamType::Bool), oneOf(u"mode"_s, {u"now"_s, u"queue"_s, u"steer"_s}),
-                     param(u"wake"_s, ParamType::Bool)}),
+                     param(u"wake"_s, ParamType::Bool), param(u"pictures"_s, ParamType::Json)}),
+             true);
+        // A conversation's agent options (its model, mode …: chatLive's detail lists them), and the
+        // messages held after its turn stopped or failed.
+        chat(method(u"chatOption"_s,
+                    u"Set one of the AI agent's options of a conversation (its model, mode …) to a value of its "
+                    u"choices (\"true\" / \"false\" for one that is on or off)"_s,
+                    {param(u"path"_s, ParamType::String, true), param(u"option"_s, ParamType::String, true),
+                     param(u"value"_s, ParamType::String, true)}),
+             true);
+        chat(method(u"chatResume"_s,
+                    u"The messages held after a conversation's turn stopped or failed go on: the first is sent now"_s,
+                    {param(u"path"_s, ParamType::String, true)}),
              true);
         chat(method(u"chatWait"_s,
                     u"Wait up to ms for a conversation's turn to end: its answer, the question it waits on, or "

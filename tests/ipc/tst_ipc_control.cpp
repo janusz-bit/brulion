@@ -848,7 +848,8 @@ private Q_SLOTS:
             if (m.chat)
                 chatMethods << m.name;
         }
-        QCOMPARE(chatMethods, (QStringList{u"chats"_s, u"chatRead"_s, u"chatStart"_s, u"chatSend"_s, u"chatWait"_s,
+        QCOMPARE(chatMethods, (QStringList{u"chats"_s, u"chatRead"_s, u"chatStart"_s, u"chatSend"_s, u"chatOption"_s,
+                                           u"chatResume"_s, u"chatWait"_s,
                                            u"chatStop"_s, u"chatPartners"_s, u"chatLive"_s, u"chatSchedules"_s,
                                            u"chatScheduleAdd"_s, u"chatScheduleSet"_s, u"chatScheduleRemove"_s,
                                            u"chatScheduleRun"_s, u"chatRequestSecret"_s, u"chatNotify"_s}));
@@ -1046,8 +1047,9 @@ private Q_SLOTS:
                 shareMethods << m.name;
             QVERIFY2(!(m.share && m.hook), qPrintable(m.name));
         }
-        QCOMPARE(shareMethods, (QStringList{u"chats"_s, u"chatRead"_s, u"chatStart"_s, u"chatSend"_s, u"chatWait"_s,
-                                            u"chatStop"_s, u"chatPartners"_s, u"chatLive"_s, u"chatAnswer"_s}));
+        QCOMPARE(shareMethods, (QStringList{u"chats"_s, u"chatRead"_s, u"chatStart"_s, u"chatSend"_s, u"chatOption"_s,
+                                            u"chatResume"_s, u"chatWait"_s, u"chatStop"_s, u"chatPartners"_s,
+                                            u"chatLive"_s, u"chatAnswer"_s}));
         // Revoked: its connection dropped, a new hello refused.
         QLocalSocket again;
         again.connectToServer(k);

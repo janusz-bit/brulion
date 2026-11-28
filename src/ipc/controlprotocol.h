@@ -38,8 +38,9 @@ namespace brulion::ipc {
 
 /// The protocol's version (hello: "protocol"); bumped when a method changes incompatibly.
 constexpr int ControlProtocolVersion = 1;
-/// The longest request line accepted (a longer one closes the connection after an error).
-constexpr qsizetype MaxLineBytes = 1024 * 1024;
+/// The longest request line accepted (a longer one closes the connection after an error): ACP's
+/// (acp::MaxLineBytes) — a message sent from the phone carries its pictures (acp/appchats.h).
+constexpr qsizetype MaxLineBytes = 16 * 1024 * 1024;
 
 /// The control socket's name for the single-instance key (SingleInstance::keyFor()): the same
 /// folder (the user's runtime folder), "-control" appended.
