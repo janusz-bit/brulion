@@ -2304,6 +2304,77 @@ private Q_SLOTS:
         QTRY_COMPARE_WITH_TIMEOUT(ws->read(u"Dom.md"_s), dom, 10000);
     }
 
+    // A plan to approve from a real agent in its plan mode (Claude Code: BRULION_REAL_ACP_AGENT,
+    // _OPTION as in realAgent(); docs/UI.md "AI chat" — plans to approve): the turn asks with the
+    // plan, which is saved as a page, and once approved the agent carries it out.
+    void realAgentPlanApproved()
+    {
+        const QString command = qEnvironmentVariable("BRULION_REAL_ACP_AGENT");
+        if (command.isEmpty())
+            QSKIP("no real agent named (BRULION_REAL_ACP_AGENT)");
+        auto ws = open({AgentConfig{u"real"_s, u"Real"_s, command, true}});
+        WorkspaceChats *chats = ws->chats();
+        QSignalSpy checked(chats, &WorkspaceChats::agentChecked);
+        chats->checkAgent(u"real"_s);
+        QTRY_COMPARE_WITH_TIMEOUT(checked.size(), 1, 240000);
+        if (const QString option = qEnvironmentVariable("BRULION_REAL_ACP_OPTION"); option.contains(u'='))
+            chats->setAgentOption(QString(), u"acp:real"_s, option.section(u'=', 0, 0), option.section(u'=', 1));
+        QString planMode;
+        for (const QVariant &c : chats->agentChoices(QString(), u"acp:real"_s, u"mode"_s)) {
+            const QString value = c.toMap().value(u"value"_s).toString();
+            if (value.contains(u"plan"_s, Qt::CaseInsensitive))
+                planMode = value;
+        }
+        if (planMode.isEmpty())
+            QSKIP("the agent has no plan mode");
+        chats->setAgentOption(QString(), u"acp:real"_s, u"mode"_s, planMode);
+        const QString path = chats->send(QString(),
+                                         u"Zaplanuj w dwóch krokach dopisanie na końcu pliku Dom.md linii "
+                                         u"\"- [ ] Kupić mleko\", a po zatwierdzeniu planu wykonaj go."_s,
+                                         QString(), {}, u"acp:real"_s);
+        QVERIFY(!path.isEmpty());
+        QVERIFY2(QTest::qWaitFor([&] { return !chats->questionPlan(path).isEmpty() || !chats->turn(path)->running(); },
+                                 600000),
+                 "no plan asked for in time");
+        qInfo().noquote() << ws->read(path);
+        const QString plan = chats->questionPlan(path);
+        QVERIFY2(!plan.isEmpty(), "the turn ended without a plan to approve");
+        const QString saved = chats->savePlan(path);
+        QVERIFY(!saved.isEmpty());
+        QVERIFY(ws->read(saved).contains(plan.left(20)));
+        const QStringList options = chats->questionOptions(path);
+        qInfo() << "plan options:" << options;
+        QString approve;
+        for (const QString &o : options)
+            if (!o.contains(u"keep"_s, Qt::CaseInsensitive) && !o.contains(u"no"_s, Qt::CaseInsensitive)) {
+                approve = o;
+                break;
+            }
+        QVERIFY(!approve.isEmpty());
+        // Its edits after the plan, allowed as they come.
+        QTimer answers;
+        answers.setInterval(200);
+        QObject::connect(&answers, &QTimer::timeout, chats, [&] {
+            if (!chats->asking(path))
+                return;
+            const QStringList more = chats->questionOptions(path);
+            QString allow = more.value(0);
+            for (const QString &o : more)
+                if (o.contains(u"allow"_s, Qt::CaseInsensitive) && !o.contains(u"always"_s, Qt::CaseInsensitive)) {
+                    allow = o;
+                    break;
+                }
+            chats->answer(path, allow);
+        });
+        chats->answer(path, approve);
+        answers.start();
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->turn(path)->running(), 600000);
+        qInfo().noquote() << ws->read(path).section(u"🧑"_s, -1);
+        QCOMPARE(chats->turn(path)->failure(), QString());
+        QCOMPARE(chats->questionPlan(path), QString());
+        QTRY_VERIFY_WITH_TIMEOUT(ws->read(u"Dom.md"_s).contains(u"Kupić mleko"_s), 10000);
+    }
+
     // A real agent's thread in a real git project (docs/CODE.md), when one is named:
     // BRULION_REAL_ACP_AGENT="npx -y @agentclientprotocol/claude-agent-acp" (or codex-acp). The agent fixes a bug in
     // the project's file — its questions (may it edit?) allowed —, the turn's checkpoint is taken before it, and git

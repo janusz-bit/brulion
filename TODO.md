@@ -49,9 +49,10 @@ done in the repository simply disappears from the list.
   (tst_shell_agents realAgentThread), a sub-conversation that wakes its parent, either way between
   the two (realAgentWakesParent), the queue, steer, a side chat, a fork, Edit from here and a turn's
   changed files with Undo — its editing tool and a shell command (realAgentChatFeatures,
-  realAgentUndoesItsChanges, 2026-11-28). Not yet with them: a plan to approve (Claude Code's plan
-  mode), a secret the agent asks for in a private card, scheduled conversations and their webhooks,
-  the subscription limits and the usage history from their own session logs.
+  realAgentUndoesItsChanges, 2026-11-28), a plan to approve in Claude Code's plan mode
+  (realAgentPlanApproved). Not yet with them: a secret the agent asks for in a private card,
+  scheduled conversations and their webhooks, the subscription limits and the usage history from
+  their own session logs.
 * **AI agents (ACP): what is still missing** — an agent the user runs answers in the AI chat over
   the Agent Client Protocol (docs/UI.md "AI agents (ACP)"; tried with Claude Code, Codex and
   OpenCode), on the computer or, through `brulion-cli acp serve` on a computer of the user's — the
