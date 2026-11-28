@@ -36,7 +36,28 @@ void WorkspaceExtensions::scheduleAppChanged()
         m_appChangePending = false;
         ++m_appRevision;
         Q_EMIT appRevisionChanged();
+        followViewReplacements();
     });
+}
+
+void WorkspaceExtensions::followViewReplacements()
+{
+    QVariantList shown;
+    if (m_engine)
+        for (const QString &builtin : extensions::replaceableViews())
+            if (const std::optional<extensions::ViewReplacement> r = m_engine->viewReplacement(builtin))
+                shown << extensions::viewReplacementTable(*r);
+    if (shown == m_shownReplacements)
+        return;
+    m_shownReplacements = shown;
+    Q_EMIT viewReplacementsChanged();
+}
+
+QVariantMap WorkspaceExtensions::shownRoute(const QVariantMap &route) const
+{
+    const std::optional<extensions::ViewReplacement> replacement =
+            m_engine ? m_engine->viewReplacement(route.value(u"view"_s).toString()) : std::nullopt;
+    return replacement ? extensions::replacedRoute(route, *replacement) : route;
 }
 
 QVariantList WorkspaceExtensions::contributions(const QString &slot, int revision) const
@@ -202,6 +223,12 @@ QVariantMap WorkspaceExtensions::loadLive(const QString &id, const QString &sour
             out.insert(u"inputRules"_s, rules);
         if (!styles.isEmpty())
             out.insert(u"tagStyles"_s, styles);
+        QVariantList replacements;
+        for (const extensions::ViewReplacement &replacement : m_engine->viewReplacements())
+            if (replacement.extension == id)
+                replacements << extensions::viewReplacementTable(replacement);
+        if (!replacements.isEmpty())
+            out.insert(u"replacedViews"_s, replacements);
     }
     out.insert(u"commands"_s, commands);
     out.insert(u"views"_s, views);

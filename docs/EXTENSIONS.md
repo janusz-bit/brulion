@@ -1819,11 +1819,12 @@ live code an agent sends ("Live code" below).
 | `b.app.contribute(slot, item)`, `b.app.remove(slot, id?)`, `b.app.contributions(slot?)` | puts an item into the app's UI, takes one (or all of a slot) away, lists those of every extension ("Items of the UI" below) |
 | `b.app.inputRule(rule)`, `b.app.inputRules()` | text the editor replaces as it is typed (`->` → `→`), every extension's rules ("Input rules" below); `b.app.remove("inputRule", match?)` takes one (or all) away |
 | `b.app.tagStyle(style)`, `b.app.tagStyles()` | blocks carrying a tag drawn tinted (`#pilne` on red), every extension's styles ("Styles of blocks by tag" below); `b.app.remove("tagStyle", tag?)` takes one (or all) away |
+| `b.app.replaceView(builtin, view, params?)`, `b.app.replacedViews()` | one of the extension's views shown where a built-in view was (the journal, Tasks …), every extension's replacements ("Built-in views replaced" below); `b.app.remove("replaceView", builtin?)` takes one (or all) away |
 
 What moves the UI — `navigate`, `open`, `back`, `run`, `toast` — happens after the call returns,
 never inside it, and is refused at an extension's top level (it would run on every save of the
-page: call it from a command, an action or a hook). `theme`, `contribute`, `inputRule` and
-`tagStyle` are declarations:
+page: call it from a command, an action or a hook). `theme`, `contribute`, `inputRule`,
+`tagStyle` and `replaceView` are declarations:
 they work at the top level, and what an extension set goes away when it is loaded again, switched
 off or removed. A macro or a template variable only reads (`b.app.state()` works there; a change
 is an error). In `brulion-cli extension run` there is no app: `b.app.state()` says
@@ -2088,6 +2089,40 @@ b.app.tagStyle({ tag = "pomysł", tint = "#8e6cd8" })
 for _, s in b.app.tagStyles() do
     print(`#{s.tag}: {s.tint}`)
 end
+```
+
+### Built-in views replaced
+
+`b.app.replaceView(builtin, view, params?)` shows one of the extension's views (`b.view`) where a
+built-in view of the app was — TiddlyWiki's shadow tiddlers, for the app's screens: a board for
+Tasks, a journal of one's own. `builtin` is one of `"journals"` (the journal; a day opened by
+itself stays the app's), `"tasks"`, `"calendar"`, `"habits"`, `"graph"`, `"allPages"`, `"tags"`,
+`"search"` — not a page, the settings, the console or another extension's view, so the way to
+switch an extension off stays the app's.
+
+* The route stays the built-in's: the bottom navigation, the icon bar, links, tabs, the history
+  and `b.app.state().view` still say `"tasks"`, and a tab saved with it shows the built-in again
+  once the extension is gone. The view gets `params` with the route's own parameters over them
+  (`query` of a Tasks link, `date` of the journal's) and `replaces` = the built-in's name.
+* Its header has **Built-in view**, which shows the app's own (the route with `builtin = true`;
+  `b.app.navigate({ view = "tasks", builtin = true })` does the same).
+* Declared at the top level, the view may come later in the file; later on, a view the extension
+  lacks is an error. Declaring the same built-in again replaces the extension's entry and puts it
+  last; of several extensions', the one declared last is shown, as long as its view exists. At
+  most 64 replacements in all, `params` at most 16 KB as JSON.
+
+```luau
+-- Tasks as a board: open tasks in three columns by their priority.
+b.view("board", function(params)
+    local columns = {}
+    for _, p in { "high", "medium", "low" } do
+        local tasks = b.query(`type:tasks status:open priority:{p}`)
+        table.insert(columns, b.ui.heading(`{p}: {tasks.total}`))
+    end
+    return b.ui.column(columns)
+end, nil, { label = "Board" })
+b.app.replaceView("tasks", "board")
+print(#b.app.replacedViews())
 ```
 
 ### Settings and navigation

@@ -213,21 +213,24 @@ Item {
     readonly property bool otherInSidePanel: otherView === "page" || otherView === "chat" || otherView === "drawing"
                                              || otherView === "canvas"
     /// Show the view of `route`: its route first (a view made now starts with it), then the view.
+    /// A built-in view an extension replaced (b.app.replaceView) shows as the extension's view:
+    /// `shown` is that view's route (Workspace.extensions.shownRoute; the route itself stays).
     function showRoute(): void {
+        const shown = Workspace.extensions.shownRoute(root.route)
         // (Not viewName: its binding follows the route only after this handler.)
-        const name = "" + AppController.routeText(root.route, "view")
+        const name = "" + AppController.routeText(shown, "view")
         const kept = "" + root.keptKey(name)
         const key = kept !== "" ? kept : name
         // A kept view being hidden ends its editing (the touch keyboard goes with it).
         if (key !== root.shownKey && root.keepViews && root.keptKey(root.shownKey) !== "")
             traits.endEditing()
         switch (key) {
-        case "journals": root.journalsRoute = root.route; break
-        case "allPages": root.allPagesRoute = root.route; break
-        case "search": root.searchRoute = root.route; break
-        case "tasks": root.tasksRoute = root.route; break
-        case "calendar": root.calendarRoute = root.route; break
-        default: root.otherRoute = root.route
+        case "journals": root.journalsRoute = shown; break
+        case "allPages": root.allPagesRoute = shown; break
+        case "search": root.searchRoute = shown; break
+        case "tasks": root.tasksRoute = shown; break
+        case "calendar": root.calendarRoute = shown; break
+        default: root.otherRoute = shown
         }
         if (!root.keepViews || name === "") {
             journalsLoader.kept = false
@@ -325,6 +328,9 @@ Item {
         const next = root.keptLoader(key)
         if (next === null || next.active)
             return false
+        // (Replaced by an extension's view: the built-in is not what the user goes to.)
+        if (AppController.routeText(Workspace.extensions.shownRoute({ view: key }), "view") !== key)
+            return false
         switch (key) {
         case "journals": if (!Js.hasKey(root.journalsRoute, "view")) root.journalsRoute = { view: "journals" }; break
         case "allPages": if (!Js.hasKey(root.allPagesRoute, "view")) root.allPagesRoute = { view: "allPages" }; break
@@ -376,6 +382,11 @@ Item {
 
     onRouteChanged: showRoute()
     onKeepViewsChanged: showRoute()
+    Connections {
+        target: Workspace.extensions
+        // An extension replaced the view shown, or its replacement went.
+        function onViewReplacementsChanged(): void { root.showRoute() }
+    }
     Component.onCompleted: {
         keeper.add("journals", journalsLoader)
         keeper.add("allPages", allPagesLoader)

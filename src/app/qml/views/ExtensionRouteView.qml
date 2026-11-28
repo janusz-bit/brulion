@@ -7,6 +7,9 @@ import Brulion
 // palette offers it), drawn by ShellExtensionView like the gym's; the route's other keys are the
 // view's params. Its title is the view's label (also kept in the route for tabs and the history).
 //
+// A built-in view the extension replaced (b.app.replaceView: the route's `replaces`) offers the
+// built-in one in its header ("Built-in view": the same route with `builtin`).
+//
 // Contract with the shell (qml/shell/ShellRouteView.qml): `route`, optional `title`.
 FocusScope {
     id: root
@@ -14,6 +17,8 @@ FocusScope {
     property var route: ({})
     readonly property string extensionId: AppController.routeText(root.route, "extension")
     readonly property string viewName: AppController.routeText(root.route, "name")
+    /// The built-in view this one replaces ("" none).
+    readonly property string replaces: AppController.routeText(root.route, "replaces")
     readonly property string title: Workspace.extensions.revision >= 0
                                     ? Workspace.extensions.viewTitle(root.extensionId, root.viewName) : ""
     readonly property int maximumWidth: 720
@@ -75,6 +80,14 @@ FocusScope {
                     variant: "muted"
                     elide: Text.ElideRight
                     text: Workspace.extensions.revision >= 0 ? qsTr("Extension: %1").arg(Workspace.extensions.title(root.extensionId)) : ""
+                }
+                BButton {
+                    objectName: "extensionRouteBuiltin"
+                    visible: root.replaces !== ""
+                    size: "small"
+                    iconName: "undo-2"
+                    text: qsTr("Built-in view")
+                    onClicked: AppController.navigate({ view: root.replaces, builtin: true })
                 }
                 BText {
                     visible: lines.error !== ""

@@ -301,7 +301,7 @@ Never compute a hash yourself.
 | `extension docs [<section>]` | | the reference for writing extensions (docs/EXTENSIONS.md as built in): `{sections, text}`; a section's words give only the sections whose heading has them (`extension docs views`) | |
 | `extension list` | | the extension pages `{id, title, path, hash, codeHash, permissions, description, overrides?, problems, state}` — state on this device: `approved`, `approval` (waits for the user), `off`, `problem`, `duplicate` — and the built-ins | |
 | `extension show <name>` | | an extension's page and code (a built-in's source, and `overridePage`: the page that replaces it) | |
-| `extension check <name>` | `[--content T \| --stdin]` | load it in a sandbox: `{loaded, commands, views, hooks, macros, variables, contributions?, theme?, inputRules?, tagStyles?, printed}` or the error with the page's `line` (exit 6); `--content` checks a text before it is written | |
+| `extension check <name>` | `[--content T \| --stdin]` | load it in a sandbox: `{loaded, commands, views, hooks, macros, variables, contributions?, theme?, inputRules?, tagStyles?, replacedViews?, printed}` or the error with the page's `line` (exit 6); `--content` checks a text before it is written | |
 | `extension run <name> [<command>]` | `[--view V [--action A]] [--hook E] [--macro M] [--variable V] [--text T] [--args JSON] [--page P] [--block REF] [--answers JSON]` | try a command, a view (its node tree), an action, the hooks of an event, a macro or a template variable in a sandbox: `{status, value, writes (diffs, never made), printed, questions}`; `--args` is a view's params, an action's args or a command's `ctx.args`; `--text` a macro's or a variable's arguments as written (`"Przysiad, 30"`), `--page` the note it is in (its `ctx.page`, `ctx.path`, `ctx.date`); a macro also gives `shows`, what the note shows as text (docs/EXTENSIONS.md "Macros") | |
 | `extension eval <code>` | `[--extension N] [--answers JSON] [--stdin]` | Luau with the notebook's `b`, as the app's console (writes only computed) | |
 | `extension write <name>` | `(--content T \| --stdin \| --code C [--description D] [--permissions P]) [--folder F] [--expect-hash H] [--force]` | write an extension page, checked first (exit 6 when it does not load); replacing one needs its hash. The app runs it once the user approves it | yes |
@@ -350,7 +350,7 @@ Never compute a hash yourself.
 | `app quit` | | quit the running app | yes |
 | `app eval <code>` | `[--extension X] [--stdin]` | evaluate Luau in the running app, as its Luau console: `{ok, value?, printed, error?, line?, traceback?}`; exit 6 `extension_error` when it fails ("Live changes" below) | yes |
 | `app extensions` | | every extension of the app with its state: `{extensions [{id, title, kind (builtin, page, live), state, message, line?, path, permissions, commands, views, hooks, types, typeMessage?}], live [{id, title, who, permissions, state, error?, line?}]}` | |
-| `app load <id>` | `(--file F \| --code C \| --stdin) [--title T] [--permissions write,ai,app]` | load Luau as a live extension for this run (it replaces a page or built-in of that id while loaded): `{ok, id, replaced, commands, views, hooks, contributions, theme?, inputRules?, tagStyles?, permissions}`; exit 6 when it does not load | yes |
+| `app load <id>` | `(--file F \| --code C \| --stdin) [--title T] [--permissions write,ai,app]` | load Luau as a live extension for this run (it replaces a page or built-in of that id while loaded): `{ok, id, replaced, commands, views, hooks, contributions, theme?, inputRules?, tagStyles?, replacedViews?, permissions}`; exit 6 when it does not load | yes |
 | `app unload <id>` | | take a live extension out (the page or built-in of its id runs again) | yes |
 | `app reload` | | load every extension again (live ones stay) | yes |
 | `app console` | `[--since N] [--limit N]` | the Luau console's lines `{lines [{n, kind, text, source}], next, first, last}` | |
@@ -1601,7 +1601,7 @@ mistyped parameters `bad_params` (with `param`) before the app runs anything.
 | `quit` | | `{quitting: true}`, then the app quits |
 | `eval` | `code`, `extension` (its environment instead of the console's) | `{ok, value?, printed, error?, line?, traceback?}` (`ok` false: the code failed) |
 | `extensions` | | `{extensions: [{id, title, kind, state, message, line?, path, permissions, commands, views, hooks, types, typeMessage?, description?}], live: [{id, title, who, permissions, state, error?, line?}]}` |
-| `load` | `id`, `source`, `title`, `permissions` (`"write, ai"` or a list) | `{ok, id, replaced, commands, views, hooks, contributions, theme?, inputRules?, tagStyles?, permissions, error?, line?}` |
+| `load` | `id`, `source`, `title`, `permissions` (`"write, ai"` or a list) | `{ok, id, replaced, commands, views, hooks, contributions, theme?, inputRules?, tagStyles?, replacedViews?, permissions, error?, line?}` |
 | `unload` | `id` | `{id, unloaded}`; `not_found` with `live` |
 | `reload` | | `{reloaded, live}` |
 | `console` | `since` (a line number), `limit` (200, at most 1000) | `{lines: [{n, kind, text, source}], next, first, last}` |

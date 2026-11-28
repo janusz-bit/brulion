@@ -523,6 +523,7 @@ end, { label = "How many open tasks" })
 | `b.app.remove(place, id)`, `b.app.contributions()` | takes one away; lists every extension's |
 | `b.app.inputRule({ match = "->", replace = "→" })`, `b.app.inputRules()` | text replaced as you type (below); every extension's rules |
 | `b.app.tagStyle({ tag = "pilne", tint = "danger" })`, `b.app.tagStyles()` | blocks with a tag drawn in a colour (below); every extension's styles |
+| `b.app.replaceView("tasks", "board")`, `b.app.replacedViews()` | one of your views shown in place of a built-in one (below); every extension's replacements |
 
 Moving around (`navigate`, `open`, `back`, `run`) and messages happen after the call — in commands, actions and reactions, not while the page loads. `"route"` among the reactions runs when the screen shows something else: `e.view`, `e.page`, `e.date`.
 
@@ -605,6 +606,16 @@ b.app.inputRule({ match = "teh", replace = "the", word = true })
 b.app.tagStyle({ tag = "pilne", tint = "danger" })
 b.app.tagStyle({ tag = "waiting", tint = "warning", fill = false })
 b.app.tagStyle({ tag = "idea", tint = "#8e6cd8" })
+```
+
+**Your own view instead of a built-in one.** `b.app.replaceView("tasks", "board")` shows your view `board` wherever Tasks would show — from the bottom navigation, the icon bar, a link. The views you can replace: `"journals"`, `"tasks"`, `"calendar"`, `"habits"`, `"graph"`, `"allPages"`, `"tags"`, `"search"`. The view gets the route's own parameters (a Tasks link's `query`), and its header has **Built-in view** to open the app's own. Switch the extension off and the built-in view is back.
+
+```luau
+-- Tasks as a board of your own.
+b.view("board", function(params)
+    return b.ui.heading(`Open tasks: {b.query("type:tasks status:open").total}`)
+end, nil, { label = "Board" })
+b.app.replaceView("tasks", "board")
 ```
 
 An AI agent you work with can do all of this in the running app at once, without a page — and you can undo it in the top bar's **Live** menu. See [[Extensions]] and the developer's reference.

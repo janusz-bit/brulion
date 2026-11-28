@@ -523,6 +523,7 @@ end, { label = "Ile otwartych zadań" })
 | `b.app.remove(miejsce, id)`, `b.app.contributions()` | zabiera jeden; wypisuje elementy wszystkich rozszerzeń |
 | `b.app.inputRule({ match = "->", replace = "→" })`, `b.app.inputRules()` | tekst zamieniany w trakcie pisania (niżej); reguły wszystkich rozszerzeń |
 | `b.app.tagStyle({ tag = "pilne", tint = "danger" })`, `b.app.tagStyles()` | bloki z tagiem w kolorze (niżej); style wszystkich rozszerzeń |
+| `b.app.replaceView("tasks", "tablica")`, `b.app.replacedViews()` | jeden z Twoich widoków w miejscu wbudowanego (niżej); zamiany wszystkich rozszerzeń |
 
 Przechodzenie (`navigate`, `open`, `back`, `run`) i komunikaty dzieją się po wywołaniu — w poleceniach, akcjach i reakcjach, nie podczas wczytywania strony. Reakcja `"route"` uruchamia się, gdy ekran pokazuje coś innego: `e.view`, `e.page`, `e.date`.
 
@@ -605,6 +606,16 @@ b.app.inputRule({ match = "zolw", replace = "żółw", word = true })
 b.app.tagStyle({ tag = "pilne", tint = "danger" })
 b.app.tagStyle({ tag = "czeka", tint = "warning", fill = false })
 b.app.tagStyle({ tag = "pomysł", tint = "#8e6cd8" })
+```
+
+**Własny widok zamiast wbudowanego.** `b.app.replaceView("tasks", "tablica")` pokazuje Twój widok `tablica` wszędzie tam, gdzie byłyby Zadania — z dolnej nawigacji, paska ikon, linku. Zastąpić można: `"journals"`, `"tasks"`, `"calendar"`, `"habits"`, `"graph"`, `"allPages"`, `"tags"`, `"search"`. Widok dostaje parametry trasy (`query` linku do Zadań), a w nagłówku ma **Wbudowany widok**, który otwiera widok aplikacji. Po wyłączeniu rozszerzenia wraca widok wbudowany.
+
+```luau
+-- Zadania jako własna tablica.
+b.view("tablica", function(params)
+    return b.ui.heading(`Otwarte zadania: {b.query("type:tasks status:open").total}`)
+end, nil, { label = "Tablica" })
+b.app.replaceView("tasks", "tablica")
 ```
 
 Agent AI, z którym pracujesz, może zrobić to wszystko od razu w działającej aplikacji, bez strony — a Ty możesz to cofnąć w menu **Na żywo** na górnym pasku. Zobacz [[Rozszerzenia]] i opis dla programistów.

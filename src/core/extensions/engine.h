@@ -49,6 +49,8 @@
 #include <QStringList>
 #include <QVariant>
 
+#include <optional>
+
 struct lua_State;
 
 namespace brulion::extensions {
@@ -269,7 +271,13 @@ public:
     /// The styles of blocks by tag extensions declared (b.app.tagStyle), the first declared first
     /// (a later one wins a tag).
     QList<TagStyle> tagStyles() const { return m_tagStyles; }
-    /// Counts the changes of contributions(), themes(), inputRules() and tagStyles().
+    /// The built-in views extensions replaced (b.app.replaceView), the first declared first.
+    QList<ViewReplacement> viewReplacements() const { return m_viewReplacements; }
+    /// What the app shows for the built-in view `builtin`: the last replacement declared for it
+    /// whose extension has its view; none — the built-in view — otherwise.
+    std::optional<ViewReplacement> viewReplacement(const QString &builtin) const;
+    /// Counts the changes of contributions(), themes(), inputRules(), tagStyles() and
+    /// viewReplacements().
     int appRevision() const { return m_appRevision; }
 
     qint64 memoryUsed() const { return qint64(m_used); }
@@ -409,6 +417,8 @@ private:
     static int apiAppInputRules(lua_State *L);
     static int apiAppTagStyle(lua_State *L);
     static int apiAppTagStyles(lua_State *L);
+    static int apiAppReplaceView(lua_State *L);
+    static int apiAppReplacedViews(lua_State *L);
 
     int commandImpl(lua_State *L);
     int viewImpl(lua_State *L);
@@ -484,7 +494,9 @@ private:
     int appContributionsImpl(lua_State *L);
     int appInputRuleImpl(lua_State *L);
     int appTagStyleImpl(lua_State *L);
-    /// b.app.remove("inputRule" | "tagStyle", key?): the extension's rules or styles taken away.
+    int appReplaceViewImpl(lua_State *L);
+    /// b.app.remove("inputRule" | "tagStyle" | "replaceView", key?): the extension's rules, styles
+    /// or replaced views taken away.
     int appRemoveDeclarationImpl(lua_State *L, const QString &extension, const QString &kind, const QString &key);
     /// False, its error raised, when `extension` may not change the app now: no permission "app",
     /// a macro's or a template variable's call, or — `notWhileLoading` — its top level.
@@ -552,6 +564,7 @@ private:
     QList<ThemeInfo> m_themes;               // in the order set
     QList<InputRule> m_inputRules;           // in the order declared
     QList<TagStyle> m_tagStyles;             // in the order declared
+    QList<ViewReplacement> m_viewReplacements; // in the order declared
     int m_appRevision = 0;
 };
 

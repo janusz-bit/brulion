@@ -3041,6 +3041,18 @@ file when it is first shown (`ShellRouteView.viewSource()`, `Loader.setSource()`
 first properties — its route, and of the pane what it takes: `inSidePanel`, `paneActive`,
 `covered` —, `Binding`s afterwards): `ShellRouteView` names none of them as a type, since a QML
 file named in another one is loaded with it (docs/PERFORMANCE.md "Memory: only what is in use").
+
+A built-in view an extension replaced (`b.app.replaceView`, docs/EXTENSIONS.md "Built-in views
+replaced") shows the extension's view for its route: `ShellRouteView.showRoute()` shows
+`Workspace.extensions.shownRoute(route)` — core's `replacedRoute()`, `{view: "extension",
+extension, name, replaces, …params}` — while the route itself stays (the history, tabs, the
+bottom navigation's highlight and `b.app.state()` keep `"tasks"`), and shows the route again on
+`viewReplacementsChanged` (an extension loaded, switched off, live code unloaded), so a replaced
+view on screen changes at once. A replaced kept view is not built ahead. `ExtensionRouteView`'s
+header then has **Built-in view** (`extensionRouteBuiltin`): the route with `builtin = true`,
+which shows the app's own. Tests: `tst_extensions_app` (`viewsReplaced`, `replacedRoutes`),
+`tst_shell_scripting` (`builtInViewsReplaced`).
+
 A pane keeps the views of the
 phone's bottom navigation — Journal, All pages, Search, Tasks, Calendar — once it has shown them
 (`ShellRouteView.keepViews`): hidden while another view is shown, each with the route it was last

@@ -119,9 +119,9 @@ done in the repository simply disappears from the list.
   hostile-extension self-test in a real browser beside CI's headless Chrome
   (`scripts/wasm-smoke.mjs --extensions`).
 * **The app as code (`b.app`, live code): what is next** — the app's settings, theme tokens and
-  eleven slots of the UI are scriptable, and agents change the running app live (docs/EXTENSIONS.md
+  eleven slots of the UI are scriptable, its built-in views replaceable, and agents change the running app live (docs/EXTENSIONS.md
   "The app (`b.app`)", "Live code"). Still open: the bottom navigation's and the keyboard toolbar's
-  extension buttons checked on a real phone (the self-test's phone run has them); replacing a built-in view with an extension's (TiddlyWiki's shadow tiddlers for the journal or Tasks view).
+  extension buttons checked on a real phone (the self-test's phone run has them).
 * **Gym: next steps** — the exercises' pictures checked on a real phone; the rest timer's notification with the
   app closed checked on a real phone (the emulator's test passes) and on a desktop that quit (nothing can show it there: a scheduled notification of the system?).
 * **A small language for the interface layout: what is still missing** — the icon bar's order and

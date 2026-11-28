@@ -204,6 +204,41 @@ bool tagStyleFrom(const QVariantMap &table, TagStyle *out, QString *error);
 /// A TagStyle as a table (b.app.tagStyles()): {extension, tag, tint, fill, bar}.
 QVariantMap tagStyleTable(const TagStyle &style);
 
+// ---- Built-in views replaced (b.app.replaceView) ---------------------------------------------------
+
+/// A built-in view shown as an extension's own — TiddlyWiki's shadow tiddlers: the journal or the
+/// Tasks view drawn by the extension. The route stays the built-in's (history, tabs, links and
+/// b.app.state() keep it); the app shows the extension's view `view` in its place, with `params`
+/// and the route's own parameters over them. The built-in is back when the extension goes.
+struct ViewReplacement {
+    QString extension;
+    QString builtin;    ///< one of replaceableViews()
+    QString view;       ///< one of the extension's views (b.view)
+    QVariantMap params; ///< what the view's render gets (the route's parameters win)
+    bool operator==(const ViewReplacement &other) const = default;
+};
+
+inline constexpr int MaxViewReplacements = 64;
+/// The largest params of one replacement, as compact JSON.
+inline constexpr int MaxViewReplacementParams = 16 * 1024;
+
+/// The built-in views an extension may replace: "journals", "tasks", "calendar", "habits",
+/// "graph", "allPages", "tags", "search" (not a page, a day, the settings, the console or the
+/// extensions' own views: the way to switch an extension off stays the app's).
+QStringList replaceableViews();
+/// b.app.replaceView's arguments as a ViewReplacement (its extension left empty): `builtin` one
+/// of replaceableViews(), `view` a view's name (1 … 100 characters), `params` at most
+/// MaxViewReplacementParams as JSON.
+bool viewReplacementFrom(const QString &builtin, const QString &view, const QVariantMap &params, ViewReplacement *out,
+                         QString *error);
+/// A ViewReplacement as a table (b.app.replacedViews()): {extension, builtin, view, params}.
+QVariantMap viewReplacementTable(const ViewReplacement &replacement);
+/// The route the app shows for `route` when `replacement` replaced its view: the extension's
+/// view {view: "extension", extension, name, replaces: the built-in's name, …params, …the route's
+/// own parameters}; `route` itself when its view is another one or it asks for the built-in
+/// (`builtin = true`).
+QVariantMap replacedRoute(const QVariantMap &route, const ViewReplacement &replacement);
+
 // ---- The notebook's settings (b.app.settings / get / set, scope "notebook") ------------------------
 
 /// A setting of the notebook (.brulion/config.json, synced), not of a device: the app's b.app lists

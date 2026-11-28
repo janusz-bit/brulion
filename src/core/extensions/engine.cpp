@@ -811,12 +811,14 @@ void Engine::stop()
     m_requireFactoryRef = 0;
     m_moduleCode.clear();
     m_asking = false;
-    if (!m_contributions.isEmpty() || !m_themes.isEmpty() || !m_inputRules.isEmpty() || !m_tagStyles.isEmpty())
+    if (!m_contributions.isEmpty() || !m_themes.isEmpty() || !m_inputRules.isEmpty() || !m_tagStyles.isEmpty()
+        || !m_viewReplacements.isEmpty())
         ++m_appRevision;
     m_contributions.clear();
     m_themes.clear();
     m_inputRules.clear();
     m_tagStyles.clear();
+    m_viewReplacements.clear();
 }
 
 void Engine::arm()
@@ -942,6 +944,8 @@ void Engine::pushEnvironment(const QString &extension)
     set("inputRules", &Engine::apiAppInputRules);
     set("tagStyle", &Engine::apiAppTagStyle);
     set("tagStyles", &Engine::apiAppTagStyles);
+    set("replaceView", &Engine::apiAppReplaceView);
+    set("replacedViews", &Engine::apiAppReplacedViews);
     lua_setreadonly(L, -1, true);
     lua_setfield(L, -2, "app");
     lua_setreadonly(L, -1, true);
@@ -1408,6 +1412,20 @@ int Engine::apiAppTagStyles(lua_State *L)
     QVariantList out;
     for (const TagStyle &style : engine->m_tagStyles)
         out << tagStyleTable(style);
+    Unlimited unlimited(&engine->m_unlimited);
+    pushVariant(L, out);
+    return finishApi(L, 1);
+}
+int Engine::apiAppReplaceView(lua_State *L)
+{
+    return finishApi(L, self(L)->appReplaceViewImpl(L));
+}
+int Engine::apiAppReplacedViews(lua_State *L)
+{
+    Engine *engine = self(L);
+    QVariantList out;
+    for (const ViewReplacement &replacement : engine->m_viewReplacements)
+        out << viewReplacementTable(replacement);
     Unlimited unlimited(&engine->m_unlimited);
     pushVariant(L, out);
     return finishApi(L, 1);
@@ -3407,13 +3425,13 @@ int Engine::appRemoveImpl(lua_State *L)
     QString slot, id;
     if (!argString(L, 1, "b.app.remove", &slot) || !argOptString(L, 2, "b.app.remove", &id))
         return kRaise;
-    if (slot == u"inputRule" || slot == u"tagStyle") {
+    if (slot == u"inputRule" || slot == u"tagStyle" || slot == u"replaceView") {
         if (!mayChangeApp(L, extension, u"b.app.remove"_s, false))
             return kRaise;
         return appRemoveDeclarationImpl(L, extension, slot, id);
     }
     if (!isContributionSlot(slot))
-        return failWith(L, u"b.app.remove: unknown slot “%1” (%2, or inputRule, tagStyle)"_s.arg(
+        return failWith(L, u"b.app.remove: unknown slot “%1” (%2, or inputRule, tagStyle, replaceView)"_s.arg(
                                    slot, contributionSlots().join(u", "_s)));
     if (!mayChangeApp(L, extension, u"b.app.remove"_s, false))
         return kRaise;
@@ -3524,6 +3542,55 @@ int Engine::appTagStyleImpl(lua_State *L)
     return 0;
 }
 
+int Engine::appReplaceViewImpl(lua_State *L)
+{
+    const QString extension = extensionOf(L);
+    if (!mayChangeApp(L, extension, u"b.app.replaceView"_s, false))
+        return kRaise;
+    QString builtin, view;
+    if (!argString(L, 1, "b.app.replaceView", &builtin) || !argString(L, 2, "b.app.replaceView", &view))
+        return kRaise;
+    QVariant params;
+    if (!lua_isnoneornil(L, 3)) {
+        if (lua_type(L, 3) != LUA_TTABLE)
+            return failWith(L, u"b.app.replaceView: argument 3 is the view's params (a table)"_s);
+        if (!argValue(L, 3, "b.app.replaceView", &params))
+            return kRaise;
+    }
+    ViewReplacement replacement;
+    QString error;
+    if (!viewReplacementFrom(builtin, view, params.toMap(), &replacement, &error))
+        return failWith(L, u"b.app.replaceView: "_s + error);
+    replacement.extension = extension;
+    // At the top level the view may come later in the file; once loaded it must be there.
+    if (!m_views.contains(extension + u'/' + view) && !m_loading)
+        return failWith(L, u"b.app.replaceView: the extension has no view “%1”"_s.arg(view));
+    qsizetype at = 0;
+    while (at < m_viewReplacements.size()
+           && (m_viewReplacements[at].extension != extension || m_viewReplacements[at].builtin != builtin))
+        ++at;
+    if (at < m_viewReplacements.size()) {
+        if (m_viewReplacements[at] == replacement)
+            return 0;
+        m_viewReplacements.removeAt(at); // declared again: last, so it wins the view
+    } else if (m_viewReplacements.size() >= MaxViewReplacements) {
+        return failWith(L,
+                        u"b.app.replaceView: at most %1 views replaced by all extensions"_s.arg(MaxViewReplacements));
+    }
+    m_viewReplacements.append(replacement);
+    ++m_appRevision;
+    m_host->appChanged(extension);
+    return 0;
+}
+
+std::optional<ViewReplacement> Engine::viewReplacement(const QString &builtin) const
+{
+    for (auto it = m_viewReplacements.crbegin(); it != m_viewReplacements.crend(); ++it)
+        if (it->builtin == builtin && m_views.contains(it->extension + u'/' + it->view))
+            return *it;
+    return std::nullopt;
+}
+
 int Engine::appRemoveDeclarationImpl(lua_State *L, const QString &extension, const QString &kind, const QString &key)
 {
     qsizetype removed = 0;
@@ -3532,10 +3599,14 @@ int Engine::appRemoveDeclarationImpl(lua_State *L, const QString &extension, con
             return r.extension == extension
                    && (key.isEmpty() || r.match == key.normalized(QString::NormalizationForm_C));
         });
-    } else {
+    } else if (kind == u"tagStyle") {
         const QString folded = tagStyleKey(key);
         removed = m_tagStyles.removeIf([&](const TagStyle &t) {
             return t.extension == extension && (key.isEmpty() || tagStyleKey(t.tag) == folded);
+        });
+    } else {
+        removed = m_viewReplacements.removeIf([&](const ViewReplacement &r) {
+            return r.extension == extension && (key.isEmpty() || r.builtin == key);
         });
     }
     if (removed > 0) {
@@ -3552,7 +3623,9 @@ bool Engine::dropAppState(const QString &extension)
     const qsizetype themes = m_themes.removeIf([&](const ThemeInfo &t) { return t.extension == extension; });
     const qsizetype rules = m_inputRules.removeIf([&](const InputRule &r) { return r.extension == extension; });
     const qsizetype styles = m_tagStyles.removeIf([&](const TagStyle &t) { return t.extension == extension; });
-    if (items + themes + rules + styles == 0)
+    const qsizetype views =
+            m_viewReplacements.removeIf([&](const ViewReplacement &r) { return r.extension == extension; });
+    if (items + themes + rules + styles + views == 0)
         return false;
     ++m_appRevision;
     return true;

@@ -12289,6 +12289,11 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <translation>Rozszerzenie: %1</translation>
     </message>
     <message>
+        <location filename="../src/app/qml/views/ExtensionRouteView.qml" line="89"/>
+        <source>Built-in view</source>
+        <translation>Wbudowany widok</translation>
+    </message>
+    <message>
         <location filename="../src/app/qml/views/ExtensionRouteView.qml" line="82"/>
         <source>The view could not be drawn: %1</source>
         <translation>Nie udało się narysować widoku: %1</translation>

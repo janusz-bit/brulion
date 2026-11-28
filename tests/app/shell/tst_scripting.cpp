@@ -63,6 +63,19 @@ const QByteArray kExtension = QByteArrayLiteral(
         "end)\n"
         "```\n");
 
+const QString kReplacing = u"Rozszerzenia/Tablica.md"_s;
+
+// An extension page whose view replaces the built-in Tasks view.
+const QByteArray kReplacingPage = QByteArrayLiteral(
+        "---\n"
+        "tags: [rozszerzenie]\n"
+        "uprawnienia: [aplikacja]\n"
+        "---\n"
+        "```luau\n"
+        "b.view(\"tablica\", function(params) return b.ui.text(\"Zadania: \" .. (params.query or \"\")) end)\n"
+        "b.app.replaceView(\"tasks\", \"tablica\", { kolumny = 3 })\n"
+        "```\n");
+
 const QString kTheme = u"Motywy/Sepia.md"_s;
 
 // A theme page: an accent for both modes, a background for each, a misspelt token (ignored).
@@ -527,6 +540,42 @@ private Q_SLOTS:
         extensions()->setPageOn(kPage, false);
         QTRY_VERIFY(extensions()->contributions(u"toolbar"_s).isEmpty());
         QTRY_VERIFY(brulion::ui::ThemeOverrides::instance()->tokens(false).isEmpty());
+    }
+
+    // A built-in view an extension replaced (b.app.replaceView): the route stays the built-in's,
+    // the shell shows the extension's view for it — the built-in when asked for, or once the
+    // extension goes.
+    void builtInViewsReplaced()
+    {
+        openApp(false);
+        const QVariantMap tasks{{u"view"_s, u"tasks"_s}, {u"query"_s, u"#pilne"_s}};
+        QCOMPARE(extensions()->shownRoute(tasks), tasks);
+        QSignalSpy replaced(extensions(), &WorkspaceExtensions::viewReplacementsChanged);
+        QVERIFY(writeFile(m_vault + u'/' + kReplacing, kReplacingPage));
+        QTRY_VERIFY(!extensions()->pageState(kReplacing).isEmpty());
+        extensions()->approve(kReplacing);
+        QTRY_COMPARE(extensions()->pageState(kReplacing), u"running"_s);
+        QTRY_VERIFY(!replaced.isEmpty());
+        const QVariantMap shown = extensions()->shownRoute(tasks);
+        QCOMPARE(shown.value(u"view"_s).toString(), u"extension"_s);
+        QCOMPARE(shown.value(u"extension"_s).toString(), extensions()->pageExtension(kReplacing));
+        QCOMPARE(shown.value(u"name"_s).toString(), u"tablica"_s);
+        QCOMPARE(shown.value(u"replaces"_s).toString(), u"tasks"_s);
+        QCOMPARE(shown.value(u"query"_s).toString(), u"#pilne"_s);
+        QCOMPARE(shown.value(u"kolumny"_s).toInt(), 3);
+        // The route stays the built-in's; asked for, the built-in shows.
+        m_app->navigate(tasks);
+        QCOMPARE(m_app->currentView(), u"tasks"_s);
+        QVariantMap builtin = tasks;
+        builtin.insert(u"builtin"_s, true);
+        QCOMPARE(extensions()->shownRoute(builtin), builtin);
+        const QVariantMap calendar{{u"view"_s, u"calendar"_s}};
+        QCOMPARE(extensions()->shownRoute(calendar), calendar);
+        // Switched off: the built-in again.
+        replaced.clear();
+        extensions()->setPageOn(kReplacing, false);
+        QTRY_VERIFY(!replaced.isEmpty());
+        QCOMPARE(extensions()->shownRoute(tasks), tasks);
     }
 
     // The slots of 0.29 (docs/EXTENSIONS.md "Items of the UI"): what a command gets from each.

@@ -893,6 +893,95 @@ private Q_SLOTS:
         QCOMPARE(m_engine.tagStyles().first().tint, u"info"_s);
     }
 
+    // ---- built-in views replaced (b.app.replaceView) -----------------------------------------------
+
+    void viewsReplaced()
+    {
+        // Declared at the top level, before its view or after it; a view it lacks is kept, not shown.
+        QVERIFY(m_engine.load(ext(u"zadania"_s, uR"lua(
+            b.app.replaceView("tasks", "tablica", { kolumny = 3, nazwa = "Zażółć" })
+            b.view("tablica", function() return b.ui.text("tablica") end)
+            b.app.replaceView("journals", "brak")
+        )lua"_s))
+                        .ok());
+        QCOMPARE(m_engine.viewReplacements().size(), 2);
+        const std::optional<ViewReplacement> tasks = m_engine.viewReplacement(u"tasks"_s);
+        QVERIFY(tasks);
+        QCOMPARE(tasks->extension, u"zadania"_s);
+        QCOMPARE(tasks->view, u"tablica"_s);
+        QCOMPARE(tasks->params.value(u"kolumny"_s).toInt(), 3);
+        QCOMPARE(tasks->params.value(u"nazwa"_s).toString(), u"Zażółć"_s);
+        QVERIFY(!m_engine.viewReplacement(u"journals"_s)); // no view "brak": the built-in shows
+        QVERIFY(!m_engine.viewReplacement(u"calendar"_s));
+        const Result list = eval(
+                u"local r = b.app.replacedViews() return #r .. r[1].extension .. r[1].builtin .. r[1].view .. r[1].params.kolumny"_s,
+                u"zadania"_s);
+        QVERIFY2(list.ok(), qPrintable(list.error));
+        QCOMPARE(list.value.toString(), u"2zadaniataskstablica3"_s);
+        // Declared again: the same entry, its params new.
+        const int revision = m_engine.appRevision();
+        QVERIFY(eval(u"b.app.replaceView(\"tasks\", \"tablica\")"_s, u"zadania"_s).ok());
+        QCOMPARE(m_engine.viewReplacements().size(), 2);
+        QVERIFY(m_engine.viewReplacement(u"tasks"_s)->params.isEmpty());
+        QVERIFY(m_engine.appRevision() > revision);
+        // Once loaded, a view it does not have is an error; so is a view that cannot be replaced.
+        const Result missing = eval(u"b.app.replaceView(\"calendar\", \"nic\")"_s, u"zadania"_s);
+        QVERIFY(!missing.ok());
+        QVERIFY2(missing.error.contains(u"b.app.replaceView: the extension has no view “nic”"_s),
+                 qPrintable(missing.error));
+        const Result settings = eval(u"b.app.replaceView(\"settings\", \"tablica\")"_s, u"zadania"_s);
+        QVERIFY(!settings.ok());
+        QVERIFY2(settings.error.contains(u"“settings” cannot be replaced (one of journals, tasks"_s),
+                 qPrintable(settings.error));
+        const Result badParams = eval(u"b.app.replaceView(\"tasks\", \"tablica\", 7)"_s, u"zadania"_s);
+        QVERIFY(!badParams.ok());
+        QVERIFY2(badParams.error.contains(u"argument 3 is the view's params"_s), qPrintable(badParams.error));
+        // Another extension's, declared later, wins the view.
+        QVERIFY(m_engine.load(ext(u"inne"_s, uR"lua(
+            b.view("lista", function() return b.ui.text("lista") end)
+            b.app.replaceView("tasks", "lista")
+        )lua"_s))
+                        .ok());
+        QCOMPARE(m_engine.viewReplacement(u"tasks"_s)->extension, u"inne"_s);
+        // Taken away by the built-in view's name (only one's own), then with its extension.
+        const Result removed = eval(u"return b.app.remove(\"replaceView\", \"tasks\")"_s, u"inne"_s);
+        QVERIFY2(removed.ok() && removed.value.toBool(), qPrintable(removed.error));
+        QCOMPARE(m_engine.viewReplacement(u"tasks"_s)->extension, u"zadania"_s);
+        m_engine.unload(u"zadania"_s);
+        QVERIFY(!m_engine.viewReplacement(u"tasks"_s));
+        QVERIFY(m_engine.viewReplacements().isEmpty());
+        // It changes the app: the permission "app".
+        const Result denied = m_engine.load(ext(u"bez"_s,
+                                                u"b.view(\"v\", function() return b.ui.text(\"v\") end)\n"
+                                                u"b.app.replaceView(\"tasks\", \"v\")"_s,
+                                                {}));
+        QVERIFY(!denied.ok());
+        QVERIFY2(denied.error.contains(u"b.app.replaceView"_s), qPrintable(denied.error));
+    }
+
+    void replacedRoutes()
+    {
+        const ViewReplacement r{u"zadania"_s,
+                                u"tasks"_s,
+                                u"tablica"_s,
+                                {{u"kolumny"_s, 3}, {u"query"_s, u"status:open"_s}, {u"view"_s, u"zły"_s}}};
+        // The route's own parameters win over the declared ones; the reserved keys are the replacement's.
+        const QVariantMap shown =
+                replacedRoute({{u"view"_s, u"tasks"_s}, {u"query"_s, u"#pilne"_s}, {u"name"_s, u"inna"_s}}, r);
+        QCOMPARE(shown.value(u"view"_s).toString(), u"extension"_s);
+        QCOMPARE(shown.value(u"extension"_s).toString(), u"zadania"_s);
+        QCOMPARE(shown.value(u"name"_s).toString(), u"tablica"_s);
+        QCOMPARE(shown.value(u"replaces"_s).toString(), u"tasks"_s);
+        QCOMPARE(shown.value(u"query"_s).toString(), u"#pilne"_s);
+        QCOMPARE(shown.value(u"kolumny"_s).toInt(), 3);
+        QCOMPARE(shown.size(), 6);
+        // The built-in asked for, or another view: the route itself.
+        const QVariantMap builtin{{u"view"_s, u"tasks"_s}, {u"builtin"_s, true}};
+        QCOMPARE(replacedRoute(builtin, r), builtin);
+        const QVariantMap calendar{{u"view"_s, u"calendar"_s}};
+        QCOMPARE(replacedRoute(calendar, r), calendar);
+    }
+
     // ---- the app's operations ------------------------------------------------------------------------
 
     void readingNeedsNoPermission()
@@ -1130,6 +1219,8 @@ private Q_SLOTS:
             b.app.theme({ accent = string.char(35) .. "123456" })
             b.app.inputRule({ match = "->", replace = "→" })
             b.app.tagStyle({ tag = "pilne", tint = "danger", bar = false })
+            b.view("tablica", function() return b.ui.text("t") end)
+            b.app.replaceView("tasks", "tablica")
         )lua"_s);
         const QVariantMap report = checkExtension(vault, index, e, options);
         QVERIFY2(report.value(u"ok"_s).toBool(), qPrintable(report.value(u"error"_s).toString()));
@@ -1138,6 +1229,7 @@ private Q_SLOTS:
         QCOMPARE(report.value(u"inputRules"_s).toList().size(), 1);
         QCOMPARE(report.value(u"inputRules"_s).toList().first().toMap().value(u"replace"_s).toString(), u"→"_s);
         QCOMPARE(report.value(u"tagStyles"_s).toList().first().toMap().value(u"bar"_s).toBool(), false);
+        QCOMPARE(report.value(u"replacedViews"_s).toList().first().toMap().value(u"builtin"_s).toString(), u"tasks"_s);
     }
 
     void dryRunReadsTheNotebooksSettings()

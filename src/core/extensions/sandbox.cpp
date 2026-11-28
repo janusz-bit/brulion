@@ -110,6 +110,12 @@ QVariantMap checkExtension(Vault &vault, VaultIndex &index, const Extension &ext
             out.insert(u"inputRules"_s, rules);
         if (!styles.isEmpty())
             out.insert(u"tagStyles"_s, styles);
+        QVariantList replaced;
+        for (const ViewReplacement &replacement : engine.viewReplacements())
+            if (replacement.extension == extension.id)
+                replaced << viewReplacementTable(replacement);
+        if (!replaced.isEmpty())
+            out.insert(u"replacedViews"_s, replaced);
     } else {
         QString message = r.error;
         if (message.isEmpty())

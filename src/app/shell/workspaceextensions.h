@@ -456,6 +456,11 @@ public:
     /// (Engine::inputRules(), Engine::tagStyles(); appRevisionChanged() when they change).
     QList<extensions::InputRule> inputRules() const;
     QList<extensions::TagStyle> tagStyles() const;
+    /// The route the shell shows for `route` (docs/EXTENSIONS.md "Built-in views replaced"): the
+    /// extension's view where one replaced the route's built-in view (b.app.replaceView; core's
+    /// replacedRoute()), else `route` — also when it asks for the built-in (`builtin = true`).
+    /// viewReplacementsChanged() when what it gives changes.
+    Q_INVOKABLE QVariantMap shownRoute(const QVariantMap &route) const;
     /// The main view's route changed (AppController): "route" hooks hear {view, page?, path?,
     /// date?, previous} once it settled (a burst of changes is one event).
     void routeChanged(const QVariantMap &route);
@@ -563,6 +568,9 @@ Q_SIGNALS:
     void macrosChanged();
     /// The extensions' UI items or theme overrides changed (appRevision); themes() has the theme.
     void appRevisionChanged();
+    /// What shownRoute() gives for a built-in view changed: an extension replaced one, or its
+    /// replacement went.
+    void viewReplacementsChanged();
     /// The live extensions changed (loadLive(), unloadLive()).
     void liveChanged();
     /// showMacro(), showView(): the extension and what of it was clicked (the macro as written,
@@ -727,6 +735,9 @@ private:
     AppHandler m_appHandler;
     NotifyHandler m_notifyHandler; // setNotifyHandler()
     int m_appRevision = 0;
+    /// The replacements shownRoute() follows, as tables, by the built-in view (viewReplacementsChanged()).
+    QVariantList m_shownReplacements;
+    void followViewReplacements();
     bool m_appChangePending = false;
     QVariantMap m_lastRoute;
     QTimer *m_routeTimer = nullptr;

@@ -2,6 +2,7 @@
 
 #include "markdown/inline.h"
 
+#include <QJsonDocument>
 #include <QRegularExpression>
 #include <QSet>
 
@@ -583,6 +584,54 @@ QVariantMap tagStyleTable(const TagStyle &style)
             {u"tint"_s, style.tint},
             {u"fill"_s, style.fill},
             {u"bar"_s, style.bar}};
+}
+
+QStringList replaceableViews()
+{
+    static const QStringList views{u"journals"_s, u"tasks"_s,    u"calendar"_s, u"habits"_s,
+                                   u"graph"_s,    u"allPages"_s, u"tags"_s,     u"search"_s};
+    return views;
+}
+
+bool viewReplacementFrom(const QString &builtin, const QString &view, const QVariantMap &params, ViewReplacement *out,
+                         QString *error)
+{
+    if (!replaceableViews().contains(builtin)) {
+        *error = u"“%1” cannot be replaced (one of %2)"_s.arg(builtin.left(100), replaceableViews().join(u", "_s));
+        return false;
+    }
+    if (view.isEmpty() || view.size() > 100) {
+        *error = u"argument 2 is the name of one of the extension's views"_s;
+        return false;
+    }
+    if (QJsonDocument::fromVariant(params).toJson(QJsonDocument::Compact).size() > MaxViewReplacementParams) {
+        *error = u"the view's params are at most %1 bytes as JSON"_s.arg(MaxViewReplacementParams);
+        return false;
+    }
+    *out = ViewReplacement{QString(), builtin, view, params};
+    return true;
+}
+
+QVariantMap replacedRoute(const QVariantMap &route, const ViewReplacement &replacement)
+{
+    if (route.value(u"view"_s).toString() != replacement.builtin || route.value(u"builtin"_s).toBool())
+        return route;
+    QVariantMap out = replacement.params;
+    for (auto [key, value] : route.asKeyValueRange())
+        out.insert(key, value);
+    out.insert(u"view"_s, u"extension"_s);
+    out.insert(u"extension"_s, replacement.extension);
+    out.insert(u"name"_s, replacement.view);
+    out.insert(u"replaces"_s, replacement.builtin);
+    return out;
+}
+
+QVariantMap viewReplacementTable(const ViewReplacement &replacement)
+{
+    return {{u"extension"_s, replacement.extension},
+            {u"builtin"_s, replacement.builtin},
+            {u"view"_s, replacement.view},
+            {u"params"_s, replacement.params}};
 }
 
 namespace {
