@@ -1754,7 +1754,18 @@ the chrome around them, until the view's route shows no QML item ("No QML in the
    lanes, now's line, cascades, every click and the menu, the keys) and the self-test
    `tst_views_qml_atrament_week` (a head clicked, →, PageDown / PageUp, a double click opening the
    daily note). **Not yet**: the swipe between weeks (touch), now's line following the clock between
-   redraws, the day panel (QML), the gate's measurements.
+   redraws, the gate's measurements.
+6. **Calendar, the day panel** (2026-11-28; `src/app/views/atrament/daypanelview.h`,
+   `qml/planning/CalendarDayAtramentPanel.qml`; the side column with a mouse — the stacked panel
+   under a phone's month and the day's sheet stay QML). The CalendarModel's selected day
+   (`anchorDate`; its dayEntries(), dayHasJournal(), overdue and overdueCount by name): the relative
+   word and the date, "Open journal" / "Write in journal", "Add task", "Add reminder", today's overdue
+   tasks under a folding "Overdue" header (five at most, with their due dates, then "All N overdue
+   in Tasks"), the day's entries under "Plan of the day" or "Nothing planned" and why. The entries
+   are the agenda's rows: `planningrow.h`'s EntryRows, now shared by both. Tested by
+   `tests/atrament/views/tst_atrament_daypanel` (today's and another day's panel, every click, the
+   fold) and the month's self-test (the side column drawn by Atrament, the selected day's plan in
+   it). **Not yet**: the phone's sheet and the stacked panel, the gate's measurements.
 
 ### After the three views
 

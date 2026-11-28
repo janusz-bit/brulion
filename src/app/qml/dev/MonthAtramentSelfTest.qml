@@ -47,6 +47,15 @@ Item {
     }
     /// The rows of today and tomorrow, the month shown first.
     property string tomorrow: DatesHelper.addDays(DatesHelper.today, 1)
+    /// The day panel drawn by Atrament (CalendarView's side column).
+    property AtramentView panel: null
+    property rect _panelRect: Qt.rect(0, 0, 0, 0)
+    function panelPart(part: string): rect {
+        if (test.panel === null)
+            return test._rect
+        test._panelRect = test.panel.viewPartRect(0, part)
+        return test._panelRect
+    }
     property int firstMonth: 0
     function rowOf(date: string): int { return test.calendar.rowForDate(date) }
 
@@ -64,13 +73,18 @@ Item {
             test.waitFor(test.calendar.anchorDate === test.tomorrow)
         if (test.at()) {
             test.check(test.calendar.anchorDate === test.tomorrow, "a click selects the day: " + test.calendar.anchorDate)
+            test.panel = QmlCall.object(test.calendarView, "atramentPanel") as AtramentView
+            test.check(test.panel !== null && QmlCall.integer(QmlCall.get(test.panel, "width")) > 0,
+                       "the side column is the day panel drawn by Atrament")
             test.list.forceActiveFocus()
             events.keyClick(Qt.Key_Right, Qt.NoModifier, -1)
         }
         if (test.at())
-            test.waitFor(test.calendar.anchorDate === DatesHelper.addDays(test.tomorrow, 1))
+            test.waitFor(test.calendar.anchorDate === DatesHelper.addDays(test.tomorrow, 1)
+                         && test.panelPart("plan").height > 0 && test.panelPart("entry 0").height > 0)
         if (test.at()) {
             test.check(test.calendar.anchorDate === DatesHelper.addDays(test.tomorrow, 1), "→ moves the selected day")
+            test.check(test.panelPart("entry 0").height > 0, "the panel shows the selected day's plan")
             events.keyClick(Qt.Key_PageDown, Qt.NoModifier, -1)
         }
         if (test.at())

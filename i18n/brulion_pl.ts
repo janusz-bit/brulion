@@ -2878,15 +2878,23 @@
     </message>
     <message>
         <location filename="../src/app/qml/planning/CalendarAgendaList.qml" line="321"/>
-        <location filename="../src/app/qml/views/CalendarView.qml" line="552"/>
+        <location filename="../src/app/qml/views/CalendarView.qml" line="647"/>
         <source>Nothing planned in these four weeks</source>
         <translation>Nic nie zaplanowano na te cztery tygodnie</translation>
     </message>
     <message>
         <location filename="../src/app/qml/planning/CalendarAgendaList.qml" line="322"/>
-        <location filename="../src/app/qml/views/CalendarView.qml" line="553"/>
+        <location filename="../src/app/qml/views/CalendarView.qml" line="648"/>
         <source>Dates (📅, ⏳) and reminders (⏰) from your notes appear here. Choose a day to add a task or a reminder to it.</source>
         <translation>Tu pojawiają się daty (📅, ⏳) i przypomnienia (⏰) z Twoich notatek. Wybierz dzień, aby dodać do niego zadanie lub przypomnienie.</translation>
+    </message>
+</context>
+<context>
+    <name>CalendarDayAtramentPanel</name>
+    <message>
+        <location filename="../src/app/qml/planning/CalendarDayAtramentPanel.qml" line="61"/>
+        <source>Day</source>
+        <translation>Dzień</translation>
     </message>
 </context>
 <context>
@@ -3337,6 +3345,7 @@
         <translation>zrobione</translation>
     </message>
     <message>
+        <location filename="../src/app/views/atrament/weekview.cpp" line="252"/>
         <location filename="../src/app/qml/planning/CalendarMonthGrid.qml" line="283"/>
         <source>today</source>
         <translation>dziś</translation>
@@ -3373,77 +3382,77 @@
         <translation>Kalendarz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/CalendarView.qml" line="201"/>
+        <location filename="../src/app/qml/views/CalendarView.qml" line="246"/>
         <source>Task reopened</source>
         <translation>Zadanie ponownie otwarte</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/CalendarView.qml" line="201"/>
+        <location filename="../src/app/qml/views/CalendarView.qml" line="246"/>
         <source>Task done</source>
         <translation>Zadanie zrobione</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/CalendarView.qml" line="195"/>
+        <location filename="../src/app/qml/views/CalendarView.qml" line="240"/>
         <source>Undo</source>
         <translation>Cofnij</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/CalendarView.qml" line="206"/>
+        <location filename="../src/app/qml/views/CalendarView.qml" line="251"/>
         <source>Status changed</source>
         <translation>Zmieniono status</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/CalendarView.qml" line="251"/>
+        <location filename="../src/app/qml/views/CalendarView.qml" line="296"/>
         <source>The journal could not be saved.</source>
         <translation>Nie udało się zapisać dziennika.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/CalendarView.qml" line="254"/>
+        <location filename="../src/app/qml/views/CalendarView.qml" line="299"/>
         <source>Open</source>
         <translation>Otwórz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/CalendarView.qml" line="613"/>
+        <location filename="../src/app/qml/views/CalendarView.qml" line="708"/>
         <source>Task added to the journal of %1</source>
         <translation>Dodano zadanie do dziennika (%1)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/CalendarView.qml" line="644"/>
+        <location filename="../src/app/qml/views/CalendarView.qml" line="739"/>
         <source>Problem</source>
         <translation>Problem</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/CalendarView.qml" line="656"/>
+        <location filename="../src/app/qml/views/CalendarView.qml" line="751"/>
         <source>New event…</source>
         <translation>Nowe wydarzenie…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/CalendarView.qml" line="662"/>
+        <location filename="../src/app/qml/views/CalendarView.qml" line="757"/>
         <source>Refresh calendars</source>
         <translation>Odśwież kalendarze</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/CalendarView.qml" line="668"/>
+        <location filename="../src/app/qml/views/CalendarView.qml" line="763"/>
         <source>Manage calendars…</source>
         <translation>Zarządzaj kalendarzami…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/CalendarView.qml" line="669"/>
+        <location filename="../src/app/qml/views/CalendarView.qml" line="764"/>
         <source>Add a calendar…</source>
         <translation>Dodaj kalendarz…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/CalendarView.qml" line="679"/>
+        <location filename="../src/app/qml/views/CalendarView.qml" line="774"/>
         <source>Written in the journal of %1</source>
         <translation>Zapisano w dzienniku (%1)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/CalendarView.qml" line="263"/>
+        <location filename="../src/app/qml/views/CalendarView.qml" line="308"/>
         <source>Reminder set for %1</source>
         <translation>Ustawiono przypomnienie na %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/CalendarView.qml" line="629"/>
+        <location filename="../src/app/qml/views/CalendarView.qml" line="724"/>
         <source>Reminder</source>
         <translation>Przypomnienie</translation>
     </message>
@@ -3483,6 +3492,7 @@
         <translation>Tydzień %1: otwórz jego notatkę</translation>
     </message>
     <message>
+        <location filename="../src/app/views/atrament/weekview.cpp" line="200"/>
         <location filename="../src/app/qml/planning/CalendarWeekNumber.qml" line="24"/>
         <source>Week %1: write its note</source>
         <translation>Tydzień %1: napisz jego notatkę</translation>
@@ -20042,25 +20052,25 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <translation>trwa dalej</translation>
     </message>
     <message>
-        <location filename="../src/app/views/atrament/agendaview.cpp" line="112"/>
+        <location filename="../src/app/views/atrament/agendaview.cpp" line="100"/>
         <location filename="../src/app/qml/planning/PlanningItemRow.qml" line="79"/>
         <source>Overdue</source>
         <translation>Zaległe</translation>
     </message>
     <message>
-        <location filename="../src/app/views/atrament/agendaview.cpp" line="113"/>
+        <location filename="../src/app/views/atrament/agendaview.cpp" line="101"/>
         <location filename="../src/app/qml/planning/PlanningItemRow.qml" line="80"/>
         <source>Alarm</source>
         <translation>Alarm</translation>
     </message>
     <message>
-        <location filename="../src/app/views/atrament/agendaview.cpp" line="114"/>
+        <location filename="../src/app/views/atrament/agendaview.cpp" line="102"/>
         <location filename="../src/app/qml/planning/PlanningItemRow.qml" line="81"/>
         <source>Reminder</source>
         <translation>Przypomnienie</translation>
     </message>
     <message>
-        <location filename="../src/app/views/atrament/agendaview.cpp" line="115"/>
+        <location filename="../src/app/views/atrament/agendaview.cpp" line="103"/>
         <location filename="../src/app/qml/planning/PlanningItemRow.qml" line="82"/>
         <source>Scheduled</source>
         <translation>Zaplanowane</translation>
@@ -20076,19 +20086,19 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <translation>Zakończone</translation>
     </message>
     <message>
-        <location filename="../src/app/views/atrament/agendaview.cpp" line="116"/>
+        <location filename="../src/app/views/atrament/agendaview.cpp" line="104"/>
         <location filename="../src/app/qml/planning/PlanningItemRow.qml" line="86"/>
         <source>Due</source>
         <translation>Termin</translation>
     </message>
     <message>
-        <location filename="../src/app/views/atrament/agendaview.cpp" line="117"/>
+        <location filename="../src/app/views/atrament/agendaview.cpp" line="105"/>
         <location filename="../src/app/qml/planning/PlanningItemRow.qml" line="87"/>
         <source>Starts</source>
         <translation>Początek</translation>
     </message>
     <message>
-        <location filename="../src/app/views/atrament/agendaview.cpp" line="118"/>
+        <location filename="../src/app/views/atrament/agendaview.cpp" line="106"/>
         <location filename="../src/app/qml/planning/PlanningItemRow.qml" line="88"/>
         <source>Journal</source>
         <translation>Dziennik</translation>

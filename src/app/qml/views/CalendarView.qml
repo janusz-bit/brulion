@@ -64,6 +64,7 @@ FocusScope {
     property Item atramentAgenda: null
     property Item atramentMonth: null
     property Item atramentWeek: null
+    property Item atramentPanel: null
     property var selfTestValues: ({})
     /// The agenda has nothing to show (CalendarAgendaList.empty): only today, without entries.
     readonly property bool agendaEmpty: cal.revision >= 0 && cal.rangeStart !== "-"
@@ -161,6 +162,32 @@ FocusScope {
         const entry = monthInfo.map.entry
         root.openEntryMenu(entry, root.atramentWeek, x, y)
     }
+    /// What the day panel drawn by Atrament asks (views/atrament/daypanelview.h's actions): what
+    /// CalendarDayPanel's signals do.
+    MapHolder { id: panelInfo }
+    function atramentPanelAction(action: string, args: var): void {
+        panelInfo.map = args
+        const date = "" + AppController.routeText(panelInfo.map, "date")
+        const x = 0 + AppController.routeInt(panelInfo.map, "x", 0)
+        const y = 0 + AppController.routeInt(panelInfo.map, "y", 0)
+        const entry = panelInfo.map.entry
+        if (action === "journal")
+            root.openJournal(date)
+        else if (action === "addTask")
+            root.addFor("task", date)
+        else if (action === "addReminder")
+            root.addFor("reminder", date)
+        else if (action === "allOverdue")
+            AppController.navigate({ view: "tasks" })
+        else if (action === "open")
+            root.openEntry(entry)
+        else if (action === "toggle")
+            root.toggleEntry(entry)
+        else if (action === "menu")
+            root.openEntryMenu(entry, root.atramentPanel, x, y)
+        else if (action === "statusMenu")
+            root.openStatusMenuOn(entry, root.atramentPanel, x, y)
+    }
     function openMonthEntry(date: string, entry: var): void {
         root.openEntry(entry)
         cal.anchorDate = date
@@ -176,6 +203,10 @@ FocusScope {
     property var agendaMenuEntry: ({})
     property string agendaMenuStatus
     function openAgendaStatusMenu(entry: var, x: int, y: int): void {
+        root.openStatusMenuOn(entry, root.atramentAgenda, x, y)
+    }
+    /// The status menu of a task drawn by Atrament in `item` (the agenda, the day panel) at x, y.
+    function openStatusMenuOn(entry: var, item: Item, x: int, y: int): void {
         root.agendaMenuEntry = entry
         entryInfo.map = entry
         const status = "" + AppController.routeText(entryInfo.map, "status")
@@ -183,7 +214,7 @@ FocusScope {
         if (root.agendaStatusMenu === null)
             root.agendaStatusMenu = agendaStatusMenuComponent.createObject(root) as TaskStatusMenu
         root.agendaStatusMenu.status = root.agendaMenuStatus
-        root.agendaStatusMenu.popup(root.atramentAgenda, x, y)
+        root.agendaStatusMenu.popup(item, x, y)
     }
     Component {
         id: agendaStatusMenuComponent
@@ -474,9 +505,29 @@ FocusScope {
                 Layout.fillHeight: true
                 color: Theme.bgElevated
 
-                DayPanel {
+                // Drawn by Atrament with a mouse (agendaAtrament), loaded by file name; else the QML panel.
+                Loader {
+                    id: sidePanel
                     anchors.fill: parent
                     anchors.margins: Theme.space3
+                    sourceComponent: root.agendaAtrament && !root.gridSwipeNeeded ? atramentPanelComponent : qmlPanelComponent
+                }
+                Component {
+                    id: qmlPanelComponent
+                    DayPanel {}
+                }
+                Component {
+                    id: atramentPanelComponent
+                    Loader {
+                        id: atramentPanelLoader
+                        source: "../planning/CalendarDayAtramentPanel.qml"
+                        onLoaded: {
+                            QmlCall.set(atramentPanelLoader.item, "calendarView", root)
+                            QmlCall.set(atramentPanelLoader.item, "viewModel", cal)
+                            root.atramentPanel = atramentPanelLoader.item as Item
+                        }
+                        Component.onDestruction: root.atramentPanel = null
+                    }
                 }
             }
         }

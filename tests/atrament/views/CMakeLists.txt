@@ -10,6 +10,8 @@ target_compile_definitions(tst_atrament_agenda PRIVATE BRULION_SOURCE_DIR="${PRO
 brulion_add_test(tst_atrament_month SOURCES tst_atrament_month.cpp LIBS brulion_views_atrament Qt6::Gui)
 target_compile_definitions(tst_atrament_month PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 brulion_add_test(tst_atrament_week SOURCES tst_atrament_week.cpp LIBS brulion_views_atrament Qt6::Gui)
+brulion_add_test(tst_atrament_daypanel SOURCES tst_atrament_daypanel.cpp LIBS brulion_views_atrament Qt6::Gui)
+target_compile_definitions(tst_atrament_daypanel PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 target_compile_definitions(tst_atrament_week PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 
 # The Tasks view's rows drawn by Atrament in the real app (`--atrament-views`,

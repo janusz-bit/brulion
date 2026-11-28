@@ -1,7 +1,8 @@
 // AtramentView's views other than the editor's (docs/ATRAMENT.md "The views in Atrament (M3)"),
 // each a kind of kKinds: `view: "tasks"` — TasksView over the TaskListModel in `viewModel` —,
 // `view: "search"` — SearchResultsView over the SearchResultModel —, `view: "agenda"` — AgendaView
-// over the CalendarModel —, `view: "month"` and `"week"` — MonthView, WeekView over it —; their look from `viewLook` and
+// over the CalendarModel —, `view: "month"`, `"week"`, `"daypanel"` — MonthView, WeekView,
+// DayPanelView over it —; their look from `viewLook` and
 // the item's colours, their rows' requests as `viewAction` (x, y in this item: the Atrament window's
 // coordinates are the item's).
 #include "atramentview.h"
@@ -12,6 +13,7 @@
 #include "dateshelper.h"
 #include "monthview.h"
 #include "weekview.h"
+#include "daypanelview.h"
 #include "searchmodel.h"
 #include "searchview.h"
 #include "tasklistmodel.h"
@@ -120,6 +122,12 @@ void configure(views::SearchResultsView &v, QQmlEngine *engine)
     v.formatDate = dateWords(engine, &brulion::ui::DatesHelper::formatLong);
 }
 void configure(views::MonthView &, QQmlEngine *) { }
+void configure(views::DayPanelView &v, QQmlEngine *engine)
+{
+    v.formatHuman = dateWords(engine, &brulion::ui::DatesHelper::formatHuman);
+    v.formatLong = dateWords(engine, &brulion::ui::DatesHelper::formatLong);
+    v.journalDay = journalDayWords(engine);
+}
 void configure(views::WeekView &v, QQmlEngine *engine)
 {
     // Now's line: DatesHelper.now() ("YYYY-MM-DD HH:mm", the app's --now too) in minutes.
@@ -156,7 +164,8 @@ const Kind kKinds[] = {{u"tasks", &make<views::TasksView, brulion::planning::Tas
                        {u"search", &make<views::SearchResultsView, brulion::content::SearchResultModel>},
                        {u"agenda", &make<views::AgendaView, brulion::planning::CalendarModel>},
                        {u"month", &make<views::MonthView, brulion::planning::CalendarModel>},
-                       {u"week", &make<views::WeekView, brulion::planning::CalendarModel>}};
+                       {u"week", &make<views::WeekView, brulion::planning::CalendarModel>},
+                       {u"daypanel", &make<views::DayPanelView, brulion::planning::CalendarModel>}};
 
 const Kind *kindNamed(const QString &name)
 {

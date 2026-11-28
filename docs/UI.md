@@ -7000,7 +7000,9 @@ mouse it also draws the month (`qml/planning/CalendarMonthAtramentGrid.qml` over
 more", week numbers and keys; touch UIs keep the QML grid for its swipe between months. The week
 likewise (`qml/planning/CalendarWeekAtramentGrid.qml` over `src/app/views/atrament/weekview.h`): the
 heads with their all-day pills, the hours scrolled to the first entry, the timed entries in their
-lanes, now's line; a right-click on an entry opens its date's menu.
+lanes, now's line; a right-click on an entry opens its date's menu. The day panel beside them
+(`qml/planning/CalendarDayAtramentPanel.qml` over `src/app/views/atrament/daypanelview.h`) is drawn
+by Atrament too: its actions, today's overdue tasks and the day's plan as the agenda's rows.
 
 ### Pictures hold their pixels only near the view
 

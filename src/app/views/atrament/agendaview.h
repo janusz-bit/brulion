@@ -168,12 +168,8 @@ private:
     atrament::AnyElement dayDisc(const RowData &d);
     atrament::AnyElement journalButton(int row, const RowData &d);
     atrament::AnyElement entryRow(int row, int index, const RowData &d, const AgendaEntry &e);
-    atrament::AnyElement marker(int row, int index, const AgendaEntry &e);
-    atrament::AnyElement entryTexts(const RowData &d, const AgendaEntry &e);
-    atrament::AnyElement chip(const AgendaEntry &e);
     atrament::AnyElement tracker(int row, Part part) { return m_parts.tracker(row, part, part.kind == Part::Day); }
     void act(const QString &action, const QVariantMap &args) const;
-    void menuAt(const QString &action, const AgendaEntry &e, atrament::Point at) const;
     bool keyDown(const atrament::KeyDownEvent &e, atrament::Context<AgendaView> &cx);
     int keysDay() const;
     bool moveCurrent(int step, atrament::Context<AgendaView> &cx);

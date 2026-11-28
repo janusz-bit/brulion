@@ -1,7 +1,7 @@
 #include "agendaview.h"
 
 #include "lookmap.h"
-#include "taskbox.h"
+#include "planningrow.h"
 
 #include "calendarmodel.h" // (its roles)
 #include "pageicons.h"
@@ -23,10 +23,6 @@ using namespace Qt::StringLiterals;
 namespace {
 
 // PlanningItemRow's and CalendarAgendaList's words (their translations; not lupdate's).
-QString entryWords(const char *text)
-{
-    return QCoreApplication::translate("PlanningItemRow", text);
-}
 QString dayWords(const char *text)
 {
     return QCoreApplication::translate("CalendarAgendaList", text);
@@ -38,14 +34,6 @@ QString capitalized(const QString &s)
     return s.isEmpty() ? s : s.left(1).toUpper() + s.mid(1);
 }
 
-QString joined(const QStringList &parts, const QString &separator)
-{
-    QStringList kept;
-    for (const QString &p : parts)
-        if (!p.isEmpty())
-            kept.append(p);
-    return kept.join(separator);
-}
 
 constexpr ColorField<AgendaLook> kColors[] = {
         {"background", &AgendaLook::background}, {"text", &AgendaLook::text},
@@ -362,133 +350,21 @@ at::AnyElement AgendaView::journalButton(int row, const RowData &d)
             .child(tracker(row, {Part::Journal}));
 }
 
-// An entry as PlanningItemRow: its marker, its time, its title and place, its chip; a click opens
-// it, a right-click its date's menu.
+// An entry as PlanningItemRow (planningrow.h), its parts the agenda's.
 at::AnyElement AgendaView::entryRow(int row, int index, const RowData &d, const AgendaEntry &e)
 {
-    const AgendaView *self = this;
-    const QVariantMap entry = e.map;
-    const QString name = joined({e.time, e.title, e.kindLabel(), subtitle(e)}, u", "_s);
-    at::Div line = at::div()
-                           .id(at::ElementId::number(quint64(index)))
-                           .relative()
-                           .flexRow()
-                           .itemsStart()
-                           .gap(8)
-                           .pl(6)
-                           .pr(8)
-                           .py(5)
-                           .minH(m_look.rowHeight)
-                           .rounded(m_look.radius)
-                           .hover([look = m_look.hover](at::Style &s) { s.background = at::Background::solid(look); })
-                           .cursorPointer()
-                           .role(at::Role::ListItem)
-                           .ariaLabel(u16View(name))
-                           .onClick([self, entry](const at::ClickEvent &, at::Window &, at::App &) {
-                               self->act(u"open"_s, {{u"entry"_s, entry}});
-                           })
-                           .child(marker(row, index, e));
-    if (e.hasTokenMenu())
-        std::move(line).onMouseDown(at::MouseButton::Right,
-                                    [self, e](const at::MouseDownEvent &m, at::Window &, at::App &) {
-                                        self->menuAt(u"menu"_s, e, m.position);
-                                    });
-    if (!e.time.isEmpty())
-        std::move(line).child(at::div()
-                                      .flexShrink0()
-                                      .mt(4)
-                                      .textSize(m_look.smallSize)
-                                      .fontSemibold()
-                                      .fontFeatures(u"tnum")
-                                      .textColor(e.closed ? m_look.faint : m_look.text)
-                                      .child(at::text(u16View(e.time))));
-    std::move(line).child(entryTexts(d, e));
-    if (!e.kindLabel().isEmpty() && m_width > m_look.chipMinWidth)
-        std::move(line).child(chip(e));
-    return std::move(line).child(tracker(row, {Part::Entry, index}));
-}
-
-// The entry's first column: a task's box, an event's colour, the entry's icon.
-at::AnyElement AgendaView::marker(int row, int index, const AgendaEntry &e)
-{
-    at::Div column = at::div().size(m_look.entryMarker).flexShrink0().flexRow().itemsCenter().justifyCenter();
-    if (e.isTask) {
-        const AgendaView *self = this;
-        return std::move(column).child(
-                taskBoxShape(e.taskStatus(), {m_look.box, m_look.accent, m_look.background})
-                        .ariaLabel(u16View(entryWords("Done: %1").arg(e.title)))
-                        .onClick([self, e](const at::ClickEvent &, at::Window &w, at::App &) {
-                            self->act(u"toggle"_s, {{u"entry"_s, e.map}});
-                            w.stopPropagation();
-                        })
-                        .onMouseDown(at::MouseButton::Right,
-                                     [self, e](const at::MouseDownEvent &m, at::Window &w, at::App &) {
-                                         self->menuAt(u"statusMenu"_s, e, m.position);
-                                         w.stopPropagation();
-                                     })
-                        .child(tracker(row, {Part::Box, index})));
-    }
-    if (e.isEvent()) {
-        const QColor c(e.color);
-        const at::Color color = c.isValid() ? at::Color{float(c.redF()), float(c.greenF()), float(c.blueF()), 1} : m_look.muted;
-        return std::move(column).child(at::div().size(10).roundedFull().bg(color));
-    }
-    const bool marked = e.variant == u"alarm" || e.variant == u"reminder";
-    return std::move(column).child(
-            editor::atr::iconElement(e.icon.isEmpty() ? u"calendar"_s : e.icon, 16, marked ? m_look.reminder : m_look.muted));
-}
-
-// The entry's title (two lines at most; done or past: muted, cancelled: struck out) and where it is.
-at::AnyElement AgendaView::entryTexts(const RowData &d, const AgendaEntry &e)
-{
-    at::Div title = at::div()
-                            .textSize(m_look.textSize)
-                            .lineHeight(m_look.lineHeight)
-                            .textColor(e.closed || d.pastDay() ? m_look.muted : m_look.text)
-                            .when(e.status == u"cancelled", [](at::Div &&t) { return std::move(t).lineThrough(); })
-                            .child(at::text(u16View(e.title)).maxLines(2));
-    at::Div column = at::div().flex1().minW0().flexCol().gap(1).child(std::move(title));
-    const QString where = subtitle(e);
-    if (!where.isEmpty())
-        std::move(column).child(at::div()
-                                        .textSize(m_look.smallSize)
-                                        .textColor(m_look.muted)
-                                        .child(at::text(u16View(where)).maxLines(1)));
-    return std::move(column);
-}
-
-// The kind of date as a small chip in its variant's colours (a recurring one's with its icon).
-at::AnyElement AgendaView::chip(const AgendaEntry &e)
-{
-    const AgendaLook::ChipColors colors = m_look.chip(e.variant);
-    at::Div c = at::div()
-                        .flexShrink0()
-                        .mt(2)
-                        .flexRow()
-                        .itemsCenter()
-                        .gap(4)
-                        .px(8)
-                        .py(2)
-                        .roundedFull()
-                        .bg(colors.background)
-                        .textSize(m_look.chipSize)
-                        .fontMedium()
-                        .textColor(colors.text)
-                        .ariaHidden();
-    if (e.recurring)
-        std::move(c).child(editor::atr::iconElement(u"repeat"_s, 12, colors.text));
-    return std::move(c).child(at::text(u16View(e.kindLabel())));
+    AgendaView *self = this;
+    const EntryRows rows{m_look, m_width,
+                         [self](const QString &action, const QVariantMap &args) { self->act(action, args); },
+                         [self, row](bool box, int k) { return self->tracker(row, {box ? Part::Box : Part::Entry, k}); },
+                         [self](const AgendaEntry &entry) { return self->subtitle(entry); }};
+    return rows.row(index, e, d.pastDay());
 }
 
 void AgendaView::act(const QString &action, const QVariantMap &args) const
 {
     if (onAction)
         onAction(action, args);
-}
-
-void AgendaView::menuAt(const QString &action, const AgendaEntry &e, at::Point at) const
-{
-    act(action, {{u"entry"_s, e.map}, {u"x"_s, qreal(at.x)}, {u"y"_s, qreal(at.y)}});
 }
 
 void AgendaView::showRow(int row, at::Context<AgendaView> &cx)
