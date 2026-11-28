@@ -351,19 +351,72 @@ FocusScope {
                 readonly property int paneCount: root.group !== null ? root.group.count : 0
                 readonly property bool sideBySide: root.group === null || root.group.orientation === Qt.Horizontal
                 readonly property real gap: 1
+                /// The length the panes share (the gaps left out), and a count of their parts' changes.
+                readonly property real room: Math.max(0, (paneArea.sideBySide ? paneArea.width : paneArea.height)
+                                                          - paneArea.gap * Math.max(0, paneArea.paneCount - 1))
+                property int sharesSerial: 0
+                Connections {
+                    target: root.group
+                    function onSharesChanged() { ++paneArea.sharesSerial }
+                }
+
+                // The edges between panes: a drag resizes the two beside it, a double click makes
+                // every pane the same size.
+                Repeater {
+                    model: Math.max(0, paneArea.paneCount - 1)
+                    delegate: Item {
+                        id: edgeDelegate
+                        required property int index
+                        readonly property int edge: edgeDelegate.index + 1
+                        readonly property real at: paneArea.sharesSerial >= 0 && root.group !== null
+                                                   ? paneArea.room * root.group.start(edgeDelegate.edge)
+                                                     + (edgeDelegate.edge - 1) * paneArea.gap : 0
+                        objectName: "terminalSplitEdge"
+                        z: 3
+                        x: paneArea.sideBySide ? edgeDelegate.at - 3 : 0
+                        y: paneArea.sideBySide ? 0 : edgeDelegate.at - 3
+                        width: paneArea.sideBySide ? 7 : paneArea.width
+                        height: paneArea.sideBySide ? paneArea.height : 7
+                        HoverHandler {
+                            cursorShape: paneArea.sideBySide ? Qt.SplitHCursor : Qt.SplitVCursor
+                        }
+                        DragHandler {
+                            id: edgeDrag
+                            target: null
+                            onCentroidChanged: {
+                                if (!edgeDrag.active || root.group === null || paneArea.room <= 0)
+                                    return
+                                const p = edgeDrag.centroid.scenePosition
+                                const local = paneArea.mapFromItem(null, p.x, p.y)
+                                root.group.moveEdge(edgeDelegate.edge, (paneArea.sideBySide ? local.x : local.y) / paneArea.room)
+                            }
+                        }
+                        TapHandler {
+                            onDoubleTapped: if (root.group !== null) root.group.equalize()
+                        }
+                        Rectangle {
+                            anchors.centerIn: parent
+                            width: paneArea.sideBySide ? 1 : parent.width
+                            height: paneArea.sideBySide ? parent.height : 1
+                            color: edgeDrag.active ? Theme.accent : "transparent"
+                        }
+                    }
+                }
 
                 Repeater {
                     id: panes
                     model: root.group
                     delegate: TerminalPane {
                         id: paneDelegate
-                        readonly property int n: Math.max(1, paneArea.paneCount)
-                        readonly property real share: ((paneArea.sideBySide ? paneArea.width : paneArea.height)
-                                                       - paneArea.gap * (paneDelegate.n - 1)) / paneDelegate.n
-                        x: paneArea.sideBySide ? paneDelegate.index * (paneDelegate.share + paneArea.gap) : 0
-                        y: paneArea.sideBySide ? 0 : paneDelegate.index * (paneDelegate.share + paneArea.gap)
-                        width: paneArea.sideBySide ? paneDelegate.share : paneArea.width
-                        height: paneArea.sideBySide ? paneArea.height : paneDelegate.share
+                        // (Its part of the tab — TerminalGroup.share, dragged at the edges — less the gaps.)
+                        readonly property real from: paneArea.sharesSerial >= 0 && root.group !== null
+                                                     ? paneArea.room * root.group.start(paneDelegate.index) : 0
+                        readonly property real size: paneArea.sharesSerial >= 0 && root.group !== null
+                                                     ? paneArea.room * root.group.share(paneDelegate.index) : 0
+                        x: paneArea.sideBySide ? paneDelegate.from + paneDelegate.index * paneArea.gap : 0
+                        y: paneArea.sideBySide ? 0 : paneDelegate.from + paneDelegate.index * paneArea.gap
+                        width: paneArea.sideBySide ? paneDelegate.size : paneArea.width
+                        height: paneArea.sideBySide ? paneArea.height : paneDelegate.size
                         dark: root.dark
                         split: paneArea.paneCount > 1
                         focusedPane: root.group !== null && paneDelegate.index === root.group.focusIndex

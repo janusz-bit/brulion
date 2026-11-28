@@ -106,8 +106,10 @@ public:
     };
     /// A tab at the end with these terminals (shells in their folders — a missing one: the
     /// thread's —, a command typed into its shell, not run), side by side or stacked, `focus`
-    /// focused. False when none could be made.
-    bool restoreTab(const QList<Restored> &terminals, Qt::Orientation orientation, int focus);
+    /// focused, each its part of `shares` (none, or not one a terminal: equal parts). False when none
+    /// could be made.
+    bool restoreTab(const QList<Restored> &terminals, Qt::Orientation orientation, int focus,
+                    const QList<qreal> &shares = {});
     /// Ends the terminals in which no program runs (busy ones stay); how many ended.
     int closeIdle();
     /// Ends all of them now.

@@ -11,7 +11,7 @@ done in the repository simply disappears from the list.
   (docs/CODE.md; tried with a real Claude Code and Codex: tst_shell_agents realAgentThread; its tests
   run on Windows too: the ConPTY terminal, git, gh). Missing: Code mode tried by hand on Windows and on
   macOS at all; t3.json read again when it changes, on Windows (CI's runner saw no change of it:
-  tst_shell_codeprojects configInProject skips it there); a terminal on Windows before 10 1809; the terminal's resizable splits;
+  tst_shell_codeprojects configInProject skips it there); a terminal on Windows before 10 1809;
   hunks of the Changes panel's other sources than Uncommitted and single lines staged or thrown away,
   the pull request of "Commit, push and create PR" written by AI too (the pull request dialog's and the
   commit message are: "Write with AI", an empty message written by itself), a turn's changes without

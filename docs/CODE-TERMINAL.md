@@ -494,8 +494,13 @@ whether to open a web address a program printed —, `fileActivated(path, line, 
 The tab strip (one `TerminalTab` per tab: its focused terminal's title, dimmed once ended with
 "exit N" — green for 0, red otherwise —, a dot in the accent colour when output came while it was not
 shown, a bell when a program rang one, the number of terminals of a split tab, ×), "+" (new shell),
-split right, split down, Find; under it the shown tab's terminals (`TerminalPane` each, equal
-shares, 1-pixel gaps; in a split the focused one has an accent line on top; a click focuses one):
+split right, split down, Find; under it the shown tab's terminals (`TerminalPane` each, at their
+parts of the tab — `TerminalGroup.share(i)` / `start(i)` —, 1-pixel gaps; an edge between two
+(`terminalSplitEdge`, the split cursor) dragged resizes those two, neither below `MinShare` = 10 % of
+the tab (`moveEdge(edge, at)` over the pure `movedEdge()`), a double click on it gives every pane the
+same part (`equalize()`); a new split makes them equal again, a closed pane's part goes to the others
+in proportion; the parts are in the tab's layout over a restart — `sizes`, one a terminal, anything
+else equal parts; in a split the focused one has an accent line on top; a click focuses one):
 the view, a scroll bar over the scrollback (drag the thumb, click beside it), "Jump to latest" while
 scrolled back, and once its program ended (or could not start) "Process exited with code N" with
 Restart and ×. The find bar (`TerminalFindBar`, top right): the query, "3 of 12", Aa, older /
@@ -607,8 +612,7 @@ cells on screen, not what changed.
   reflow; programs started from a terminal (a GUI one too) end with it when its tab is closed while
   the shell runs (the job), unless they break away from jobs; the foreground program's directory
   (`currentDirectory()` is "" there).
-* Resizable splits (they share the tab equally); a split's own direction inside another (a tab is
-  all side by side or all stacked).
+* A split's own direction inside another (a tab is all side by side or all stacked).
 * Grapheme clustering of emoji ZWJ sequences, flags and skin tones (widths follow wcwidth()).
 * Drawn by Atrament: colour emoji (Atrament's colour glyphs come later, docs/ATRAMENT.md D7: Brulion
   Emoji's outlines meanwhile), a system font chosen as the code font (Atrament has the bundled ones

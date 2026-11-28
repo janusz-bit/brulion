@@ -93,6 +93,8 @@ void TerminalGroup::insert(int index, TerminalSession *session)
     beginInsertRows(QModelIndex(), index, index);
     m_sessions.insert(index, session);
     endInsertRows();
+    // (A pane more: every one the same part again, as a new split's.)
+    equalize();
     Q_EMIT countChanged();
     // The new one has the keyboard (the index shifts even when the focused session stays).
     m_focus = -1;
@@ -109,6 +111,12 @@ void TerminalGroup::take(TerminalSession *session)
     beginRemoveRows(QModelIndex(), row, row);
     m_sessions.removeAt(row);
     endRemoveRows();
+    // (Its part shared out among the others, theirs in proportion.)
+    const qreal gone = m_shares.value(row);
+    m_shares.removeAt(row);
+    for (qreal &share : m_shares)
+        share = gone < 1 ? share / (1 - gone) : 1.0 / m_shares.size();
+    Q_EMIT sharesChanged();
     Q_EMIT countChanged();
     // The one beside it (the one before it when it was the last), or the same one moved up.
     int next = focus;
@@ -118,6 +126,59 @@ void TerminalGroup::take(TerminalSession *session)
         next = std::min(row, int(m_sessions.size()) - 1);
     m_focus = -2; // (always announced: the session at the index changed; -1 when none is left)
     setFocusIndex(next);
+}
+
+QList<qreal> movedEdge(QList<qreal> shares, int edge, qreal at, qreal min)
+{
+    if (edge < 1 || edge >= shares.size())
+        return shares;
+    qreal before = 0;
+    for (int i = 0; i < edge - 1; ++i)
+        before += shares.at(i);
+    const qreal pair = shares.at(edge - 1) + shares.at(edge);
+    const qreal first = std::clamp(at - before, std::min(min, pair / 2), std::max(pair - min, pair / 2));
+    shares[edge - 1] = first;
+    shares[edge] = pair - first;
+    return shares;
+}
+
+qreal TerminalGroup::share(int index) const { return m_shares.value(index, 0.0); }
+
+qreal TerminalGroup::start(int index) const
+{
+    qreal at = 0;
+    for (int i = 0; i < index && i < m_shares.size(); ++i)
+        at += m_shares.at(i);
+    return at;
+}
+
+void TerminalGroup::moveEdge(int edge, qreal at)
+{
+    const QList<qreal> moved = movedEdge(m_shares, edge, at, MinShare);
+    if (moved == m_shares)
+        return;
+    m_shares = moved;
+    Q_EMIT sharesChanged();
+}
+
+void TerminalGroup::equalize()
+{
+    m_shares = QList<qreal>(m_sessions.size(), m_sessions.isEmpty() ? 0.0 : 1.0 / m_sessions.size());
+    Q_EMIT sharesChanged();
+}
+
+void TerminalGroup::setShares(const QList<qreal> &shares)
+{
+    qreal sum = 0;
+    for (const qreal share : shares)
+        sum += share > 0 ? share : 0;
+    if (shares.size() != m_sessions.size() || sum <= 0)
+        return;
+    QList<qreal> normal;
+    for (const qreal share : shares)
+        normal << std::max<qreal>(share, 0) / sum;
+    m_shares = normal;
+    Q_EMIT sharesChanged();
 }
 
 int TerminalGroup::rowCount(const QModelIndex &parent) const

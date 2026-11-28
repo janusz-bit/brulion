@@ -146,6 +146,8 @@ private Q_SLOTS:
     void registryKeys();
     void registryLimits();
     void registrySettle();
+    void splitSizes();
+    void splitSizesKept();
     void registryLayouts();
     void viewKeys();
     void viewTerminalKeys();
@@ -655,6 +657,92 @@ void TestTerminal::registrySettle()
     QVERIFY(!registry.settleRunning());
     QCOMPARE(ended.size(), 3);
     registry.closeAll();
+}
+
+// Resizable splits (docs/CODE-TERMINAL.md "Threads, tabs and splits"): an edge dragged between two
+// panes moves only them, never below MinShare; equal again; a pane added or taken shares out again.
+void TestTerminal::splitSizes()
+{
+    using brulion::terminal::movedEdge;
+    const auto near = [](const QList<qreal> &a, const QList<qreal> &b) {
+        if (a.size() != b.size())
+            return false;
+        for (qsizetype i = 0; i < a.size(); ++i)
+            if (std::abs(a.at(i) - b.at(i)) > 1e-9)
+                return false;
+        return true;
+    };
+    QVERIFY(near(movedEdge({0.5, 0.5}, 1, 0.3), {0.3, 0.7}));
+    QVERIFY(near(movedEdge({0.25, 0.25, 0.5}, 2, 0.6), {0.25, 0.35, 0.4}));
+    // Clamped: neither pane under the minimum.
+    QVERIFY(near(movedEdge({0.5, 0.5}, 1, 0.01), {TerminalGroup::MinShare, 1 - TerminalGroup::MinShare}));
+    QVERIFY(near(movedEdge({0.5, 0.5}, 1, 2.0), {1 - TerminalGroup::MinShare, TerminalGroup::MinShare}));
+    QVERIFY(near(movedEdge({0.2, 0.3, 0.5}, 1, 0.9), {0.2 + 0.3 - TerminalGroup::MinShare, TerminalGroup::MinShare, 0.5}));
+    // No such edge: as it was.
+    QVERIFY(near(movedEdge({0.5, 0.5}, 0, 0.3), {0.5, 0.5}));
+    QVERIFY(near(movedEdge({0.5, 0.5}, 2, 0.3), {0.5, 0.5}));
+    QVERIFY(near(movedEdge({1.0}, 1, 0.3), {1.0}));
+
+    if (!m_posix)
+        return;
+    QTemporaryDir dir;
+    TerminalRegistry registry;
+    TerminalThread *thread = registry.thread(u"AI/podział.md"_s, dir.path());
+    QVERIFY(thread->openTab(QString(), QString()));
+    TerminalGroup *group = thread->current();
+    QCOMPARE(group->share(0), 1.0);
+    QVERIFY(thread->split(Qt::Horizontal));
+    QCOMPARE(group->share(0), 0.5);
+    QCOMPARE(group->start(1), 0.5);
+    QSignalSpy sized(group, &TerminalGroup::sharesChanged);
+    group->moveEdge(1, 0.25);
+    QCOMPARE(sized.size(), 1);
+    QCOMPARE(group->share(0), 0.25);
+    QCOMPARE(group->start(1), 0.25);
+    QCOMPARE(group->share(1), 0.75);
+    QCOMPARE(group->share(5), 0.0);
+    // A third pane: equal shares again; one taken: the rest share it.
+    QVERIFY(thread->split(Qt::Horizontal));
+    QVERIFY(std::abs(group->share(2) - 1.0 / 3) < 1e-9);
+    group->moveEdge(1, 0.5);
+    thread->closeSession(group->at(2), true);
+    QCOMPARE(group->count(), 2);
+    QVERIFY(std::abs(group->share(0) + group->share(1) - 1.0) < 1e-9);
+    QVERIFY(group->share(0) > group->share(1));
+    group->equalize();
+    QCOMPARE(group->share(1), 0.5);
+    registry.closeAll();
+}
+
+// The shares are part of a tab's layout over a restart.
+void TestTerminal::splitSizesKept()
+{
+    if (!m_posix)
+        QSKIP("no pseudo-terminal in this build");
+    QTemporaryDir dir;
+    QJsonObject layouts;
+    {
+        TerminalRegistry registry;
+        TerminalThread *thread = registry.thread(u"AI/podział.md"_s, dir.path());
+        registry.shown(u"AI/podział.md"_s);
+        QVERIFY(thread->openTab(QString(), QString()));
+        QVERIFY(thread->split(Qt::Vertical));
+        thread->current()->moveEdge(1, 0.7);
+        layouts = registry.layouts();
+        registry.closeAll();
+    }
+    const QJsonArray sizes = layouts.value(u"threads"_s).toArray().at(0).toObject().value(u"tabs"_s).toArray().at(0)
+                                     .toObject().value(u"sizes"_s).toArray();
+    QCOMPARE(sizes.size(), 2);
+    QVERIFY(std::abs(sizes.at(0).toDouble() - 0.7) < 1e-9);
+    TerminalRegistry again;
+    again.setLayouts(layouts);
+    TerminalThread *thread = again.thread(u"AI/podział.md"_s, dir.path());
+    QTRY_COMPARE(thread->count(), 1);
+    QCOMPARE(thread->current()->count(), 2);
+    QVERIFY(std::abs(thread->current()->share(0) - 0.7) < 1e-9);
+    QCOMPARE(thread->current()->orientation(), Qt::Vertical);
+    again.closeAll();
 }
 
 void TestTerminal::registryLimits()

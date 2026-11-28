@@ -447,8 +447,12 @@ QJsonObject TerminalRegistry::layouts() const
             }
             if (terminals.isEmpty())
                 continue;
+            QJsonArray sizes;
+            for (int i = 0; i < terminals.size(); ++i)
+                sizes.append(group->share(i));
             tabs.append(QJsonObject{{u"split"_s, group->orientation() == Qt::Vertical ? u"down"_s : u"right"_s},
                                     {u"focus"_s, group->focusIndex()},
+                                    {u"sizes"_s, sizes},
                                     {u"terminals"_s, terminals}});
         }
         if (!tabs.isEmpty())
@@ -499,9 +503,15 @@ void TerminalRegistry::setLayouts(const QJsonObject &layouts)
             }
             if (terminals.isEmpty())
                 continue;
+            // (Sizes only as numbers, one a terminal: anything else is no size — equal parts.)
+            QJsonArray sizes;
+            for (const QJsonValue &size : tab.value(u"sizes"_s).toArray())
+                if (size.isDouble() && size.toDouble() > 0 && sizes.size() < terminals.size())
+                    sizes.append(size.toDouble());
             tabs.append(QJsonObject{
                     {u"split"_s, tab.value(u"split"_s).toString() == u"down" ? u"down"_s : u"right"_s},
                     {u"focus"_s, std::clamp(tab.value(u"focus"_s).toInt(), 0, int(terminals.size()) - 1)},
+                    {u"sizes"_s, sizes.size() == terminals.size() ? sizes : QJsonArray()},
                     {u"terminals"_s, terminals}});
         }
         if (tabs.isEmpty())
@@ -524,8 +534,11 @@ void TerminalRegistry::restore(TerminalThread *thread, const QJsonObject &layout
             terminals.append({terminal.value(u"folder"_s).toString(), terminal.value(u"label"_s).toString(),
                               terminal.value(u"command"_s).toString()});
         }
+        QList<qreal> shares;
+        for (const QJsonValue &size : tab.value(u"sizes"_s).toArray())
+            shares << size.toDouble();
         if (!thread->restoreTab(terminals, tab.value(u"split"_s).toString() == u"down" ? Qt::Vertical : Qt::Horizontal,
-                                tab.value(u"focus"_s).toInt()))
+                                tab.value(u"focus"_s).toInt(), shares))
             break; // (no room: the rest neither)
     }
     thread->setCurrentIndex(layout.value(u"current"_s).toInt());

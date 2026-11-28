@@ -20,6 +20,11 @@
 
 namespace brulion::terminal {
 
+/// `shares` (each pane's part of the tab, summing to 1) with the edge before pane `edge` (1 …
+/// size − 1) moved to `at` (a part of the whole, from the start): only the two panes beside it
+/// change, neither below `min`. Unchanged for an edge that is none.
+QList<qreal> movedEdge(QList<qreal> shares, int edge, qreal at, qreal min = 0.1);
+
 class TerminalGroup : public QAbstractListModel {
     Q_OBJECT
     Q_PROPERTY(int count READ count NOTIFY countChanged FINAL)
@@ -41,6 +46,8 @@ class TerminalGroup : public QAbstractListModel {
 public:
     /// Terminals in one tab, at most (T3 Code's limit).
     static constexpr int MaxSessions = 4;
+    /// The smallest part of the tab a pane is given by a drag.
+    static constexpr qreal MinShare = 0.1;
 
     enum Role {
         SessionRole = Qt::UserRole + 1,
@@ -73,6 +80,16 @@ public:
 
     Q_INVOKABLE brulion::terminal::TerminalSession *at(int index) const;
     Q_INVOKABLE int indexOf(brulion::terminal::TerminalSession *session) const;
+    /// Pane `index`'s part of the tab (0 … 1; 0 for none) and where it starts (the parts before it).
+    Q_INVOKABLE qreal share(int index) const;
+    Q_INVOKABLE qreal start(int index) const;
+    /// The edge before pane `edge` dragged to `at` (movedEdge()).
+    Q_INVOKABLE void moveEdge(int edge, qreal at);
+    /// Every pane the same part (a double click on an edge).
+    Q_INVOKABLE void equalize();
+    QList<qreal> shares() const { return m_shares; }
+    /// Parts kept from before (a layout brought back): used when they fit the panes.
+    void setShares(const QList<qreal> &shares);
     const QList<TerminalSession *> &sessions() const { return m_sessions; }
 
     /// `session` at `index` (clamped), its parent now this group; it gets the focus.
@@ -89,6 +106,8 @@ Q_SIGNALS:
     void countChanged();
     void orientationChanged();
     void focusChanged();
+    /// The panes' parts changed (a drag, a pane added or taken).
+    void sharesChanged();
     /// The title, a mark, the running state or the end of a session changed.
     void stateChanged();
 
@@ -97,6 +116,7 @@ private:
 
     QList<TerminalSession *> m_sessions;
     Qt::Orientation m_orientation = Qt::Horizontal;
+    QList<qreal> m_shares;
     int m_focus = -1;
 };
 

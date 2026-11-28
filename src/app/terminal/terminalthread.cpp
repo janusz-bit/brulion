@@ -216,7 +216,8 @@ TerminalSession *TerminalThread::split(Qt::Orientation orientation)
     return session;
 }
 
-bool TerminalThread::restoreTab(const QList<Restored> &terminals, Qt::Orientation orientation, int focus)
+bool TerminalThread::restoreTab(const QList<Restored> &terminals, Qt::Orientation orientation, int focus,
+                                const QList<qreal> &shares)
 {
     auto *group = new TerminalGroup(this);
     QList<std::pair<TerminalSession *, QString>> started;
@@ -238,6 +239,7 @@ bool TerminalThread::restoreTab(const QList<Restored> &terminals, Qt::Orientatio
     }
     group->setOrientation(orientation);
     group->setFocusIndex(focus);
+    group->setShares(shares);
     insertGroup(count(), group);
     if (m_current < 0)
         setCurrentIndex(0);
