@@ -474,6 +474,9 @@ private:
     CodePlace codeSessionOf(const Stream *s, const QJsonObject &params) const;
 
     // The app's own conversations (acp/appchats.h), over the link to the app.
+    /// onHeaders() of `chats/…`: refused (404, 405), or the body it may have.
+    static std::optional<http::Response> chatsHeaders(const QStringList &parts, const QByteArray &method,
+                                                      qint64 *maxBody);
     void chatsRequest(const PairedDevice &device, const QStringList &parts, const http::Request &request,
                       const http::Reply &reply);
     /// `method` of the app with `params`: `answer` makes the device's answer of the app's result, or
@@ -481,6 +484,17 @@ private:
     void relay(const QString &method, const QJsonObject &params, int timeoutMs, const http::Reply &reply,
                std::function<http::Response(const QJsonObject &result)> answer);
     http::Response chatPage(const http::Request &request) const;
+    /// chats/send, chats/start (`pictures` checked here: acp::remotePicturesFromJson()), chats/stop,
+    /// chats/answer, chats/option, chats/resume: the app's chatSend … chatResume.
+    void chatSend(const PairedDevice &device, const QString &path, const QJsonObject &body, const http::Reply &reply);
+    void chatStart(const PairedDevice &device, const QJsonObject &body, const http::Reply &reply);
+    void chatStop(const PairedDevice &device, const QString &path, const http::Reply &reply);
+    void chatAnswer(const PairedDevice &device, const QString &path, const QJsonObject &body, const http::Reply &reply);
+    void chatOption(const PairedDevice &device, const QString &path, const QJsonObject &body, const http::Reply &reply);
+    void chatResume(const PairedDevice &device, const QString &path, const http::Reply &reply);
+    int chatTimeout() const;
+    /// `method` of the app for `path`, its answer's `flag` (stopped, resumed) passed on.
+    void chatFlag(const QString &method, const QString &path, const QString &flag, const http::Reply &reply);
     /// The device's long polls whose connection closed: dropped.
     void dropLeftPolls();
 

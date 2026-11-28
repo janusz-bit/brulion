@@ -1616,6 +1616,13 @@ private Q_SLOTS:
             }
             if (request.method == u"chatStop")
                 return reply.ok(QJsonObject{{u"path"_s, p}, {u"stopped"_s, true}});
+            if (request.method == u"chatResume") {
+                if (p == u"AI/Bez kolejki.md")
+                    return reply.fail(u"not_held"_s, u"Nic nie czeka"_s);
+                return reply.ok(QJsonObject{{u"path"_s, p}, {u"resumed"_s, true}});
+            }
+            if (request.method == u"chatOption" && request.params.value(u"option"_s).toString() == u"nie ma")
+                return reply.fail(u"bad_option"_s, u"Nie ma takiej opcji"_s);
             reply.ok(QJsonObject{{u"path"_s, p}, {u"state"_s, u"running"_s}});
         });
 
@@ -1762,27 +1769,51 @@ private Q_SLOTS:
         };
         acp::RemoteError err = done([&](auto cb) {
             acp::sendRemoteChat(m_transport.get(), QUrl(m_base), token, path, u"Skręć: gęślą jaźń"_s,
-                                acp::SendMode::Steer, cb);
+                                acp::SendMode::Steer, {}, cb);
         });
         QVERIFY2(!err.failed(), qPrintable(err.detail));
         QCOMPARE(heard.last().first, u"chatSend"_s);
         QCOMPARE(heard.last().second,
                  (QJsonObject{{u"path"_s, path}, {u"text"_s, u"Skręć: gęślą jaźń"_s}, {u"mode"_s, u"steer"_s}}));
         err = done([&](auto cb) {
-            acp::sendRemoteChat(m_transport.get(), QUrl(m_base), token, path, u"Potem"_s, acp::SendMode::Queue, cb);
+            acp::sendRemoteChat(m_transport.get(), QUrl(m_base), token, path, u"Potem"_s, acp::SendMode::Queue, {},
+                                cb);
         });
         QVERIFY(!err.failed());
         QCOMPARE(heard.last().second.value(u"mode"_s).toString(), u"queue"_s);
         err = done([&](auto cb) {
-            acp::sendRemoteChat(m_transport.get(), QUrl(m_base), token, path, u"Teraz"_s, acp::SendMode::Now, cb);
+            acp::sendRemoteChat(m_transport.get(), QUrl(m_base), token, path, u"Teraz"_s, acp::SendMode::Now, {}, cb);
         });
         QVERIFY(!err.failed());
         QVERIFY(!heard.last().second.contains(u"mode"_s));
+        // Pictures go along to the app as they came (checked here); a message of pictures alone too —
+        // also larger than a line of the app's socket was before (1 MiB).
+        const QList<acp::RemotePicture> pictures{{u"Paragon żabki.jpg"_s, QByteArray(3 * 1024 * 1024, '\xd8')},
+                                                 {u"ekran.png"_s, QByteArray("\x89PNG")}};
+        err = done([&](auto cb) {
+            acp::sendRemoteChat(m_transport.get(), QUrl(m_base), token, path, QString(), acp::SendMode::Now, pictures,
+                                cb);
+        });
+        QVERIFY2(!err.failed(), qPrintable(err.detail));
+        QCOMPARE(heard.last().first, u"chatSend"_s);
+        QCOMPARE(acp::remotePicturesFromJson(heard.last().second.value(u"pictures"_s)), std::optional(pictures));
+        // The agent's option, the held messages resumed.
+        err = done([&](auto cb) {
+            acp::setRemoteChatOption(m_transport.get(), QUrl(m_base), token, path, u"model"_s, u"sonnet"_s, cb);
+        });
+        QVERIFY(!err.failed());
+        QCOMPARE(heard.last().first, u"chatOption"_s);
+        QCOMPARE(heard.last().second,
+                 (QJsonObject{{u"path"_s, path}, {u"option"_s, u"model"_s}, {u"value"_s, u"sonnet"_s}}));
+        err = done([&](auto cb) { acp::resumeRemoteChat(m_transport.get(), QUrl(m_base), token, path, cb); });
+        QVERIFY(!err.failed());
+        QCOMPARE(heard.last().first, u"chatResume"_s);
+        QCOMPARE(heard.last().second, (QJsonObject{{u"path"_s, path}}));
         // A thread started there: its path.
         QString started;
         bool startedDone = false;
         acp::startRemoteThread(m_transport.get(), QUrl(m_base), token, u"brulion"_s, u"Napraw żółwia"_s,
-                               u"acp:claude"_s, u"/home/ala/drzewa/brulion/zolw"_s, u"brulion/zolw"_s,
+                               u"acp:claude"_s, u"/home/ala/drzewa/brulion/zolw"_s, u"brulion/zolw"_s, {},
                                [&](const QString &p, const acp::RemoteError &e3) {
                                    started = p;
                                    err = e3;
@@ -1831,6 +1862,17 @@ private Q_SLOTS:
                      {u"chats/start"_s, R"({"text":"x"})", 400, u"bad_request"_s},
                      {u"chats/start"_s, R"({"project":"p","text":"x","worktree":7})", 400, u"bad_request"_s},
                      {u"chats/answer"_s, R"({"path":"AI/a.md"})", 400, u"bad_option"_s},
+                     {u"chats/resume"_s, R"({"path":"AI/Bez kolejki.md"})", 409, u"not_held"_s},
+                     {u"chats/option"_s, R"({"path":"AI/a.md","option":"nie ma","value":"x"})", 400, u"bad_option"_s},
+                     {u"chats/option"_s, R"({"path":"AI/a.md","option":"model"})", 400, u"bad_option"_s},
+                     {u"chats/option"_s, R"({"path":"AI/a.md","value":"x"})", 400, u"bad_option"_s},
+                     {u"chats/resume"_s, R"({"path":"Dom.md"})", 400, u"bad_path"_s},
+                     {u"chats/send"_s, R"({"path":"AI/a.md","text":"x","pictures":[{"name":"a.sh","data":"eA=="}]})",
+                      400, u"bad_pictures"_s},
+                     {u"chats/send"_s, R"({"path":"AI/a.md","text":"x","pictures":"a.jpg"})", 400, u"bad_pictures"_s},
+                     {u"chats/start"_s, R"({"project":"p","text":"x","pictures":[{"name":"a.jpg"}]})", 400,
+                      u"bad_pictures"_s},
+                     {u"chats/send"_s, R"({"path":"AI/a.md","text":" "})", 400, u"bad_request"_s},
              }) {
             r = http("POST", m.endpoint, m.body, bearer(token));
             QVERIFY2(r.status == m.status,
