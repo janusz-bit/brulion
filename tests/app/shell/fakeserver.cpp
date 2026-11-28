@@ -46,7 +46,8 @@ int main(int argc, char *argv[])
     QByteArray env;
     if (const QString name = value("--env"); !name.isEmpty())
         env = qEnvironmentVariableIsSet(name.toLatin1().constData())
-                      ? QByteArray(R"(, "env": ")" + qgetenv(name.toLatin1().constData()) + '"')
+                      // (Its text, not the bytes of Windows' ANSI code page: qgetenv() loses "ż" there.)
+                      ? QByteArray(R"(, "env": ")" + qEnvironmentVariable(name.toLatin1().constData()).toUtf8() + '"')
                       : QByteArray(R"(, "env": null)");
     const QByteArray line =
             R"({"ok": true, "command": "fake.serve", "result": {"url": ")" + url.toUtf8() + '"' + env + "}}\n";
