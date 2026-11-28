@@ -105,7 +105,7 @@ item hidden where it would be by default.
 
 ## Order of work
 
-1. Core: `settingsnote` — the note found (names, `brulion: settings`), its frontmatter → QJsonObject
+1. **(done)** Core: `settingsnote` (`src/core/settingsnote/`, `tst_settingsnote`) — the note found (names, `brulion: settings`), its frontmatter → QJsonObject
    → `parseVaultConfig()` merged over config.json's, the migration (pure: config.json + the note's
    text → the note's new text, idempotent), the write of one key. Tests with Polish text, CRLF,
    malformed YAML, a note with only some keys.
