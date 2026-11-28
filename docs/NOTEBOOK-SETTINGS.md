@@ -80,19 +80,21 @@ calls: one call a place, its arguments the items in order, `|` a separator (a gr
 item hidden where it would be by default.
 
 ```brulion-layout
-#rail(journal, pages, tasks, calendar, search, |, code)
-#panel(favorites, recent, pages, tags, -outline)
-#more(gym, habits, flashcards, |, settings)
-#bottom(journal, tasks, capture, search, more)
-#tabs(on)
+// The icon bar, the pages panel, the phone's bottom bar.
+#rail(journals, tasks, calendar, |, search, graph)
+#panel(favorites, recent, -pages)
+#bottom(journals, tasks, search, calendar, allPages)
 ```
 
-* **Places**: `rail` (the icon bar), `panel` (the pages panel's sections — today's "order of the
-  panel's sections" and hidden ones), `more` (the "More" menu), `bottom` (the phone's bottom
-  navigation: at most five), `tabs` (`on` / `off`). A place left out keeps the app's own layout.
-* **Items**: the ids the app already has for them (the rail's `sidebarNav_<id>`, the panel's section
-  ids, the bottom navigation's buttons — `AppSettings.bottomNav`), plus `|`; an unknown item, a
-  duplicate, a sixth bottom button are left out with a warning, never an error that stops the rest.
+* **Places** (`uilayout::defaultVocabulary()`): `rail` (the icon bar: `journals`, `calendar`, `tasks`,
+  `habits`, `gym`, `flashcards`, `allPages`, `tags`, `graph`, `search`), `panel` (the pages panel's
+  sections: `pages`, `favorites`, `recent`), `bottom` (the phone's bottom navigation: the views of
+  `AppSettings::bottomNavViews()`, at most five). A place left out keeps the app's own layout. (Later
+  places: `more`, the "More" menu's contents; `tabs`, once the tabs can be switched off.)
+* **Items**: the ids the app already has for them, plus `|` (a group's end) and `-id` (hidden); `//`
+  starts a comment line. An unknown place or item, a second call of a place, an item twice, a sixth
+  bottom button, a line that is no call are left out with a warning
+  naming the line ("line 3: “żółw” is no item of rail"), never an error that stops the rest.
 * **Where it is written**: in a ` ```brulion-layout ` block — of the settings note (the notebook's
   layout, every device that follows it), or of Settings → Appearance → Layout → "Edit as text" (this
   device's, kept in its settings). Settings → Appearance → Layout's switches and orders stay: they
@@ -115,6 +117,8 @@ item hidden where it would be by default.
 3. **(done)** Settings → Notebook → "Settings in a note": "Move into a note" (`Workspace.moveSettingsToNote()`:
    named in the app's language, an ordinary page of that name never taken over — the other name, else
    an error) and "Open the note" (`Workspace.settingsNote`); guide en/pl.
-4. Core `layoutspec`: the language's parser and printer (round trip), warnings.
+4. **(done)** Core `uilayout` (`src/core/uilayout/`, `tst_uilayout`): `parse()` with warnings,
+   `print()` (read back the same), `blockOf()` (a note's first ` ```brulion-layout ` block, ``` or ~~~,
+   CRLF), `shown()`.
 5. The app's layout from a `LayoutSpec` (rail, panel, more, bottom, tabs), "Edit as text", "Use the
    notebook's layout".
