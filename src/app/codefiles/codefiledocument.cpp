@@ -8,6 +8,7 @@
 
 #include <QCryptographicHash>
 #include <QDir>
+#include <QLocale>
 #include <QSaveFile>
 #include <QRegularExpression>
 #include <QSet>
@@ -29,6 +30,7 @@ struct CodeFileDocument::Loaded {
     QList<QList<CodeSpan>> spans;
     TextShape shape;
     QByteArray hash;
+    bool archive = false;
 };
 
 namespace {
@@ -318,6 +320,17 @@ CodeFileDocument::Loaded CodeFileDocument::readFile(const QString &abs, int tabW
     l.size = file.size;
     l.shape = file.shape;
     l.hash = file.hash;
+    if (file.kind == FileKind::Binary && io::isZip(io::fileHead(abs, 4))) {
+        const io::ZipListing listing = io::listZipFile(abs, MaxArchiveLines);
+        if (listing.ok) {
+            // (A ZIP archive: its files listed as the lines, nothing to edit — no hash.)
+            l.kind = u"text"_s;
+            l.archive = true;
+            l.hash.clear();
+            lexLines(archiveLines(listing).join(u'\n'), tabWidth, l);
+        }
+        return l;
+    }
     if (file.kind != FileKind::Text)
         return l;
     l.language = languageForPath(abs);
@@ -392,6 +405,7 @@ void CodeFileDocument::apply(Loaded l)
     m_spans = std::move(l.spans);
     m_shape = l.shape;
     m_hash = l.hash;
+    m_archive = l.archive;
     m_matches.clear();
     endResetModel();
     Q_EMIT loaded();
@@ -402,6 +416,18 @@ void CodeFileDocument::apply(Loaded l)
 bool CodeFileDocument::editable() const
 {
     return m_kind == u"text" && !m_truncated && !m_shape.lossy && !m_hash.isEmpty();
+}
+
+QStringList CodeFileDocument::archiveLines(const io::ZipListing &listing)
+{
+    QStringList out;
+    for (const io::ZipListEntry &e : listing.entries) {
+        const QString size = QLocale::c().formattedDataSize(e.size, 1, QLocale::DataSizeTraditionalFormat);
+        out << size.rightJustified(10) + u"  "_s + e.path + (e.encrypted ? tr(" (encrypted)") : QString());
+    }
+    if (listing.cut)
+        out << tr("… and more files (%n listed)", "", int(listing.entries.size()));
+    return out;
 }
 
 bool CodeFileDocument::renderable() const

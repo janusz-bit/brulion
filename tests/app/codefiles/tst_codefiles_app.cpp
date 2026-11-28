@@ -5,6 +5,7 @@
 #include "codefileindex.h"
 #include "codefiles.h"
 #include "codesearch.h"
+#include "io/zip.h"
 
 #include <QDir>
 #include <QFile>
@@ -413,6 +414,43 @@ private Q_SLOTS:
         doc.setPath(u"a.txt"_s);
         QTRY_VERIFY(!doc.renderable());
         QCOMPARE(doc.renderedHtml(), QString());
+    }
+
+    // A ZIP archive shows its files, one a line with its size (nothing unpacked), not to edit; one
+    // that does not read is a binary file.
+    void zipListed()
+    {
+        QTemporaryDir dir;
+        QFile zip(dir.filePath(u"paczka.zip"_s));
+        QVERIFY(zip.open(QIODevice::WriteOnly));
+        zip.write(brulion::io::writeZip({{u"Notatka ąćę.md"_s, "abc"}, {u"src/b.cpp"_s, QByteArray(2048, 'x')}}));
+        zip.close();
+        QVERIFY(writeFile(dir.filePath(u"zepsuta.zip"_s), QByteArray("PK\x03\x04\0\0\0\x01\x02zepsuta", 16)));
+        CodeFileDocument doc;
+        doc.setFolder(dir.path());
+        doc.setPath(u"paczka.zip"_s);
+        QTRY_COMPARE(doc.kind(), u"text"_s);
+        QVERIFY(doc.archive());
+        QVERIFY(!doc.editable());
+        QVERIFY(!doc.renderable());
+        QCOMPARE(doc.lineCount(), 2);
+        QVERIFY2(doc.lineText(1).endsWith(u"  Notatka ąćę.md"_s) && doc.lineText(1).contains(u"3 bytes"_s), qPrintable(doc.lineText(1)));
+        QVERIFY2(doc.lineText(2).endsWith(u"  src/b.cpp"_s) && doc.lineText(2).contains(u"2.0 kB"_s), qPrintable(doc.lineText(2)));
+        doc.setPath(u"zepsuta.zip"_s);
+        QTRY_COMPARE(doc.kind(), u"binary"_s);
+        QVERIFY(!doc.archive());
+        // More files than shown: a last line says so.
+        QList<brulion::io::FileEntry> many;
+        for (int i = 0; i < CodeFileDocument::MaxArchiveLines + 3; ++i)
+            many.append({u"p%1.txt"_s.arg(i), "x"});
+        QFile big(dir.filePath(u"duza.zip"_s));
+        QVERIFY(big.open(QIODevice::WriteOnly));
+        big.write(brulion::io::writeZip(many));
+        big.close();
+        const QStringList lines =
+                CodeFileDocument::archiveLines(brulion::io::listZipFile(big.fileName(), CodeFileDocument::MaxArchiveLines));
+        QCOMPARE(lines.size(), CodeFileDocument::MaxArchiveLines + 1);
+        QVERIFY(lines.last().startsWith(u"…"_s));
     }
 
     // Find within the file shown (Ctrl+F in the viewer): its matches counted, line by line, with the

@@ -25,7 +25,7 @@ done in the repository simply disappears from the list.
   up by their age alone, whatever their threads (a settled thread's is, after its merge or some days:
   docs/CODE.md "Settling and snoozing"); a new thread's title written
   by the AI by itself ("Regenerate title" is there); in the file
-  viewer (docs/CODE-FILES.md): rendered HTML / PDF / ZIP files, the index following the disk on Windows (Linux and macOS watch the folders);
+  viewer (docs/CODE-FILES.md): rendered HTML / PDF files, the index following the disk on Windows (Linux and macOS watch the folders);
   in a thread's composer:
   mentions of threads, models and pull requests (`#`), review comments as chips instead of text.
 

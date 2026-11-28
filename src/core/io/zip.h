@@ -50,6 +50,24 @@ bool isZip(QByteArrayView data);
 QList<FileEntry> readZip(QByteArrayView zip, QStringList *warnings = nullptr, const ZipReadOptions &options = {});
 /// readZip() of the archive in the file `file`, read piece by piece (never loaded whole).
 QList<FileEntry> readZipFile(const QString &file, QStringList *warnings = nullptr, const ZipReadOptions &options = {});
+/// One entry of listZipFile(): its path (sanitizeArchivePath()), its size unpacked and packed, and
+/// whether it is encrypted.
+struct ZipListEntry {
+    QString path;
+    qint64 size = 0;
+    qint64 packedSize = 0;
+    bool encrypted = false;
+};
+
+/// The files of a ZIP archive listed, nothing unpacked: `ok` false when `file` is no readable
+/// archive; at most `maxEntries` of them (`cut` when there are more). Directories are left out.
+struct ZipListing {
+    bool ok = false;
+    bool cut = false;
+    QList<ZipListEntry> entries;
+};
+ZipListing listZipFile(const QString &file, int maxEntries = 10'000);
+
 /// The first `bytes` of a file ("" when it cannot be read): enough for isZip() / isTar().
 QByteArray fileHead(const QString &file, qint64 bytes = 512);
 

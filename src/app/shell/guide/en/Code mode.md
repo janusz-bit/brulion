@@ -53,7 +53,7 @@ What the computer's app runs itself, the phone follows live: **On your computers
 The panel beside the thread has three tabs: **Changes**, **Files** and **Search**.
 - **Ctrl+P** (or *Go to file…* in the palette) finds a file of the project by a few letters of its name — `cvw` finds `CodeView.qml`; Enter opens it in the **Files** tab, Ctrl+Enter in your editor.
 - **Files** shows the file with colours and line numbers (pictures as pictures). Click a line — Shift+click or a drag over the numbers for more — and choose **Comment…**: the lines and your comment go into the thread's message, for the agent to act on.
-- A CSV or TSV file shows as a table, a Markdown file rendered (the button beside it shows its text).
+- A CSV or TSV file shows as a table, a Markdown file rendered (the button beside it shows its text), a ZIP archive the files in it.
 - **Edit** (the pencil in the Files tab) changes the file shown; **Save** (Ctrl+S) writes it back with its own line endings. If the agent changed the file meanwhile, Brulion does not overwrite it: reload and edit again.
 - **Ctrl+F** in the Files tab finds text in the file shown (Enter for the next match, Shift+Enter for the one before; `Aa`, `ab` and `.*` as below).
 - **Ctrl+Shift+F** searches the text of every file of the project (ignored files left out); a result opens the file at its line. `Aa`, `ab` and `.*` match case, whole words and regular expressions.

@@ -86,6 +86,34 @@ private Q_SLOTS:
         QVERIFY(zip.size() < 100'000); // compressed
     }
 
+    // An archive's entries listed without unpacking them (the Code mode file viewer): paths, sizes,
+    // the encrypted ones marked; cut at a limit; a file that is no archive is none.
+    void zipListed()
+    {
+        QTemporaryDir work;
+        const QString archive = saved(work, u"Paczka.zip"_s,
+                                      writeZip({{u"Notatka ąćę.md"_s, u"Zażółć gęślą jaźń"_s.toUtf8()},
+                                                {u"src/a/b.cpp"_s, QByteArray(10'000, 'x')},
+                                                {u"pusty.txt"_s, QByteArray()}}));
+        const ZipListing listing = listZipFile(archive);
+        QVERIFY(listing.ok);
+        QVERIFY(!listing.cut);
+        QCOMPARE(listing.entries.size(), 3);
+        QCOMPARE(listing.entries.at(0).path, u"Notatka ąćę.md"_s);
+        QCOMPARE(listing.entries.at(0).size, qint64(u"Zażółć gęślą jaźń"_s.toUtf8().size()));
+        QCOMPARE(listing.entries.at(1).path, u"src/a/b.cpp"_s);
+        QCOMPARE(listing.entries.at(1).size, qint64(10'000));
+        QVERIFY(listing.entries.at(1).packedSize < 10'000);
+        QVERIFY(!listing.entries.at(1).encrypted);
+        QCOMPARE(listing.entries.at(2).size, qint64(0));
+        const ZipListing two = listZipFile(archive, 2);
+        QVERIFY(two.ok);
+        QVERIFY(two.cut);
+        QCOMPARE(two.entries.size(), 2);
+        QVERIFY(!listZipFile(saved(work, u"nie.zip"_s, "to nie jest archiwum")).ok);
+        QVERIFY(!listZipFile(work.filePath(u"brak.zip"_s)).ok);
+    }
+
     void zipIsDeterministic()
     {
         const QList<FileEntry> entries = {{u"a.md"_s, "alpha"}, {u"b/c.md"_s, "beta"}};

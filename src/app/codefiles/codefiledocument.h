@@ -18,6 +18,7 @@
 #include "codefiles/highlight.h"
 #include "codefiles/search.h"
 #include "codefiles/viewer.h"
+#include "io/zip.h"
 
 #include <QAbstractListModel>
 #include <QColor>
@@ -52,6 +53,8 @@ class CodeFileDocument : public QAbstractListModel {
     Q_PROPERTY(int matchCount READ matchCount NOTIFY findChanged FINAL)
     /// It can be edited here (save()): a text file read whole, valid UTF-8.
     Q_PROPERTY(bool editable READ editable NOTIFY loaded FINAL)
+    /// A ZIP archive read: its lines list its files (archiveLines()), nothing to edit.
+    Q_PROPERTY(bool archive READ archive NOTIFY loaded FINAL)
     /// A Markdown file read (.md, .markdown): renderedHtml() shows it rendered.
     Q_PROPERTY(bool renderable READ renderable NOTIFY loaded FINAL)
     Q_PROPERTY(QString findError READ findError NOTIFY findChanged FINAL)
@@ -97,6 +100,12 @@ public:
     /// on disk since it was read; then reads it again. "" saved, else why not.
     Q_INVOKABLE QString save(const QString &text);
     bool renderable() const;
+    bool archive() const { return m_archive; }
+    /// The most files of an archive listed.
+    static constexpr int MaxArchiveLines = 10'000;
+    /// The lines of an archive's listing (pure): "<size, right-aligned>  <path>" a file, " (encrypted)"
+    /// after one that is, and a last line when there are more than listed.
+    static QStringList archiveLines(const io::ZipListing &listing);
     /// A renderable() file as rich text (renderMarkdown()); "" when it is not one.
     Q_INVOKABLE QString renderedHtml() const;
     /// `markdown` as rich text for the viewer (pure): the notebook's HTML renderer with everything
@@ -151,6 +160,7 @@ private:
     int m_tabWidth = 4;
     QString m_kind;
     bool m_truncated = false;
+    bool m_archive = false;
     qint64 m_size = 0;
     QString m_language;
     int m_maxColumns = 0;

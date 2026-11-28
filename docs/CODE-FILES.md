@@ -150,6 +150,14 @@ the system's browser when it is an `http(s)` address, nothing else. `codeFilesRe
 text instead and back; a file opened at a line (an agent's link, a search result), Find (Ctrl+F) and
 Edit show the text.
 
+### Archives
+
+A ZIP archive (`.zip`, `.jar`, `.docx` … — what starts as one and opens: `io::listZipFile()`, nothing
+unpacked) is shown as its files, one a line — the size unpacked, right-aligned, then the path
+(`sanitizeArchivePath()`), " (encrypted)" after an encrypted one —, at most 10 000 of them and a last
+line saying there are more (`CodeFileDocument.archive`, `archiveLines()`). The lines are the viewer's:
+find, select, comment; nothing to edit. One that does not open is a binary file.
+
 ### Editing
 
 The header's **Edit** (`codeFilesEdit`, a pencil) — for a text file read whole, valid UTF-8
@@ -278,7 +286,8 @@ pages of the notebook.)
 
 ## Not done (yet)
 
-* Rendered views of HTML, PDF and ZIP files (here: their text; PDFs and archives as binary files);
+* Rendered views of HTML and PDF files (here: their text; PDFs as binary files), the files of an
+  archive opened (the listing only), archives other than ZIP;
   an editor with the viewer's colours (the edit is plain text).
 * T3 Code's mentions of threads and models, and `#` for pull requests.
 * Review comments as chips in the composer: here they are text.

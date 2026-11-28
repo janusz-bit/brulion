@@ -2700,6 +2700,17 @@
     </message>
 </context>
 <context>
+    <name>brulion::codefiles::CodeFileDocument</name>
+    <message numerus="yes">
+        <location filename="../src/app/codefiles/codefiledocument.cpp" line="429"/>
+        <source>… and more files (%n listed)</source>
+        <translation>
+            <numerusform>… and more files (%n listed)</numerusform>
+            <numerusform>… and more files (%n listed)</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>brulion::editor::SuggestionModel</name>
     <message numerus="yes">
         <location filename="../src/app/editor/suggestionmodel.cpp" line="320"/>

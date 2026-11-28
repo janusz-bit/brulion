@@ -309,6 +309,31 @@ QList<FileEntry> readZipFile(const QString &file, QStringList *warnings, const Z
     return out;
 }
 
+ZipListing listZipFile(const QString &file, int maxEntries)
+{
+    ZipListing out;
+    OpenZip zip(ZipSource{{}, file});
+    if (!zip.ok() || file.isEmpty())
+        return out;
+    out.ok = true;
+    mz_zip_archive &archive = zip.archive;
+    const mz_uint count = mz_zip_reader_get_num_files(&archive);
+    for (mz_uint i = 0; i < count; ++i) {
+        mz_zip_archive_file_stat stat{};
+        if (!mz_zip_reader_file_stat(&archive, i, &stat) || stat.m_is_directory)
+            continue;
+        const QString path = sanitizeArchivePath(entryName(&archive, i, stat));
+        if (path.isEmpty())
+            continue;
+        if (out.entries.size() >= maxEntries) {
+            out.cut = true;
+            break;
+        }
+        out.entries.append({path, qint64(stat.m_uncomp_size), qint64(stat.m_comp_size), bool(stat.m_is_encrypted)});
+    }
+    return out;
+}
+
 QByteArray fileHead(const QString &file, qint64 bytes)
 {
     QFile in(file);

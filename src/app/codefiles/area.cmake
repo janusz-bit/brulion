@@ -24,7 +24,7 @@ qt_add_library(brulion_codefiles STATIC
     ${_brulion_codefiles_dir}/codefilesbackground_p.h
 )
 target_include_directories(brulion_codefiles PUBLIC ${_brulion_codefiles_dir})
-target_link_libraries(brulion_codefiles PUBLIC Qt6::Core Qt6::Gui brulion_core_codefiles PRIVATE brulion_core_gitcli brulion_core_io)
+target_link_libraries(brulion_codefiles PUBLIC Qt6::Core Qt6::Gui brulion_core_codefiles brulion_core_io PRIVATE brulion_core_gitcli)
 qt_extract_metatypes(brulion_codefiles)
 brulion_set_warnings(brulion_codefiles)
 
