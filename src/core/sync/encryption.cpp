@@ -229,7 +229,12 @@ std::optional<QByteArray> Decryptor::finish()
 QByteArray seal(const Keys &keys, QByteArrayView plain, const crypto::RandomSource &random)
 {
     Encryptor encryptor(keys, random);
-    return encryptor.header() + encryptor.add(plain) + encryptor.finish();
+    // One statement each: the operands of `+` may be evaluated in any order (MSVC called finish(),
+    // which lets go of the pending buffer, before add() wrote into it).
+    QByteArray out = encryptor.header();
+    out += encryptor.add(plain);
+    out += encryptor.finish();
+    return out;
 }
 
 std::optional<crypto::SecureBytes> open(const Keys &keys, QByteArrayView sealed)
