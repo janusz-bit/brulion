@@ -30,6 +30,7 @@ namespace {
 
 using caldav::EventIntent;
 using caldav::EventProblem;
+using caldav::Participation;
 
 /// The calendars the app set up on this device, or nothing (no state folder, never set up). Read
 /// only: the app is the one writer of their state.
@@ -348,9 +349,14 @@ constexpr Refusal Refusals[] = {
         {ExitUsage, u"occurrence_rule",
          QT_TRANSLATE_NOOP("brulion::cli",
                            "One occurrence has no recurrence of its own: leave out --occurrence to change the series")},
+        {ExitRefused, u"not_invited",
+         QT_TRANSLATE_NOOP("brulion::cli",
+                           "The event does not invite this account (or “%1” does not know the account's addresses: "
+                           "add the account again in the app)")},
+        {ExitUsage, u"no_answer", QT_TRANSLATE_NOOP("brulion::cli", "An answer is accept, decline or tentative")},
 };
 
-static_assert(std::size(Refusals) == std::size_t(EventProblem::OccurrenceRule), "one row per EventProblem but None");
+static_assert(std::size(Refusals) == std::size_t(EventProblem::NoAnswer), "one row per EventProblem but None");
 
 /// The error of a change that cannot be made (`problem` is never None).
 Result refusal(Call &call, EventProblem problem, const QString &calendar, const QString &uid)
@@ -688,11 +694,45 @@ QDateTime askedAt(const QList<EventIntent> &pending)
     return at;
 }
 
+/// The answer argument ("accept", "decline", "tentative"; Polish too) into `intent`; false (the
+/// call's error set) for anything else.
+bool answerArg(Call &call, EventIntent *intent)
+{
+    static const QHash<QString, Participation> words = {
+            {u"accept"_s, Participation::Accepted},   {u"accepted"_s, Participation::Accepted},
+            {u"yes"_s, Participation::Accepted},      {u"tak"_s, Participation::Accepted},
+            {u"decline"_s, Participation::Declined},  {u"declined"_s, Participation::Declined},
+            {u"no"_s, Participation::Declined},       {u"nie"_s, Participation::Declined},
+            {u"tentative"_s, Participation::Tentative}, {u"maybe"_s, Participation::Tentative},
+            {u"może"_s, Participation::Tentative},
+    };
+    const auto it = words.constFind(call.text(u"answer"_s).trimmed().toLower());
+    if (it == words.constEnd()) {
+        
+        return false;
+    }
+    intent->answer = *it;
+    return true;
+}
+
+/// "accepted the invitation", … (changeAnswer()'s text).
+QString answerText(const EventIntent &intent)
+{
+    switch (intent.answer.value_or(Participation::NeedsAction)) {
+    case Participation::Accepted: return tr("invitation accepted");
+    case Participation::Declined: return tr("invitation declined");
+    case Participation::Tentative: return tr("invitation answered: maybe");
+    case Participation::NeedsAction:
+    case Participation::Delegated: break;
+    }
+    return {};
+}
+
 /// The answer to a change left for the app (`result`: the event after it; none for a deletion).
 Result changeAnswer(Call &call, const caldav::CalendarEntry &entry, const EventIntent &intent,
                     const std::optional<caldav::EventEdit> &result)
 {
-    static const QString kinds[] = {u"create"_s, u"change"_s, u"delete"_s};
+    static const QString kinds[] = {u"create"_s, u"change"_s, u"delete"_s, u"answer"_s};
     const QJsonObject app = appJson(call);
     QJsonObject o{{u"queued"_s, !call.dryRun()},
                   {u"id"_s, intent.id},
@@ -704,7 +744,10 @@ Result changeAnswer(Call &call, const caldav::CalendarEntry &entry, const EventI
     if (intent.instance)
         o.insert(u"instance"_s, caldav::instanceText(*intent.instance));
     QString text = entry.name + u": "_s;
-    if (result) {
+    if (intent.kind == EventIntent::Kind::Answer) {
+        o.insert(u"answer"_s, intent.toJson().value(u"answer"_s));
+        text += answerText(intent);
+    } else if (result) {
         o.insert(u"event"_s, eventJson(*result));
         text += eventLine(*result);
     } else {
@@ -727,12 +770,14 @@ Result change(Call &call, EventIntent::Kind kind)
     intent.kind = kind;
     intent.at = askedAt(pending);
     intent.id = caldav::newIntentId(intent.at);
-    if (!patchArgs(call, kind, &intent.patch))
+    if (kind == EventIntent::Kind::Answer ? !answerArg(call, &intent) : !patchArgs(call, kind, &intent.patch))
         return call.failed();
     const caldav::CalendarSettings settings = store->settings(); // (entry points into it)
     const caldav::CalendarEntry *entry = targetOf(call, settings, *store, pending, context, &intent);
     if (!entry)
         return call.failed();
+    if (const caldav::Account *account = settings.account(entry->account); account && kind == EventIntent::Kind::Answer)
+        intent.addresses = account->addresses;
     EventProblem why = EventProblem::None;
     caldav::EventEdit result;
     if (!caldav::plannedChange(*entry, viewOf(*store, *entry, pending, context), intent, context, &why, &result))
@@ -741,8 +786,8 @@ Result change(Call &call, EventIntent::Kind kind)
         return call.fail(
                 ExitInternal, u"io_error"_s,
                 tr("The change could not be left for the app in %1").arg(caldav::inboxFolder(store->folder())));
-    return changeAnswer(call, *entry, intent,
-                        kind == EventIntent::Kind::Delete ? std::nullopt : std::optional<caldav::EventEdit>(result));
+    const bool fields = kind == EventIntent::Kind::Create || kind == EventIntent::Kind::Change;
+    return changeAnswer(call, *entry, intent, fields ? std::optional<caldav::EventEdit>(result) : std::nullopt);
 }
 
 Result calendarAdd(Call &call)
@@ -758,6 +803,11 @@ Result calendarEdit(Call &call)
 Result calendarDelete(Call &call)
 {
     return change(call, EventIntent::Kind::Delete);
+}
+
+Result calendarAnswer(Call &call)
+{
+    return change(call, EventIntent::Kind::Answer);
 }
 
 QList<Arg> eventArgs(bool creating)
@@ -888,6 +938,23 @@ void addCalendarCommands(QList<Command> &out)
     c.writes = true;
     c.destructive = true;
     c.run = calendarDelete;
+    out.append(c);
+    c = Command();
+    c.id = u"calendar.answer"_s;
+    c.summary = cliText(QT_TRANSLATE_NOOP("brulion::cli", "Answer an invitation: accept, decline or tentative"));
+    c.help = cliText(QT_TRANSLATE_NOOP(
+            "brulion::cli",
+            "The account's answer to an event it is invited to (the whole event or series); its server sends the "
+            "organizer the reply. Left for the app like calendar add: {queued, id, kind: answer, answer, calendar, "
+            "calendarId, uid, app}."));
+    c.args = {positional(u"uid"_s, ArgType::String,
+                         QT_TRANSLATE_NOOP("brulion::cli", "The event's uid (calendar events)")),
+              positional(u"answer"_s, ArgType::String,
+                         QT_TRANSLATE_NOOP("brulion::cli", "accept, decline or tentative (tak, nie, może)")),
+              option(u"calendar"_s, ArgType::String,
+                     QT_TRANSLATE_NOOP("brulion::cli", "The calendar holding it (its name or id)"))};
+    c.writes = true;
+    c.run = calendarAnswer;
     out.append(c);
 }
 

@@ -402,6 +402,18 @@ std::optional<EventChange> newChange(const CalendarEntry &calendar, const EventI
 }
 
 /// The change of an event the calendar has: the whole event or one occurrence of its series.
+/// The invitation of `ics` answered as `intent` says (the whole event: answerInvitation()).
+std::optional<EventChange> answerChange(const QByteArray &ics, const EventIntent &intent, const TodoContext &context,
+                                        EventChange change, EventProblem *problem)
+{
+    if (!intent.answer)
+        return failed(problem, EventProblem::NoAnswer);
+    change.data = answerInvitation(ics, intent.uid, intent.addresses, *intent.answer, context);
+    if (change.data.isEmpty())
+        return failed(problem, EventProblem::NotInvited);
+    return change;
+}
+
 std::optional<EventChange> existingChange(const CalendarData &data, const CalendarState &state,
                                           const EventIntent &intent, const TodoContext &context, EventChange change,
                                           EventProblem *problem, EventEdit *result)
@@ -420,6 +432,8 @@ std::optional<EventChange> existingChange(const CalendarData &data, const Calend
             change.data = excludeOccurrence(ics, intent.uid, *intent.instance, context);
         return change;
     }
+    if (intent.kind == EventIntent::Kind::Answer)
+        return answerChange(ics, intent, context, std::move(change), problem);
     const auto edit = editedFields(current, intent.patch, &why);
     if (!edit)
         return failed(problem, why);
@@ -490,8 +504,44 @@ std::optional<EventMoment> momentFrom(const QString &text)
 
 const QString &kindName(EventIntent::Kind kind)
 {
-    static const QString names[] = {u"create"_s, u"change"_s, u"delete"_s};
+    static const QString names[] = {u"create"_s, u"change"_s, u"delete"_s, u"answer"_s};
     return names[int(kind)];
+}
+
+/// The answers an intent carries, by their JSON names.
+constexpr std::pair<const char16_t *, Participation> AnswerNames[] = {
+        {u"accepted", Participation::Accepted},
+        {u"declined", Participation::Declined},
+        {u"tentative", Participation::Tentative},
+};
+
+QString answerName(Participation answer)
+{
+    for (const auto &[name, value] : AnswerNames) {
+        if (value == answer)
+            return QString::fromUtf16(name);
+    }
+    return {};
+}
+
+/// An answer intent's answer and addresses from `json`; false when the answer is none of
+/// AnswerNames or the addresses are no list of at most MaxAnswerAddresses strings.
+bool readAnswer(const QJsonObject &json, EventIntent *i)
+{
+    const QString answer = json.value(u"answer"_s).toString();
+    for (const auto &[name, value] : AnswerNames) {
+        if (answer == QStringView(name))
+            i->answer = value;
+    }
+    const QJsonArray addresses = json.value(u"addresses"_s).toArray();
+    if (!i->answer || addresses.size() > MaxAnswerAddresses)
+        return false;
+    for (const QJsonValue &a : addresses) {
+        if (!a.isString() || a.toString().size() > MaxAddressLength)
+            return false;
+        i->addresses.append(a.toString());
+    }
+    return true;
 }
 
 /// A text field of `json` into `out`: absent is fine; false when it is no string or too long.
@@ -576,7 +626,7 @@ bool sizedId(const QString &id)
 bool readHeader(const QJsonObject &json, EventIntent *i)
 {
     static constexpr EventIntent::Kind kinds[] = {EventIntent::Kind::Create, EventIntent::Kind::Change,
-                                                  EventIntent::Kind::Delete};
+                                                  EventIntent::Kind::Delete, EventIntent::Kind::Answer};
     const QString kind = json.value(u"kind"_s).toString();
     const auto it = std::ranges::find(kinds, kind, kindName);
     if (it == std::end(kinds))
@@ -615,6 +665,10 @@ QJsonObject EventIntent::toJson() const
         o.insert(u"allDay"_s, *patch.times.allDay);
     if (patch.reminderMinutes)
         o.insert(u"reminderMinutes"_s, *patch.reminderMinutes);
+    if (kind == Kind::Answer) {
+        o.insert(u"answer"_s, answer ? answerName(*answer) : QString());
+        o.insert(u"addresses"_s, QJsonArray::fromStringList(addresses));
+    }
     return o;
 }
 
@@ -628,7 +682,7 @@ std::optional<EventIntent> EventIntent::fromJson(const QJsonObject &json)
         if (!i.instance)
             return std::nullopt;
     }
-    if (!readPatch(json, &i.patch))
+    if (!readPatch(json, &i.patch) || (i.kind == Kind::Answer && !readAnswer(json, &i)))
         return std::nullopt;
     return i;
 }
@@ -658,9 +712,11 @@ constexpr ProblemWords Problems[] = {
         {u"all_day_with_time", u"An all-day event has no times"},
         {u"unknown_rule", u"The recurrence is not understood"},
         {u"occurrence_rule", u"One occurrence has no recurrence of its own"},
+        {u"not_invited", u"The event does not invite this account"},
+        {u"no_answer", u"An answer needs accept, decline or tentative"},
 };
 
-static_assert(std::size(Problems) == std::size_t(EventProblem::OccurrenceRule) + 1, "one row per EventProblem");
+static_assert(std::size(Problems) == std::size_t(EventProblem::NoAnswer) + 1, "one row per EventProblem");
 
 const ProblemWords &wordsOf(EventProblem problem)
 {

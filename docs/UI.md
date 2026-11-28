@@ -7796,7 +7796,13 @@ Nextcloud app password (`<app data>/secrets/caldav-<account>`). A second device 
 * **An event** (`qml/planning/CalendarEventDialog.qml`, a click or right-click on an event): its
   title, when ("Fri, Nov 20, 14:00–15:30"), its calendar with the colour, "Read-only" for
   subscriptions and calendars without the write privilege, the series ("every week", or the rule as
-  written), the place, the description and "Open link". "Note in the journal" appends `- 14:00–15:30
+  written), the place, the description and "Open link". An invitation (an event with `ORGANIZER` /
+  `ATTENDEE`s) shows "Organized by …" and each person invited with their answer (Accepted, Declined,
+  Maybe, Delegated, No answer yet; the account's own in bold); when one of them is the account (its
+  addresses: `calendar-user-address-set`, kept when the account was added) and the calendar is
+  writable, "Your answer" — Accept / Maybe / Decline — sets that attendee's `PARTSTAT` for the whole
+  event or series (`WorkspaceCalendars.answerEvent`, an `EventIntent::Kind::Answer` in the outbox;
+  the server's scheduling, RFC 6638, sends the organizer the reply). "Note in the journal" appends `- 14:00–15:30
   Title (Calendar)` (with `location::`) to that day's journal. In a writable CalDAV calendar: "Edit"
   (title, all day, start and end — dates from an inline date picker, 24-hour times —, repeat: does
   not repeat / every day / every weekday / every week / every 2 weeks / every month / every year,

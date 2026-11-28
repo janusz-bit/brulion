@@ -38,6 +38,55 @@ bool holds(const caldav::CalendarEntry &c, const QString &component)
     return c.components.isEmpty() || c.components.contains(component);
 }
 
+/// The addresses invitations name the account of calendar `id` by (none for a subscription).
+QStringList addressesOf(const caldav::CalendarSettings &s, const QString &id)
+{
+    const caldav::CalendarEntry *c = s.calendar(id);
+    const caldav::Account *a = c ? s.account(c->account) : nullptr;
+    return a ? a->addresses : QStringList();
+}
+
+const QString &answerName(caldav::Participation p)
+{
+    static const QString names[] = {u"needs-action"_s, u"accepted"_s, u"declined"_s, u"tentative"_s, u"delegated"_s};
+    return names[int(p)];
+}
+
+/// "accepted", "declined", "tentative" as an answer (nullopt otherwise).
+std::optional<caldav::Participation> answerOf(const QString &name)
+{
+    for (const caldav::Participation p :
+         {caldav::Participation::Accepted, caldav::Participation::Declined, caldav::Participation::Tentative}) {
+        if (answerName(p) == name)
+            return p;
+    }
+    return std::nullopt;
+}
+
+/// The invitation of `e` as the event dialog shows it: organizer (its name, else its address),
+/// attendees [{name, address, answer, role, me}], myAnswer ("" when the account is not invited)
+/// and canAnswer (invited, the event writable).
+QVariantMap invitationDetails(const caldav::Event &e, const QStringList &mine, bool writable)
+{
+    QVariantList people;
+    QString myAnswer;
+    for (const caldav::Participant &a : e.attendees) {
+        const bool me = mine.contains(a.address);
+        if (me)
+            myAnswer = answerName(a.status);
+        people.append(QVariantMap{{u"name"_s, a.name.isEmpty() ? a.address : a.name},
+                                  {u"address"_s, a.address},
+                                  {u"answer"_s, answerName(a.status)},
+                                  {u"role"_s, a.role},
+                                  {u"me"_s, me}});
+    }
+    const caldav::Participant &o = e.organizer;
+    return QVariantMap{{u"organizer"_s, o.name.isEmpty() ? o.address : o.name},
+                       {u"attendees"_s, people},
+                       {u"myAnswer"_s, myAnswer},
+                       {u"canAnswer"_s, writable && !myAnswer.isEmpty()}};
+}
+
 /// The plain fields of `values` (QML's names) written into `sub`: name, color, refreshMinutes,
 /// alarms — not its address.
 void applySubscriptionValues(caldav::Subscription &sub, const QVariantMap &values)
@@ -641,7 +690,7 @@ QVariantMap WorkspaceCalendars::eventDetails(const QString &key) const
     const caldav::Event &e = data->events.at(fields->event);
     const caldav::EventEdit &f = fields->edit;
     const Owner owner = ownerOf(m_store->settings(), id);
-    return QVariantMap{
+    QVariantMap details{
             {u"key"_s, key},
             {u"calendarId"_s, id},
             {u"calendarName"_s, owner.name},
@@ -664,6 +713,23 @@ QVariantMap WorkspaceCalendars::eventDetails(const QString &key) const
             {u"reminderMinutes"_s, f.reminderMinutes},
             {u"instance"_s, parts.at(2)},
     };
+    details.insert(invitationDetails(e, addressesOf(m_store->settings(), id), details.value(u"canEdit"_s).toBool()));
+    return details;
+}
+
+bool WorkspaceCalendars::answerEvent(const QString &key, const QString &answer)
+{
+    const QStringList parts = key.split(KeySep);
+    const std::optional<caldav::Participation> value = answerOf(answer);
+    if (parts.size() != 3 || !m_sync || !value || !eventDetails(key).value(u"canAnswer"_s).toBool())
+        return false;
+    caldav::EventIntent intent;
+    intent.kind = caldav::EventIntent::Kind::Answer;
+    intent.calendarId = parts.at(0);
+    intent.uid = parts.at(1);
+    intent.answer = value;
+    intent.addresses = addressesOf(m_store->settings(), intent.calendarId);
+    return queueIntent(intent, false);
 }
 
 QString WorkspaceCalendars::whenText(const caldav::EventEdit &f) const

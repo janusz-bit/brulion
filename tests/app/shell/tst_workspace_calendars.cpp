@@ -237,6 +237,13 @@ void TestWorkspaceCalendars::accountTasksAndEvents()
                        vevent(u"standup"_s, u"DTSTART;TZID=Europe/Warsaw:20261116T093000\r\n"
                                             u"DTEND;TZID=Europe/Warsaw:20261116T094500\r\nRRULE:FREQ=DAILY;COUNT=10\r\n"
                                             u"SUMMARY:Stand-up\r\n"_s));
+    m_server.putMember(u"praca"_s, u"zaproszenie.ics"_s,
+                       vevent(u"zaproszenie"_s, u"DTSTART;TZID=Europe/Warsaw:20261126T150000\r\n"
+                                                u"DTEND;TZID=Europe/Warsaw:20261126T160000\r\nSUMMARY:Planowanie\r\n"
+                                                u"ORGANIZER;CN=Łucja Żółć:mailto:lucja@example.pl\r\n"
+                                                u"ATTENDEE;CN=Łucja Żółć;PARTSTAT=ACCEPTED;ROLE=CHAIR:mailto:lucja@example.pl\r\n"
+                                                u"ATTENDEE;CN=Jan;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:jan@example.pl\r\n"
+                                                u"ATTENDEE;PARTSTAT=DECLINED:mailto:ola@example.pl\r\n"_s));
     m_server.putMember(u"zakupy"_s, u"mleko.ics"_s, vtodo(u"mleko"_s, u"SUMMARY:Mleko\r\nDUE;VALUE=DATE:20261121\r\n"_s));
     // Discovery with a wrong password: said in words.
     QSignalSpy found(cal, &WorkspaceCalendars::discovered);
@@ -288,7 +295,7 @@ void TestWorkspaceCalendars::accountTasksAndEvents()
     QCOMPARE(pracaRow.value(u"kind"_s).toString(), u"caldav"_s);
     QVERIFY(pracaRow.value(u"holdsEvents"_s).toBool());
     QVERIFY(pracaRow.value(u"holdsTasks"_s).toBool()); // (it names no components: it holds both)
-    QCOMPARE(pracaRow.value(u"eventCount"_s).toInt(), 1);
+    QCOMPARE(pracaRow.value(u"eventCount"_s).toInt(), 2); // (the stand-up, the invitation)
     QCOMPARE(pracaRow.value(u"taskCount"_s).toInt(), 0);
     QCOMPARE(pracaRow.value(u"outbox"_s).toInt(), 0);
     QVERIFY(!pracaRow.value(u"cors"_s).toBool());
@@ -298,6 +305,33 @@ void TestWorkspaceCalendars::accountTasksAndEvents()
     QVERIFY(zakupyRow.value(u"holdsTasks"_s).toBool());
     QCOMPARE(zakupyRow.value(u"eventCount"_s).toInt(), 0);
     QCOMPARE(zakupyRow.value(u"taskCount"_s).toInt(), 1);
+    // An invitation: who organizes it and who is invited, with their answers; the account answers
+    // it (its attendee found by the account's addresses), shown at once and sent to the server.
+    const QList<planning::ExternalEvent> thursday = cal->eventsBetween(QDate(2026, 11, 26), QDate(2026, 11, 26));
+    const auto invitation = std::ranges::find(thursday, u"Planowanie"_s, &planning::ExternalEvent::title);
+    QVERIFY(invitation != thursday.end());
+    QVariantMap invited = cal->eventDetails(invitation->key);
+    QCOMPARE(invited.value(u"organizer"_s).toString(), u"Łucja Żółć"_s);
+    const QVariantList people = invited.value(u"attendees"_s).toList();
+    QCOMPARE(people.size(), 3);
+    QCOMPARE(people.at(0).toMap().value(u"name"_s).toString(), u"Łucja Żółć"_s);
+    QCOMPARE(people.at(0).toMap().value(u"answer"_s).toString(), u"accepted"_s);
+    QVERIFY(!people.at(0).toMap().value(u"me"_s).toBool());
+    QVERIFY(people.at(1).toMap().value(u"me"_s).toBool());
+    QCOMPARE(people.at(2).toMap().value(u"name"_s).toString(), u"ola@example.pl"_s); // (no CN: the address)
+    QCOMPARE(people.at(2).toMap().value(u"answer"_s).toString(), u"declined"_s);
+    QVERIFY(invited.value(u"canAnswer"_s).toBool());
+    QCOMPARE(invited.value(u"myAnswer"_s).toString(), u"needs-action"_s);
+    QVERIFY(!cal->answerEvent(invitation->key, u"może"_s));
+    QVERIFY(cal->answerEvent(invitation->key, u"accepted"_s));
+    QCOMPARE(cal->eventDetails(invitation->key).value(u"myAnswer"_s).toString(), u"accepted"_s);
+    waitIdle();
+    QTRY_VERIFY(m_server.member(u"praca"_s, u"zaproszenie.ics"_s)->data.contains("PARTSTAT=ACCEPTED:mailto:jan@example.pl"));
+    // An event without an invitation: nothing to answer.
+    const QVariantMap standupDetails = cal->eventDetails(cal->eventsBetween(QDate(2026, 11, 16), QDate(2026, 11, 16)).first().key);
+    QVERIFY(!standupDetails.value(u"canAnswer"_s).toBool());
+    QVERIFY(standupDetails.value(u"attendees"_s).toList().isEmpty());
+    QVERIFY(!cal->answerEvent(cal->eventsBetween(QDate(2026, 11, 16), QDate(2026, 11, 16)).first().key, u"accepted"_s));
     // The stand-up's occurrences, in its calendar's colour.
     QList<planning::ExternalEvent> week = cal->eventsBetween(QDate(2026, 11, 16), QDate(2026, 11, 22));
     QCOMPARE(week.size(), 7);

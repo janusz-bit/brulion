@@ -262,7 +262,8 @@ class TestCliProcess : public QObject {
         const QString dir = vault({{u"Notatka.md"_s, "- x\n"}});
         const QString folder = stateDirOf(dir) + u"/calendars"_s;
         const QJsonObject account{
-                {u"id"_s, u"a-1"_s}, {u"server"_s, u"https://dav.example.pl"_s}, {u"user"_s, u"jan"_s}};
+                {u"id"_s, u"a-1"_s}, {u"server"_s, u"https://dav.example.pl"_s}, {u"user"_s, u"jan"_s},
+                {u"addresses"_s, QJsonArray{u"jan@example.pl"_s}}};
         const auto calendar = [](const QString &id, const QString &name, const QString &path) {
             return QJsonObject{{u"id"_s, id},
                                {u"account"_s, u"a-1"_s},
@@ -310,6 +311,10 @@ class TestCliProcess : public QObject {
                 u"rada.ics"_s, u"rada"_s,
                 u"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:rada\r\nDTSTART:20261016T120000\r\n"
                 u"DTEND:20261016T133000\r\nSUMMARY:Rada pedagogiczna\r\nLOCATION:Pokój 12\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"_s);
+        resource(u"zaproszenie.ics"_s, u"zaproszenie"_s,
+                 u"BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:zaproszenie\r\nDTSTART:20270112T100000\r\n"
+                 u"SUMMARY:Planowanie roku\r\nORGANIZER;CN=Łucja:mailto:lucja@example.pl\r\n"
+                 u"ATTENDEE;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:jan@example.pl\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n"_s);
         writeFile(folder + u"/c-1.state.json"_s,
                   QJsonDocument(QJsonObject{{u"version"_s, 1}, {u"resources"_s, members}})
                           .toJson(QJsonDocument::Compact));
@@ -736,12 +741,28 @@ private Q_SLOTS:
                               u"2026-10-28T13:00 Obiad z Zosią i Kubą"_s, u"2026-11-04T13:00 Obiad z Zosią i Kubą"_s,
                               u"2026-11-11 Święto Niepodległości"_s, u"2026-11-11T13:00 Obiad z Zosią i Kubą"_s,
                               u"2026-11-18T13:00 Obiad z Zosią i Kubą"_s, u"2026-11-25T13:00 Obiad z Zosią i Kubą"_s}));
+        // An invitation answered (the server sends the organizer the reply): left for the app with
+        // the account's addresses; an event that does not invite the account refuses.
+        r = run(dir, {u"calendar"_s, u"answer"_s, u"zaproszenie"_s, u"accept"_s});
+        QVERIFY2(r.code == 0, qPrintable(r.describe()));
+        QCOMPARE(r.result().value(u"kind"_s).toString(), u"answer"_s);
+        QCOMPARE(r.result().value(u"answer"_s).toString(), u"accepted"_s);
+        inbox = inboxOf(dir);
+        QCOMPARE(inbox.last().value(u"kind"_s).toString(), u"answer"_s);
+        QCOMPARE(inbox.last().value(u"addresses"_s).toArray(), QJsonArray{u"jan@example.pl"_s});
+        r = run(dir, {u"calendar"_s, u"answer"_s, u"stand"_s, u"decline"_s});
+        QVERIFY(r.code != 0);
+        QCOMPARE(r.json.value(u"error"_s).toObject().value(u"details"_s).toObject().value(u"reason"_s).toString(),
+                 u"not_invited"_s);
+        r = run(dir, {u"calendar"_s, u"answer"_s, u"zaproszenie"_s, u"później"_s});
+        QVERIFY(r.code != 0);
+        QCOMPARE(inboxOf(dir).size(), inbox.size()); // (nothing left for the app)
         // A dry run leaves nothing; --read-only refuses.
         r = run(dir, {u"--dry-run"_s, u"calendar"_s, u"add"_s, u"Próba"_s, u"--start"_s, u"jutro 9:00"_s});
         QVERIFY2(r.code == 0, qPrintable(r.describe()));
         QCOMPARE(r.result().value(u"queued"_s).toBool(true), false);
         QCOMPARE(r.result().value(u"event"_s).toObject().value(u"start"_s).toString(), u"2026-10-15T09:00"_s);
-        QCOMPARE(inboxOf(dir).size(), 7);
+        QCOMPARE(inboxOf(dir).size(), 8);
         r = run(dir, {u"--read-only"_s, u"calendar"_s, u"add"_s, u"Próba"_s, u"--start"_s, u"jutro"_s});
         QCOMPARE(r.code, 7);
         // Text for people.
@@ -754,7 +775,7 @@ private Q_SLOTS:
         r = run(dir, {u"--format"_s, u"text"_s, u"--dry-run"_s, u"calendar"_s, u"add"_s, u"Wigilia"_s, u"--start"_s,
                       u"2026-12-24"_s});
         QVERIFY2(r.out.contains("Praca: “Wigilia” 2026-12-24\n"), r.out.constData());
-        QCOMPARE(inboxOf(dir).size(), 7);
+        QCOMPARE(inboxOf(dir).size(), 8);
         // The app's notebook (no app running): it takes the change when it opens it.
         {
             QSettings settings(settingsFile(), QSettings::IniFormat);

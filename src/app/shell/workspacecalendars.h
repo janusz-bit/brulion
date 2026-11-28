@@ -209,6 +209,10 @@ public:
     Q_INVOKABLE bool saveEvent(const QVariantMap &values);
     /// Delete an event, or only this occurrence of its series.
     Q_INVOKABLE bool deleteEvent(const QString &key, bool thisOccurrenceOnly);
+    /// Answer an invitation of the account: "accepted", "declined" or "tentative" (the whole
+    /// event or series; the server sends the organizer the reply). False when the event invites
+    /// no address of the account (eventDetails' canAnswer) or the answer is none of those.
+    Q_INVOKABLE bool answerEvent(const QString &key, const QString &answer);
     /// The journal's line about an event ("- 10:00–11:00 Zebranie (Praca)").
     Q_INVOKABLE QString journalLine(const QString &key) const;
 

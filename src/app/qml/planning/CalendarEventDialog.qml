@@ -9,7 +9,9 @@ import Brulion
 // journal: journalRequested()). An event of a CalDAV calendar Brulion may write also has "Edit"
 // (the form: title, all day, start and end, repeat, reminder, place, description; a series asks
 // whether the change is for this event or all of them) and "Delete" (a series: this one or all).
-// "New event" (openNew()) starts with the form in a calendar picked from the writable ones.
+// "New event" (openNew()) starts with the form in a calendar picked from the writable ones. An
+// invitation shows its organizer and the people invited with their answers; the account's own
+// answer (Accept / Maybe / Decline) is sent with the next sync (answerEvent()).
 // Subscriptions are read-only: the details only.
 //
 //   CalendarEventDialog { id: eventDialog; onJournalRequested: (date, line) => …; onMessage: (text, kind) => … }
@@ -34,6 +36,10 @@ BDialog {
     property string detailRuleText
     property bool recurring: false
     property bool canEdit: false
+    property string detailOrganizer
+    property list<var> detailAttendees: []
+    property string myAnswer
+    property bool canAnswer: false
     property string detailDate
     // The form.
     property string calendarId
@@ -72,6 +78,32 @@ BDialog {
         case 1440: return qsTr("1 day before")
         }
         return qsTr("%n minute(s) before", "", minutes)
+    }
+
+    function answerName(answer: string): string {
+        switch (answer) {
+        case "accepted": return qsTr("Accepted")
+        case "declined": return qsTr("Declined")
+        case "tentative": return qsTr("Maybe")
+        case "delegated": return qsTr("Delegated")
+        }
+        return qsTr("No answer yet")
+    }
+    function answerVariant(answer: string): string {
+        switch (answer) {
+        case "accepted": return "success"
+        case "declined": return "danger"
+        }
+        return "neutral"
+    }
+    function answer(value: string): void {
+        if (!control.calendars.answerEvent(control.key, value)) {
+            control.message(qsTr("The answer could not be saved."), "error")
+            return
+        }
+        holder.map = control.calendars.eventDetails(control.key)
+        fillFromDetails()
+        control.message(qsTr("Your answer goes to the organizer with the next sync."), "success")
     }
 
     function openFor(eventKey: string): void {
@@ -124,6 +156,10 @@ BDialog {
         detailDate = AppController.routeText(holder.map, "startDate")
         recurring = AppController.routeFlag(holder.map, "recurring")
         canEdit = AppController.routeFlag(holder.map, "canEdit")
+        detailOrganizer = AppController.routeText(holder.map, "organizer")
+        detailAttendees = AppController.routeList(holder.map, "attendees")
+        myAnswer = AppController.routeText(holder.map, "myAnswer")
+        canAnswer = AppController.routeFlag(holder.map, "canAnswer")
         calendarId = AppController.routeText(holder.map, "calendarId")
         startDate = AppController.routeText(holder.map, "startDate")
         endDate = AppController.routeText(holder.map, "endDate")
@@ -288,6 +324,54 @@ BDialog {
                 Layout.fillWidth: true
                 text: control.detailLocation
                 wrapMode: Text.Wrap
+            }
+        }
+        RowLayout {
+            Layout.fillWidth: true
+            visible: control.detailOrganizer !== ""
+            spacing: Theme.space2
+            BIcon { Layout.alignment: Qt.AlignTop; name: "user"; size: Theme.iconSizeSm; color: Theme.fgMuted }
+            BText {
+                Layout.fillWidth: true
+                text: qsTr("Organized by %1").arg(control.detailOrganizer)
+                variant: "small"
+                wrapMode: Text.Wrap
+            }
+        }
+        Repeater {
+            model: control.detailAttendees
+            delegate: RowLayout {
+                id: attendeeRow
+                required property var modelData
+                Layout.fillWidth: true
+                spacing: Theme.space2
+                BText {
+                    Layout.fillWidth: true
+                    text: AppController.routeText(attendeeRow.modelData, "name")
+                    variant: "small"
+                    elide: Text.ElideRight
+                    font.weight: AppController.routeFlag(attendeeRow.modelData, "me") ? Font.DemiBold : Font.Normal
+                }
+                BBadge {
+                    text: control.answerName(AppController.routeText(attendeeRow.modelData, "answer"))
+                    variant: control.answerVariant(AppController.routeText(attendeeRow.modelData, "answer"))
+                }
+            }
+        }
+        RowLayout {
+            Layout.fillWidth: true
+            visible: control.canAnswer
+            spacing: Theme.space2
+            BText { text: qsTr("Your answer"); variant: "label" }
+            BSegmented {
+                objectName: "calendarEventAnswer"
+                Layout.fillWidth: true
+                size: "small"
+                model: [{ value: "accepted", text: qsTr("Accept") }, { value: "tentative", text: qsTr("Maybe") },
+                        { value: "declined", text: qsTr("Decline") }]
+                currentValue: control.myAnswer
+                accessibleName: qsTr("Your answer to the invitation")
+                onActivated: (value) => control.answer("" + value)
             }
         }
         BText {

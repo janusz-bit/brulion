@@ -283,7 +283,7 @@
 <context>
     <name>CalendarEventDialog</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/planning/CalendarEventDialog.qml" line="74"/>
+        <location filename="../src/app/qml/planning/CalendarEventDialog.qml" line="80"/>
         <source>%n minute(s) before</source>
         <translation>
             <numerusform>%n minute before</numerusform>
@@ -336,7 +336,7 @@
 <context>
     <name>CanvasCard</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/canvas/CanvasCard.qml" line="307"/>
+        <location filename="../src/app/qml/canvas/CanvasCard.qml" line="309"/>
         <source>%1 · %n page(s)</source>
         <translation>
             <numerusform>%1 · %n page</numerusform>
@@ -738,7 +738,7 @@
     <name>ContentPdfView</name>
     <message numerus="yes">
         <location filename="../src/app/qml/content/ContentPdfView.qml" line="1531"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="4270"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="4284"/>
         <source>%n page(s)</source>
         <translation>
             <numerusform>%n page</numerusform>
@@ -819,7 +819,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/DatabaseView.qml" line="1423"/>
+        <location filename="../src/app/qml/editor/DatabaseView.qml" line="1424"/>
         <source>%1: %n page(s)</source>
         <translation>
             <numerusform>%1: %n page</numerusform>
@@ -2143,7 +2143,7 @@
     <name>ShellShareDialog</name>
     <message numerus="yes">
         <location filename="../src/app/qml/shell/ShellShareDialog.qml" line="35"/>
-        <location filename="../src/app/shell/shellselftest.cpp" line="10183"/>
+        <location filename="../src/app/shell/shellselftest.cpp" line="10197"/>
         <source>%n file(s) to save in the notebook</source>
         <translation>
             <numerusform>%n file to save in the notebook</numerusform>
@@ -2203,9 +2203,9 @@
 <context>
     <name>SyncConflictResolver</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="298"/>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="307"/>
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="320"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="299"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="308"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="321"/>
         <source>%n element(s)</source>
         <translation>
             <numerusform>%n element</numerusform>
@@ -2213,7 +2213,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="563"/>
+        <location filename="../src/app/qml/io/SyncConflictResolver.qml" line="564"/>
         <source>Changes made on one side only are merged already. Decide the %n place(s) changed on both sides.</source>
         <translation>
             <numerusform>Changes made on one side only are merged already. Decide the %n place changed on both sides.</numerusform>
@@ -3093,7 +3093,7 @@
 <context>
     <name>brulion::shell::WorkspaceCalendars</name>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="1364"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="1465"/>
         <source>Updated: %n event(s)</source>
         <translation>
             <numerusform>Updated: %n event</numerusform>
@@ -3101,7 +3101,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacecalendars.cpp" line="1381"/>
+        <location filename="../src/app/shell/workspacecalendars.cpp" line="1482"/>
         <source>%n deletion(s) wait for a confirmation: %1</source>
         <translation>
             <numerusform>%n deletion waits for a confirmation: %1</numerusform>

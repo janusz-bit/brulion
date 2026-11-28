@@ -10,6 +10,7 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
 #include <QJsonDocument>
 #include <QRegularExpression>
 #include <QTemporaryDir>
@@ -190,6 +191,7 @@ private Q_SLOTS:
     void writable();
     void invitationAnswered_data();
     void invitationAnswered();
+    void answerIntent();
     void outbox();
     void pendingOverlay();
     void instances_data();
@@ -1134,6 +1136,80 @@ void TestCalDavEventChange::invitationAnswered()
     QVERIFY(answerInvitation(ics, u"nie-ma"_s, me, Participation::Accepted, context()).isEmpty());
     QVERIFY(answerInvitation(ics, u"zaproszenie"_s, {}, Participation::Accepted, context()).isEmpty());
     QVERIFY(answerInvitation(ics, u"zaproszenie"_s, me, Participation::NeedsAction, context()).isEmpty());
+}
+
+void TestCalDavEventChange::answerIntent()
+{
+    // An answer to an invitation as an intent (the app's dialog, brulion-cli): the event changed
+    // with the account's attendee answering, shown at once; refused when the account is not
+    // invited or no answer is given. Kept as JSON with its answer and the account's addresses.
+    CalendarState state = praca();
+    state.resources.insert(Home + u"zaproszenie.ics"_s,
+                           Resource{u"\"7\""_s, u"zaproszenie"_s, u"VEVENT"_s,
+                                    ics(vevent(u"zaproszenie"_s,
+                                               u"DTSTART;TZID=Europe/Warsaw:20261124T100000\r\nSUMMARY:Planowanie\r\n"
+                                               u"ORGANIZER;CN=Łucja:mailto:lucja@example.pl\r\n"
+                                               u"ATTENDEE;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:jan@example.pl\r\n"_s))});
+    EventIntent i = intent(EventIntent::Kind::Answer, u"zaproszenie"_s);
+    i.answer = Participation::Declined;
+    i.addresses = {u"jan@example.pl"_s};
+    EventProblem problem = EventProblem::None;
+    auto change = plannedChange(pracaEntry(), state, i, context(), &problem);
+    QVERIFY2(change, qPrintable(problemCode(problem)));
+    QCOMPARE(change->kind, EventChange::Kind::Update);
+    QCOMPARE(change->path, Home + u"zaproszenie.ics"_s);
+    addToOutbox(state, *change);
+    QCOMPARE(state.outbox.last().ifMatch, u"\"7\""_s);
+    const CalendarData shownData = eventsOf(state);
+    const auto e = std::ranges::find(shownData.events, u"zaproszenie"_s, &Event::uid);
+    QVERIFY(e != shownData.events.end());
+    QCOMPARE(e->attendees.first().status, Participation::Declined);
+    // Not invited; no answer; an event that is none.
+    i.addresses = {u"ktos@example.pl"_s};
+    QVERIFY(!plannedChange(pracaEntry(), state, i, context(), &problem));
+    QCOMPARE(problem, EventProblem::NotInvited);
+    QCOMPARE(problemCode(problem), u"not_invited"_s);
+    i.addresses = {u"jan@example.pl"_s};
+    i.answer.reset();
+    QVERIFY(!plannedChange(pracaEntry(), state, i, context(), &problem));
+    QCOMPARE(problem, EventProblem::NoAnswer);
+    i.answer = Participation::Accepted;
+    i.uid = u"nie-ma"_s;
+    QVERIFY(!plannedChange(pracaEntry(), state, i, context(), &problem));
+    QCOMPARE(problem, EventProblem::NotFound);
+    // JSON both ways; a broken answer is no intent.
+    i.uid = u"zaproszenie"_s;
+    i.answer = Participation::Tentative;
+    const QJsonObject json = i.toJson();
+    QCOMPARE(json.value(u"kind"_s).toString(), u"answer"_s);
+    QCOMPARE(json.value(u"answer"_s).toString(), u"tentative"_s);
+    const auto back = EventIntent::fromJson(json);
+    QVERIFY(back);
+    QCOMPARE(back->kind, EventIntent::Kind::Answer);
+    QCOMPARE(back->answer, std::optional(Participation::Tentative));
+    QCOMPARE(back->addresses, i.addresses);
+    for (const QJsonValue &bad : {QJsonValue(u"maybe"_s), QJsonValue(u"needs-action"_s), QJsonValue(3)}) {
+        QJsonObject broken = json;
+        broken.insert(u"answer"_s, bad);
+        QVERIFY(!EventIntent::fromJson(broken));
+    }
+    QJsonObject withoutAnswer = json;
+    withoutAnswer.remove(u"answer"_s);
+    QVERIFY(!EventIntent::fromJson(withoutAnswer));
+    QJsonObject manyAddresses = json;
+    QJsonArray list;
+    for (int n = 0; n < MaxAnswerAddresses; ++n)
+        list.append(u"a%1@example.pl"_s.arg(n));
+    manyAddresses.insert(u"addresses"_s, list);
+    QCOMPARE(EventIntent::fromJson(manyAddresses)->addresses.size(), MaxAnswerAddresses); // (at the limit)
+    list.append(u"jeszcze@example.pl"_s);
+    manyAddresses.insert(u"addresses"_s, list);
+    QVERIFY(!EventIntent::fromJson(manyAddresses));
+    for (const QJsonValue &bad : {QJsonValue(7), QJsonValue(QString(MaxAddressLength + 1, u'ż'))}) {
+        QJsonObject broken = json;
+        broken.insert(u"addresses"_s, QJsonArray{u"jan@example.pl"_s, bad});
+        QVERIFY(!EventIntent::fromJson(broken));
+    }
 }
 
 QTEST_GUILESS_MAIN(TestCalDavEventChange)

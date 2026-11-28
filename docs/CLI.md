@@ -266,6 +266,7 @@ Never compute a hash yourself.
 | `calendar add <title>` | `--start D [--end D] [--all-day] [--calendar C] [--location L] [--description T \| --stdin] [--every R] [--reminder M]` | a new event in a CalDAV calendar, left for the app ("Calendar events" below): `{queued, id, kind, calendar, calendarId, uid, event {title, start, end, allDay, location?, description?, rule?, reminderMinutes?}, app {running, sameNotebook}}`; `--start` a day (all-day) or a day and time, `--end` a time (`14:30`), a day and time or (all-day) the last day — by default an hour, or its one day; `--reminder 15`, `1h`, `1d`; `--calendar` may be left out when one calendar takes events | yes |
 | `calendar edit <uid>` | `[--occurrence O] [--title T] [--start D] [--end D] [--all-day \| --timed] [--calendar C] [--location L] [--description T \| --stdin] [--every R\|none] [--reminder M\|none]` | change an event: only what is given (`--start` a day keeps its time and length, a time alone `10:00` its day; `""` removes a place or a description); the whole series, or one occurrence with `--occurrence` (its `instance` from `calendar events`, or the day — and time — it starts); the same answer as `calendar add` | yes |
 | `calendar delete <uid>` | `[--occurrence O] [--calendar C]` | delete an event (a whole series), or one occurrence left out of its series (`EXDATE`): `{queued, id, kind, calendar, calendarId, uid, instance?, app}` | destructive |
+| `calendar answer <uid> <answer>` | `[--calendar C]` | answer an invitation — `accept`, `decline` or `tentative` (`tak`, `nie`, `może`) — for the whole event or series: the account's `ATTENDEE` gets that `PARTSTAT` and the server (RFC 6638 scheduling) sends the organizer the reply: `{queued, id, kind: answer, answer, calendar, calendarId, uid, app}`; `not_invited` when no attendee is one of the account's addresses | writes |
 | `card list` | `[--deck D] [--limit N] [--tags T] [--new-per-day N] [--retention P]` | the flashcards (docs/SYNTAX.md §15): `{cards: [{id, kind, sibling, siblings, page, path, line, decks, folder, question, answer, context, ref, memory: {state, due?, interval?, stability?, difficulty?, lastReview?, retrievability?, reps, lapses}}], counts: {due, review, learningDue, new, newTotal, learning, total}, now}`; `--deck tag:flashcards/hiszpański`, `page:Name`, `folder:Path` | |
 | `card due` | `card list`'s options | what a session asks now, in its order: learning cards whose step is over, reviews due today, new cards up to the day's limit | |
 | `card show <id>` | `card list`'s options | one card, and `next`: what each grade would schedule `{Again: {due, interval}, …}` | |
@@ -611,14 +612,17 @@ that relays reminders (e.g. to a chat) keeps its own "already sent" state.
 left them; nothing is fetched. `calendar add`, `calendar edit` and `calendar delete` change an
 event of a CalDAV calendar — the whole event (a series), or with `--occurrence` one occurrence of
 it (an exception with its `RECURRENCE-ID`, or an `EXDATE` when deleted), as the app's event dialog
-does. The tools of the MCP server: `brulion_calendar_add`, `brulion_calendar_edit` and (with
-`--allow-destructive`) `brulion_calendar_delete`, each with `dryRun`.
+does; `calendar answer` answers an invitation the account got (the addresses the account's
+principal names in `calendar-user-address-set`, kept when it was added, find its attendee). The tools of the MCP server: `brulion_calendar_add`, `brulion_calendar_edit`,
+`brulion_calendar_answer` and (with `--allow-destructive`) `brulion_calendar_delete`, each with
+`dryRun`.
 
 ```
 brulion-cli calendar add "Obiad z Zosią" --start "w piątek 13:00" --end 14:30 --location Kraków --reminder 15
 brulion-cli calendar edit brulion-event-k3j9… --start 2026-12-04      # moved: its time and length kept
 brulion-cli calendar edit stand --occurrence 2026-12-02 --start 10:00  # that one only
 brulion-cli --allow-destructive calendar delete stand --occurrence 20261209T093000@Europe/Warsaw
+brulion-cli calendar answer zaproszenie-od-lucji accept
 ```
 
 * **The writer.** The app is the one writer of the calendars' state: its `CalendarStore` keeps every

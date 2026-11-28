@@ -54,9 +54,13 @@ struct EventPatch {
     friend bool operator==(const EventPatch &, const EventPatch &) = default;
 };
 
-/// An event to create, change or delete in a CalDAV calendar.
+/// The addresses an answer intent carries at most.
+inline constexpr int MaxAnswerAddresses = 100;
+
+/// An event to create, change or delete in a CalDAV calendar, or the account's answer to an
+/// invitation.
 struct EventIntent {
-    enum class Kind { Create, Change, Delete };
+    enum class Kind { Create, Change, Delete, Answer };
     Kind kind = Kind::Change;
     QString id; ///< its inbox file's name (newIntentId())
     QString calendarId;
@@ -65,6 +69,11 @@ struct EventIntent {
     /// event.
     std::optional<io::ical::DateTimeValue> instance;
     EventPatch patch;
+    /// Answer: the account's answer to the invitation (Accepted, Declined, Tentative), for the
+    /// whole event (a series: every occurrence) — answerInvitation().
+    std::optional<Participation> answer;
+    /// Answer: how invitations name the account (Account::addresses; at most 100).
+    QStringList addresses;
     QDateTime at; ///< when it was asked: the newer change wins a conflict
 
     QJsonObject toJson() const;
@@ -89,6 +98,8 @@ enum class EventProblem {
     AllDayWithTime, ///< all-day, yet a time given
     UnknownRule,    ///< the recurrence is not understood
     OccurrenceRule, ///< one occurrence has no recurrence of its own
+    NotInvited,     ///< an answer, yet the event does not invite the account
+    NoAnswer,       ///< an answer without one
 };
 
 /// "no_calendar", "subscription", "read_only", "end_before_start" …: stable (the `reason` of

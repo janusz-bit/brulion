@@ -263,6 +263,7 @@ private Q_SLOTS:
                                "calendar.add",
                                "calendar.edit",
                                "calendar.delete",
+                               "calendar.answer",
                                "date.parse",
                                "calc",
                                "calc.page",
