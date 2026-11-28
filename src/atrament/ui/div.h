@@ -204,9 +204,34 @@ private:
         MouseDownEvent down;
         bool hovered = false;
     };
+    // A scroll view's thumbs and their drag with the mouse, kept across frames: where each thumb
+    // was painted (none: no thumb on that axis), and the drag going on (axis −1: none).
+    // A scroll bar's thumb: where it is painted, and the content px scrolled per px it moves (0
+    // when it is as long as its track).
+    struct Thumb {
+        Rect rect;
+        float offsetPerPx = 0;
+    };
+    static std::optional<Thumb> thumbOn(int axis, Rect inner, const ScrollState &st);
+    struct ThumbDrag {
+        std::optional<Thumb> thumbs[2]; // x, y: this frame's
+        int axis = -1; // the thumb dragged, -1: none
+        float startPointer = 0;
+        float startOffset = 0;
+        float offsetPerPx = 0;
+        // A press at `p` on a thumb starts its drag; the pointer at `p` scrolls (whether it moved).
+        bool press(Point p, const ScrollState &st);
+        bool move(Point p, ScrollState &st) const;
+        // A mouse event while the view is shown: not the drag's, taken, taken and scrolled.
+        enum class Outcome { NotTaken, Taken, Scrolled };
+        Outcome handle(const PlatformInput &input, ScrollState &st);
+    };
     bool isScrollable() const;
     bool needsHitbox() const;
     void paintScrollbars(Rect bounds, Window &window);
+    void registerThumbDrag(Window &window);
+    Point prepaintScroll(Rect bounds, Window &window);
+    void prepaintChildren(Rect bounds, Point scroll, Window &window, App &app);
     void registerMouseListeners(Window &window);
     void registerKeyListeners(Window &window);
     std::u16string_view arenaString(std::u16string_view s);
@@ -246,6 +271,7 @@ private:
     HitboxId m_hitbox = 0;
     InteractState *m_state = nullptr;
     ScrollState *m_scrollState = nullptr;
+    ThumbDrag *m_thumbDrag = nullptr;
 };
 
 inline Div div()

@@ -421,19 +421,14 @@ void Div::prepaint(Rect bounds, Window &window, App &app)
     if (needsHitbox())
         m_hitbox = window.insertHitbox(bounds, m_blockMouse ? HitboxBehavior::BlockMouse : HitboxBehavior::Normal);
 
-    Point scroll;
-    if (isScrollable()) {
-        ScrollState &st = m_scrollHandle ? *m_scrollHandle : window.elementState<ScrollState>();
-        m_scrollState = &st;
-        const Rect inner = bounds.inset(m_style.layout.border);
-        st.viewport = inner.size;
-        st.content = window.nodeLayout(m_layout).contentSize;
-        st.scrollBy({});
-        if (m_style.layout.overflowX == Overflow::Scroll)
-            scroll.x = st.offset.x;
-        if (m_style.layout.overflowY == Overflow::Scroll)
-            scroll.y = st.offset.y;
-    }
+    const Point scroll = isScrollable() ? prepaintScroll(bounds, window) : Point{};
+    prepaintChildren(bounds, scroll, window, app);
+}
+
+// The children in the frame's state this element sets: its content mask, its text style, its
+// scroll's offset and frame.
+void Div::prepaintChildren(Rect bounds, Point scroll, Window &window, App &app)
+{
     const bool clip = m_style.layout.overflowX != Overflow::Visible || m_style.layout.overflowY != Overflow::Visible;
     if (clip)
         window.pushContentMask(bounds.inset(m_style.layout.border));
@@ -455,6 +450,20 @@ void Div::prepaint(Rect bounds, Window &window, App &app)
         window.popTextStyle();
     if (clip)
         window.popContentMask();
+}
+
+// The scroll view's state for this frame (its viewport, content, offset clamped): how far its
+// content is moved.
+Point Div::prepaintScroll(Rect bounds, Window &window)
+{
+    ScrollState &st = m_scrollHandle ? *m_scrollHandle : window.elementState<ScrollState>();
+    m_scrollState = &st;
+    m_thumbDrag = &window.elementState<ThumbDrag>();
+    st.viewport = bounds.inset(m_style.layout.border).size;
+    st.content = window.nodeLayout(m_layout).contentSize;
+    st.scrollBy({});
+    return {m_style.layout.overflowX == Overflow::Scroll ? st.offset.x : 0,
+            m_style.layout.overflowY == Overflow::Scroll ? st.offset.y : 0};
 }
 
 void Div::paint(Rect bounds, Window &window, App &app)
@@ -508,29 +517,120 @@ void Div::paint(Rect bounds, Window &window, App &app)
         window.popOpacity();
 }
 
-void Div::paintScrollbars(Rect bounds, Window &window)
+namespace {
+
+// A point's coordinate along an axis (0: x, 1: y), and a point with only that one.
+float coord(Point p, int axis)
 {
-    const ScrollState &st = *m_scrollState;
-    const Rect inner = bounds.inset(m_style.layout.border);
-    const Color thumb = rgba(0x8080808c);
+    return axis == 0 ? p.x : p.y;
+}
+
+Point pointAlong(int axis, float v)
+{
+    return axis == 0 ? Point{v, 0} : Point{0, v};
+}
+
+// One axis of a scroll view: the view's and the content's length, the box's, the offset and its
+// largest value.
+struct Along {
+    float view, content, box, offset, max;
+};
+
+Along along(int axis, Rect inner, const ScrollState &st)
+{
+    if (axis == 0)
+        return {st.viewport.width, st.content.width, inner.width(), st.offset.x, st.maxOffset().x};
+    return {st.viewport.height, st.content.height, inner.height(), st.offset.y, st.maxOffset().y};
+}
+
+} // namespace
+
+// A thumb along one axis of a scroll view's padding box `inner`: 6 px thick, 2 px in from the
+// edges, as long as the view's share of the content (24 px at least, the track at most), placed by
+// the offset; none when the content fits.
+std::optional<Div::Thumb> Div::thumbOn(int axis, Rect inner, const ScrollState &st)
+{
     constexpr float thickness = 6;
     constexpr float inset = 2;
-    if (m_style.layout.overflowY == Overflow::Scroll && st.content.height > st.viewport.height + 0.5f) {
-        const float track = inner.height() - 2 * inset;
-        const float h = std::max(24.0f, track * st.viewport.height / st.content.height);
-        const float max = st.maxOffset().y;
-        const float y = inner.top() + inset + (max > 0 ? (track - h) * st.offset.y / max : 0);
-        window.paintQuad(Rect::fromXYWH(inner.right() - thickness - inset, y, thickness, h), Background::solid(thumb),
-                {}, transparent(), Corners::all(thickness / 2));
+    const Along a = along(axis, inner, st);
+    if (a.content <= a.view + 0.5f)
+        return std::nullopt;
+    const float track = a.box - 2 * inset;
+    const float length = std::min(track, std::max(24.0f, track * a.view / a.content));
+    const float free = track - length;
+    const float at = inset + free * a.offset / a.max; // max > 0.5: the content does not fit
+    const float perPx = free > 0 ? a.max / free : 0;
+    if (axis == 0)
+        return Thumb{Rect::fromXYWH(inner.left() + at, inner.bottom() - thickness - inset, length, thickness), perPx};
+    return Thumb{Rect::fromXYWH(inner.right() - thickness - inset, inner.top() + at, thickness, length), perPx};
+}
+
+void Div::paintScrollbars(Rect bounds, Window &window)
+{
+    const Rect inner = bounds.inset(m_style.layout.border);
+    const bool scrolls[] = {m_style.layout.overflowX == Overflow::Scroll, m_style.layout.overflowY == Overflow::Scroll};
+    for (int axis : {0, 1}) {
+        std::optional<Thumb> &thumb = m_thumbDrag->thumbs[axis];
+        thumb = scrolls[axis] ? thumbOn(axis, inner, *m_scrollState) : std::nullopt;
+        if (thumb) // (round ends)
+            window.paintQuad(thumb->rect, Background::solid(rgba(0x8080808c)), {}, transparent(),
+                             Corners::all(std::min(thumb->rect.width(), thumb->rect.height()) / 2));
     }
-    if (m_style.layout.overflowX == Overflow::Scroll && st.content.width > st.viewport.width + 0.5f) {
-        const float track = inner.width() - 2 * inset;
-        const float w = std::max(24.0f, track * st.viewport.width / st.content.width);
-        const float max = st.maxOffset().x;
-        const float x = inner.left() + inset + (max > 0 ? (track - w) * st.offset.x / max : 0);
-        window.paintQuad(Rect::fromXYWH(x, inner.bottom() - thickness - inset, w, thickness), Background::solid(thumb),
-                {}, transparent(), Corners::all(thickness / 2));
+    registerThumbDrag(window);
+}
+
+bool Div::ThumbDrag::press(Point p, const ScrollState &st)
+{
+    for (int a : {0, 1}) {
+        if (thumbs[a] && thumbs[a]->rect.contains(p)) {
+            axis = a;
+            startPointer = coord(p, a);
+            startOffset = coord(st.offset, a);
+            offsetPerPx = thumbs[a]->offsetPerPx;
+            return true;
+        }
     }
+    return false;
+}
+
+bool Div::ThumbDrag::move(Point p, ScrollState &st) const
+{
+    const float target = startOffset + (coord(p, axis) - startPointer) * offsetPerPx;
+    return st.scrollBy(pointAlong(axis, target - coord(st.offset, axis)));
+}
+
+// A press on a thumb and the mouse's moves scroll by as much as the thumb moves along its track,
+// the content getting none of them; the release ends it.
+void Div::registerThumbDrag(Window &window)
+{
+    ThumbDrag *drag = m_thumbDrag;
+    ScrollState *st = m_scrollState;
+    window.onMouseEvent([drag, st](const PlatformInput &input, DispatchPhase phase, Window &w, App &) {
+        if (phase != DispatchPhase::Capture)
+            return;
+        const ThumbDrag::Outcome outcome = drag->handle(input, *st);
+        if (outcome == ThumbDrag::Outcome::Scrolled)
+            w.refresh();
+        if (outcome != ThumbDrag::Outcome::NotTaken)
+            w.stopPropagation();
+    });
+}
+
+Div::ThumbDrag::Outcome Div::ThumbDrag::handle(const PlatformInput &input, ScrollState &st)
+{
+    if (const auto *down = std::get_if<MouseDownEvent>(&input)) {
+        const bool mouse = down->button == MouseButton::Left && down->pointer == PointerKind::Mouse;
+        return mouse && press(down->position, st) ? Outcome::Taken : Outcome::NotTaken;
+    }
+    if (axis < 0)
+        return Outcome::NotTaken;
+    if (const auto *m = std::get_if<MouseMoveEvent>(&input))
+        return move(m->position, st) ? Outcome::Scrolled : Outcome::Taken;
+    if (std::holds_alternative<MouseUpEvent>(input)) {
+        axis = -1;
+        return Outcome::Taken;
+    }
+    return Outcome::NotTaken;
 }
 
 void Div::registerMouseListeners(Window &window)

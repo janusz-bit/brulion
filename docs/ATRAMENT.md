@@ -157,6 +157,15 @@ public:
 `entity.update(app, fn)` mutates it, `cx.notify()` marks the windows that drew it for a frame.
 `cx.listener(fn)` turns a member-style callback into a listener that holds a weak handle.
 
+A div with `overflowXScroll()` / `overflowYScroll()` is a scroll view: the wheel scrolls it (an
+inner one at its end lets the wheel go on to the one around it), and it paints a thumb along each
+axis whose content does not fit — 6 px thick, 2 px in from the edges, as long as the view's share
+of the content (24 px at least, the track at most), placed by the offset. A press of the left
+mouse button on a thumb drags it: the content scrolls by as much as the thumb moves along its
+track, from where it was, the other axis left alone; the content gets neither the press nor a
+click, the release ends it, and the wheel still scrolls meanwhile (`Div::ThumbDrag`,
+`tests/atrament/ui/tst_atrament_scrollbars`). A thumb as long as its track cannot be dragged.
+
 ### Text
 
 * `FontCollection`: faces registered from bytes (bundled fonts) or files; families by name with
@@ -1295,8 +1304,9 @@ scrolling, `tst_atrament_editor`) before the next:
      column instead of being the app's Back and Forward (the page's ShortcutOverride while
      `AtramentView.editTableRow` is a row). The tools are `PageView::nextCell`, `undoInCell`,
      `closeCell`, `onCellEditingChanged`.
-   **Not yet** for tables: tooltips (a formula's error, a truncated cell's text, link previews),
-   dragging the sideways scroll bar (Atrament draws none).
+   A wide table's sideways scroll bar is dragged with the mouse as any Atrament scroll view's
+   ("Views and entities"). **Not yet** for tables: tooltips (a formula's error, a truncated
+   cell's text, link previews).
    **Pictures, files, embedded blocks and query results** (2026-11-27; `PageView::setDrawsMedia`,
    `src/app/editor/atrament/mediarows.cpp`, `queryrows.cpp`, `picturecache.h`; `AtramentView.
    drawsPictures` / `drawsFiles` / `drawsTransclusions` / `drawsQueries`, all on, and `mediaLook`).
