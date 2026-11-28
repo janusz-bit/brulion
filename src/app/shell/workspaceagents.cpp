@@ -2653,10 +2653,10 @@ QStringList WorkspaceAgents::commandTurns() const
 void WorkspaceAgents::keepExternal(const QStringList &turns, const VaultChange &change)
 {
     // A file as the notebook saw it: a note's text in the index (null when it is not one: not
-    // known); a file made: none.
+    // known; a file made has none there).
     const auto keep = [&](const QString &file, bool existed) {
         const VaultIndex *index = m_workspace->index();
-        const QString text = existed && index ? index->content(file) : QString();
+        const QString text = index ? index->content(file) : QString();
         for (const QString &turn : turns)
             keepBefore(turn, file, text, existed, !existed || !text.isNull());
     };
