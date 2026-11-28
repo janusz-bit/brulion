@@ -197,6 +197,7 @@ private Q_SLOTS:
     void wheelOverHostedRowScrolls();
     void hostedItemsAreAccessibleChildren();
     void keyboardComesBackFromHostedRow();
+    void headerComesAndGoes();
 };
 
 void TestAtramentEditorHosting::initTestCase()
@@ -407,6 +408,37 @@ void TestAtramentEditorHosting::keyboardComesBackFromHostedRow()
     QTest::mouseClick(&f.window, Qt::LeftButton, Qt::NoModifier, QPoint(int(row.center().x), int(row.center().y)));
     QCOMPARE(f.window.activeFocusItem(), f.item);
     QVERIFY(f.item->isActive());
+}
+
+void TestAtramentEditorHosting::headerComesAndGoes()
+{
+    // A day of the journal stream: no footer item (the room under its blocks is the stream's), a
+    // header — the zoom's breadcrumb — only while it is zoomed into a block.
+    Fixture f(pageWithBlocks());
+    f.item->host->setHeader(nullptr);
+    f.item->host->setFooter(nullptr);
+    f.page.update(f.app, [](PageView &v, at::Context<PageView> &cx) {
+        v.setFooterHeight(12);
+        cx.notify();
+    });
+    f.settle();
+    QCOMPARE(f.view().headerHeight(), 0.0f);
+    QCOMPARE(f.view().footerHeight(), 12.0f);
+    QCOMPARE(f.view().rowBounds(0)->top(), 0.0f);
+    // The header comes: the blocks below it, the page's own footer kept.
+    f.item->host->setHeader(f.header);
+    f.settle();
+    QCOMPARE(f.view().headerHeight(), 80.0f);
+    QCOMPARE(f.view().footerHeight(), 12.0f);
+    QCOMPARE(f.view().rowBounds(0)->top(), 80.0f);
+    QCOMPARE(f.header->y(), 0.0);
+    QVERIFY(f.header->isVisible());
+    // It goes: no room above the blocks any more.
+    f.item->host->setHeader(nullptr);
+    f.settle();
+    QCOMPARE(f.view().headerHeight(), 0.0f);
+    QCOMPARE(f.view().footerHeight(), 12.0f);
+    QCOMPARE(f.view().rowBounds(0)->top(), 0.0f);
 }
 
 QTEST_MAIN(TestAtramentEditorHosting)

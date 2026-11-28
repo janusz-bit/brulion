@@ -216,4 +216,22 @@ EditorAtramentPage {
             onActionTriggered: AppController.navigate({ view: "importExport", tab: "import" })
         }
     }
+
+    // ---- A day zoomed into a block: its breadcrumb above its blocks (ContentJournalDay's, in its
+    // editor's header), made for that day while the zoom lasts and placed over its page's header.
+    dayHeader: Component {
+        Item {
+            id: crumbs
+            required property PageController controller
+            objectName: "dayZoomBreadcrumb"
+            width: root.width
+            height: breadcrumb.implicitHeight
+            ZoomBreadcrumb {
+                id: breadcrumb
+                x: root.editor ? root.editor.contentX : 0
+                width: root.editor ? root.editor.contentWidth : 0
+                controller: crumbs.controller
+            }
+        }
+    }
 }

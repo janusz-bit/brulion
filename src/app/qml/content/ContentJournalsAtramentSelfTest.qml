@@ -14,7 +14,8 @@ import Brulion
 //     makes a block in that day, Backspace at the next day's start merges nothing;
 //   * Esc and Shift+↓ past a day's end select blocks of two days (StreamSelection);
 //   * the find bar's query reaches the stream (every day tints it), its matches counted in days;
-//   * a zoom into a block of a day: Back (JournalsView.stepBack) zooms out;
+//   * a zoom into a block of a day: its breadcrumb above the day's blocks (the page, the parent, the
+//     block), a crumb clicked zooms out to it, Back (JournalsView.stepBack) zooms out;
 //   * the view's state (the day at the top and the offset) saved and restored, "Go to day";
 //   * only the days near the view are made (a stream scrolled to its end keeps a few);
 //   * the touch toolbar on a simulated keyboard: docked on the stream's frame (one), staying put
@@ -54,6 +55,9 @@ Item {
     property Item _child: null
     property Item _frame: null
     property real slotY: 0
+    property string crumbTitle: ""
+    property int parentRow: -1
+    property int childRow: -1
 
     DevEvents { id: events }
     DevBlock { id: block }
@@ -118,6 +122,10 @@ Item {
         const height = test.stream.dayRowHeight(d, row)
         const x = test.stream.contentX + test.stream.gutter + intoX
         test.tap(x, top + Math.min(height / 2, 12))
+    }
+    /// The breadcrumb over a day zoomed into a block (EditorAtramentJournal's dayHeader), or null.
+    function crumbs(): Item {
+        return DevTest.findShown(test.stream, "dayZoomBreadcrumb")
     }
     function editing(d: int, row: int): bool {
         const c = test.day(d)
@@ -315,16 +323,52 @@ Item {
             test.waitFor(test.stream.findQuery === "")
     }
     function runStepsViews(): void {
-        // ---- Back zooms out of a day's block -------------------------------------------------------
+        // ---- A day zoomed into a block: its breadcrumb, a crumb clicked, Back ------------------------
         if (test.at()) {
-            test.day(1).zoomInto(0)
+            // (Two short blocks at the day's end, the second a child of the first: two levels to zoom
+            // into, a path that fits a phone's width.)
+            test.stream.scrollToDay(1, false)
+            test.parentRow = test.day(1).insertBlockAfter(test.day(1).lastVisibleRow(), "Rodzic")
+            test.childRow = test.day(1).insertBlockAfter(test.parentRow, "Dziecko")
+            test.day(1).selectRange(test.childRow, test.childRow)
+            test.day(1).indentSelection()
+            test.day(1).clearSelection()
+        }
+        if (test.at()) {
+            test.check(AppController.routeInt(test.day(1).blocks.get(test.childRow), "depth", -1) === 1, "a child to zoom into")
+            test.check(test.crumbs() === null, "no breadcrumb over a day not zoomed into")
+            test.day(1).zoomInto(test.childRow)
         }
         if (test.at())
-            test.waitFor(test.day(1).zoomBlock >= 0 && QmlCall.isTrue(QmlCall.get(test.journalsView, "canStepBack")))
+            test.waitFor(test.day(1).zoomBlock === test.childRow && test.crumbs() !== null
+                         && test.stream.dayRowTop(1, test.childRow) >= 0)
+        if (test.at()) {
+            test._child = test.crumbs()
+            test._at = test._child.mapToItem(test.stream, 0, test._child.height)
+            test.check(test._at.y <= test.stream.dayRowTop(1, test.childRow) + 0.5 && test._at.y >= test.stream.dayTop(1),
+                       "the zoomed day's breadcrumb is above its blocks: " + test._at.y + " ≤ "
+                       + test.stream.dayRowTop(1, test.childRow))
+            // Its path: the page, the parent, the block; the parent clicked zooms out to it.
+            test.crumbTitle = AppController.routeText(test.day(1).breadcrumb[0], "title")
+            test._frame = DevTest.findWhere(test._child, "text", test.crumbTitle, true)
+            test.check(test.day(1).breadcrumb.length === 2 && test._frame !== null,
+                       "the breadcrumb names the zoomed block's parent: " + test.crumbTitle)
+            if (test._frame !== null) {
+                test._at = test._frame.mapToItem(test.stream, test._frame.width / 2, test._frame.height / 2)
+                test.tap(test._at.x, test._at.y)
+            }
+        }
         if (test.at())
+            test.waitFor(test.day(1).zoomBlock === test.parentRow)
+        if (test.at()) {
+            test.check(test.day(1).zoomBlock === test.parentRow && test.crumbs() !== null, "a crumb clicked zooms out to it")
+            test.check(QmlCall.isTrue(QmlCall.get(test.journalsView, "canStepBack")), "Back can zoom out")
             QmlCall.call(test.journalsView, "stepBack")
+        }
         if (test.at())
-            test.waitFor(test.day(1).zoomBlock < 0)
+            test.waitFor(test.day(1).zoomBlock < 0 && test.crumbs() === null)
+        if (test.at())
+            test.check(test.stream.dayRowTop(1, 0) >= test.stream.dayTop(1), "Back zooms out of the day, its breadcrumb gone")
         // ---- The view's state, "Go to day" ---------------------------------------------------------
         if (test.at()) {
             test.stream.scrollToDay(20, false)

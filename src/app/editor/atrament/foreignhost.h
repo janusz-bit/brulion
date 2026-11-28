@@ -55,7 +55,8 @@ public:
     // The delegate of foreign rows (a BlockDelegate: required properties named after the model's roles).
     void setDelegate(QQmlComponent *delegate);
     QQmlComponent *delegate() const { return m_delegate.data(); }
-    // Above the blocks and below them (made children of the item; their widths are their own).
+    // Above the blocks and below them (made children of the item; their widths are their own). Each
+    // edge's height goes to the page while it has an item, and 0 once its item goes.
     void setHeader(QQuickItem *header);
     void setFooter(QQuickItem *footer);
     QQuickItem *header() const { return m_header.data(); }
@@ -87,6 +88,7 @@ private:
     bool tellHeights();
     void itemHeightChanged();
     void adopt(QQuickItem *edge);
+    void tellEdge(ForeignFrame::Kind kind);
 
     QPointer<atrament::AtramentItem> m_item;
     atrament::App &m_app;

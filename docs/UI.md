@@ -6941,12 +6941,16 @@ list"; `qml/editor/EditorAtramentJournal.qml`, loaded by JournalsView by its fil
   block in that day, Backspace at a day's start merges nothing into the day above. Shift+↑/↓ past
   a day's edge and a mouse drag from one day into another select blocks of several days
   (StreamSelection, as above); the find bar tints its matches in every day.
+* **A day zoomed into a block** shows the zoom's breadcrumb above its blocks (ZoomBreadcrumb, as
+  ContentJournalDay's editor does: the page, the block's ancestors, the block; a crumb zooms out to
+  it, the arrow one level up, Back too), made for that day while the zoom lasts; the zoom brings
+  the day's heading, the breadcrumb and the block into view (the day got shorter).
 * **Kept as QML**: the missed reminders, the days' count and "Go to day…" above the days, the empty
   journal's hint below them, a day's rows Atrament does not draw yet (its BlockDelegates, as on a
-  page) — placed over the list.
-* Not yet: the zoom's breadcrumb above a day zoomed into, the selection's drag scrolling the stream at
-  its edges (the wheel and Shift+click reach farther days), a long day laid out only where it shows
-  (a day is laid out whole, as ContentJournalDay builds all its blocks).
+  page), a zoomed day's breadcrumb — placed over the list.
+* Not yet: the selection's drag scrolling the stream at its edges (the wheel and Shift+click reach
+  farther days), a long day laid out only where it shows (a day is laid out whole, as
+  ContentJournalDay builds all its blocks).
 
 ### The task list drawn by Atrament
 

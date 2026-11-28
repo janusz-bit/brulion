@@ -200,6 +200,7 @@ private Q_SLOTS:
     void enterAtTheBottomKeepsTheBlockInView();
     void tapUnderTheBlocksAddsOne();
     void composedWordKeptWhenAnotherDayIsActivated();
+    void zoomShowsTheDaysTop();
 };
 
 void TestAtramentJournal::daysLaidOutInOrder()
@@ -561,6 +562,30 @@ void TestAtramentJournal::composedWordKeptWhenAnotherDayIsActivated()
     h.tw.settle();
     QCOMPARE(first->editingRow(), -1);
     QVERIFY2(first->blocks()->editTextAt(0).contains(u"zażółć"_s), qPrintable(first->blocks()->editTextAt(0)));
+}
+
+void TestAtramentJournal::zoomShowsTheDaysTop()
+{
+    // A long day scrolled to its end, zoomed into its last block: the day gets short; its heading
+    // and the block come into view (where the view was is past the day's end now).
+    Harness h(4, 30);
+    PageController *first = h.day(1);
+    const int last = first->lastVisibleRow();
+    h.scrollToDay(1);
+    h.journal.update(h.app, [](JournalView &j, at::Context<JournalView> &cx) {
+        j.handle().scrollBy(600);
+        cx.notify();
+    });
+    h.tw.settle();
+    QVERIFY(h.dayBounds(1) && h.dayBounds(1)->top() < -400);
+    QVERIFY(h.view().rowBounds(1, last)->bottom() > 0);
+    first->zoomInto(last);
+    h.tw.settle();
+    QCOMPARE(first->zoomBlock(), last);
+    const std::optional<at::Rect> day = h.dayBounds(1);
+    const std::optional<at::Rect> row = h.view().rowBounds(1, last);
+    QVERIFY(day && row);
+    QVERIFY2(day->top() >= -0.5f && row->bottom() <= 700.5f, qPrintable(u"%1, %2"_s.arg(day->top()).arg(row->bottom())));
 }
 
 QTEST_MAIN(TestAtramentJournal)

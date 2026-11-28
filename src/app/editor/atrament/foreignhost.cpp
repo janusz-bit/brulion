@@ -59,10 +59,14 @@ void ForeignRowHost::setHeader(QQuickItem *header)
 {
     if (header == m_header)
         return;
+    const bool had = m_header;
     if (m_header)
         disconnect(m_header, nullptr, this, nullptr);
     m_header = header;
     adopt(header);
+    // (Its item gone, the page has no room above its blocks: a day zoomed out.)
+    if (had && !header)
+        tellEdge(ForeignFrame::Kind::Header);
     itemHeightChanged();
 }
 
@@ -70,11 +74,22 @@ void ForeignRowHost::setFooter(QQuickItem *footer)
 {
     if (footer == m_footer)
         return;
+    const bool had = m_footer;
     if (m_footer)
         disconnect(m_footer, nullptr, this, nullptr);
     m_footer = footer;
     adopt(footer);
+    if (had && !footer)
+        tellEdge(ForeignFrame::Kind::Footer);
     itemHeightChanged();
+}
+
+void ForeignRowHost::tellEdge(ForeignFrame::Kind kind)
+{
+    m_page.update(m_app, [kind](PageView &page, at::Context<PageView> &cx) {
+        if (kind == ForeignFrame::Kind::Header ? page.setHeaderHeight(0) : page.setFooterHeight(0))
+            cx.notify();
+    });
 }
 
 QQuickItem *ForeignRowHost::rowItem(int row) const
@@ -183,13 +198,13 @@ bool ForeignRowHost::tellHeights()
     for (const auto &[uid, h] : m_hosted)
         if (h.item)
             rows.push_back({h.row, float(h.item->height())});
-    const float header = m_header ? float(m_header->height()) : 0.0f;
-    const float footer = m_footer ? float(m_footer->height()) : 0.0f;
-    const bool edges = m_header || m_footer;
+    QQuickItem *header = m_header.data();
+    QQuickItem *footer = m_footer.data();
     return m_page.update(m_app, [&](PageView &page, at::Context<PageView> &cx) {
-        // (A host without a header and a footer — a day of the journal stream — leaves the page's.)
-        bool changed = edges && page.setHeaderHeight(header);
-        changed = (edges && page.setFooterHeight(footer)) || changed;
+        // Each edge while it has an item (a day of the journal stream: the room under its blocks is
+        // the stream's, a header only while it is zoomed into a block).
+        bool changed = header && page.setHeaderHeight(float(header->height()));
+        changed = (footer && page.setFooterHeight(float(footer->height()))) || changed;
         for (const Height &h : rows) {
             // Only rows the page does not draw itself (a delegate on its way out keeps nothing).
             if (!page.drawsRow(h.row))

@@ -413,6 +413,14 @@ bool JournalView::makeDay(int day, at::Context<JournalView> &cx)
     made2.connections.push_back(QObject::connect(ctl, &PageController::editingRowChanged, ctl, activity));
     made2.connections.push_back(QObject::connect(ctl, &PageController::selectionChanged, ctl, activity));
     made2.connections.push_back(QObject::connect(ctl, &PageController::zoomChanged, ctl, activity));
+    // Zoomed into a block: the day's top with its breadcrumb and the block in view (the day got
+    // shorter: what was in view may be past its end).
+    made2.connections.push_back(QObject::connect(ctl, &PageController::zoomChanged, ctl, [app, self, guard] {
+        app->updateEntity<JournalView>(self, [&](JournalView &j, at::Context<JournalView> &c) {
+            j.revealZoom(j.dayOfController(guard.data()));
+            c.notify();
+        });
+    }));
     made2.connections.push_back(QObject::connect(ctl, &PageController::sourceModeChanged, ctl, [app, self, guard] {
         if (!guard || !guard->sourceMode())
             return;
@@ -856,6 +864,28 @@ void JournalView::takeReveals()
                 },
                 reveal->position, m_revealMargin, m_revealMargin);
     }
+}
+
+void JournalView::revealZoom(int day)
+{
+    const PageController *c = controller(day);
+    const at::Entity<PageView> *p = page(day);
+    if (!c || !p || c->zoomBlock() < 0)
+        return;
+    at::App *app = m_app;
+    const at::EntityId pageId = p->id();
+    const int row = c->zoomBlock();
+    // From the day's heading to the zoomed block's end.
+    m_handle.scrollToRowPart(
+            std::size_t(day),
+            [app, pageId, row](at::Window &window) -> std::optional<at::RowPart> {
+                const PageView *v = app->tryGet<PageView>(pageId);
+                const std::optional<at::RowPart> part = v ? v->embeddedPart(row, window) : std::nullopt;
+                if (!part)
+                    return std::nullopt;
+                return at::RowPart{0, part->top + part->height};
+            },
+            at::ListPosition::Nearest, m_revealMargin, m_revealMargin);
 }
 
 // --- The header and the footer of the stream ----------------------------------------------------

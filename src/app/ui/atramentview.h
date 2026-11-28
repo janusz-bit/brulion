@@ -229,6 +229,11 @@ class AtramentView : public brulion::atrament::AtramentItem {
     Q_PROPERTY(QQmlComponent *delegate READ delegate WRITE setDelegate NOTIFY delegateChanged FINAL)
     Q_PROPERTY(QQuickItem *header READ header WRITE setHeader NOTIFY headerChanged FINAL)
     Q_PROPERTY(QQuickItem *footer READ footer WRITE setFooter NOTIFY footerChanged FINAL)
+    // "journal": a day zoomed into a block gets one of these above its blocks — the zoom's
+    // breadcrumb (ContentJournalDay's, in its editor's header), a required property `controller` the
+    // day's PageController — made while the zoom lasts, placed over its page's header as a page's
+    // header is.
+    Q_PROPERTY(QQmlComponent *dayHeader READ dayHeader WRITE setDayHeader NOTIFY dayHeaderChanged FINAL)
     // "page": tables drawn and edited by Atrament (editor/atrament/tablerows.cpp, their cell
     // selection and filter row too; off: the QML delegate hosts them), and their look: { background,
     // header, border, borderStrong, borderSubtle, focusRing, formula, error, input, hover, picked,
@@ -363,6 +368,8 @@ public:
     void setHeader(QQuickItem *item);
     QQuickItem *footer() const { return m_footer.data(); }
     void setFooter(QQuickItem *item);
+    QQmlComponent *dayHeader() const { return m_dayHeader.data(); }
+    void setDayHeader(QQmlComponent *component);
     // "page": the delegate over model row `row` (null: the row is Atrament's, or not near the view).
     Q_INVOKABLE QQuickItem *rowItem(int row) const;
     // "page": edits cell (`tableRow`, `column`) (−1: the header) of the table in `row` with the caret
@@ -504,6 +511,7 @@ Q_SIGNALS:
     void delegateChanged();
     void headerChanged();
     void footerChanged();
+    void dayHeaderChanged();
     // "page", tables drawn by Atrament: a click or a tap on a cell asks to edit it at `cursor` (the
     // editor decides: BlockEditor.blockTappedWith, then editTableCell()); a link of a cell clicked
     // at a point of this item (TableBlockView's: a date chip's dialog, a link); a right-click on a
@@ -676,6 +684,7 @@ private:
     QPointer<QQmlComponent> m_delegate;
     QPointer<QQuickItem> m_header;
     QPointer<QQuickItem> m_footer;
+    QPointer<QQmlComponent> m_dayHeader;
     // Tables drawn by Atrament.
     void applyTableStyle();
     void connectTables();
@@ -723,6 +732,8 @@ private:
     void applyDayOptions();
     void activatePage(std::uint64_t pageId);
     void journalActiveChanged(int day);
+    // A day zoomed into a block gets its dayHeader item; zoomed out, it goes.
+    void updateDayHeader(QObject *controller);
     void placeStreamEdges();
     void tellStreamEdges();
     QPointer<QObject> m_daysModel;

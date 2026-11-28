@@ -221,6 +221,8 @@ private:
     void releaseFarDays();
     // A day's page asked to be revealed: the list shows that part of the day's row.
     void takeReveals();
+    // A day zoomed into a block: its heading, the zoom's breadcrumb and the block in view.
+    void revealZoom(int day);
     void dayActivity(PageController *controller, atrament::Context<JournalView> &cx);
     bool pastEdge(PageController *from, bool up, float x, atrament::Context<JournalView> &cx);
     // Today's date by the days' model (its isToday row).

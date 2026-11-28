@@ -955,10 +955,19 @@ mode and Vim the active day's. In the app: qml/editor/EditorAtramentJournal.qml,
 `BlockEditor.atramentHost`, JournalsView's `atramentStream` / `streamEditor` / `streamView` (docs/UI.md
 "The journal stream drawn by Atrament"). Tested by `tests/atrament/editor/tst_atrament_journal`
 (18 cases) and `tst_content_journals_atrament_qml` (ContentJournalsAtramentSelfTest.qml: the app
-with `--atrament-editor`). **Not yet**: the zoom's breadcrumb above a day zoomed into (a day's
-page header is empty), the edge scrolling of a drag across days, a long day laid out only where it
-shows, the QML stream's span self-test (`tst_content_journals_span_qml`) against this stream, a
-hosted row's delegate showing the active day's editing state while its own day is not active.
+with `--atrament-editor`). **A day zoomed into a block** has the zoom's breadcrumb above its
+blocks as ContentJournalDay's editor has it in its header: AtramentView's `dayHeader` (a Component,
+EditorAtramentJournal's: ZoomBreadcrumb over the day's controller) is made for a day when its
+controller zooms and released when the zoom ends (`updateDayHeader`), the day's `ForeignRowHost`
+placing it over the page's header as a page's header is (a host tells each edge's height while it has
+an item for it and 0 once the item goes: a day's footer, the stream's room under its blocks, is never
+the host's); the zoom reveals the day's top to the zoomed block (`JournalView::revealZoom`: the day
+got shorter, what was in view may be past its end). Tested by `tst_atrament_editor_hosting`
+(`headerComesAndGoes`), `tst_atrament_journal` (`zoomShowsTheDaysTop`) and the app's self-test (the
+breadcrumb above the day's blocks, its parent crumb clicked zooming out to it, Back). **Not yet**:
+the edge scrolling of a drag across days, a long day laid out only where it shows, the QML
+stream's span self-test (`tst_content_journals_span_qml`) against this stream, a hosted row's
+delegate showing the active day's editing state while its own day is not active.
 
 ### Steps
 

@@ -32,6 +32,8 @@
 
 #include <QDate>
 #include <QKeyEvent>
+#include <QQmlComponent>
+#include <QQmlContext>
 #include <QQmlEngine>
 
 #include <algorithm>
@@ -82,6 +84,7 @@ struct AtramentView::Journal {
     struct Day {
         at::Entity<brulion::editor::atr::PageView> page;
         std::unique_ptr<brulion::editor::atr::ForeignRowHost> host;
+        QPointer<QQuickItem> header; // the zoom's breadcrumb while it is zoomed into a block
         bool foldsRestored = false;
     };
     std::unordered_map<QObject *, Day> days; // by controller
@@ -1048,6 +1051,67 @@ void AtramentView::setDelegate(QQmlComponent *delegate)
     Q_EMIT delegateChanged();
 }
 
+void AtramentView::setDayHeader(QQmlComponent *component)
+{
+    if (component == m_dayHeader)
+        return;
+    m_dayHeader = component;
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    if (m_journal) {
+        std::vector<QObject *> controllers;
+        for (auto &[controller, day] : m_journal->days) {
+            // (Made again from the new component.)
+            if (day.host)
+                day.host->setHeader(nullptr);
+            if (day.header)
+                day.header->deleteLater();
+            day.header = nullptr;
+            controllers.push_back(controller);
+        }
+        for (QObject *controller : controllers)
+            updateDayHeader(controller);
+    }
+#endif
+    Q_EMIT dayHeaderChanged();
+}
+
+void AtramentView::updateDayHeader(QObject *controller)
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    using namespace brulion::editor;
+    if (!m_journal)
+        return;
+    const auto it = m_journal->days.find(controller);
+    auto *page = qobject_cast<PageController *>(controller);
+    if (it == m_journal->days.end() || !it->second.host || !page)
+        return;
+    Journal::Day &day = it->second;
+    const bool zoomed = page->zoomBlock() >= 0 && m_dayHeader && m_dayHeader->isReady();
+    if (zoomed == bool(day.header))
+        return;
+    if (!zoomed) {
+        day.host->setHeader(nullptr);
+        day.header->deleteLater();
+        day.header = nullptr;
+        return;
+    }
+    QQmlContext *context = m_dayHeader->creationContext() ? m_dayHeader->creationContext() : qmlContext(this);
+    QObject *object = context ? m_dayHeader->beginCreate(context) : nullptr;
+    auto *item = qobject_cast<QQuickItem *>(object);
+    if (!item) {
+        delete object;
+        return;
+    }
+    m_dayHeader->setInitialProperties(item, {{u"controller"_s, QVariant::fromValue<QObject *>(page)}});
+    item->setParentItem(this);
+    m_dayHeader->completeCreate();
+    day.header = item;
+    day.host->setHeader(item);
+#else
+    Q_UNUSED(controller)
+#endif
+}
+
 void AtramentView::setHeader(QQuickItem *item)
 {
     if (item == m_header)
@@ -1294,6 +1358,11 @@ void AtramentView::attachJournal()
             guard->touchSelectionOf(handle);
             day.host = std::make_unique<ForeignRowHost>(guard.data(), runtime().app, page, controller->blocks());
             day.host->setDelegate(guard->m_delegate);
+            QObject::connect(controller, &PageController::zoomChanged, guard.data(), [guard, controller] {
+                if (guard)
+                    guard->updateDayHeader(controller);
+            });
+            guard->updateDayHeader(controller);
             Q_EMIT guard->dayMade(controller);
         };
         j.onDayReleased = [guard](int, PageController *controller) {
@@ -1303,6 +1372,8 @@ void AtramentView::attachJournal()
             if (it == guard->m_journal->days.end())
                 return;
             it->second.host.reset();
+            if (it->second.header)
+                it->second.header->deleteLater();
             guard->m_journal->days.erase(it);
             Q_EMIT guard->dayReleased(controller);
         };
