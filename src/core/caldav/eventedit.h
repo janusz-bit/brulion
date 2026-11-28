@@ -5,6 +5,7 @@
 // caldav/caldav.h.
 #pragma once
 
+#include "caldav/events.h"
 #include "caldav/taskmap.h"
 #include "io/ical.h"
 
@@ -55,6 +56,14 @@ QByteArray renameInstances(const QByteArray &ics, const QString &uid,
                            const std::function<DateSpec(const io::ical::DateTimeValue &)> &rename,
                            const TodoContext &context);
 /// A DATE / DATE-TIME value as RECURRENCE-ID and EXDATE write it ("20261120T090000" with its TZID).
+/// `ics` with the answer `answer` (Accepted, Declined or Tentative) of the attendee whose address
+/// is one of `addresses` (participantAddress() form) to the event `uid`: its ATTENDEE's PARTSTAT
+/// set in the series and in each override naming it, RSVP dropped, DTSTAMP now, SEQUENCE kept (an
+/// attendee's change: RFC 5546 §2.1.4) — on a CalDAV server with scheduling (RFC 6638) that is the
+/// reply the organizer gets. Empty when there is no such event or attendee, or `answer` is none.
+QByteArray answerInvitation(const QByteArray &ics, const QString &uid, const QStringList &addresses,
+                            Participation answer, const TodoContext &context);
+
 QString formatDateTimeValue(const io::ical::DateTimeValue &value);
 
 } // namespace brulion::caldav

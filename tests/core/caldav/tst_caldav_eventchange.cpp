@@ -188,6 +188,8 @@ private Q_SLOTS:
     void refused_data();
     void refused();
     void writable();
+    void invitationAnswered_data();
+    void invitationAnswered();
     void outbox();
     void pendingOverlay();
     void instances_data();
@@ -1073,6 +1075,65 @@ void TestCalDavEventChange::inbox()
     odd.id = newIntentId(QDateTime(QDate(2026, 11, 20), QTime(9, 6), QTimeZone::UTC));
     QVERIFY(!postIntent(dir.filePath(u"plik"_s), odd));
     QVERIFY(postIntent(folder, odd));
+}
+
+void TestCalDavEventChange::invitationAnswered_data()
+{
+    QTest::addColumn<int>("answer");
+    QTest::addColumn<QString>("partstat");
+    QTest::newRow("accepted") << int(Participation::Accepted) << u"ACCEPTED"_s;
+    QTest::newRow("declined") << int(Participation::Declined) << u"DECLINED"_s;
+    QTest::newRow("tentative") << int(Participation::Tentative) << u"TENTATIVE"_s;
+}
+
+void TestCalDavEventChange::invitationAnswered()
+{
+    // The invited person's answer in their copy (RFC 6638: the server sends the organizer the
+    // reply): their PARTSTAT in the series and in its overrides that name them, RSVP dropped,
+    // DTSTAMP now, SEQUENCE kept (only the organizer's changes count); the others' as they were.
+    QFETCH(int, answer);
+    QFETCH(QString, partstat);
+    const QByteArray ics = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nBEGIN:VEVENT\r\nUID:zaproszenie\r\n"
+                           "DTSTAMP:20261101T080000Z\r\nSEQUENCE:2\r\n"
+                           "DTSTART;TZID=Europe/Warsaw:20261123T100000\r\nRRULE:FREQ=WEEKLY;COUNT=3\r\nSUMMARY:Planowanie\r\n"
+                           "ORGANIZER;CN=Łucja Żółć:mailto:lucja@example.pl\r\n"
+                           "ATTENDEE;CN=Łucja Żółć;PARTSTAT=ACCEPTED:mailto:lucja@example.pl\r\n"
+                           "ATTENDEE;CN=Jan;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:MAILTO:Jan@Example.PL\r\n"
+                           "ATTENDEE;PARTSTAT=TENTATIVE:mailto:ola@example.pl\r\nEND:VEVENT\r\n"
+                           "BEGIN:VEVENT\r\nUID:zaproszenie\r\nRECURRENCE-ID;TZID=Europe/Warsaw:20261130T100000\r\n"
+                           "DTSTART;TZID=Europe/Warsaw:20261130T120000\r\nSUMMARY:Planowanie (później)\r\n"
+                           "ATTENDEE;PARTSTAT=NEEDS-ACTION;RSVP=TRUE:mailto:jan@example.pl\r\nEND:VEVENT\r\n"
+                           "BEGIN:VEVENT\r\nUID:inne\r\nDTSTART:20261123T100000Z\r\n"
+                           "ATTENDEE;PARTSTAT=NEEDS-ACTION:mailto:jan@example.pl\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n";
+    const QStringList me{u"jan@example.pl"_s, u"jan.kowalski@example.pl"_s};
+    const QByteArray answered = answerInvitation(ics, u"zaproszenie"_s, me, Participation(answer), context());
+    QVERIFY(!answered.isEmpty());
+    const CalendarData data = parseCalendarData(answered);
+    QCOMPARE(data.events.size(), 3);
+    for (const Event &e : data.events) {
+        for (const Participant &a : e.attendees) {
+            if (e.uid == u"inne"_s)
+                QCOMPARE(a.status, Participation::NeedsAction); // another event: not answered
+            else if (a.address == u"jan@example.pl"_s)
+                QCOMPARE(a.status, Participation(answer));
+            else if (a.address == u"lucja@example.pl"_s)
+                QCOMPARE(a.status, Participation::Accepted);
+            else
+                QCOMPARE(a.status, Participation::Tentative);
+        }
+    }
+    const QString text = QString::fromUtf8(answered);
+    QVERIFY(text.contains(u"PARTSTAT="_s + partstat));
+    QCOMPARE(text.count(u"RSVP=TRUE"_s), 0);
+    QVERIFY(text.contains(u"SEQUENCE:2"_s));
+    QVERIFY(text.contains(u"DTSTAMP:20261120T090000Z"_s));
+    QVERIFY(text.contains(u"CN=Jan"_s));
+    QCOMPARE(data.events.first().organizer.name, u"Łucja Żółć"_s);
+    // Not invited, another UID, or nothing to answer with: nothing.
+    QVERIFY(answerInvitation(ics, u"zaproszenie"_s, {u"ktos@example.pl"_s}, Participation::Accepted, context()).isEmpty());
+    QVERIFY(answerInvitation(ics, u"nie-ma"_s, me, Participation::Accepted, context()).isEmpty());
+    QVERIFY(answerInvitation(ics, u"zaproszenie"_s, {}, Participation::Accepted, context()).isEmpty());
+    QVERIFY(answerInvitation(ics, u"zaproszenie"_s, me, Participation::NeedsAction, context()).isEmpty());
 }
 
 QTEST_GUILESS_MAIN(TestCalDavEventChange)

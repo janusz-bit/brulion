@@ -1183,6 +1183,56 @@ QByteArray patchEvent(const QByteArray &ics, const QString &uid, const EventEdit
     return serialize(roots);
 }
 
+namespace {
+
+/// The ATTENDEE of `event` whose address is one of `addresses`, or nullptr.
+io::ical::Property *attendeeIn(io::ical::Component &event, const QStringList &addresses)
+{
+    for (io::ical::Property &p : event.properties) {
+        if (p.name == u"ATTENDEE" && addresses.contains(participantAddress(p.value)))
+            return &p;
+    }
+    return nullptr;
+}
+
+QString partstatName(Participation answer)
+{
+    switch (answer) {
+    case Participation::Accepted: return u"ACCEPTED"_s;
+    case Participation::Declined: return u"DECLINED"_s;
+    case Participation::Tentative: return u"TENTATIVE"_s;
+    case Participation::NeedsAction:
+    case Participation::Delegated: break;
+    }
+    return {};
+}
+
+} // namespace
+
+QByteArray answerInvitation(const QByteArray &ics, const QString &uid, const QStringList &addresses,
+                            Participation answer, const TodoContext &context)
+{
+    const QString partstat = partstatName(answer);
+    if (partstat.isEmpty())
+        return {};
+    QList<io::ical::Component> roots = io::ical::parse(ics);
+    bool answered = false;
+    for (io::ical::Component &root : roots) {
+        for (io::ical::Component &c : root.children) {
+            if (c.name != u"VEVENT" || c.text(u"UID").trimmed() != uid)
+                continue;
+            io::ical::Property *me = attendeeIn(c, addresses);
+            if (!me)
+                continue;
+            me->params.insert(u"PARTSTAT"_s, partstat);
+            me->params.remove(u"RSVP"_s);
+            stamp(c, context, false);
+            answered = true;
+        }
+    }
+    return answered ? serialize(roots) : QByteArray();
+}
+
 QByteArray patchOccurrence(const QByteArray &ics, const QString &uid, const io::ical::DateTimeValue &instance,
                            const EventEdit &edit, const TodoContext &context)
 {
