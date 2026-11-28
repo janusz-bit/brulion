@@ -50,7 +50,8 @@ To, co aplikacja na komputerze uruchomiła sama, telefon śledzi na żywo: **Na 
 ## Pliki i wyszukiwanie
 Panel obok wątku ma trzy karty: **Zmiany**, **Pliki** i **Szukaj**.
 - **Ctrl+P** (albo *Przejdź do pliku…* w palecie) znajduje plik projektu po kilku literach nazwy — `cvw` znajdzie `CodeView.qml`; Enter otwiera go w karcie **Pliki**, Ctrl+Enter w Twoim edytorze.
-- **Pliki** pokazują plik tylko do odczytu, z kolorami i numerami wierszy (obrazy jako obrazy). Kliknij wiersz — Shift+klik albo przeciągnięcie po numerach zaznacza więcej — i wybierz **Skomentuj…**: wiersze z Twoim komentarzem trafiają do wiadomości wątku, żeby agent się nimi zajął.
+- **Pliki** pokazują plik z kolorami i numerami wierszy (obrazy jako obrazy). Kliknij wiersz — Shift+klik albo przeciągnięcie po numerach zaznacza więcej — i wybierz **Skomentuj…**: wiersze z Twoim komentarzem trafiają do wiadomości wątku, żeby agent się nimi zajął.
+- **Edytuj** (ołówek w karcie Pliki) zmienia pokazany plik; **Zapisz** (Ctrl+S) zapisuje go z jego własnymi końcami linii. Jeśli agent zmienił plik w międzyczasie, Brulion go nie nadpisze: wczytaj go ponownie i edytuj jeszcze raz.
 - **Ctrl+F** w karcie Pliki szuka tekstu w pokazanym pliku (Enter — następny wynik, Shift+Enter — poprzedni; `Aa`, `ab` i `.*` jak niżej).
 - **Ctrl+Shift+F** szuka tekstu we wszystkich plikach projektu (bez ignorowanych); wynik otwiera plik w swoim wierszu. `Aa`, `ab` i `.*` to wielkość liter, całe słowa i wyrażenia regularne.
 - Wpisz **@** w wiadomości wątku, żeby wskazać plik albo folder projektu (`@src/main.cpp`); agent dostaje też same wskazane pliki.

@@ -131,6 +131,19 @@ settings, `code/recentFiles/<hash of the folder>`, at most 20), the path as a br
 file…, Copy path, Open in editor, Reload. A thread's answer written reads the file shown again,
 keeping its place.
 
+### Editing
+
+The header's **Edit** (`codeFilesEdit`, a pencil) — for a text file read whole, valid UTF-8
+(`CodeFileDocument.editable`: not cut at 2 MiB, not `TextShape::lossy`) — puts the file's text
+(`editText()`) in a monospace editor (`codeFileEditor`, no wrapping) in place of the lines; **Save**
+(Ctrl+S) writes it, **Cancel** (Esc while nothing changed) leaves it. `save(text)` writes atomically
+(QSaveFile) what was typed in the file's own shape (`codefiles::shapeOf()` of the bytes read: its line
+break — the first one in it —, a UTF-8 byte order mark, a break after the last line;
+`encodeEdited()`), and refuses when the file changed on disk since it was read (a SHA-1 of its bytes):
+"reload it, then edit it again" — never overwriting an agent's or another program's change. Saved, the
+file is read again. Another file is not opened while the edit has changes ("Save or cancel the edit of
+this file first.").
+
 ### Find in the file
 
 Ctrl+F in the viewer (or its header's search button, `codeFilesFind`) opens `CodeFileFindBar` under
@@ -246,8 +259,8 @@ pages of the notebook.)
 
 ## Not done (yet)
 
-* Editing files in the viewer (T3 Code edits workspace files); rendered views of Markdown, HTML,
-  CSV, PDF and ZIP files (here: their text; PDFs as binary files).
+* Rendered views of Markdown, HTML, CSV, PDF and ZIP files (here: their text; PDFs as binary files);
+  an editor with the viewer's colours (the edit is plain text).
 * T3 Code's mentions of threads and models, and `#` for pull requests.
 * Review comments as chips in the composer: here they are text.
 * The index following the disk on Windows (only the refreshes there: a watched folder cannot be

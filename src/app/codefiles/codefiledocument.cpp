@@ -5,7 +5,9 @@
 #include "codefiles/search.h"
 #include "codefiles/viewer.h"
 
+#include <QCryptographicHash>
 #include <QDir>
+#include <QSaveFile>
 #include <QRegularExpression>
 #include <QSet>
 
@@ -24,6 +26,8 @@ struct CodeFileDocument::Loaded {
     int maxColumns = 0;
     QStringList lines;
     QList<QList<CodeSpan>> spans;
+    TextShape shape;
+    QByteArray hash;
 };
 
 namespace {
@@ -330,6 +334,8 @@ void CodeFileDocument::load()
                 l.kind = kindName(file.kind);
                 l.truncated = file.truncated;
                 l.size = file.size;
+                l.shape = file.shape;
+                l.hash = file.hash;
                 if (file.kind != FileKind::Text)
                     return l;
                 l.language = languageForPath(abs);
@@ -373,11 +379,42 @@ void CodeFileDocument::apply(Loaded l)
     m_maxColumns = l.maxColumns;
     m_lines = std::move(l.lines);
     m_spans = std::move(l.spans);
+    m_shape = l.shape;
+    m_hash = l.hash;
     m_matches.clear();
     endResetModel();
     Q_EMIT loaded();
     if (!m_findPattern.isEmpty())
         refind();
+}
+
+bool CodeFileDocument::editable() const
+{
+    return m_kind == u"text" && !m_truncated && !m_shape.lossy && !m_hash.isEmpty();
+}
+
+QString CodeFileDocument::editText() const
+{
+    return editable() ? m_lines.join(u'\n') + (m_shape.finalNewline ? u"\n"_s : QString()) : QString();
+}
+
+QString CodeFileDocument::save(const QString &text)
+{
+    if (!editable())
+        return tr("This file cannot be edited here.");
+    const QString abs = absolutePath();
+    QFile current(abs);
+    if (!current.open(QIODevice::ReadOnly)
+        || QCryptographicHash::hash(current.readAll(), QCryptographicHash::Sha1) != m_hash)
+        return tr("The file changed on disk since it was opened: reload it, then edit it again.");
+    current.close();
+    QSaveFile out(abs);
+    const QByteArray bytes = encodeEdited(text, m_shape);
+    if (!out.open(QIODevice::WriteOnly) || out.write(bytes) != bytes.size() || !out.commit())
+        return tr("The file could not be saved: %1").arg(out.errorString());
+    m_hash = QCryptographicHash::hash(bytes, QCryptographicHash::Sha1);
+    load();
+    return {};
 }
 
 QString CodeFileDocument::linesText(int from, int to) const

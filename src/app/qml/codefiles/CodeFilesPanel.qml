@@ -5,12 +5,13 @@ import QtQuick.Templates as T
 import Brulion
 
 // CodeFilesPanel — the "Files" tab of Code mode's right panel (docs/CODE-FILES.md "The file
-// viewer", docs/UI.md "Code mode"): one file of the thread's folder, read-only, its colours and
+// viewer", docs/UI.md "Code mode"): one file of the thread's folder — its colours and
 // line numbers (CodeFileView over CodeFileDocument), a picture as a picture; binary files, missing
 // ones and folders say so; big files show their first 2 MB. Its header: the recent files (a menu,
 // kept per folder in the device's settings, `code/recentFiles/<hash>`), the path as a breadcrumb (a
 // folder part opens the file picker there), Go to file… (the picker), Copy path, Open in editor,
-// Reload. Lines selected → "Comment…": a short text, then the comment goes to the thread's composer
+// Reload, Find in file (CodeFileFindBar), Edit (a text editor; Save writes it as it was read).
+// Lines selected → "Comment…": a short text, then the comment goes to the thread's composer
 // (addToChat: the path, the lines in a fenced block, the comment — CodeFiles.reviewComment).
 //
 //   CodeFilesPanel { folder: root.folder; onAddToChat: (text) => chat.addToComposer(text) }
@@ -58,7 +59,41 @@ Item {
     }
 
     /// Show `path` (relative to the folder, "/"-separated) at `line` (0: the top).
+    // ---- Editing (docs/CODE-FILES.md "Editing") ----------------------------------------------------
+    /// The file is being edited (its text in `editor`), and what it had when the edit began.
+    property bool editing: false
+    property string editedFrom
+    readonly property bool editDirty: panel.editing && editor.text !== panel.editedFrom
+    function startEdit(): void {
+        if (!doc.editable)
+            return
+        panel.editedFrom = doc.editText()
+        editor.text = panel.editedFrom
+        panel.editing = true
+        editor.cursorPosition = 0
+        editor.forceActiveFocus()
+    }
+    function saveEdit(): void {
+        const why = doc.save(editor.text)
+        if (why !== "") {
+            AppController.toast(why, "error")
+            return
+        }
+        panel.editing = false
+        AppController.toast(qsTr("Saved"), "success")
+        view.forceActiveFocus()
+    }
+    function cancelEdit(): void {
+        panel.editing = false
+        view.forceActiveFocus()
+    }
+
     function open(path: string, line: int): void {
+        if (panel.editDirty && path !== panel.path) {
+            AppController.toast(qsTr("Save or cancel the edit of this file first."), "warning")
+            return
+        }
+        panel.editing = false
         const same = path === panel.path
         panel.pendingLine = line
         panel.positionPending = true
@@ -205,6 +240,32 @@ Item {
                 onClicked: panel.openFind()
             }
             BIconButton {
+                objectName: "codeFilesEdit"
+                visible: !panel.editing
+                size: "small"
+                iconName: "pencil"
+                label: qsTr("Edit")
+                enabled: doc.editable
+                onClicked: panel.startEdit()
+            }
+            BButton {
+                objectName: "codeFilesSave"
+                visible: panel.editing
+                size: "small"
+                variant: "primary"
+                text: qsTr("Save")
+                Accessible.description: "Ctrl+S"
+                onClicked: panel.saveEdit()
+            }
+            BButton {
+                objectName: "codeFilesCancelEdit"
+                visible: panel.editing
+                size: "small"
+                variant: "ghost"
+                text: qsTr("Cancel")
+                onClicked: panel.cancelEdit()
+            }
+            BIconButton {
                 objectName: "codeFilesCopyPath"
                 size: "small"
                 iconName: "copy"
@@ -260,11 +321,38 @@ Item {
             Layout.fillWidth: true
             Layout.fillHeight: true
 
+            // The file's text being edited, all of it (a file read whole: at most 2 MB).
+            Flickable {
+                objectName: "codeFileEditorScroll"
+                anchors.fill: parent
+                visible: panel.editing
+                clip: true
+                boundsBehavior: Flickable.StopAtBounds
+                T.ScrollBar.vertical: BScrollBar {}
+                T.ScrollBar.horizontal: BScrollBar {}
+                T.TextArea.flickable: BTextArea {
+                    id: editor
+                    objectName: "codeFileEditor"
+                    monospace: true
+                    background: Item {}
+                    wrapMode: TextEdit.NoWrap
+                    accessibleName: qsTr("The file's text")
+                    Keys.onPressed: (event) => {
+                        if (event.matches(StandardKey.Save)) {
+                            panel.saveEdit()
+                            event.accepted = true
+                        } else if (event.key === Qt.Key_Escape && !panel.editDirty) {
+                            panel.cancelEdit()
+                            event.accepted = true
+                        }
+                    }
+                }
+            }
             CodeFileView {
                 id: view
                 objectName: "codeFileView"
                 anchors.fill: parent
-                visible: doc.kind === "text"
+                visible: doc.kind === "text" && !panel.editing
                 document: doc
                 path: panel.path
                 onCommentRequested: (from, to) => panel.startComment(from, to)

@@ -25,6 +25,21 @@ inline constexpr qint64 MaxViewBytes = 2 * 1024 * 1024;
 
 enum class FileKind { Text, Picture, Binary, Missing, Folder, Unreadable };
 
+/// How a text file is written, for an edit to be saved as it was read (docs/CODE-FILES.md
+/// "Editing"): its line break (the first one in it; "\n" when none), a UTF-8 byte order mark, a
+/// line break after its last line, and whether its bytes were no valid UTF-8 (`lossy`: an edit would
+/// replace them — not offered).
+struct TextShape {
+    QString newline = QStringLiteral("\n");
+    bool bom = false;
+    bool finalNewline = false;
+    bool lossy = false;
+};
+TextShape shapeOf(QByteArrayView bytes);
+/// `text` as the editor gives it (any line breaks) written in `shape`: its breaks the file's, its
+/// byte order mark, a last break added when the file had one; UTF-8.
+QByteArray encodeEdited(QStringView text, const TextShape &shape);
+
 struct ViewerFile {
     FileKind kind = FileKind::Missing;
     /// The text (Text only): UTF-8 (invalid sequences as U+FFFD), at most maxBytes of the file,
@@ -34,7 +49,12 @@ struct ViewerFile {
     bool truncated = false;
     /// The file's size in bytes.
     qint64 size = 0;
+    /// How it is written (Text only: shapeOf() of what was read) and a hash of its bytes (SHA-1 of the
+    /// whole file when not truncated): a save refuses a file that changed meanwhile.
+    TextShape shape;
+    QByteArray hash;
 };
+
 
 /// The file at `absolutePath` for the viewer: a picture by its name (isPictureName()), a folder,
 /// missing, unreadable, binary (looksBinary() of its start), else its text.

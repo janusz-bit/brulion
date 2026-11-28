@@ -295,6 +295,51 @@ private Q_SLOTS:
         QCOMPARE(CodeFileDocument::lineHtml(u"abc", {}, colours, 4, {{1, 9}}, QString()), u"a<b>bc</b>"_s);
     }
 
+    // Editing in the viewer (docs/CODE-FILES.md "Editing"): saved as it was read (CRLF, a byte order
+    // mark), read again; refused when the file changed on disk meanwhile, for a file cut short, for a
+    // binary one; a new break at the end kept as the file had it.
+    void editAndSave()
+    {
+        QTemporaryDir dir;
+        QVERIFY(writeFile(dir.filePath(u"a.txt"_s), "\xef\xbb\xbfŻółw\r\nje\r\n"));
+        CodeFileDocument doc;
+        doc.setFolder(dir.path());
+        doc.setPath(u"a.txt"_s);
+        QTRY_COMPARE(doc.lineCount(), 2);
+        QVERIFY(doc.editable());
+        QCOMPARE(doc.editText(), u"Żółw\nje\n"_s);
+        QSignalSpy loaded(&doc, &CodeFileDocument::loaded);
+        QCOMPARE(doc.save(u"Żółw\nje sałatę\nwolno"_s), QString());
+        QFile f(dir.filePath(u"a.txt"_s));
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        QCOMPARE(f.readAll(), QByteArray("\xef\xbb\xbfŻółw\r\nje sałatę\r\nwolno\r\n"));
+        f.close();
+        QTRY_COMPARE(doc.lineCount(), 3);
+        QVERIFY(!loaded.isEmpty());
+        // Changed by someone else meanwhile: refused, the file left as it is.
+        QVERIFY(writeFile(dir.filePath(u"a.txt"_s), "inny\n"));
+        QVERIFY(!doc.save(u"moje"_s).isEmpty());
+        QVERIFY(f.open(QIODevice::ReadOnly));
+        QCOMPARE(f.readAll(), QByteArray("inny\n"));
+        f.close();
+        // Read again: editable again.
+        doc.reload();
+        QTRY_COMPARE(doc.lineText(1), u"inny"_s);
+        QCOMPARE(doc.save(u"moje\n"_s), QString());
+        // Not text: nothing.
+        QVERIFY(writeFile(dir.filePath(u"b.bin"_s), QByteArray("\0\0\0", 3)));
+        doc.setPath(u"b.bin"_s);
+        QTRY_COMPARE(doc.kind(), u"binary"_s);
+        QVERIFY(!doc.editable());
+        QCOMPARE(doc.editText(), QString());
+        QVERIFY(!doc.save(u"x"_s).isEmpty());
+        // Invalid UTF-8: not offered (an edit would replace its bytes).
+        QVERIFY(writeFile(dir.filePath(u"c.txt"_s), "a\xff b\n"));
+        doc.setPath(u"c.txt"_s);
+        QTRY_COMPARE(doc.kind(), u"text"_s);
+        QVERIFY(!doc.editable());
+    }
+
     // Find within the file shown (Ctrl+F in the viewer): its matches counted, line by line, with the
     // project search's options; an invalid expression said; cleared.
     void findInFile()

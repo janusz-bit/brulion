@@ -16,6 +16,7 @@
 #pragma once
 
 #include "codefiles/highlight.h"
+#include "codefiles/viewer.h"
 
 #include <QAbstractListModel>
 #include <QColor>
@@ -48,6 +49,8 @@ class CodeFileDocument : public QAbstractListModel {
     Q_PROPERTY(QUrl fileUrl READ fileUrl NOTIFY pathChanged FINAL)
     /// Find within the file (find()): how many matches, and why the pattern is no expression ("").
     Q_PROPERTY(int matchCount READ matchCount NOTIFY findChanged FINAL)
+    /// It can be edited here (save()): a text file read whole, valid UTF-8.
+    Q_PROPERTY(bool editable READ editable NOTIFY loaded FINAL)
     Q_PROPERTY(QString findError READ findError NOTIFY findChanged FINAL)
 
 public:
@@ -82,6 +85,14 @@ public:
 
     /// Read the file again (it changed).
     Q_INVOKABLE void reload();
+    bool editable() const;
+    /// The whole text to edit (its lines joined with "\n", a last one when the file has it); "" when
+    /// not editable().
+    Q_INVOKABLE QString editText() const;
+    /// Writes `text` (any line breaks) into the file as it was read — its breaks, byte order mark
+    /// and last break (codefiles::encodeEdited()) —, atomically (QSaveFile), unless the file changed
+    /// on disk since it was read; then reads it again. "" saved, else why not.
+    Q_INVOKABLE QString save(const QString &text);
     /// Lines `from` … `to` (1-based, either order, clamped) joined with "\n".
     Q_INVOKABLE QString linesText(int from, int to) const;
     /// One line's text (1-based; "" out of range).
@@ -132,6 +143,8 @@ private:
     QString m_language;
     int m_maxColumns = 0;
     QStringList m_lines;
+    TextShape m_shape;
+    QByteArray m_hash;
     QList<QList<CodeSpan>> m_spans;
     int m_generation = 0;
     /// find()'s options, and its matches: {row, from, length}, in order.

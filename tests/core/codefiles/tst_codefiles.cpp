@@ -225,6 +225,56 @@ private Q_SLOTS:
     }
 
     // The folders a file watcher follows: shallow first, at most `max`.
+    // A file edited in the viewer is written back as it was read: its line break, its byte order mark,
+    // its last line break; a file whose bytes were no valid UTF-8 is not offered for editing.
+    void shapeOfText_data()
+    {
+        QTest::addColumn<QByteArray>("bytes");
+        QTest::addColumn<QString>("newline");
+        QTest::addColumn<bool>("bom");
+        QTest::addColumn<bool>("final");
+        QTest::addColumn<bool>("lossy");
+        QTest::newRow("unix") << QByteArray("a\nb\n") << "\n" << false << true << false;
+        QTest::newRow("windows") << QByteArray("a\r\nb\r\n") << "\r\n" << false << true << false;
+        QTest::newRow("old mac") << QByteArray("a\rb") << "\r" << false << false << false;
+        QTest::newRow("bom, no last break") << QByteArray("\xef\xbb\xbfżółw") << "\n" << true << false << false;
+        QTest::newRow("empty") << QByteArray() << "\n" << false << false << false;
+        QTest::newRow("mixed: the first") << QByteArray("a\r\nb\nc\n") << "\r\n" << false << true << false;
+        QTest::newRow("invalid UTF-8") << QByteArray("a\xff\n") << "\n" << false << true << true;
+    }
+    void shapeOfText()
+    {
+        QFETCH(QByteArray, bytes);
+        QFETCH(QString, newline);
+        QFETCH(bool, bom);
+        QFETCH(bool, final);
+        QFETCH(bool, lossy);
+        const TextShape shape = shapeOf(bytes);
+        QCOMPARE(shape.newline, newline);
+        QCOMPARE(shape.bom, bom);
+        QCOMPARE(shape.finalNewline, final);
+        QCOMPARE(shape.lossy, lossy);
+    }
+    void encodeEdited()
+    {
+        TextShape crlf;
+        crlf.newline = u"\r\n"_s;
+        crlf.finalNewline = true;
+        QCOMPARE(brulion::codefiles::encodeEdited(u"a\nżółw", crlf), QByteArray("a\r\n\xc5\xbc\xc3\xb3\xc5\x82w\r\n"));
+        // What the editor gives back with other breaks: the file's.
+        QCOMPARE(brulion::codefiles::encodeEdited(u"a\r\nb\rc\n", crlf), QByteArray("a\r\nb\r\nc\r\n"));
+        TextShape bare;
+        bare.finalNewline = false;
+        bare.bom = true;
+        QCOMPARE(brulion::codefiles::encodeEdited(u"x", bare), QByteArray("\xef\xbb\xbfx"));
+        // (Its last break kept as typed when it had none.)
+        QCOMPARE(brulion::codefiles::encodeEdited(u"x\n", bare), QByteArray("\xef\xbb\xbfx\n"));
+        QCOMPARE(brulion::codefiles::encodeEdited(u"", TextShape{}), QByteArray());
+        // The round trip of a read.
+        const QByteArray file("int a;\r\n\r\nint b;");
+        QCOMPARE(brulion::codefiles::encodeEdited(u"int a;\n\nint b;", shapeOf(file)), file);
+    }
+
     void foldersToWatch()
     {
         const FileIndex index = FileIndex::fromPaths({u"src/app/main.cpp"_s, u"src/app/qml/Main.qml"_s,

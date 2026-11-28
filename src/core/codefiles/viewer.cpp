@@ -2,10 +2,12 @@
 
 #include "codefiles/fileindex.h"
 
+#include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QHash>
+#include <QStringDecoder>
 #include <QUrl>
 
 #include <algorithm>
@@ -108,6 +110,33 @@ bool isPictureName(QStringView name)
     return pictures.contains(ext);
 }
 
+TextShape shapeOf(QByteArrayView bytes)
+{
+    TextShape shape;
+    shape.bom = bytes.startsWith("\xef\xbb\xbf");
+    if (const qsizetype at = bytes.indexOf('\n'), cr = bytes.indexOf('\r'); cr >= 0 && (at < 0 || cr < at))
+        shape.newline = cr + 1 < bytes.size() && bytes.at(cr + 1) == '\n' ? u"\r\n"_s : u"\r"_s;
+    shape.finalNewline = bytes.endsWith('\n') || bytes.endsWith('\r');
+    QStringDecoder utf8(QStringDecoder::Utf8);
+    const QString decoded = utf8.decode(bytes);
+    shape.lossy = utf8.hasError();
+    return shape;
+}
+
+QByteArray encodeEdited(QStringView text, const TextShape &shape)
+{
+    QString unified = text.toString();
+    unified.replace(u"\r\n"_s, u"\n"_s).replace(u'\r', u'\n');
+    if (shape.finalNewline && !unified.isEmpty() && !unified.endsWith(u'\n'))
+        unified += u'\n';
+    if (shape.newline != u"\n")
+        unified.replace(u"\n"_s, shape.newline);
+    QByteArray out = unified.toUtf8();
+    if (shape.bom)
+        out.prepend("\xef\xbb\xbf");
+    return out;
+}
+
 ViewerFile readForViewer(const QString &absolutePath, qint64 maxBytes)
 {
     ViewerFile out;
@@ -144,6 +173,9 @@ ViewerFile readForViewer(const QString &absolutePath, qint64 maxBytes)
             bytes.truncate(lf + 1);
     }
     out.kind = FileKind::Text;
+    out.shape = shapeOf(bytes);
+    if (!out.truncated)
+        out.hash = QCryptographicHash::hash(bytes, QCryptographicHash::Sha1);
     out.text = QString::fromUtf8(bytes);
     // (A byte order mark is no character of the text.)
     if (out.text.startsWith(QChar(0xfeff)))
