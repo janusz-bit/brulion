@@ -1857,18 +1857,21 @@ void TestGitCliRepo::singleLines()
         client.applyLines(repo.root, u"wiersze.txt"_s, HunkAction::Stage, 2, 2, 2, 2, done);
     });
     QVERIFY2(o.ok, qPrintable(o.message));
+    QCOMPARE(o.message, u"Staged the lines"_s);
     QCOMPARE(repo.text({u"show"_s, u":wiersze.txt"_s}), u"a\nB żółw\nc\nd"_s);
     // Line 3's change thrown away from the work tree: C back to c, line 2 kept.
     o = await<Outcome>([&](auto done) {
         client.applyLines(repo.root, u"wiersze.txt"_s, HunkAction::Discard, 3, 3, 3, 3, done);
     });
     QVERIFY2(o.ok, qPrintable(o.message));
+    QCOMPARE(o.message, u"Threw the lines away"_s);
     QCOMPARE(repo.read(u"wiersze.txt"_s), QByteArray("a\nB żółw\nc\nd\n"));
     // The staged line unstaged.
     o = await<Outcome>([&](auto done) {
         client.applyLines(repo.root, u"wiersze.txt"_s, HunkAction::Unstage, 2, 2, 2, 2, done);
     });
     QVERIFY2(o.ok, qPrintable(o.message));
+    QCOMPARE(o.message, u"Unstaged the lines"_s);
     QCOMPARE(repo.text({u"diff"_s, u"--cached"_s, u"--name-only"_s}), QString());
     // Lines without a change: nothing to do, said.
     QVERIFY(!await<Outcome>([&](auto done) {
@@ -1924,12 +1927,29 @@ void TestGitCliRepo::hunkOfARangeReverted()
     QVERIFY(!await<Outcome>([&](auto done) {
         client.revertHunk(repo.root, u"../poza.txt"_s, u"HEAD~1"_s, u"HEAD"_s, 3, 3, done);
     }).ok);
+    QVERIFY(!await<Outcome>([&](auto done) {
+        client.revertHunk(repo.root, u"plik ż.txt"_s, u"HEAD~1"_s, u"HEAD"_s, 0, 3, done);
+    }).ok);
+    QVERIFY(!await<Outcome>([&](auto done) {
+        client.revertHunk(repo.root, u"plik ż.txt"_s, u"HEAD~1"_s, u"HEAD"_s, 3, 0, done);
+    }).ok);
+    QCOMPARE(repo.read(u"plik ż.txt"_s), edited);
     // Against the work tree (no target): the user's own line thrown away.
     o = await<Outcome>([&](auto done) {
         client.revertHunk(repo.root, u"plik ż.txt"_s, u"HEAD"_s, QString(), 3, 3, done);
     });
     QVERIFY2(o.ok, qPrintable(o.message));
     QCOMPARE(repo.read(u"plik ż.txt"_s), expected);
+    // The lines are the target's: after lines added above, a hunk is found by its new numbers.
+    QByteArray shifted = "nowa 1\nnowa 2\nnowa 3\n" + expected;
+    shifted.replace("linia 12\n", "LINIA 12\n");
+    repo.write(u"plik ż.txt"_s, shifted);
+    repo.commitAll(u"c"_s);
+    o = await<Outcome>([&](auto done) {
+        client.revertHunk(repo.root, u"plik ż.txt"_s, u"HEAD~1"_s, u"HEAD"_s, 15, 15, done);
+    });
+    QVERIFY2(o.ok, qPrintable(o.message));
+    QCOMPARE(repo.read(u"plik ż.txt"_s), "nowa 1\nnowa 2\nnowa 3\n" + expected);
 }
 
 void TestGitCliRepo::hunks()
@@ -1948,6 +1968,7 @@ void TestGitCliRepo::hunks()
     // The second change only (the work tree's lines 25–26).
     Outcome o = await<Outcome>([&](auto done) { client.applyHunk(repo.root, u"plik ż.txt"_s, HunkAction::Stage, 25, 26, done); });
     QVERIFY2(o.ok, qPrintable(o.message));
+    QVERIFY2(o.message.startsWith(u"Staged 1 hunk"_s), qPrintable(o.message));
     QByteArray staged = repo.run({u"show"_s, u":plik ż.txt"_s});
     QVERIFY(staged.contains("LINIA 25\nnowa po 25\n"));
     QVERIFY(staged.contains("linia 3\n"));
@@ -1960,12 +1981,18 @@ void TestGitCliRepo::hunks()
     QCOMPARE(repo.run({u"show"_s, u":plik ż.txt"_s}), changed);
     o = await<Outcome>([&](auto done) { client.applyHunk(repo.root, u"plik ż.txt"_s, HunkAction::Unstage, 3, 3, done); });
     QVERIFY2(o.ok, qPrintable(o.message));
+    QVERIFY2(o.message.startsWith(u"Unstaged 1 hunk"_s), qPrintable(o.message));
     staged = repo.run({u"show"_s, u":plik ż.txt"_s});
     QVERIFY(staged.contains("linia 3\n"));
     QVERIFY(staged.contains("LINIA 25\n"));
     // Thrown away from the work tree: line 3 back to the index's text, line 25 stays.
+    // (Line 0, or a range ending there: no line of the file.)
+    QVERIFY(!await<Outcome>([&](auto done) { client.applyHunk(repo.root, u"plik ż.txt"_s, HunkAction::Discard, 0, 3, done); }).ok);
+    QVERIFY(!await<Outcome>([&](auto done) { client.applyHunk(repo.root, u"plik ż.txt"_s, HunkAction::Discard, 3, 0, done); }).ok);
+    QVERIFY(repo.read(u"plik ż.txt"_s).contains("LINIA 3\n"));
     o = await<Outcome>([&](auto done) { client.applyHunk(repo.root, u"plik ż.txt"_s, HunkAction::Discard, 3, 3, done); });
     QVERIFY2(o.ok, qPrintable(o.message));
+    QVERIFY2(o.message.startsWith(u"Threw away 1 hunk"_s), qPrintable(o.message));
     const QByteArray now = repo.read(u"plik ż.txt"_s);
     QVERIFY(now.contains("linia 3\n"));
     QVERIFY(now.contains("LINIA 25\nnowa po 25\n"));

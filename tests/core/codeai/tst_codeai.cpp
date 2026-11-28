@@ -161,6 +161,9 @@ private Q_SLOTS:
         QVERIFY(put(u".github/pull_request_template.md"_s, "## Zmiany żółwia\n"));
         QCOMPARE(pullRequestTemplateIn(dir.path()), u"## Zmiany żółwia\n"_s);
         QCOMPARE(pullRequestTemplateIn(QString()), QString());
+        // A long one: one character more than pullRequest() keeps, so it says it was cut.
+        QVERIFY(put(u".github/pull_request_template.md"_s, QByteArray(MaxTemplate + 50, 'x')));
+        QCOMPARE(pullRequestTemplateIn(dir.path()).size(), MaxTemplate + 1);
     }
 
     void readPullRequestAnswer_data()
