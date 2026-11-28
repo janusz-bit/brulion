@@ -248,6 +248,71 @@ private Q_SLOTS:
         QCOMPARE(f.edit(2), u"y ->"_s);
     }
 
+    // ---- source mode: the match on the caret's line, the protection over the whole text ---------------
+
+    void matchIgnoresProtection()
+    {
+        // The match alone: source mode finds it on the caret's line, then asks the whole text.
+        const QList<InputRule> rules{{u"->"_s, u"→"_s}, {u"zolw"_s, u"żółw"_s, true}};
+        QCOMPARE(inputRuleMatch(u"`a ->"_s, 5, 1, rules), (InputRuleHit{3, 5, u"→"_s}));
+        QCOMPARE(inputRuleHit(u"`a ->"_s, 5, 1, rules), std::nullopt);
+        QCOMPARE(inputRuleMatch(u"mój zolw "_s, 9, 1, rules), (InputRuleHit{4, 8, u"żółw"_s}));
+        QCOMPARE(inputRuleMatch(u"a -"_s, 3, 1, rules), std::nullopt);
+        QCOMPARE(inputRuleMatch(u"a ->"_s, 4, 3, rules), std::nullopt); // more typed than the match: a paste
+    }
+
+    void aLongerRuleDeclaredFirstStillWins()
+    {
+        // The rules are tried from the last declared: a shorter one found first does not hide a
+        // longer one declared before it.
+        const QList<InputRule> rules{{u"-->"_s, u"⟶"_s}, {u"->"_s, u"→"_s}};
+        QCOMPARE(inputRuleHit(u"a -->"_s, 5, 1, rules), (InputRuleHit{2, 5, u"⟶"_s}));
+    }
+
+    void sourceProtected_data()
+    {
+        QTest::addColumn<QString>("text");
+        QTest::addColumn<bool>("isProtected");
+        // The whole source; "‸" marks where a rule would start replacing, just typed.
+        QTest::newRow("a paragraph") << u"Akapit ‸"_s << false;
+        QTest::newRow("a list item") << u"# Nagłówek\n\n- [ ] zadanie ‸\n"_s << false;
+        QTest::newRow("a heading") << u"## Zażółć ‸"_s << false;
+        QTest::newRow("in the frontmatter") << u"---\ntytuł: a ‸\n---\nTreść\n"_s << true;
+        QTest::newRow("after the frontmatter") << u"---\ntytuł: a\n---\nTreść ‸"_s << false;
+        QTest::newRow("the body's first character") << u"---\ntytuł: a\n---\n‸->"_s << false;
+        QTest::newRow("the frontmatter's last character") << u"---\ntytuł: a‸\n---\n"_s << true;
+        QTest::newRow("frontmatter never closed: text") << u"---\ntytuł: a ‸\nTreść\n"_s << false;
+        QTest::newRow("a fence lines above") << u"Tekst\n\n```luau\nlocal x = 1\nprint(x ‸)\n```\n"_s << true;
+        QTest::newRow("after a closed fence") << u"```\nkod\n```\nza nim ‸"_s << false;
+        QTest::newRow("a code span over two lines") << u"Akapit `kod\ndalej ‸"_s << true;
+        QTest::newRow("a code span cut by a blank line") << u"Akapit `kod\n\nnowy ‸"_s << false;
+        QTest::newRow("a display formula") << u"$$\nx = ‸\n$$\n"_s << true;
+        // A code span ends where a Markdown block does: the next list item, a heading, a quote.
+        QTest::newRow("a code span open in the item above") << u"- Strzałka `a->\n- Zwykły blok ‸\n"_s << false;
+        QTest::newRow("a numbered item after it") << u"1. `kod\n2. dalej ‸"_s << false;
+        QTest::newRow("a heading after it") << u"Tekst `kod\n## Nagłówek ‸"_s << false;
+        QTest::newRow("a quote after it") << u"Tekst `kod\n> cytat ‸"_s << false;
+        QTest::newRow("open in the same item") << u"- `kod ‸\n- dalej\n"_s << true;
+        QTest::newRow("after a closed display formula") << u"$$\nx\n$$\npo nim ‸"_s << false;
+        QTest::newRow("a display formula with a blank line") << u"$$\n\nx = ‸\n$$\n"_s << true;
+        QTest::newRow("a tilde fence lines above") << u"~~~\nkod ‸\n~~~\n"_s << true;
+        QTest::newRow("a fence after a first empty line") << u"\n~~~\nkod ‸\n~~~\n"_s << true;
+        QTest::newRow("a backslash at the caret") << u"Akapit \\‸"_s << false;
+        QTest::newRow("a percent sign at the caret") << u"Akapit %‸"_s << false;
+        QTest::newRow("a backtick at the caret") << u"Akapit `‸"_s << true;
+        QTest::newRow("a backtick in a closed comment") << u"a %% x ` y %% dalej ‸"_s << false;
+        QTest::newRow("a link destination from the start") << u"](cel ‸"_s << true;
+        QTest::newRow("the very start") << u"‸`kod` dalej"_s << false;
+    }
+    void sourceProtected()
+    {
+        QFETCH(QString, text);
+        QFETCH(bool, isProtected);
+        const int at = int(text.indexOf(u'‸'));
+        text.remove(at, 1);
+        QCOMPARE(sourceInputRuleProtected(text, at), isProtected);
+    }
+
     void noRulesNoChange()
     {
         Fixture f(u"- a\n"_s);

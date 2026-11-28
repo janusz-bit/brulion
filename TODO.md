@@ -124,7 +124,6 @@ done in the repository simply disappears from the list.
   eleven slots of the UI are scriptable, and agents change the running app live (docs/EXTENSIONS.md
   "The app (`b.app`)", "Live code"). Still open: the bottom navigation's and the keyboard toolbar's
   extension buttons checked on a real phone (the self-test's phone run has them); replacing a built-in view with an extension's (TiddlyWiki's shadow tiddlers for the journal or Tasks view);
-  input rules (`b.app.inputRule`) in source mode too (its TextEdit has an undo stack of its own) and
   the tint of `b.app.tagStyle` in rows drawn by `PageItem` / `JournalDayItem` (behind their
   switches) and in exports.
 * **Gym: next steps** — Polish instructions for the rest of the exercises (the 144 common ones

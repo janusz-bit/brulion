@@ -28,6 +28,8 @@ import Brulion
 // margin around them; a large file in slices); a right-click on one — on touch UIs a tap — opens
 // its corrections, Add to dictionary and Ignore (BlockEditor.openSourceSpellingMenu); a
 // correction is one step of the text's own undo.
+// Input rules (docs/UI.md "Input rules"): SourceInputRules replaces what is typed before the caret,
+// as the block editor does, as a step of the TextEdit's own undo.
 Flickable {
     id: root
 
@@ -208,6 +210,13 @@ Flickable {
             id: sync
             textDocument: source.textDocument
             controller: root.controller
+        }
+        // Extensions' input rules (`->` → `→`, docs/UI.md "Input rules") as the text is typed: a
+        // step of the text's own undo; never on a paste, in code, math or the frontmatter.
+        SourceInputRules {
+            textDocument: source.textDocument
+            target: source
+            host: root.controller ? root.controller.host : null
         }
 
         MarkdownHighlighter {

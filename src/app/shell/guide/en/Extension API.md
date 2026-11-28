@@ -587,7 +587,7 @@ b.app.contribute("share", { id = "bookmark", label = "Bookmark", icon = "bookmar
 b.app.contribute("keyboardToolbar", { id = "important", label = "Important", icon = "flag", command = "important" })
 ```
 
-**As you type.** `b.app.inputRule({ match, replace })` replaces text the moment you type it: `->` becomes `→` when you type the `>`. One Ctrl+Z brings back what you typed. With `word = true` only a whole word is replaced, once you type a space or punctuation after it. Nothing is replaced in code, formulas, link targets or web addresses, nor when you paste. Brulion comes with no rules of its own — an extension declares the ones you want — and `b.app.remove("inputRule", "->")` takes one away.
+**As you type.** `b.app.inputRule({ match, replace })` replaces text the moment you type it: `->` becomes `→` when you type the `>`. One Ctrl+Z brings back what you typed. With `word = true` only a whole word is replaced, once you type a space or punctuation after it. It works in source mode too. Nothing is replaced in code, formulas, link targets, web addresses or the frontmatter, nor when you paste. Brulion comes with no rules of its own — an extension declares the ones you want — and `b.app.remove("inputRule", "->")` takes one away.
 
 ```luau
 -- Arrows and dashes as you type, and a word corrected.

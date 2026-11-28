@@ -69,6 +69,7 @@ qt_add_library(brulion_editor STATIC
     suggestionmodel.h suggestionmodel.cpp
     fakeeditorhost.h fakeeditorhost.cpp
     editorinput.h editorinput.cpp
+    sourceinputrules.h sourceinputrules.cpp
     sourcetextsync.h sourcetextsync.cpp
     mermaidview.h mermaidview.cpp
     chartview.h chartview.cpp

@@ -1,6 +1,6 @@
 // QML registration of the block editor classes in brulion_editor (src/app/editor/CMakeLists.txt):
 // the classes know nothing about QML; these wrappers make them types of the app's QML module
-// "Brulion" (PageController, BlockListModel, BlockRowData, MarkdownHighlighter, SourceTextSync, MermaidView, ChartView,
+// "Brulion" (PageController, BlockListModel, BlockRowData, MarkdownHighlighter, SourceTextSync, SourceInputRules, MermaidView, ChartView,
 // RichTextPills, RichTextLinks, RenderedTextItem (+ the value type renderedText), LinkPreview, SuggestionModel,
 // QueryResultModel, ViewResultModel, StreamSelection, FakeEditorHost, the EditorInput and SpellCheck singletons;
 // EditorHost as an uncreatable interface type), so qmllint/qmlcachegen see their full API from the library's extracted
@@ -25,6 +25,7 @@
 #include "renderedtextitem.h"
 #include "richtextlinks.h"
 #include "richtextpills.h"
+#include "sourceinputrules.h"
 #include "sourcetextsync.h"
 #include "spellcheck.h"
 #include "streamfind.h"
@@ -48,6 +49,12 @@ struct SourceTextSyncForeign {
     Q_GADGET
     QML_FOREIGN(brulion::editor::SourceTextSync)
     QML_NAMED_ELEMENT(SourceTextSync)
+};
+
+struct SourceInputRulesForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::editor::SourceInputRules)
+    QML_NAMED_ELEMENT(SourceInputRules)
 };
 
 struct VimSessionForeign {

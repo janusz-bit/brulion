@@ -68,6 +68,11 @@ brulion_add_test(tst_editor_vim
 brulion_add_test(tst_editor_sourcesync
     SOURCES tst_editor_sourcesync.cpp
     LIBS brulion_editor)
+# Input rules in source mode (SourceInputRules): typing replaced on the caret's line, one undo step of
+# its own, never on a paste, an edit of code, in code, math, a comment, a URL or the frontmatter.
+brulion_add_test(tst_editor_sourceinputrules
+    SOURCES tst_editor_sourceinputrules.cpp
+    LIBS brulion_editor Qt6::Qml Qt6::Quick)
 # Spell checking (SpellCheck on its worker thread over word-list backends; MarkdownHighlighter's
 # underlines): verdicts pending then in, batches, the cache, languages from the setting and the UI
 # language, the personal dictionary and ignored words (no flicker: wrong words stay marked until

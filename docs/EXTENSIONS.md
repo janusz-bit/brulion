@@ -2023,7 +2023,7 @@ b.app.contribute("bottomNav", { id = "bookmarks", label = "Bookmarks", icon = "b
 
 ### Input rules
 
-`b.app.inputRule({ match, replace, word? })` replaces text as it is typed in the block editor —
+`b.app.inputRule({ match, replace, word? })` replaces text as it is typed in the block editor and in source mode —
 `->` becomes `→` the moment `>` is typed, as a word processor's autocorrect. The rule is a
 declaration the app keeps: typing never waits for Luau, and no code of the extension runs while
 the user writes.
@@ -2039,7 +2039,7 @@ the user writes.
 * A rule fires on typing only — never on a paste, a deletion or text an extension writes — in
   paragraphs, list items and headings, and never inside code (a code span, also one still open
   before the caret, a fenced block, a code block), a formula (`$…$`, `$$…$$`), a `%%` comment, a
-  link's target (`[[…`, `](…`) or a URL.
+  link's target (`[[…`, `](…`), a URL or, in source mode, the frontmatter.
 * Of the rules that match, the longest wins (`-->` over `->`), and of equally long ones the one
   declared last. Declaring the same `match` again replaces the extension's rule in its place.
   Each extension has at most 64 rules, all of them together 256.

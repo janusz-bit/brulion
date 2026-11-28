@@ -587,7 +587,7 @@ b.app.contribute("share", { id = "zakladka", label = "Zakładka", icon = "bookma
 b.app.contribute("keyboardToolbar", { id = "wazne", label = "Ważne", icon = "flag", command = "wazne" })
 ```
 
-**W trakcie pisania.** `b.app.inputRule({ match, replace })` zamienia tekst w chwili, gdy go wpisujesz: `->` staje się `→`, gdy wpiszesz `>`. Jedno Ctrl+Z przywraca to, co wpisałeś. Z `word = true` zamieniane jest tylko całe słowo, gdy wpiszesz po nim spację albo znak interpunkcyjny. Nic nie jest zamieniane w kodzie, wzorach, celach linków ani adresach stron, ani przy wklejaniu. Brulion nie ma własnych reguł — rozszerzenie deklaruje te, których chcesz — a `b.app.remove("inputRule", "->")` zabiera jedną z nich.
+**W trakcie pisania.** `b.app.inputRule({ match, replace })` zamienia tekst w chwili, gdy go wpisujesz: `->` staje się `→`, gdy wpiszesz `>`. Jedno Ctrl+Z przywraca to, co wpisałeś. Z `word = true` zamieniane jest tylko całe słowo, gdy wpiszesz po nim spację albo znak interpunkcyjny. Działa też w trybie źródła. Nic nie jest zamieniane w kodzie, wzorach, celach linków, adresach stron ani we frontmatterze, ani przy wklejaniu. Brulion nie ma własnych reguł — rozszerzenie deklaruje te, których chcesz — a `b.app.remove("inputRule", "->")` zabiera jedną z nich.
 
 ```luau
 -- Strzałki i półpauzy w trakcie pisania oraz poprawione słowo.

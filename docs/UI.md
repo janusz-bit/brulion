@@ -5099,8 +5099,19 @@ text and caret (`editTextReset`), one undo brings back the typed text with the c
 what is typed next starts another step. Nothing fires in code — a code span (also one still open
 before the caret), a fenced block or `$$` lines inside the text, a code block —, an inline
 formula (also one a `$` typed at the caret would close), a `%%` comment, a wiki link or embed
-not yet closed, a Markdown link's destination or a URL (`inputRuleProtected()`). Source mode has
-its own TextEdit and undo stack and replaces nothing. Tests: `tst_editor_inputrules`.
+not yet closed, a Markdown link's destination or a URL (`inputRuleProtected()`; a code span or a
+comment ends where a line starts a list item, a heading or a quote, as in Markdown). Source mode's
+TextEdit, with its own undo stack, has `SourceInputRules` (`src/app/editor/sourceinputrules.h`):
+typing is a change of the text while a key's event or an input method's commit is delivered to the
+TextEdit (an edit made by code — find and replace, a spelling correction, the toolbar's inserts,
+Vim's commands — fires nothing); the match is found on the caret's line alone
+(`inputRuleMatch()`), and only then the whole text is read for the protection — the same, and the
+frontmatter (`sourceInputRuleProtected()`) —, so a keystroke costs its line. The replacement comes
+after the key's event, if the text is still what the rule saw, as one edit block of the TextEdit's
+undo that ends with the typed text's removal (QTextDocument merges what is typed next into a block
+that ends with an insertion): one undo brings the typed text back, what is typed after it is a
+step of its own. Tests: `tst_editor_inputrules`, `tst_editor_sourceinputrules`, the playground's
+"input rules" steps (`tst_editor_qml`: typed in both modes).
 
 ### Styles of blocks by tag
 

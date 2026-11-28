@@ -836,6 +836,19 @@ ApplicationWindow {
         if (window.at()) check(info(0).plainText === "Strzałka ->", "Ctrl+Z brings the typed text back: " + info(0).plainText)
         if (window.at()) typeKeys(" `a->")
         if (window.at()) check(info(0).editText === "Strzałka -> `a->", "nothing is replaced in a code span: " + info(0).editText)
+        // Source mode: the same rule in the TextEdit of the whole file, its own undo.
+        if (window.at()) { page.stopEditing(); editor.toggleSourceMode() }
+        if (window.at()) window.waitStep(page.sourceMode && editor.sourceTextEdit !== null
+                                         && editor.sourceTextEdit.activeFocus, "source mode for the input rules")
+        if (window.at()) editor.sourceTextEdit.cursorPosition = editor.sourceTextEdit.length - 1 // "- Zwykły blok|"
+        if (window.at()) typeKeys(" ->")
+        if (window.at()) check(Js.endsWith(editor.sourceTextEdit.text, "- Zwykły blok →\n"),
+                               "an input rule replaces in source mode: " + editor.sourceTextEdit.text)
+        if (window.at()) realKey(Qt.Key_Z, Qt.ControlModifier, "")
+        if (window.at()) check(Js.endsWith(editor.sourceTextEdit.text, "- Zwykły blok ->\n"),
+                               "Ctrl+Z brings the typed text back in source mode: " + editor.sourceTextEdit.text)
+        if (window.at()) editor.toggleSourceMode()
+        if (window.at()) window.waitStep(!page.sourceMode && rowOf("Zwykły") === 2, "back to blocks")
         if (window.at()) {
             page.stopEditing()
             host.setTagStyle("pilne", "danger", true, true)

@@ -41,10 +41,19 @@ struct InputRuleHit {
 /// target (`[[…`, `](…`) or a URL (`https://…`): inputRuleProtected().
 std::optional<InputRuleHit> inputRuleHit(const QString &text, int cursor, int typed, const QList<InputRule> &rules);
 
+/// inputRuleHit()'s match alone, without asking whether the place is protected: source mode
+/// matches on the caret's line (cheap at every keystroke) and asks sourceInputRuleProtected() of
+/// the whole text only when a rule matched.
+std::optional<InputRuleHit> inputRuleMatch(const QString &text, int cursor, int typed, const QList<InputRule> &rules);
+
 /// The position `at` of a block's text lies where nothing is replaced as it is typed — judged by
 /// the text before it, as it is being typed: inside a code span (closed or still open), a fenced
 /// code block or a `$$` display formula within the text, an inline formula, a `%%` comment, a wiki
 /// link (`[[…`, `![[…`), a Markdown link's destination (`](…`) or a URL.
 bool inputRuleProtected(const QString &text, int at);
+
+/// inputRuleProtected() over a page's whole Markdown source (source mode), and its frontmatter
+/// (the YAML between the first `---` lines: no rule replaces there either).
+bool sourceInputRuleProtected(const QString &source, int at);
 
 } // namespace brulion::editor
