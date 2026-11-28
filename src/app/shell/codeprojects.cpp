@@ -196,6 +196,7 @@ void CodeProjects::setRemote(RemoteProjects *remote)
     if (m_remote) {
         connect(m_remote, &RemoteProjects::changed, this, &CodeProjects::changed);
         connect(m_remote, &RemoteProjects::worktreeCreated, this, &CodeProjects::worktreeCreated);
+        connect(m_remote, &RemoteProjects::branchesListed, this, &CodeProjects::branchesListed);
     }
     Q_EMIT changed();
 }

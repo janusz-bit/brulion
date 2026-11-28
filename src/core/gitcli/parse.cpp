@@ -1,6 +1,9 @@
 #include "gitcli/gitcli.h"
 
 #include <QRegularExpression>
+#include <QSet>
+
+#include <algorithm>
 
 using namespace Qt::StringLiterals;
 
@@ -598,6 +601,33 @@ QString subjectOf(QStringView message)
             return t.toString();
     }
     return {};
+}
+
+QList<PickedBranch> pickerBranches(const QList<Branch> &branches, const QString &originHead)
+{
+    QString localDefault = originHead.section(u'/', 1);
+    if (localDefault.isEmpty()) {
+        for (const QString &name : {u"main"_s, u"master"_s, u"trunk"_s}) {
+            if (std::ranges::any_of(branches, [&name](const Branch &b) { return !b.remote && b.name == name; })) {
+                localDefault = name;
+                break;
+            }
+        }
+    }
+    QSet<QString> tracked;
+    for (const Branch &b : branches) {
+        if (!b.remote && !b.upstream.isEmpty())
+            tracked.insert(b.upstream);
+    }
+    QList<PickedBranch> local;
+    QList<PickedBranch> remote;
+    for (const Branch &b : branches) {
+        if (b.remote && tracked.contains(b.name))
+            continue;
+        const bool isDefault = b.remote ? b.name == originHead : b.name == localDefault;
+        (b.remote ? remote : local).append({b, isDefault});
+    }
+    return local + remote;
 }
 
 } // namespace brulion::gitcli

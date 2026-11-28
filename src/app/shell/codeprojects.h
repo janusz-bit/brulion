@@ -323,6 +323,9 @@ public:
     /// isDefault, worktree (the folder that has it checked out, "" none), upstream, ahead, behind}],
     /// error) — local ones first, each part most recently committed first.
     Q_INVOKABLE bool listBranches(const QString &folder);
+    /// A picker's row of a branch (branchesListed()'s): {name, remote, current, isDefault, worktree,
+    /// upstream, ahead, behind}.
+    static QVariantMap branchRow(const gitcli::PickedBranch &branch);
     /// `git switch <name>` in `folder` (a remote-tracking one: a local branch tracking it) /
     /// `git switch -c <name>` there: branchSwitched(folder, name, ok, message).
     /// A row of `branches` is named `name` exactly (a local one, or "origin/<name>" for a remote one).

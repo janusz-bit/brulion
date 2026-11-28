@@ -201,6 +201,18 @@ struct Branch {
     QString worktreePath;
 };
 
+/// A branch as a picker offers it (a new worktree's base, a branch to switch to).
+struct PickedBranch {
+    Branch branch;
+    bool isDefault = false; ///< the repository's default branch
+};
+/// The branches a picker lists, as git branches() gave them: the local ones, then the
+/// remote-tracking ones no local branch tracks (that local one stands for it). The default is
+/// `originHead` ("origin/main": origin's HEAD — its local branch "main", and itself), else main,
+/// master or trunk among the local ones. One rule for this device's projects and for a computer's
+/// projects a device lists (acp serve's GET projects/<id>/branches).
+QList<PickedBranch> pickerBranches(const QList<Branch> &branches, const QString &originHead);
+
 /// The --format parseBranches() reads (fields NUL-separated, the record ended by a NUL too,
 /// which git follows with a newline).
 QString branchFormat();

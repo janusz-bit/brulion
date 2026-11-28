@@ -177,7 +177,7 @@ bool CodeProjects::createWorktree(const QString &id, const QString &title, const
 {
     // (Another computer's project: its worktree is made there, worktreeCreated() when it is.)
     if (isRemote(id))
-        return m_remote->createWorktree(id, title);
+        return m_remote->createWorktree(id, title, base);
     if (isScratch(id))
         return makeScratchFolder(title);
     const QString repo = folderOf(id);
@@ -312,8 +312,25 @@ bool CodeProjects::listWorktrees(const QString &id)
     return true;
 }
 
+QVariantMap CodeProjects::branchRow(const gitcli::PickedBranch &p)
+{
+    const gitcli::Branch &b = p.branch;
+    return {{u"name"_s, b.name},
+            {u"remote"_s, b.remote},
+            {u"current"_s, b.current},
+            {u"isDefault"_s, p.isDefault},
+            {u"worktree"_s, b.worktreePath.isEmpty() ? QString() : QDir::cleanPath(b.worktreePath)},
+            {u"upstream"_s, b.upstream},
+            {u"ahead"_s, b.ahead},
+            {u"behind"_s, b.behind}};
+}
+
 bool CodeProjects::listBranches(const QString &folder)
 {
+    // (A project of another computer, its folder there: that computer's git lists them.)
+    if (const QString remote = m_remote && !QFileInfo(folder).isDir() ? m_remote->projectAt(folder) : QString();
+        !remote.isEmpty())
+        return m_remote->listBranches(remote, folder);
     if (folder.isEmpty() || !QFileInfo(folder).isDir() || !gitAvailable())
         return false;
     gitcli::RunOptions ro;
@@ -323,37 +340,10 @@ bool CodeProjects::listBranches(const QString &folder)
                [this, folder](const gitcli::RunResult &head) {
                    const QString originHead = head.ok() ? firstLine(head.out) : QString();
                    git()->branches(folder, [this, folder, originHead](const gitcli::BranchList &list) {
-                       QString localDefault = originHead.section(u'/', 1);
-                       if (localDefault.isEmpty()) {
-                           for (const QString &name : {u"main"_s, u"master"_s, u"trunk"_s})
-                               if (std::ranges::any_of(list.branches, [&name](const gitcli::Branch &b) {
-                                       return !b.remote && b.name == name;
-                                   })) {
-                                   localDefault = name;
-                                   break;
-                               }
-                       }
-                       QSet<QString> tracked;
-                       for (const gitcli::Branch &b : list.branches)
-                           if (!b.remote && !b.upstream.isEmpty())
-                               tracked.insert(b.upstream);
-                       QVariantList local, remote;
-                       for (const gitcli::Branch &b : list.branches) {
-                           // (A remote one a local branch tracks: that local one stands for it.)
-                           if (b.remote && tracked.contains(b.name))
-                               continue;
-                           const QVariantMap row{
-                                   {u"name"_s, b.name},
-                                   {u"remote"_s, b.remote},
-                                   {u"current"_s, b.current},
-                                   {u"isDefault"_s, b.remote ? b.name == originHead : b.name == localDefault},
-                                   {u"worktree"_s, b.worktreePath.isEmpty() ? QString() : QDir::cleanPath(b.worktreePath)},
-                                   {u"upstream"_s, b.upstream},
-                                   {u"ahead"_s, b.ahead},
-                                   {u"behind"_s, b.behind}};
-                           (b.remote ? remote : local) << row;
-                       }
-                       Q_EMIT branchesListed(folder, local + remote, list.ok ? QString() : list.error);
+                       QVariantList rows;
+                       for (const gitcli::PickedBranch &p : gitcli::pickerBranches(list.branches, originHead))
+                           rows << branchRow(p);
+                       Q_EMIT branchesListed(folder, rows, list.ok ? QString() : list.error);
                    });
                });
     return true;

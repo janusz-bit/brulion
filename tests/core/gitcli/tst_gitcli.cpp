@@ -41,6 +41,44 @@ class TestGitCli : public QObject {
     Q_OBJECT
 
 private Q_SLOTS:
+    void pickedBranches_data()
+    {
+        QTest::addColumn<QString>("originHead");
+        QTest::addColumn<QStringList>("expected"); // name, then "*" for the default
+        QTest::newRow("origin's HEAD") << u"origin/rozwój"_s << QStringList{u"rozwój*"_s, u"żółw"_s, u"origin/obcy"_s};
+        QTest::newRow("main without origin's HEAD")
+                << QString() << QStringList{u"rozwój"_s, u"żółw"_s, u"origin/obcy"_s};
+    }
+    void pickedBranches()
+    {
+        // Local ones first, then the remote-tracking ones no local branch tracks; the default is
+        // origin's HEAD (its local branch, and the remote one), else main, master or trunk.
+        QFETCH(QString, originHead);
+        QFETCH(QStringList, expected);
+        const auto branch = [](const QString &name, bool remote, const QString &upstream = QString()) {
+            Branch b;
+            b.name = name;
+            b.remote = remote;
+            b.upstream = upstream;
+            return b;
+        };
+        const QList<Branch> list{branch(u"origin/rozwój"_s, true), branch(u"rozwój"_s, false, u"origin/rozwój"_s),
+                                 branch(u"origin/obcy"_s, true), branch(u"żółw"_s, false)};
+        QStringList got;
+        for (const PickedBranch &p : pickerBranches(list, originHead))
+            got << p.branch.name + (p.isDefault ? u"*"_s : QString());
+        QCOMPARE(got, expected);
+        // main among the local ones, without origin's HEAD.
+        const QList<PickedBranch> master =
+                pickerBranches({branch(u"funkcja"_s, false), branch(u"master"_s, false)}, QString());
+        QCOMPARE(master.size(), 2);
+        QVERIFY(!master.at(0).isDefault);
+        QVERIFY(master.at(1).isDefault);
+        // A remote one that is origin's HEAD and tracked by none: the default too.
+        const QList<PickedBranch> remoteOnly = pickerBranches({branch(u"origin/main"_s, true)}, u"origin/main"_s);
+        QVERIFY(remoteOnly.at(0).isDefault);
+    }
+
     // ---- status ----
     void statusBranch_data();
     void statusBranch();
