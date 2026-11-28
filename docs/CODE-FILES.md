@@ -125,6 +125,18 @@ settings, `code/recentFiles/<hash of the folder>`, at most 20), the path as a br
 file…, Copy path, Open in editor, Reload. A thread's answer written reads the file shown again,
 keeping its place.
 
+### Find in the file
+
+Ctrl+F in the viewer (or its header's search button, `codeFilesFind`) opens `CodeFileFindBar` under
+the header: what is typed is found a moment later in every line of the file shown
+(`CodeFileDocument.find(pattern, caseSensitive, wholeWord, regex)`, the project search's rules —
+`searchExpression()` / `matchRanges()`, **Aa**, **ab**, **.\*** —, at most 10 000 matches), each match
+bold in the palette's `match` colour (`lineHtml()` splits the line at the spans' and matches' edges;
+`Theme.accentText`); "3 of 12" (`matchCount`, `matchLine(i)`, `nextMatch(i, ±1)` wrapping around),
+Enter the next one and Shift+Enter the one before — shown in the middle and marked —, an invalid
+expression's reason (`findError`) in red, Esc closes it (the matches go). The file read again keeps
+the query: its matches are found in the new text.
+
 ### Review comments
 
 "Comment…" asks for a short text (`codeFileCommentDialog`), then the thread's composer gets
@@ -230,7 +242,6 @@ pages of the notebook.)
 
 * Editing files in the viewer (T3 Code edits workspace files); rendered views of Markdown, HTML,
   CSV, PDF and ZIP files (here: their text; PDFs as binary files).
-* Find within the file shown (the project search finds lines, the viewer has no Ctrl+F of its own).
 * T3 Code's mentions of threads and models, and `#` for pull requests.
 * Review comments as chips in the composer: here they are text.
 * The index notices changes on disk only when it is refreshed (a turn's end, every 15 s while the

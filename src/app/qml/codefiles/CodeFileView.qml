@@ -10,7 +10,7 @@ import Brulion
 // by showLine()). Lines are selected for a review comment: a click on a line (or its number), Shift
 // with a click extends it, a drag over the numbers selects a range; Esc clears. Over a selection a
 // bar: "Comment…" (commentRequested(from, to)) and Copy (the lines); a right click has both and
-// "Copy the path with the lines". Ctrl+C copies the selected lines.
+// "Copy the path with the lines". Ctrl+C copies the selected lines; Ctrl+F asks for the find bar.
 FocusScope {
     id: view
 
@@ -28,6 +28,8 @@ FocusScope {
 
     signal commentRequested(int from, int to)
     signal copyRequested(string text)
+    /// Ctrl+F: find within the file (CodeFileFindBar).
+    signal findRequested()
 
     readonly property int lineCount: view.document !== null ? view.document.lineCount : 0
     readonly property real charWidth: metrics.height > 0 ? metrics.advanceWidth("0") : 7
@@ -84,6 +86,9 @@ FocusScope {
     Keys.onPressed: (event) => {
         if (event.key === Qt.Key_Escape && view.hasSelection) {
             view.clearSelection()
+            event.accepted = true
+        } else if (event.matches(StandardKey.Find)) {
+            view.findRequested()
             event.accepted = true
         } else if (event.matches(StandardKey.Copy) && view.hasSelection) {
             view.copyRequested(view.selectedText())

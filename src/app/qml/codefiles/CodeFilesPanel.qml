@@ -44,8 +44,18 @@ Item {
         keyword: Theme.chipScheduledFg, type: Theme.link, constant: Theme.warningText, builtin: Theme.link,
         function: Theme.fg, number: Theme.warningText, string: Theme.chipRecurrenceFg, comment: Theme.fgFaint,
         preprocessor: Theme.dangerText, tag: Theme.dangerText, attribute: Theme.warningText,
-        property: Theme.link, variable: Theme.tagFg, inserted: Theme.diffAddFg, deleted: Theme.diffDelFg
+        property: Theme.link, variable: Theme.tagFg, inserted: Theme.diffAddFg, deleted: Theme.diffDelFg,
+        match: Theme.accentText
     })
+    /// Find within the file shown (CodeFileFindBar; Ctrl+F in the viewer).
+    function openFind(): void {
+        findBar.open = true
+        findBar.focusField()
+    }
+    function closeFind(): void {
+        findBar.open = false
+        view.forceActiveFocus()
+    }
 
     /// Show `path` (relative to the folder, "/"-separated) at `line` (0: the top).
     function open(path: string, line: int): void {
@@ -186,6 +196,15 @@ Item {
                 onClicked: panel.pickRequested("")
             }
             BIconButton {
+                objectName: "codeFilesFind"
+                size: "small"
+                iconName: "search"
+                label: qsTr("Find in file")
+                shortcut: "Ctrl+F"
+                enabled: doc.kind === "text"
+                onClicked: panel.openFind()
+            }
+            BIconButton {
                 objectName: "codeFilesCopyPath"
                 size: "small"
                 iconName: "copy"
@@ -215,6 +234,13 @@ Item {
             implicitHeight: 1
             color: Theme.borderSubtle
         }
+        CodeFileFindBar {
+            id: findBar
+            Layout.fillWidth: true
+            document: doc
+            onLineRequested: (line) => view.showLine(line)
+            onCloseRequested: panel.closeFind()
+        }
         // Only the start of a big file.
         BText {
             objectName: "codeFilesTruncated"
@@ -242,6 +268,7 @@ Item {
                 document: doc
                 path: panel.path
                 onCommentRequested: (from, to) => panel.startComment(from, to)
+                onFindRequested: panel.openFind()
                 onCopyRequested: (text) => {
                     if (CodeFiles.copyText(text))
                         AppController.toast(qsTr("Copied"), "success")

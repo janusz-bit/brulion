@@ -2,9 +2,12 @@
 
 #include "codefilesbackground_p.h"
 
+#include "codefiles/search.h"
 #include "codefiles/viewer.h"
 
 #include <QDir>
+#include <QRegularExpression>
+#include <QSet>
 
 #include <algorithm>
 
@@ -99,39 +102,137 @@ QVariant CodeFileDocument::data(const QModelIndex &index, int role) const
     switch (role) {
     case NumberRole: return row + 1;
     case TextRole: return m_lines.at(row);
-    case HtmlRole: return lineHtml(m_lines.at(row), m_spans.value(row), m_colours, m_tabWidth);
+    case HtmlRole:
+        return lineHtml(m_lines.at(row), m_spans.value(row), m_colours, m_tabWidth,
+                        m_matches.isEmpty() ? QList<std::pair<int, int>>() : matchesOf(row),
+                        m_palette.value(u"match"_s).toString());
     default: return {};
     }
 }
 
+namespace {
+
+/// The colour of `spans` at `at` ("" none).
+QString colourAt(const QList<CodeSpan> &spans, const QHash<int, QString> &colours, qsizetype at)
+{
+    for (const CodeSpan &s : spans)
+        if (at >= s.from && at < s.from + s.length)
+            return colours.value(int(s.kind));
+    return {};
+}
+
+bool matchedAt(const QList<std::pair<int, int>> &matches, qsizetype at)
+{
+    return std::ranges::any_of(matches, [at](const auto &m) { return at >= m.first && at < m.first + m.second; });
+}
+
+/// Where a line of `size` characters changes colour or match: its ends and every span's and match's.
+QList<qsizetype> segmentEdges(qsizetype size, const QList<CodeSpan> &spans, const QList<std::pair<int, int>> &matches)
+{
+    QList<qsizetype> edges{0, size};
+    for (const CodeSpan &s : spans)
+        edges << s.from << s.from + s.length;
+    for (const auto &[from, length] : matches)
+        edges << from << from + length;
+    std::ranges::sort(edges);
+    edges.erase(std::unique(edges.begin(), edges.end()), edges.end());
+    edges.removeIf([size](qsizetype e) { return e < 0 || e > size; });
+    return edges;
+}
+
+} // namespace
+
 QString CodeFileDocument::lineHtml(QStringView line, const QList<CodeSpan> &spans, const QHash<int, QString> &colours,
-                                   int tabWidth)
+                                   int tabWidth, const QList<std::pair<int, int>> &matches, const QString &matchColour)
 {
     tabWidth = std::max(1, tabWidth);
     const QStringView shown = line.first(std::min<qsizetype>(line.size(), MaxLineLength));
     QString out;
     out.reserve(shown.size() * 2);
     int column = 0;
-    qsizetype at = 0;
-    for (const CodeSpan &s : spans) {
-        if (s.from >= shown.size())
-            break;
-        if (s.from > at)
-            appendEscaped(out, shown.sliced(at, s.from - at), tabWidth, &column);
-        const qsizetype end = std::min<qsizetype>(s.from + s.length, shown.size());
-        const QString colour = colours.value(int(s.kind));
+    const QList<qsizetype> edges = segmentEdges(shown.size(), spans, matches);
+    for (qsizetype i = 0; i + 1 < edges.size(); ++i) {
+        const qsizetype from = edges.at(i);
+        const bool matched = matchedAt(matches, from);
+        const QString colour = matched && !matchColour.isEmpty() ? matchColour : colourAt(spans, colours, from);
+        if (matched)
+            out += u"<b>"_s;
         if (!colour.isEmpty())
             out += u"<font color=\""_s + colour + u"\">"_s;
-        appendEscaped(out, shown.sliced(s.from, end - s.from), tabWidth, &column);
+        appendEscaped(out, shown.sliced(from, edges.at(i + 1) - from), tabWidth, &column);
         if (!colour.isEmpty())
             out += u"</font>"_s;
-        at = end;
+        if (matched)
+            out += u"</b>"_s;
     }
-    if (at < shown.size())
-        appendEscaped(out, shown.sliced(at), tabWidth, &column);
     if (shown.size() < line.size())
         out += u"…"_s;
     return out;
+}
+
+void CodeFileDocument::find(const QString &pattern, bool caseSensitive, bool wholeWord, bool regex)
+{
+    m_findPattern = pattern;
+    m_findCase = caseSensitive;
+    m_findWord = wholeWord;
+    m_findRegex = regex;
+    refind();
+}
+
+void CodeFileDocument::refind()
+{
+    const QList<Match> before = m_matches;
+    m_matches.clear();
+    m_findError.clear();
+    if (!m_findPattern.isEmpty()) {
+        SearchOptions options;
+        options.pattern = m_findPattern;
+        options.caseSensitive = m_findCase;
+        options.wholeWord = m_findWord;
+        options.regex = m_findRegex;
+        const QRegularExpression expression = searchExpression(options);
+        if (!expression.isValid())
+            m_findError = expression.errorString();
+        for (int row = 0; expression.isValid() && row < m_lines.size() && m_matches.size() < MaxMatches; ++row)
+            for (const auto &[from, length] : matchRanges(m_lines.at(row), expression, MaxMatches))
+                m_matches.append({row, from, length});
+    }
+    // (The rows that had or have a match show it, or no longer.)
+    QSet<int> rows;
+    for (const Match &m : std::as_const(before))
+        rows.insert(m.row);
+    for (const Match &m : std::as_const(m_matches))
+        rows.insert(m.row);
+    for (const int row : std::as_const(rows))
+        if (row < m_lines.size())
+            Q_EMIT dataChanged(index(row), index(row), {HtmlRole});
+    Q_EMIT findChanged();
+}
+
+QList<std::pair<int, int>> CodeFileDocument::matchesOf(int row) const
+{
+    // (In order of rows: those of `row` found by halves.)
+    QList<std::pair<int, int>> out;
+    auto it = std::lower_bound(m_matches.cbegin(), m_matches.cend(), row,
+                               [](const Match &m, int r) { return m.row < r; });
+    for (; it != m_matches.cend() && it->row == row; ++it)
+        out.append({it->from, it->length});
+    return out;
+}
+
+int CodeFileDocument::matchLine(int index) const
+{
+    return index >= 0 && index < m_matches.size() ? m_matches.at(index).row + 1 : 0;
+}
+
+int CodeFileDocument::nextMatch(int index, int delta) const
+{
+    const int n = int(m_matches.size());
+    if (n == 0)
+        return -1;
+    if (index < 0)
+        return delta < 0 ? n - 1 : 0;
+    return ((index + (delta < 0 ? -1 : 1)) % n + n) % n;
 }
 
 void CodeFileDocument::setFolder(const QString &folder)
@@ -272,8 +373,11 @@ void CodeFileDocument::apply(Loaded l)
     m_maxColumns = l.maxColumns;
     m_lines = std::move(l.lines);
     m_spans = std::move(l.spans);
+    m_matches.clear();
     endResetModel();
     Q_EMIT loaded();
+    if (!m_findPattern.isEmpty())
+        refind();
 }
 
 QString CodeFileDocument::linesText(int from, int to) const

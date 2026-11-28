@@ -46,6 +46,9 @@ class CodeFileDocument : public QAbstractListModel {
     Q_PROPERTY(QString absolutePath READ absolutePath NOTIFY pathChanged FINAL)
     /// A picture's file: URL (kind "picture").
     Q_PROPERTY(QUrl fileUrl READ fileUrl NOTIFY pathChanged FINAL)
+    /// Find within the file (find()): how many matches, and why the pattern is no expression ("").
+    Q_PROPERTY(int matchCount READ matchCount NOTIFY findChanged FINAL)
+    Q_PROPERTY(QString findError READ findError NOTIFY findChanged FINAL)
 
 public:
     enum Role { NumberRole = Qt::UserRole + 1, HtmlRole, TextRole };
@@ -84,9 +87,23 @@ public:
     /// One line's text (1-based; "" out of range).
     Q_INVOKABLE QString lineText(int line) const;
 
-    /// The StyledText of `line` with `spans` in `colours` (pure; tabs to `tabWidth` spaces).
+    /// Finds `pattern` in the lines (the project search's options: codefiles::matchRanges(); at most
+    /// MaxMatches): their rows show the matches bold in the palette's "match" colour. "" clears.
+    Q_INVOKABLE void find(const QString &pattern, bool caseSensitive, bool wholeWord, bool regex);
+    int matchCount() const { return int(m_matches.size()); }
+    QString findError() const { return m_findError; }
+    /// The line (1-based) of match `index` (0 for none).
+    Q_INVOKABLE int matchLine(int index) const;
+    /// The match after (`delta` 1) or before (-1) match `index` (-1: from the start / the end),
+    /// wrapping around; -1 when there is none.
+    Q_INVOKABLE int nextMatch(int index, int delta) const;
+    static constexpr int MaxMatches = 10000;
+
+    /// The StyledText of `line` with `spans` in `colours` (pure; tabs to `tabWidth` spaces), the
+    /// `matches` ({from, length}) bold in `matchColour` ("" bold only).
     static QString lineHtml(QStringView line, const QList<CodeSpan> &spans, const QHash<int, QString> &colours,
-                            int tabWidth);
+                            int tabWidth, const QList<std::pair<int, int>> &matches = {},
+                            const QString &matchColour = {});
 
 Q_SIGNALS:
     void folderChanged();
@@ -95,6 +112,7 @@ Q_SIGNALS:
     void tabWidthChanged();
     /// A read finished (or was refused): kind and the rows are new.
     void loaded();
+    void findChanged();
 
 private:
     struct Loaded;
@@ -116,6 +134,19 @@ private:
     QStringList m_lines;
     QList<QList<CodeSpan>> m_spans;
     int m_generation = 0;
+    /// find()'s options, and its matches: {row, from, length}, in order.
+    struct Match {
+        int row;
+        int from;
+        int length;
+    };
+    QString m_findPattern;
+    bool m_findCase = false, m_findWord = false, m_findRegex = false;
+    QList<Match> m_matches;
+    QString m_findError;
+    /// The matches of the rows again (a find, a new read).
+    void refind();
+    QList<std::pair<int, int>> matchesOf(int row) const;
 };
 
 } // namespace brulion::codefiles

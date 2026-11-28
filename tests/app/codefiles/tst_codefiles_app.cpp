@@ -258,6 +258,61 @@ private Q_SLOTS:
         QCOMPARE(CodeFileDocument::lineHtml(u"ab\tc\x01", {}, colours, 4), u"ab&nbsp;&nbsp;c"_s);
         const QString longLine(CodeFileDocument::MaxLineLength + 10, u'x');
         QVERIFY(CodeFileDocument::lineHtml(longLine, {}, colours, 4).endsWith(u"x…"_s));
+        // Matches of the find bar: bold in the match colour, across a span's edge too.
+        QCOMPARE(CodeFileDocument::lineHtml(u"a \"żółw\"", {{2, 6, CodeToken::String}}, colours, 4, {{0, 4}}, u"#ff0000"_s),
+                 u"<b><font color=\"#ff0000\">a&nbsp;</font></b><b><font color=\"#ff0000\">&quot;ż</font></b>"
+                 u"<font color=\"#123456\">ółw&quot;</font>"_s);
+        // Without a colour: bold only; a match past the line's end cut.
+        QCOMPARE(CodeFileDocument::lineHtml(u"abc", {}, colours, 4, {{1, 9}}, QString()), u"a<b>bc</b>"_s);
+    }
+
+    // Find within the file shown (Ctrl+F in the viewer): its matches counted, line by line, with the
+    // project search's options; an invalid expression said; cleared.
+    void findInFile()
+    {
+        QTemporaryDir dir;
+        QVERIFY(writeFile(dir.filePath(u"a.md"_s), "Żółw je.\nnic\nŻÓŁW i żółw\n"));
+        CodeFileDocument doc;
+        doc.setFolder(dir.path());
+        doc.setPath(u"a.md"_s);
+        QTRY_COMPARE(doc.lineCount(), 3);
+        QSignalSpy found(&doc, &CodeFileDocument::findChanged);
+        doc.find(u"żółw"_s, false, false, false);
+        QCOMPARE(doc.matchCount(), 3);
+        QCOMPARE(doc.findError(), QString());
+        QCOMPARE(doc.matchLine(0), 1);
+        QCOMPARE(doc.matchLine(2), 3);
+        QCOMPARE(doc.matchLine(3), 0);
+        QCOMPARE(doc.matchLine(-1), 0);
+        // The next one from a line, either way, wrapping around.
+        QCOMPARE(doc.nextMatch(1, 1), 2);
+        QCOMPARE(doc.nextMatch(1, -1), 0);
+        QCOMPARE(doc.nextMatch(2, 1), 0);
+        QCOMPARE(doc.nextMatch(0, -1), 2);
+        QVERIFY(doc.data(doc.index(2), CodeFileDocument::HtmlRole).toString().contains(u"<b>"_s));
+        QVERIFY(!doc.data(doc.index(1), CodeFileDocument::HtmlRole).toString().contains(u"<b>"_s));
+        // Case and whole words; a regular expression, a broken one.
+        doc.find(u"żółw"_s, true, false, false);
+        QCOMPARE(doc.matchCount(), 1);
+        doc.find(u"je"_s, false, true, false);
+        QCOMPARE(doc.matchCount(), 1);
+        doc.find(u"Ż\\w+"_s, true, false, true);
+        QCOMPARE(doc.matchCount(), 2);
+        doc.find(u"(["_s, false, false, true);
+        QCOMPARE(doc.matchCount(), 0);
+        QVERIFY(!doc.findError().isEmpty());
+        doc.find(QString(), false, false, false);
+        QCOMPARE(doc.matchCount(), 0);
+        QCOMPARE(doc.findError(), QString());
+        QVERIFY(!doc.data(doc.index(0), CodeFileDocument::HtmlRole).toString().contains(u"<b>"_s));
+        QVERIFY(found.size() >= 6);
+        QCOMPARE(doc.nextMatch(0, 1), -1);
+        // The file read again: the matches of the new text.
+        doc.find(u"żółw"_s, false, false, false);
+        QVERIFY(writeFile(dir.filePath(u"a.md"_s), "żółw\n"));
+        doc.reload();
+        QTRY_COMPARE(doc.lineCount(), 1);
+        QCOMPARE(doc.matchCount(), 1);
     }
 
     // ---- The project search ---------------------------------------------------------------------
