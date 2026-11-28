@@ -1005,7 +1005,7 @@
 <context>
     <name>GitChangesPanel</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="775"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="782"/>
         <source>%n file(s) with conflicts: take a side, or edit them and mark them resolved.</source>
         <translation>
             <numerusform>%n file with conflicts: take a side, or edit them and mark them resolved.</numerusform>
@@ -1013,7 +1013,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="947"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="954"/>
         <source>and %n more file(s)</source>
         <translation>
             <numerusform>and %n more file</numerusform>
@@ -1021,7 +1021,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1581"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1588"/>
         <source>The files go back to how they were before the turn: the %n file(s) it changed are put back, files it added are deleted.</source>
         <translation>
             <numerusform>The files go back to how they were before the turn: the %n file it changed is put back, files it added are deleted.</numerusform>
@@ -1865,7 +1865,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3578"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3598"/>
         <source>%n warning(s) or error(s)</source>
         <translation>
             <numerusform>%n warning or error</numerusform>
@@ -1873,7 +1873,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3443"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3463"/>
         <source>Last check %1: %n reminder(s), the sync failed.</source>
         <translation>
             <numerusform>Last check %1: %n reminder, the sync failed.</numerusform>
@@ -1913,7 +1913,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3267"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3287"/>
         <source>Type check: %n warning(s), %1</source>
         <translation>
             <numerusform>Type check: %n warning, %1</numerusform>
@@ -1921,7 +1921,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3445"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3465"/>
         <source>Last check %1: %n reminder(s).</source>
         <translation>
             <numerusform>Last check %1: %n reminder.</numerusform>
@@ -2798,7 +2798,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/gitpanel/codegit.cpp" line="1162"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="1171"/>
         <source>Reverted %n file(s)</source>
         <translation>
             <numerusform>Reverted %n file</numerusform>
@@ -2806,7 +2806,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/gitpanel/codegit.cpp" line="1307"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="1316"/>
         <source>The remote has %n new commit(s): pull first</source>
         <translation>
             <numerusform>The remote has %n new commit: pull first</numerusform>

@@ -90,9 +90,13 @@ QVariantMap CodeProjects::worktreeFor(const QString &id, const QString &title) c
     return {{u"folder"_s, dir.filePath(name)}, {u"branch"_s, QString(m_branchPrefix + name)}};
 }
 
-QString CodeProjects::worktreeName(const QString &answer, const QString &title, const QString &prefix)
+QString CodeProjects::worktreeName(const QString &answer, const QString &title, const QString &prefix, bool semantic)
 {
-    const QString name = slugOrEmpty(codeai::readBranchName(answer));
+    const QString read = codeai::readBranchName(answer, semantic);
+    // (A semantic name's type stays before its slash: "fix/" + the words' slug.)
+    const qsizetype slash = read.indexOf(u'/');
+    const QString words = slugOrEmpty(read.mid(slash + 1));
+    const QString name = words.isEmpty() || slash < 0 ? words : read.left(slash + 1) + words;
     return !name.isEmpty() && gitcli::isValidBranchName(QString(prefix + name)) ? name : slug(title);
 }
 
@@ -113,7 +117,7 @@ void CodeProjects::nameWorktree(const QString &title, std::function<void(const Q
         if (wait->over || !self)
             return;
         wait->over = true;
-        done(worktreeName(answer, title, self->m_branchPrefix));
+        done(worktreeName(answer, title, self->m_branchPrefix, self->m_semanticBranches));
     };
     QTimer::singleShot(m_namerTimeoutMs, this, [wait, finish] {
         if (wait->over)
@@ -135,11 +139,13 @@ void CodeProjects::freeName(const QString &folder, const QString &dir, const QSt
                    QSet<QString> taken;
                    for (const QString &line : QString::fromUtf8(r.out).split(u'\n', Qt::SkipEmptyParts))
                        taken.insert(line.trimmed());
+                   // (A semantic name's folder has no slash: "fix-cart-total".)
+                   const auto folderOf = [](const QString &n) { return QString(n).replace(u'/', u'-'); };
                    QString name = base;
-                   for (int n = 2; QFileInfo::exists(QDir(dir).filePath(name)) || taken.contains(m_branchPrefix + name);
-                        ++n)
+                   for (int n = 2;
+                        QFileInfo::exists(QDir(dir).filePath(folderOf(name))) || taken.contains(m_branchPrefix + name); ++n)
                        name = base + u'-' + QString::number(n);
-                   done(m_branchPrefix + name, name);
+                   done(m_branchPrefix + name, folderOf(name));
                });
 }
 

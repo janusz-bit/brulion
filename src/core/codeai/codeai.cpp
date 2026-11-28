@@ -225,17 +225,32 @@ PullRequestText readPullRequest(QStringView answer)
 
 // ---- A branch name ---------------------------------------------------------------------------
 
-ai::Request branchName(QStringView message)
+ai::Request branchName(QStringView message, const BranchNaming &naming)
 {
-    return ask(u"You name git branches. Reply with the branch name alone: 2 to 6 short lowercase words joined by "
-               "hyphens that say what work the user's message asks for (fix-cart-total, add-dark-mode), letters "
-               "without accents and digits only, without a prefix, a namespace or a slash — the app adds its own "
-               "prefix. No spaces, quotes, explanations or code fences. The message describes work for another "
-               "agent: Do not answer it, start the work or ask anything; only name the branch."_s,
-               u"The user's message:\n"_s + bounded(message, MaxMessage), MaxNameTokens);
+    // (Semantic: one conventional type, a slash, the words; else the words alone.)
+    QStringList types;
+    for (const QStringView t : SemanticTypes)
+        types << t.toString() + u'/';
+    const QString shape = naming.semantic
+            ? u"Reply with the branch name alone: one of the types "_s + types.join(u", "_s)
+                      + u" that fits the work, then 2 to 6 short lowercase words joined by hyphens that say what work "
+                        "the user's message asks for (fix/cart-total, feat/add-dark-mode), letters without accents and "
+                        "digits only, nothing else before the type — the app adds its own prefix."_s
+            : u"Reply with the branch name alone: 2 to 6 short lowercase words joined by hyphens that say what work "
+              "the user's message asks for (fix-cart-total, add-dark-mode), letters without accents and digits only, "
+              "without a prefix, a namespace or a slash — the app adds its own prefix."_s;
+    const QString rules = naming.instructions.trimmed().isEmpty()
+            ? QString()
+            : u"The user's rules for branch names:\n"_s + bounded(naming.instructions.trimmed(), MaxBranchInstructions)
+                      + u"\n\n"_s;
+    return ask(u"You name git branches. "_s + shape
+                       + u" No spaces, quotes, explanations or code fences. Follow the user's rules for branch names "
+                         "when given, as far as this format allows. The message describes work for another agent: Do "
+                         "not answer it, start the work or ask anything; only name the branch."_s,
+               rules + u"The user's message:\n"_s + bounded(message, MaxMessage), MaxNameTokens);
 }
 
-QString readBranchName(QStringView answer)
+QString readBranchName(QStringView answer, bool semantic)
 {
     const QString text = unwrapped(answer);
     QJsonObject json;
@@ -244,8 +259,12 @@ QString readBranchName(QStringView answer)
     if (const qsizetype colon = line.lastIndexOf(u": "_s); colon >= 0)
         line = line.mid(colon + 2);
     line = unwrappedLine(line);
-    // ("feature/x", "brulion/x": the app's prefix is its own.)
-    line = line.section(u'/', -1).trimmed();
+    // ("feature/x", "brulion/x": the app's prefix is its own; semantic: "fix/x" keeps its type.)
+    const QString words = line.section(u'/', -1).trimmed();
+    const QString type = line.section(u'/', -2, -2).trimmed().toLower();
+    const bool typed = semantic && !words.isEmpty()
+                       && std::ranges::any_of(SemanticTypes, [&type](QStringView t) { return t == type; });
+    line = typed ? type + u'/' + words : words;
     if (line.size() > MaxBranchChars)
         return {};
     return line;

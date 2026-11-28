@@ -1112,6 +1112,8 @@ private Q_SLOTS:
         QCOMPARE(git(repo, {u"add"_s, u"-A"_s}), 0);
         QCOMPARE(git(repo, {u"commit"_s, u"-qm"_s, u"start"_s}), 0);
         CodeProjects projects;
+        QByteArray kept;
+        projects.setStorage([&kept] { return kept; }, [&kept](const QByteArray &json) { kept = json; });
         projects.setPrograms(QStandardPaths::findExecutable(u"git"_s), QString());
         projects.setWorktreesRoot(fresh(u"drzewa"_s));
         const QString id = projects.add(repo);
@@ -1179,6 +1181,25 @@ private Q_SLOTS:
         QVERIFY(projects.createWorktree(id, u"Usuń rabat"_s));
         QTRY_COMPARE_WITH_TIMEOUT(created.size(), 5, 20000);
         QCOMPARE(created.at(4).at(2).toString(), u"brulion/usun-rabat"_s);
+
+        // T3 Code's semantic names: the AI's type kept after the prefix, the folder without a slash;
+        // kept for the device with the user's rules for names.
+        QVERIFY(!projects.semanticBranches());
+        projects.setSemanticBranches(true);
+        projects.setBranchInstructions(u"  Po angielsku, krótko.  "_s);
+        QCOMPARE(projects.branchInstructions(), u"Po angielsku, krótko."_s);
+        projects.setBranchNamer([](const QString &, std::function<void(const QString &)> done) {
+            done(u"Fix/Discount-Rounding"_s);
+            return std::function<void()>();
+        });
+        QVERIFY(projects.createWorktree(id, u"Popraw sumę"_s));
+        QTRY_COMPARE_WITH_TIMEOUT(created.size(), 6, 20000);
+        QCOMPARE(created.at(5).at(2).toString(), u"brulion/fix/discount-rounding"_s);
+        QCOMPARE(QFileInfo(created.at(5).at(1).toString()).fileName(), u"fix-discount-rounding"_s);
+        CodeProjects again;
+        again.setStorage([&kept] { return kept; }, [](const QByteArray &) {});
+        QVERIFY(again.semanticBranches());
+        QCOMPARE(again.branchInstructions(), u"Po angielsku, krótko."_s);
     }
 
     // With gh: `gh pr checkout` in a new detached worktree, its title from `gh pr view`.

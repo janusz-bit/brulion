@@ -25,7 +25,8 @@ bottom navigation is gone. Reminders, sync, notifications and the rest of the no
 settings, `codeconfig.cpp` t3.json, `codeworktrees.cpp` git and gh, `codeeditors.cpp` "Open in…"):
 this device's projects, kept in its settings (`code/projects`, JSON: `{projects: [{id, name, path,
 pinned?, icon?, agent?, env?, scripts?: [{name, command, icon, shortcut?, runOnWorktreeCreate?,
-wait?}]}], worktreesRoot?, clonesRoot?, editor?, preferredEditor?, branchPrefix?, deletedWorktrees?, newThreadEnv?,
+wait?}]}], worktreesRoot?, clonesRoot?, editor?, preferredEditor?, branchPrefix?, semanticBranches?,
+branchInstructions?, deletedWorktrees?, newThreadEnv?,
 threadSort?}`) — **never in the notebook**: a path is this device's, and a synced file must never point
 an agent at a folder.
 
@@ -166,7 +167,12 @@ Everything through `gitcli::Client` (QProcess argument lists, never a shell; doc
   (`codeai::readBranchName()`; more than 64 characters is a sentence, no name), then `slug()` — when
   `branchPrefix` + it is a valid branch name (`gitcli::isValidBranchName`). Anything else — no AI, a
   failure, no answer within 20 seconds (`BranchNameTimeoutMs`; the question is stopped then), an answer
-  that is no name — gives today's name, the message's slug. The folder takes the same name; a name
+  that is no name — gives today's name, the message's slug. T3 Code's naming modes (Settings →
+  Extensions → Code mode, device settings): `semanticBranches` — the AI starts the name with one of
+  `codeai::SemanticTypes` (`fix/cart-total`: kept by `readBranchName(answer, true)`, each part a slug,
+  the branch `brulion/fix/cart-total`, its folder `fix-cart-total`) — and `branchInstructions` — the
+  user's own rules for names, in the question as data (`codeai::BranchNaming`, at most 2000
+  characters). The folder takes the same name; a name
   taken gets `-2`, `-3` … as before. The message waits meanwhile (the header's spinner), as T3 Code's
   agent waits for its name; the name is known before the worktree exists, so the thread's page names
   its branch from the start and no branch is renamed under a running agent (T3 Code makes a temporary
@@ -596,8 +602,7 @@ thread's files opening the viewer at their line (`CodeView.openFileInViewer(path
   the commit message and pull request written by AI there; a waiting message of a turn the
   computer's app runs taken back there; projects of two computers with the same id
   (the first computer's is listed).
-* Multi-repository projects and custom worktree layouts (t3.json's ignoreRepositories, worktreeLayout); T3 Code's branch naming
-  modes (a semantic prefix the AI picks, the user's own instructions for it); worktrees cleaned up by
+* Multi-repository projects and custom worktree layouts (t3.json's ignoreRepositories, worktreeLayout); worktrees cleaned up by
   their age alone, whatever their threads (settled threads' worktrees are: "Settling and snoozing").
 * Cloning: other hosts' repository lists (GitLab, Forgejo, Bitbucket — their addresses clone, their
   lists are not shown), T3 Code's "Clone into host folders" (`<host>/<owner>/<repo>`), a new project

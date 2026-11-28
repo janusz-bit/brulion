@@ -568,6 +568,23 @@ void CodeProjects::setBranchPrefix(const QString &prefix)
     save();
 }
 
+void CodeProjects::setSemanticBranches(bool on)
+{
+    if (on == m_semanticBranches)
+        return;
+    m_semanticBranches = on;
+    save();
+}
+
+void CodeProjects::setBranchInstructions(const QString &text)
+{
+    const QString clean = text.trimmed().left(codeai::MaxBranchInstructions);
+    if (clean == m_branchInstructions)
+        return;
+    m_branchInstructions = clean;
+    save();
+}
+
 void CodeProjects::setDeletedWorktrees(const QString &policy)
 {
     const QString clean = policy == u"delete" || policy == u"keep" ? policy : u"ask"_s;
@@ -663,6 +680,8 @@ void CodeProjects::load()
     m_branchPrefix = all.contains(u"branchPrefix"_s) ? all.value(u"branchPrefix"_s).toString() : u"brulion/"_s;
     if (!m_branchPrefix.isEmpty() && !validBranchName(m_branchPrefix + u"x"_s))
         m_branchPrefix = u"brulion/"_s;
+    m_semanticBranches = all.value(u"semanticBranches"_s).toBool();
+    m_branchInstructions = all.value(u"branchInstructions"_s).toString().left(codeai::MaxBranchInstructions);
     const QString deleted = all.value(u"deletedWorktrees"_s).toString();
     m_deletedWorktrees = deleted == u"delete" || deleted == u"keep" ? deleted : u"ask"_s;
     const QString env = all.value(u"newThreadEnv"_s).toString();
@@ -707,6 +726,10 @@ void CodeProjects::save()
         all.insert(u"preferredEditor"_s, m_preferredEditor);
     if (m_branchPrefix != u"brulion/")
         all.insert(u"branchPrefix"_s, m_branchPrefix);
+    if (m_semanticBranches)
+        all.insert(u"semanticBranches"_s, true);
+    if (!m_branchInstructions.isEmpty())
+        all.insert(u"branchInstructions"_s, m_branchInstructions);
     if (m_deletedWorktrees != u"ask")
         all.insert(u"deletedWorktrees"_s, m_deletedWorktrees);
     if (!m_newThreadEnv.isEmpty())

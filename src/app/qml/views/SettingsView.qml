@@ -2981,6 +2981,26 @@ Item {
                         }
                     }
                 }
+                // T3 Code's branch naming modes: the AI's name with a type, and the user's rules for it.
+                SettingSwitch {
+                    objectName: "codeSemanticBranchesSetting"
+                    text: qsTr("Branch names with a type")
+                    description: qsTr("The AI starts a new worktree's branch name with what the work is: %1fix/the-cart, %1feat/dark-mode.").arg(Workspace.projects.branchPrefix)
+                    checked: Workspace.projects.semanticBranches
+                    onToggled: Workspace.projects.semanticBranches = checked
+                }
+                ShellSettingRow {
+                    title: qsTr("Rules for branch names")
+                    description: qsTr("What the AI follows when it names a new worktree's branch, e.g. “in English, the issue number first”.")
+                    BTextField {
+                        objectName: "codeBranchInstructionsSetting"
+                        Layout.preferredWidth: Theme.compact ? -1 : 220
+                        Layout.fillWidth: Theme.compact
+                        text: Workspace.projects.branchInstructions
+                        accessibleName: qsTr("Rules for branch names")
+                        onEditingFinished: Workspace.projects.branchInstructions = text
+                    }
+                }
                 ShellSettingRow {
                     title: qsTr("Worktrees of deleted threads")
                     description: qsTr("When a thread with a worktree of its own goes to the trash and no other thread uses it. Its branch always stays; “Delete” asks when the worktree has uncommitted changes.")

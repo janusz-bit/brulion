@@ -17,8 +17,7 @@ done in the repository simply disappears from the list.
   the phone through `acp serve --projects`): the terminal from the phone, projects of two computers with the same
   id; T3 Code's in-app browser for `previewUrl` (the
   system's opens it),
-  multi-repository projects and custom worktree layouts; T3 Code's branch naming modes (the AI names
-  a new worktree's branch: a semantic prefix it picks, the user's own instructions); worktrees cleaned
+  multi-repository projects and custom worktree layouts; worktrees cleaned
   up by their age alone, whatever their threads (a settled thread's is, after its merge or some days:
   docs/CODE.md "Settling and snoozing"); a new thread's title written
   by the AI by itself ("Regenerate title" is there); in the file

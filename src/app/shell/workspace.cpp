@@ -254,7 +254,7 @@ std::function<void()> Workspace::askBranchName(const QString &message, std::func
         done(QString());
         return {};
     }
-    ai::Pending pending = m_extensions->sendAi(codeai::branchName(message), [done](const ai::Reply &reply) {
+    ai::Pending pending = m_extensions->sendAi(codeai::branchName(message, m_projects->branchNaming()), [done](const ai::Reply &reply) {
         done(reply.ok ? reply.text : QString());
     });
     return [pending]() mutable { pending.stop(); };

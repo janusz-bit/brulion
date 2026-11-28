@@ -239,6 +239,47 @@ private Q_SLOTS:
         QVERIFY(cut.size() < MaxMessage + 200);
     }
 
+    // T3 Code's branch naming modes: a semantic prefix the AI picks (feat/, fix/ …), and the user's
+    // own rules for it, as data, bounded.
+    void branchQuestionModes()
+    {
+        const QString first = u"Dodaj ciemny motyw"_s;
+        BranchNaming naming;
+        naming.semantic = true;
+        const ai::Request r = branchName(first, naming);
+        QVERIFY2(r.system.contains(u"feat/"_s) && r.system.contains(u"fix/"_s), qPrintable(r.system));
+        QVERIFY(!userText(r).contains(u"rules"_s));
+        naming.instructions = u"Zawsze po angielsku, numer zgłoszenia na początku."_s;
+        const ai::Request withRules = branchName(first, naming);
+        QVERIFY2(userText(withRules).contains(u"The user's rules for branch names:\nZawsze po angielsku"_s),
+                 qPrintable(userText(withRules)));
+        QVERIFY(userText(withRules).endsWith(first));
+        naming.instructions = QString(MaxBranchInstructions * 2, u'r');
+        QVERIFY(userText(branchName(first, naming)).contains(QString(MaxBranchInstructions, u'r') + u"\n[truncated]"_s));
+        // Plain: no prefix asked for.
+        QVERIFY(!branchName(first).system.contains(u"feat/"_s));
+    }
+
+    void readSemanticBranchName_data()
+    {
+        QTest::addColumn<QString>("answer");
+        QTest::addColumn<QString>("name");
+        QTest::newRow("a type") << u"feat/add-dark-mode"_s << u"feat/add-dark-mode"_s;
+        QTest::newRow("fix") << u"`fix/cart-total`"_s << u"fix/cart-total"_s;
+        QTest::newRow("upper case type") << u"Docs/readme-install"_s << u"docs/readme-install"_s;
+        QTest::newRow("the app's prefix too") << u"brulion/chore/bump-qt"_s << u"chore/bump-qt"_s;
+        QTest::newRow("an unknown type") << u"feature/add-dark-mode"_s << u"add-dark-mode"_s;
+        QTest::newRow("no type") << u"add-dark-mode"_s << u"add-dark-mode"_s;
+        QTest::newRow("a type alone") << u"feat/"_s << QString();
+        QTest::newRow("json") << u"{\"branch\": \"refactor/split-parser\"}"_s << u"refactor/split-parser"_s;
+    }
+    void readSemanticBranchName()
+    {
+        QFETCH(QString, answer);
+        QFETCH(QString, name);
+        QCOMPARE(readBranchName(answer, true), name);
+    }
+
     void readBranchNameAnswer_data()
     {
         QTest::addColumn<QString>("answer");

@@ -48,6 +48,7 @@
 #include <QVariantList>
 #include <QVariantMap>
 
+#include "codeai/codeai.h"
 #include "gitcli/gitcli.h"
 
 #include <functional>
@@ -90,6 +91,11 @@ class CodeProjects : public QObject {
     Q_PROPERTY(QString effectiveEditor READ effectiveEditor NOTIFY editorsChanged FINAL)
     /// The start of a new worktree's branch ("brulion/" by default; "" none). A device setting.
     Q_PROPERTY(QString branchPrefix READ branchPrefix WRITE setBranchPrefix NOTIFY changed FINAL)
+    /// T3 Code's branch naming modes (device settings): the AI picks a conventional type for a new
+    /// worktree's branch (<prefix>fix/cart-total; codeai::BranchNaming), and the user's own rules
+    /// for its names.
+    Q_PROPERTY(bool semanticBranches READ semanticBranches WRITE setSemanticBranches NOTIFY changed FINAL)
+    Q_PROPERTY(QString branchInstructions READ branchInstructions WRITE setBranchInstructions NOTIFY changed FINAL)
     /// What happens to a worktree of its own when its thread is deleted and no other thread uses it:
     /// "ask" (the default), "delete", "keep". A device setting.
     Q_PROPERTY(QString deletedWorktrees READ deletedWorktrees WRITE setDeletedWorktrees NOTIFY changed FINAL)
@@ -278,6 +284,12 @@ public:
     QString editorCommand() const { return m_editor; }
     void setEditorCommand(const QString &command);
     QString branchPrefix() const { return m_branchPrefix; }
+    bool semanticBranches() const { return m_semanticBranches; }
+    void setSemanticBranches(bool on);
+    QString branchInstructions() const { return m_branchInstructions; }
+    void setBranchInstructions(const QString &text);
+    /// The AI's question's naming of a new worktree's branch (the two above).
+    codeai::BranchNaming branchNaming() const { return {m_semanticBranches, m_branchInstructions}; }
     void setBranchPrefix(const QString &prefix);
     QString deletedWorktrees() const { return m_deletedWorktrees; }
     void setDeletedWorktrees(const QString &policy);
@@ -315,8 +327,9 @@ public:
     /// A new worktree's name — its folder's, and its branch's after `prefix` — from the AI's
     /// `answer` (codeai::readBranchName, then slug()) when it gives one that `prefix` + it is a valid
     /// branch name with (gitcli::isValidBranchName); else the slug of the thread's `title`, the name
-    /// without the AI.
-    static QString worktreeName(const QString &answer, const QString &title, const QString &prefix);
+    /// without the AI. `semantic`: the answer's type kept, "fix/cart-total" (each part a slug).
+    static QString worktreeName(const QString &answer, const QString &title, const QString &prefix,
+                                bool semantic = false);
     /// The project's worktrees but its own folder: worktreesListed(id, [{folder, branch, detached}]).
     Q_INVOKABLE bool listWorktrees(const QString &id);
     /// The branches of the repository of `folder`: branchesListed(folder, [{name, remote, current,
@@ -509,6 +522,8 @@ private:
     QString m_editor;
     QString m_preferredEditor;
     QString m_branchPrefix = QStringLiteral("brulion/");
+    bool m_semanticBranches = false;
+    QString m_branchInstructions;
     QString m_deletedWorktrees = QStringLiteral("ask");
     QString m_newThreadEnv;
     QString m_threadSort = QStringLiteral("activity");

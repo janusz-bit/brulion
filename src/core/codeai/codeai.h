@@ -86,14 +86,28 @@ inline constexpr qsizetype MaxBranchChars = 64;
 /// The most characters of the thread's first message a question sends.
 inline constexpr qsizetype MaxMessage = 8000;
 
+/// How a new worktree's branch is named (T3 Code's modes): `semantic` — a conventional prefix the AI
+/// picks (SemanticTypes: feat/…, fix/…); `instructions` — the user's own rules, as data.
+struct BranchNaming {
+    bool semantic = false;
+    QString instructions;
+};
+inline constexpr qsizetype MaxBranchInstructions = 2000;
+/// The prefixes a semantic name may start with.
+inline constexpr QStringView SemanticTypes[] = {u"feat", u"fix", u"docs", u"refactor", u"test", u"chore",
+                                                u"perf", u"style", u"build", u"ci"};
+
 /// A short branch name for the work `message` asks for (a new worktree thread's first message):
-/// a few lowercase words joined by hyphens, without a prefix — the app adds its own.
-ai::Request branchName(QStringView message);
+/// a few lowercase words joined by hyphens, without a prefix — the app adds its own —, or with
+/// `naming.semantic` after one of SemanticTypes ("feat/add-dark-mode"); `naming.instructions` the
+/// user's rules for it.
+ai::Request branchName(QStringView message, const BranchNaming &naming = {});
 
 /// The name the answer to branchName() gives: its first line or a JSON object's `branch`, with a
 /// fence, quotes, a label ("Branch: …") and a prefix ("feature/…") taken off; "" when it gives none
 /// or more than a name (over MaxBranchChars). Not yet a git branch name: the app makes one of it.
-QString readBranchName(QStringView answer);
+/// `semantic`: a prefix of SemanticTypes kept ("fix/cart-total", lowercased); any other taken off.
+QString readBranchName(QStringView answer, bool semantic = false);
 
 // ---- A thread's title ------------------------------------------------------------------------
 
