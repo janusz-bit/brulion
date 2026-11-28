@@ -304,4 +304,139 @@ int RemoteProjects::requestDiff(const QString &id, const QString &worktree, cons
     return serial;
 }
 
+// ---- Git there ----------------------------------------------------------------------------------------
+
+QString RemoteProjects::subjectOf(const QString &message)
+{
+    const QString trimmed = message.trimmed();
+    return trimmed.left(trimmed.indexOf(u'\n')).trimmed();
+}
+
+void RemoteProjects::gitFinished(int serial, const QString &action, bool ok, const QString &message, const QString &url)
+{
+    // (After the call that asked returns, as an answer from there would come.)
+    QMetaObject::invokeMethod(
+            this, [this, serial, action, ok, message, url] { Q_EMIT gitDone(serial, action, ok, message, url); },
+            Qt::QueuedConnection);
+}
+
+void RemoteProjects::askGit(int serial, const QString &id, const QString &action, const acp::RemoteGitRequest &request,
+                            const QString &failure, std::function<void(const acp::RemoteGitResult &)> then)
+{
+    const std::optional<Computer> computer = computerOf(id);
+    sync::HttpTransport *transport = m_transport ? m_transport() : nullptr;
+    if (!computer || !transport) {
+        gitFinished(serial, action, false, tr("No computer of yours has this project."));
+        return;
+    }
+    const std::weak_ptr<bool> alive = m_alive;
+    const Computer c = *computer;
+    acp::remoteGit(transport, QUrl(c.url), c.token, id, request,
+                   [this, alive, serial, action, failure, c, then](const acp::RemoteGitResult &result,
+                                                                    const acp::RemoteError &error) {
+                       if (alive.expired())
+                           return;
+                       if (error.failed()) {
+                           const QString why = errorText(c, error);
+                           gitFinished(serial, action, false, failure.isEmpty() ? why : failure.arg(why));
+                           return;
+                       }
+                       then(result);
+                   });
+}
+
+int RemoteProjects::commit(const QString &id, const QString &worktree, const QString &message, const QStringList &files,
+                           bool push, bool createPr, const QString &prTitle, const QString &prBody, bool draft)
+{
+    const int serial = ++m_serial;
+    acp::RemoteGitRequest request;
+    request.worktree = worktree;
+    request.message = message;
+    request.files = files;
+    if (request.problem() == u"bad_message") {
+        gitFinished(serial, u"commit"_s, false, tr("Write a commit message first."));
+        return serial;
+    }
+    askGit(serial, id, u"commit"_s, request, QString(),
+           [this, serial, id, worktree, message, push, createPr, prTitle, prBody, draft](const acp::RemoteGitResult &c) {
+               const QString commit = c.commit.left(7);
+               if (!push && !createPr) {
+                   gitFinished(serial, u"commit"_s, true,
+                               c.branch.isEmpty() ? tr("Committed %1").arg(commit)
+                                                  : tr("Committed %1 on %2").arg(commit, c.branch));
+                   return;
+               }
+               acp::RemoteGitRequest next;
+               next.worktree = worktree;
+               if (!createPr) {
+                   next.kind = acp::RemoteGitRequest::Kind::Push;
+                   askGit(serial, id, u"commit"_s, next, tr("Committed, but the push failed: %1"),
+                          [this, serial](const acp::RemoteGitResult &p) {
+                              gitFinished(serial, u"commit"_s, true, tr("Committed and pushed to %1").arg(p.remote));
+                          });
+                   return;
+               }
+               next.kind = acp::RemoteGitRequest::Kind::PullRequest;
+               next.title = prTitle.trimmed().isEmpty() ? subjectOf(message) : prTitle.trimmed();
+               next.body = prBody;
+               next.draft = draft;
+               askGit(serial, id, u"commit"_s, next, tr("Committed, but no pull request: %1"),
+                      [this, serial](const acp::RemoteGitResult &p) {
+                          gitFinished(serial, u"commit"_s, true,
+                                      p.number > 0 ? tr("Committed, pushed and opened pull request #%1").arg(p.number)
+                                                   : tr("Committed, pushed and opened the pull request"),
+                                      p.url);
+                      });
+           });
+    return serial;
+}
+
+int RemoteProjects::push(const QString &id, const QString &worktree)
+{
+    const int serial = ++m_serial;
+    acp::RemoteGitRequest request;
+    request.kind = acp::RemoteGitRequest::Kind::Push;
+    request.worktree = worktree;
+    askGit(serial, id, u"push"_s, request, QString(), [this, serial](const acp::RemoteGitResult &p) {
+        gitFinished(serial, u"push"_s, true, tr("Pushed %1 to %2").arg(p.branch, p.remote));
+    });
+    return serial;
+}
+
+int RemoteProjects::createPullRequest(const QString &id, const QString &worktree, const QString &title,
+                                      const QString &body, const QString &base, bool draft)
+{
+    const int serial = ++m_serial;
+    acp::RemoteGitRequest request;
+    request.kind = acp::RemoteGitRequest::Kind::PullRequest;
+    request.worktree = worktree;
+    request.title = title.trimmed();
+    request.body = body;
+    request.base = base.trimmed();
+    request.draft = draft;
+    if (request.problem() == u"bad_title") {
+        gitFinished(serial, u"pr"_s, false, tr("A pull request needs a title."));
+        return serial;
+    }
+    askGit(serial, id, u"pr"_s, request, QString(), [this, serial](const acp::RemoteGitResult &p) {
+        gitFinished(serial, u"pr"_s, true,
+                    p.number > 0 ? tr("Opened pull request #%1").arg(p.number) : tr("Opened the pull request"), p.url);
+    });
+    return serial;
+}
+
+int RemoteProjects::revertTurn(const QString &id, const QString &worktree, const QString &checkpoint)
+{
+    const int serial = ++m_serial;
+    acp::RemoteGitRequest request;
+    request.kind = acp::RemoteGitRequest::Kind::Revert;
+    request.worktree = worktree;
+    request.checkpoint = checkpoint;
+    askGit(serial, id, u"revert"_s, request, QString(), [this, serial](const acp::RemoteGitResult &r) {
+        gitFinished(serial, u"revert"_s, true,
+                    tr("The turn was reverted: %n file(s) put back", "", int(r.restored.size() + r.removed.size())));
+    });
+    return serial;
+}
+
 } // namespace brulion::shell

@@ -3970,7 +3970,8 @@ private Q_SLOTS:
     // brulion-cli acp serve with --projects and the fake agent — the computer's projects listed here
     // with its name, a new thread answered by its agent in the project's folder there (the session's
     // request naming the project, never reaching the agent), the checkpoint that computer took known
-    // here (the thread's list, its page), the turn's changes and a file's diff from there, a worktree
+    // here (the thread's list, its page), the turn's changes and a file's diff from there, the turn
+    // reverted there, a commit there pushed to its remote (an empty message never sent), a worktree
     // made there for the next thread and its turns in it, a folder that is no worktree refused there.
     void remoteThread()
     {
@@ -3983,9 +3984,14 @@ private Q_SLOTS:
         writeRaw(computer + u"/Dom.md"_s, "- na komputerze\n");
         const QString repo = m_tmp.filePath(u"komputer-projekt/Sklep żółwia"_s);
         QVERIFY(writeRaw(repo + u"/Dom.md"_s, "# Sklep żółwia\n"));
-        for (const QStringList &args : {QStringList{u"init"_s, u"-q"_s}, QStringList{u"add"_s, u"-A"_s},
-                                        QStringList{u"-c"_s, u"user.name=Ala"_s, u"-c"_s, u"user.email=a@b.c"_s, u"-c"_s,
-                                                    u"commit.gpgsign=false"_s, u"commit"_s, u"-qm"_s, u"start"_s}})
+        const QString bare = m_tmp.filePath(u"komputer-zdalne.git"_s);
+        QCOMPARE(QProcess::execute(u"git"_s, {u"init"_s, u"-q"_s, u"--bare"_s, bare}), 0);
+        for (const QStringList &args : {QStringList{u"init"_s, u"-q"_s, u"-b"_s, u"main"_s}, QStringList{u"add"_s, u"-A"_s},
+                                        QStringList{u"config"_s, u"user.name"_s, u"Ala"_s},
+                                        QStringList{u"config"_s, u"user.email"_s, u"a@b.c"_s},
+                                        QStringList{u"config"_s, u"commit.gpgsign"_s, u"false"_s},
+                                        QStringList{u"commit"_s, u"-qm"_s, u"start"_s},
+                                        QStringList{u"remote"_s, u"add"_s, u"origin"_s, bare}})
             QCOMPARE(QProcess::execute(u"git"_s, QStringList{u"-C"_s, repo} + args), 0);
         const QString root = m_tmp.filePath(u"komputer-drzewa"_s);
         const QString projectsFile = m_tmp.filePath(u"komputer-projekty.json"_s);
@@ -4101,6 +4107,43 @@ private Q_SLOTS:
         remote->requestChanges(u"brak"_s, QString(), QString());
         QTRY_COMPARE_WITH_TIMEOUT(ready.size(), 2, 20000);
         QVERIFY(!ready.last().at(3).toString().isEmpty());
+
+        // Git there from here: the turn reverted (its file gone there), written again, committed
+        // and pushed (to a bare repository there); a message or a title that is none never sent.
+        QSignalSpy git(remote, &shell::RemoteProjects::gitDone);
+        int asked = remote->revertTurn(u"sklep"_s, QString(), chats->lastCheckpoint(path));
+        QTRY_COMPARE_WITH_TIMEOUT(git.size(), 1, 30000);
+        QCOMPARE(git.last().at(0).toInt(), asked);
+        QCOMPARE(git.last().at(1).toString(), u"revert"_s);
+        QVERIFY2(git.last().at(2).toBool(), qPrintable(git.last().at(3).toString()));
+        QVERIFY(!QFile::exists(repo + u"/Od agenta.md"_s));
+        QCOMPARE(chats->send(path, u"zapisz"_s), path);
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->turn(path)->running(), 30000);
+        QVERIFY(QFile::exists(repo + u"/Od agenta.md"_s));
+        remote->commit(u"sklep"_s, QString(), u"  \n "_s, {}, true, false, QString(), QString(), false);
+        QTRY_COMPARE_WITH_TIMEOUT(git.size(), 2, 20000);
+        QVERIFY(!git.last().at(2).toBool());
+        QCOMPARE(git.last().at(3).toString(), u"Write a commit message first."_s);
+        asked = remote->commit(u"sklep"_s, QString(), u"Od agenta\n\nZ telefonu"_s, {}, true, false, QString(), QString(), false);
+        QTRY_COMPARE_WITH_TIMEOUT(git.size(), 3, 60000);
+        QCOMPARE(git.last().at(0).toInt(), asked);
+        QVERIFY2(git.last().at(2).toBool(), qPrintable(git.last().at(3).toString()));
+        QCOMPARE(git.last().at(3).toString(), u"Committed and pushed to origin"_s);
+        QProcess log;
+        log.start(u"git"_s, {u"-C"_s, bare, u"log"_s, u"-1"_s, u"--format=%s"_s, u"main"_s});
+        QVERIFY(log.waitForFinished(20000));
+        QCOMPARE(log.readAllStandardOutput().trimmed(), "Od agenta"_ba);
+        remote->createPullRequest(u"sklep"_s, QString(), u"   "_s, QString(), QString(), false);
+        QTRY_COMPARE_WITH_TIMEOUT(git.size(), 4, 20000);
+        QCOMPARE(git.last().at(3).toString(), u"A pull request needs a title."_s);
+        // Nothing to commit there now: its words.
+        remote->commit(u"sklep"_s, QString(), u"Znowu"_s, {}, false, false, QString(), QString(), false);
+        QTRY_COMPARE_WITH_TIMEOUT(git.size(), 5, 30000);
+        QVERIFY(!git.last().at(2).toBool());
+        QVERIFY2(git.last().at(3).toString().contains(u"Nothing to commit"_s), qPrintable(git.last().at(3).toString()));
+        remote->push(u"brak"_s, QString());
+        QTRY_COMPARE_WITH_TIMEOUT(git.size(), 6, 20000);
+        QCOMPARE(git.last().at(3).toString(), u"No computer of yours has this project."_s);
 
         // A worktree made there for the next thread, and its turns in it.
         QSignalSpy created(projects, &shell::CodeProjects::worktreeCreated);

@@ -1171,6 +1171,10 @@ The API (`<public URL>/acp/v1/`, JSON; `src/core/acp/remote.h` is the app's side
 | `POST projects/<id>/worktrees` | `{title, base?}` | 201 `{folder, branch}`: a git worktree made for a new thread; 400 `bad_title`, `bad_base`; 404 `unknown_project`; 409 `git_failed` |
 | `GET projects/<id>/changes` | `?worktree=F&since=C` | `{changes [{path, oldPath?, change, additions, deletions, binary}], truncated}` — the files changed since the checkpoint `C` (none: since the last commit) in the project's folder or its worktree `F`; 400 `bad_checkpoint`, `bad_worktree`; 403 `not_a_worktree` |
 | `GET projects/<id>/diff` | `?worktree=F&since=C&path=P&oldPath=O` | `{path, oldText, newText, oldExists, newExists, binary, tooLarge}`; 400 `bad_path` (not a path of the work tree: absolute, `..`, `.git`, or through a folder that links out of it) |
+| `POST projects/<id>/commit` | `{worktree?, message, files?}` | `{commit, branch, message}` — every change of the project's folder (or its worktree), or only `files` among them, committed with `message` (never empty: no AI writes it here); 400 `bad_message`, `bad_files`, `bad_worktree`; 403 `not_a_worktree`; 409 `nothing_to_commit`, `not_a_repository`, `git_failed` (a hook, conflict markers …) |
+| `POST projects/<id>/push` | `{worktree?}` | `{branch, remote, message}` — `git push` (without an upstream `-u` to origin, else the only remote); 409 `git_failed` |
+| `POST projects/<id>/pr` | `{worktree?, title, body, base?, draft?}` | `{url, number, branch, message}` — the branch pushed, then `gh pr create` here (from a fork into its upstream); 400 `bad_title`, `bad_body`, `bad_base`; 409 `push_failed`, `git_failed` (gh missing or signed out) |
+| `POST projects/<id>/revert` | `{worktree?, checkpoint}` | `{restored, removed, kept, message}` — the files back as the checkpoint has them (a turn reverted; the index, HEAD and ignored files untouched); 400 `bad_checkpoint`; 409 `git_failed` |
 
 Every request but `pair` carries `Authorization: Bearer <token>` (401 `unauthorized` without a
 paired one). Errors are `{error: {code, message}}`. A stream of another device, or one that ended
@@ -1221,8 +1225,13 @@ phone continues while the agent works here, in the project, as on the desktop.
   new thread as the desktop does (`git worktree add -b brulion/<slug> <root>/<id>/<slug> <base or
   HEAD>`, a free name: `-2`, `-3` …); `GET …/changes` and `…/diff` give what changed since a
   checkpoint (a turn's changes) or since the last commit, and a file's two texts (2 MiB each at
-  most), for the device's read-only changes list. Committing, pushing and the terminal stay this
-  computer's.
+  most), for the device's changes list.
+* **Git for the device**: `POST projects/<id>/commit`, `…/push`, `…/pr` and `…/revert` commit, push,
+  open a pull request (through this computer's GitHub CLI, signed in here) and revert a turn in the
+  project's folder or its worktree — the same project and worktree rules, git's own: the repository's
+  hooks run, a file with conflict markers is refused, files are paths inside the work tree (never of
+  `.git`), a base a branch's name, a body of 1 MiB at most (a message of 20 000 characters, a pull
+  request's title of 256 and description of 65 536). The terminal stays this computer's.
 * A stream that asks for the feature (`POST streams {features: ["code"]}`) is told the server has
   it (`features` of the answer).
 

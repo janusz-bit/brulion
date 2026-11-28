@@ -9,11 +9,16 @@ import Brulion
 // project, its git and its terminal, so this side reads what it says (Workspace.projects.remote:
 // RemoteProjects.requestChanges / requestDiff over its `acp serve`) — the files the agent's last
 // turn changed there (since the turn's checkpoint), or every change not committed, read-only, and
-// a file's diff (BDiffView: beside the list when wide, in its place when narrow). Committing, pushing
-// and the terminal stay that computer's (said in the header). Refreshed when the checkpoint changes,
-// when the owner asks (refresh(): a turn ended) and with its button.
+// a file's diff (BDiffView: beside the list when wide, in its place when narrow). Its git is asked
+// there: Commit… (every change or this turn's files; then pushed, or pushed with a pull request),
+// Push, Create PR… (CodeRemoteGitDialog) and Revert this turn… (the files back as the turn's
+// checkpoint has them) — RemoteProjects.commit / push / createPullRequest / revertTurn, one at a time,
+// none while the turn runs there (`working`), what happened in a toast. The terminal stays that
+// computer's (said in the header). Refreshed when the checkpoint changes, when the owner asks
+// (refresh(): a turn ended), after git did something and with its button.
 //
-//   CodeRemoteChanges { project: id; worktree: place.worktree; checkpoint: lastCheckpoint; host: place.host }
+//   CodeRemoteChanges { project: id; worktree: place.worktree; checkpoint: lastCheckpoint; host: place.host
+//                       working: chat.busyHere }
 Rectangle {
     id: panel
     objectName: "codeRemoteChanges"
@@ -26,6 +31,14 @@ Rectangle {
     property string host
     /// "turn" | "all" — what the list shows while there is a checkpoint.
     property string mode: "turn"
+    /// The thread's turn runs there: git waits.
+    property bool working: false
+
+    /// The git request on its way ("" none: "commit" | "push" | "pr" | "revert") and its number.
+    property string gitAction
+    property int gitSerial: 0
+    readonly property bool gitBusy: panel.gitAction !== ""
+    readonly property bool canGit: !panel.gitBusy && !panel.working && panel.project !== ""
 
     readonly property bool turnMode: panel.checkpoint !== "" && panel.mode === "turn"
     readonly property bool wide: panel.width >= 760
@@ -74,6 +87,47 @@ Rectangle {
         panel.diffLoading = true
         panel.diffSerial = remote.requestDiff(panel.project, panel.worktree, panel.turnMode ? panel.checkpoint : "",
                                               path, oldPath)
+    }
+    function commit(message: string, files: list<string>, push: bool, createPr: bool, prTitle: string,
+                    prBody: string, draft: bool): void {
+        const remote = Workspace.projects.remote
+        if (remote === null)
+            return
+        // (Asked before anything is set: a list argument is handed on only so.)
+        const serial = remote.commit(panel.project, panel.worktree, message, files, push, createPr, prTitle, prBody,
+                                     draft)
+        panel.gitAction = "commit"
+        panel.gitSerial = serial
+    }
+    function push(): void {
+        const remote = Workspace.projects.remote
+        if (remote === null)
+            return
+        panel.gitAction = "push"
+        panel.gitSerial = remote.push(panel.project, panel.worktree)
+    }
+    function pullRequest(title: string, body: string, base: string, draft: bool): void {
+        const remote = Workspace.projects.remote
+        if (remote === null)
+            return
+        panel.gitAction = "pr"
+        panel.gitSerial = remote.createPullRequest(panel.project, panel.worktree, title, body, base, draft)
+    }
+    function revertTurn(): void {
+        const remote = Workspace.projects.remote
+        if (remote === null || panel.checkpoint === "")
+            return
+        panel.gitAction = "revert"
+        panel.gitSerial = remote.revertTurn(panel.project, panel.worktree, panel.checkpoint)
+    }
+    function gitDone(serial: int, ok: bool, message: string, url: string): void {
+        if (serial !== panel.gitSerial || panel.gitAction === "")
+            return
+        panel.gitAction = ""
+        if (message !== "")
+            AppController.toast(url !== "" ? message + "\n" + url : message, ok ? "success" : "error")
+        panel.closeDiff()
+        again.restart()
     }
     function closeDiff(): void {
         panel.selectedPath = ""
@@ -125,6 +179,9 @@ Rectangle {
             panel.diffBinary = binary
             panel.diffTooLarge = tooLarge
         }
+        function onGitDone(serial: int, action: string, ok: bool, message: string, url: string) {
+            panel.gitDone(serial, ok, message, url)
+        }
     }
 
     color: Theme.bg
@@ -150,7 +207,7 @@ Rectangle {
             BText {
                 objectName: "codeRemoteNote"
                 Layout.fillWidth: true
-                text: qsTr("Changes and the terminal are on %1: here they are read-only.").arg(panel.host)
+                text: qsTr("The project is on %1: its git works there, its terminal is there.").arg(panel.host)
                 variant: "small"
                 color: Theme.fgMuted
                 wrapMode: Text.Wrap
@@ -179,6 +236,56 @@ Rectangle {
             model: panel.modes
             currentValue: panel.mode
             onActivated: (value) => panel.setMode("" + value)
+        }
+
+        // ---- Its git there --------------------------------------------------------------------------
+        Flow {
+            objectName: "codeRemoteActions"
+            Layout.fillWidth: true
+            Layout.leftMargin: Theme.space2
+            Layout.rightMargin: Theme.space2
+            Layout.bottomMargin: Theme.space2
+            spacing: Theme.space1
+            BButton {
+                objectName: "codeRemoteCommit"
+                text: qsTr("Commit…")
+                size: "small"
+                iconName: "git-commit-horizontal"
+                enabled: panel.canGit && panel.rows.length > 0
+                busy: panel.gitAction === "commit"
+                onClicked: gitDialog.openFor("commit", panel.turnMode ? UiModels.stringFields(panel.rows, "path") : panel.noPaths)
+            }
+            BButton {
+                objectName: "codeRemotePush"
+                text: qsTr("Push")
+                size: "small"
+                variant: "ghost"
+                iconName: "upload"
+                enabled: panel.canGit
+                busy: panel.gitAction === "push"
+                onClicked: panel.push()
+            }
+            BButton {
+                objectName: "codeRemotePullRequest"
+                text: qsTr("Create PR…")
+                size: "small"
+                variant: "ghost"
+                iconName: "git-pull-request"
+                enabled: panel.canGit
+                busy: panel.gitAction === "pr"
+                onClicked: gitDialog.openFor("pr", panel.noPaths)
+            }
+            BButton {
+                objectName: "codeRemoteRevertTurn"
+                visible: panel.turnMode
+                text: qsTr("Revert this turn…")
+                size: "small"
+                variant: "ghost"
+                iconName: "undo-2"
+                enabled: panel.canGit && panel.rows.length > 0
+                busy: panel.gitAction === "revert"
+                onClicked: revertDialog.open()
+            }
         }
 
         Rectangle {
@@ -308,6 +415,29 @@ Rectangle {
                 }
             }
         }
+    }
+
+    readonly property list<string> noPaths: []
+
+    CodeRemoteGitDialog {
+        id: gitDialog
+        host: panel.host
+        onCommitRequested: (message, files, push, createPr, prTitle, prBody, draft) =>
+                           panel.commit(message, files, push, createPr, prTitle, prBody, draft)
+        onPullRequestRequested: (title, body, base, draft) => panel.pullRequest(title, body, base, draft)
+    }
+
+    BConfirmDialog {
+        id: revertDialog
+        objectName: "codeRemoteRevertDialog"
+        title: qsTr("Revert this turn?")
+        subject: panel.host
+        subjectIcon: "laptop"
+        message: qsTr("The files on %1 go back to how they were before the turn: the %n file(s) it changed are put back, files it added are deleted.", "", panel.rows.length).arg(panel.host)
+        detail: qsTr("Commits, the staging area and ignored files stay as they are.")
+        confirmText: qsTr("Revert")
+        destructive: true
+        onAccepted: panel.revertTurn()
     }
 
     // ---- A changed file ----------------------------------------------------------------------

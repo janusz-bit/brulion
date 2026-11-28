@@ -427,6 +427,19 @@ goes into the upstream repository (`--repo`, `--head owner:branch`).
 too), the stashes (`gitStashList`: `gitStash_<i>` with `gitStashApply`, `gitStashPop`,
 `gitStashDrop` — confirmed by `gitDropStashDialog`; `gitNoStashes`).
 
+## A project of another computer
+
+A thread whose project is on another computer of the user's (docs/CODE.md "Threads on the phone")
+has no CodeGit here: its git is that computer's. `CodeRemoteChanges` (`src/app/qml/code`) stands in
+for the panel — the turn's or every change and a file's diff read from there — and asks that
+computer's `acp serve` for the rest (`RemoteProjects`, core `acp/codehost.h` `RemoteGitRequest`):
+`POST projects/<id>/commit` (the client's `commit()`: every change, or the files named among git's
+changes, untracked ones added — conflict markers refused, the hooks run), `…/push` (`push()`), `…/pr`
+(`push()`, then `pullRequestTarget()` and `createPullRequest()`, as Create PR… does here) and
+`…/revert` (`restore()` of the turn's checkpoint). The message is never empty there (the phone has
+no "Write with AI" for it); every path is checked on both sides (`isSafeRelativePath()`,
+`isValidBranchName()` there).
+
 ## Security
 
 * **No shell.** Every program gets its arguments as a list (QProcess): a commit message, a branch

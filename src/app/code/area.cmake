@@ -3,13 +3,15 @@
 # the shell's (shell/codeprojects.h, WorkspaceChats' threads, WorkspaceAgents' sessions in a
 # project's folder); here its QML — the view of route "code" and the sidebar AppShell shows in Code
 # mode. The Changes panel is the gitpanel area's, the Terminal panel the terminal area's;
-# CodeRemoteChanges stands in for it for a project of another computer (read-only, from there).
+# CodeRemoteChanges stands in for it for a project of another computer (its changes from there, its
+# git asked there: CodeRemoteGitDialog).
 qt_target_qml_sources(brulion
     QML_FILES
         qml/code/CodeView.qml
         qml/code/CodeSidebar.qml
         qml/code/CodeProjectDialog.qml
         qml/code/CodeRemoteChanges.qml
+        qml/code/CodeRemoteGitDialog.qml
         qml/code/CodeProjectSection.qml
         qml/code/CodeThreadRow.qml
         qml/code/CodeSnoozeMenu.qml

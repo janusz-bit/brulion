@@ -420,10 +420,18 @@ and starts new ones there.
 * **Checkpoints** are taken there, before the prompt reaches the agent; the computer tells the device
   (`_brulion/checkpoint`, also in the turn it keeps for a device that lost the stream), which records
   it as its own (`WorkspaceAgents::checkpointMade` → the thread's checkpoints).
-* **Changes and the terminal are that computer's**: on the phone `CodeRemoteChanges` shows what the
-  last turn changed there (the files since its checkpoint, or every change not committed) and a file's
-  diff, read-only (`GET projects/<id>/changes`, `…/diff`); committing, pushing and the terminal are at
-  that computer.
+* **Changes, git and the terminal are that computer's**: on the phone `CodeRemoteChanges` shows what
+  the last turn changed there (the files since its checkpoint, or every change not committed) and a
+  file's diff (`GET projects/<id>/changes`, `…/diff`), and asks that computer's git
+  (`RemoteProjects.commit / push / createPullRequest / revertTurn` → `gitDone`): **Commit…**
+  (`CodeRemoteGitDialog`: a message — never empty, no AI writes it there —, every change or only
+  this turn's files, then pushed or pushed with a pull request), **Push**, **Create PR…** (a title, a
+  description, a base; the branch pushed first, `gh` of that computer opens it) and **Revert this
+  turn…** (confirmed: the files back as the turn's checkpoint has them) — `POST projects/<id>/commit`,
+  `…/push`, `…/pr`, `…/revert` (docs/CLI.md "Code mode's projects"). One request at a time, none
+  while the thread's turn runs; what happened (or why not: a hook, nothing to commit, gh signed out)
+  comes as a toast, a pull request's address with it, and the list is read again. The terminal is
+  at that computer.
 
 ## The computer's own turns on the phone
 
@@ -582,8 +590,9 @@ thread's files opening the viewer at their line (`CodeView.openFileInViewer(path
   the Changes panel), not yet a session by hand with a real agent; a worktree of a repository whose
   paths pass 260 characters needs git's `core.longpaths`; a terminal before Windows 10 1809.
 * The rest of docs/CODE-GIT.md "Not done (yet)".
-* Threads on the phone: committing, pushing, pull requests, the branch picker, reverting a turn and
-  the terminal of a project of another computer (the phone shows its changes read-only); pictures
+* Threads on the phone: the branch picker, "Revert to before turn N" and the terminal of a project
+  of another computer (the phone commits, pushes, opens pull requests and reverts the last turn there),
+  the commit message and pull request written by AI there; pictures
   for a turn the computer's app runs, its agent's options (model, mode) changed from the phone, a
   waiting message taken back there; a new
   worktree there from another base than its HEAD in the UI; projects of two computers with the same id

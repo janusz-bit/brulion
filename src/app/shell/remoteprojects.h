@@ -6,8 +6,9 @@
 // them after this device's own (CodeProjects::setRemote(): `remote: true`, the computer's name), and a
 // thread of one runs its turns on that computer, through its shared agent (WorkspaceAgents): in the
 // project's folder there or a worktree that computer makes for it (createWorktree()). What the last
-// turn changed comes from there too (requestChanges(), requestDiff()): the Changes panel and the
-// terminal stay that computer's.
+// turn changed comes from there too (requestChanges(), requestDiff()), and its git is asked there
+// (commit(), push(), createPullRequest(), revertTurn(): POST projects/<id>/commit | push | pr |
+// revert — the commit's message is never empty here); the terminal stays that computer's.
 //
 // The computers are those of the agents paired with this device (setComputers(): an address and a
 // token each, from the app's secrets). Their lists are asked for when the agents change and on
@@ -17,6 +18,8 @@
 //
 //   Workspace.projects.remote.refresh()
 //   Workspace.projects.remote.requestChanges(project, worktree, since)  // → changesReady(serial, …)
+//   Workspace.projects.remote.commit(project, worktree, message, [], true, false, "", "", false)
+//                                                                        // → gitDone(serial, "commit", …)
 //
 // Single-threaded (the GUI thread).
 
@@ -27,6 +30,7 @@
 #include <QObject>
 #include <QSet>
 #include <QString>
+#include <QStringList>
 #include <QVariantList>
 #include <QVariantMap>
 
@@ -104,8 +108,28 @@ public:
     Q_INVOKABLE int requestDiff(const QString &id, const QString &worktree, const QString &since, const QString &path,
                                 const QString &oldPath);
 
+    /// A commit there of `files` (none: every change) with `message` (never empty), then — `push` —
+    /// pushed, or — `createPr` — pushed with a pull request (`prTitle`, "" the message's first line):
+    /// gitDone(serial, "commit", …) once all of it is done or one step failed (said which).
+    Q_INVOKABLE int commit(const QString &id, const QString &worktree, const QString &message,
+                           const QStringList &files, bool push, bool createPr, const QString &prTitle,
+                           const QString &prBody, bool draft);
+    /// The branch there pushed: gitDone(serial, "push", …).
+    Q_INVOKABLE int push(const QString &id, const QString &worktree);
+    /// A pull request there into `base` ("" the default branch), the branch pushed first:
+    /// gitDone(serial, "pr", ok, message, its address).
+    Q_INVOKABLE int createPullRequest(const QString &id, const QString &worktree, const QString &title,
+                                      const QString &body, const QString &base, bool draft);
+    /// The files there back as the turn's checkpoint has them: gitDone(serial, "revert", …).
+    Q_INVOKABLE int revertTurn(const QString &id, const QString &worktree, const QString &checkpoint);
+    /// What a commit's message gives a pull request's title: its first line, trimmed.
+    static QString subjectOf(const QString &message);
+
 Q_SIGNALS:
     void changed();
+    /// A git request ended: `action` "commit" | "push" | "pr" | "revert", what happened (or why
+    /// not) in words, a pull request's address ("" none).
+    void gitDone(int serial, const QString &action, bool ok, const QString &message, const QString &url);
     void worktreeCreated(const QString &project, const QString &folder, const QString &branch, const QString &error);
     void changesReady(int serial, const QVariantList &changes, bool truncated, const QString &error);
     void diffReady(int serial, const QString &path, const QString &oldText, const QString &newText, bool binary,
@@ -116,6 +140,11 @@ private:
     void save();
     void ask(const Computer &computer);
     QString errorText(const Computer &computer, const acp::RemoteError &error) const;
+    /// `request` sent to project `id`'s computer: `then` with what git did there — or gitDone()
+    /// with why not (`failure` "%1" before it: an earlier step's words).
+    void askGit(int serial, const QString &id, const QString &action, const acp::RemoteGitRequest &request,
+                const QString &failure, std::function<void(const acp::RemoteGitResult &result)> then);
+    void gitFinished(int serial, const QString &action, bool ok, const QString &message, const QString &url = {});
 
     std::function<sync::HttpTransport *()> m_transport;
     std::function<QByteArray()> m_load;

@@ -32,8 +32,8 @@ import Brulion
 // a link of the agent's answer, the other panels'), Search (CodeSearchPanel); docs/CODE-FILES.md.
 // A project of another computer (its threads run there, docs/CODE.md "Threads on the phone"): the
 // computer's name in the header, no terminal, editor or scripts here, and CodeRemoteChanges — that
-// computer's changes of the thread, read-only — in place of the Changes panel (under the thread
-// when narrow, opened with the changes' toggle).
+// computer's changes of the thread, its commit, push, pull request and the turn's revert asked there
+// — in place of the Changes panel (under the thread when narrow, opened with the changes' toggle).
 FocusScope {
     id: root
 
@@ -995,6 +995,7 @@ FocusScope {
                         worktree: AppController.routeText(root.place, "worktree")
                         checkpoint: root.path !== "" ? Workspace.chats.lastCheckpoint(root.path, Workspace.chats.checkpointSerial) : ""
                         host: root.host
+                        working: chat.busyHere
                     }
                 }
             }
@@ -1010,6 +1011,7 @@ FocusScope {
                     worktree: AppController.routeText(root.place, "worktree")
                     checkpoint: root.path !== "" ? Workspace.chats.lastCheckpoint(root.path, Workspace.chats.checkpointSerial) : ""
                     host: root.host
+                    working: chat.busyHere
                 }
             }
             // The right panel: Changes | Files | Search.
