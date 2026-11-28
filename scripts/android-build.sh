@@ -709,8 +709,8 @@ fi
 # Only the Basic style and no QtQuick.Dialogs: an `import QtQuick.Controls` (run-time style
 # selection) or `import QtQuick.Dialogs` would bring every other style back, ~15 MB
 # (docs/PERFORMANCE.md L9; src/app/CMakeLists.txt refuses such imports at configure time).
-unused_qml=$(grep -oE 'lib/[^ ]*(QuickControls2(Material|Universal|Imagine|Fusion|FluentWinUI3)|Controls_(Material|Universal|Imagine|Fusion|FluentWinUI3)|QuickDialogs2|QtQuick_Dialogs)[^ ]*\.so' <<<"$listing" | sort -u || true)
-[[ -z $unused_qml ]] || die "unused Qt Quick styles or QtQuick.Dialogs in the APK (FilePicker and QtQuick.Controls.Basic instead): $(tr '\n' ' ' <<<"$unused_qml")"
+unused_qml=$(grep -oE 'lib/[^ ]*(QuickControls2(Material|Universal|Imagine|Fusion|FluentWinUI3)|Controls_(Material|Universal|Imagine|Fusion|FluentWinUI3)|QuickDialogs2|QtQuick_Dialogs|LabsFolderListModel|folderlistmodel|Qt6QuickTest|Qt6Test_|qml_QtTest)[^ ]*\.so' <<<"$listing" | sort -u || true)
+[[ -z $unused_qml ]] || die "unused Qt Quick styles, QtQuick.Dialogs, QtTest or Qt.labs.folderlistmodel in the APK (FilePicker, QtQuick.Controls.Basic, Icons.names() instead; docs/PERFORMANCE.md L9, L9b): $(tr '\n' ' ' <<<"$unused_qml")"
 
 # 16 KB pages (Android 15+ devices with 16 KB memory pages refuse other libraries): the 64-bit
 # libraries must have ELF LOAD segments aligned to at least 16 KB, and one stored uncompressed in

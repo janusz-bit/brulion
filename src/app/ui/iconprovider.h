@@ -25,6 +25,7 @@
 #include <QPointer>
 #include <QQuickImageProvider>
 #include <QQuickItem>
+#include <QStringList>
 #include <QUrl>
 #include <QtQml/qqmlregistration.h>
 
@@ -76,6 +77,8 @@ public:
     /// "image://bicon/<colour>/<name>", the name percent-encoded ("" for an empty or invalid
     /// name: no image, no lookup).
     Q_INVOKABLE QUrl source(const QString &name, const QColor &color) const;
+    /// The names of every icon of `folder` (the provider's, ":/icons"), sorted: the gallery's list.
+    Q_INVOKABLE QStringList names(const QString &folder = QStringLiteral(":/icons")) const;
     /// The same, for C++ (BIcon).
     static QUrl sourceUrl(const QString &name, const QColor &color);
     /// Gives `engine` the provider unless it has one.

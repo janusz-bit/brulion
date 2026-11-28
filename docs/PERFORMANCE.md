@@ -776,11 +776,19 @@ same for both builds.) The AppImage needed one more step: linuxdeploy-plugin-qt 
 every QML import whole, so `import QtQuick` brought all of `qml/QtQuick` — the styles and
 QtQuick.Dialogs stayed after the QML changes alone (the AppImage was 0.1 MB larger);
 `scripts/appimage-build.sh` now deploys, removes them (their QML folders and libraries) and then
-packs, and its check fails when one is back. Still packaged: QtTest, QuickTest and `Qt.labs.folderlistmodel`, imported by
-the developer and self-test QML under `src/app` (`qml/dev`, `qml/content/*SelfTest.qml`) — APK
-0.84 MB, wasm 0.27 MB before wasm-opt. qmlimportscanner scans the target's whole source folder,
-compiled or not, and its `-exclude <folder>` does not keep a folder out in 6.11.2 (it also visits
-each folder's `.` entry), so they need a folder of their own outside `src/app` (L9b below).
+packs, and its check fails when one is back. QtTest and QuickTest are gone from the packages as
+well (2026-11-28, checked in CI's APK of main: no `libQt6Test`, `libQt6QuickTest` or
+`qml/QtTest`): no QML of the app imports `QtTest` any more, and the self-tests load it only at run
+time, by a name in C++ (`devtesting.cpp`) that qmlimportscanner does not read. The last import was
+`Qt.labs.folderlistmodel` in the developer gallery (`qml/dev/Gallery.qml`, its list of every
+icon): qmlimportscanner scans the target's whole source folder, compiled or not (its `-exclude
+<folder>` does not keep a folder out in 6.11.2), so that one import packaged the module's
+libraries (`libQt6LabsFolderListModel`, 113 KB, and its plugin, 12 KB, in the APK). The gallery
+now takes the names from `Icons.names()` (C++, the SVGs of `:/icons` sorted; `tst_icons`
+`everyIconByName`), so nothing imports the module, and `scripts/android-build.sh` and
+`scripts/wasm-build.sh` fail when a folderlistmodel or QtTest library is back in a package. The
+developer QML stays where it is: with nothing it imports beyond what the app needs, a folder of
+its own outside `src/app` would save nothing.
 
 Checks: `tests/app/filepicker` (fake backends, the widget dialog offscreen), `tst_pickedfiles`,
 the import self-test's save dialog (`tst_appio_import_qml*`), `scripts/wasm-smoke.mjs
@@ -3862,7 +3870,7 @@ The L-items of the October 2026 performance plan, with the numbers they should m
 | L5b | measure undo / redo on the Pi (`bench-matrix.sh` typing on the 5000-block outline, Release) and record the `blockDocOps` 5000 blocks undo+redo baseline in `pi.csv` (`perf-check.sh -u` in a quiet window; until then the Pi's check skips the row) | Pi undo 214 ms → < 50 ms |
 | L3b | measure the after-a-save fan-out on the Pi (`bench_reminders` afterEdit, small profile) and ratchet its `pi.csv` row (`perf-check.sh -m pi -u` in a quiet window; the row now measures the cached path, so the old 963 ms baseline only passes it loosely) | Pi 0.95 s → < 0.2 s |
 | L7b | measure the opening on the Pi (`bench-matrix.sh open-page`, offscreen, 3 000 notes) after L7 (done on 2026-11-18, above: "L7: cheaper page opening"); then the rest of it: `BlockDocument::derive()` with a parse that stops at what it keeps (kind, heading level, language, task status, block id — 40 % of `navigate()` on a 5000-block page), the reference rows' text (Z10) | Pi open 653 ms → ~400 ms |
-| L9b | the developer and self-test QML (`qml/dev`, `qml/content/*SelfTest.qml`) in a folder outside `src/app` (qmlimportscanner scans the target's source folder whole, and its `-exclude` does not work there), so that releases leave out QtTest, QuickTest and `Qt.labs.folderlistmodel` | APK −0.84 MB, wasm −0.27 MB (before wasm-opt) |
+| L9b | no QML import of QtTest or `Qt.labs.folderlistmodel` left (the gallery's icon list from `Icons.names()`); the APK and wasm builds refuse those libraries | APK −0.13 MB (folderlistmodel; QtTest and QuickTest were already gone) — done 2026-11-28 |
 | L10b | measure L10 (popups and menus not made with the shell, `BIcon` without a `Loader`; done on 2026-11-18, above) on the Raspberry Pi and a phone: `bench-matrix.sh startup-demo`, the phone layout too, and the first opening of the More menu and the switcher before and after their build-ahead | Pi demo first content −0.3 s |
 | L16b | measure the graph on the Raspberry Pi (`bench-matrix.sh views graph`, offscreen: the software renderer's image node, 3 000-note vault; must not regress) and in the Android emulator probe (`android-batch.sh probe`, the scene graph on GLES); check it by hand on a phone, on Windows with a GPU (Direct3D 11) and in a phone's browser; if `rebuild()` (VaultIndex::graph and the filters, GUI thread) costs a phone > 50 ms, move its pure part onto the worker | phone: GUI stall during the layout < 33 ms, settled < 3 s |
 | L19 | measure the PDF viewer on real devices (the emulator: 174 MB PSS at 800 %, above): PSS with a 100+ MB scanned lecture zoomed in on a phone (if above 350 MB, base pictures at half resolution on touch devices), time to the first page of a 300-page lecture, Qt PDF timings in a Release build | phone PSS < 350 MB; first page < 0.5 s |

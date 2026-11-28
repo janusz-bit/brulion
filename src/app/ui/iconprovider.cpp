@@ -1,5 +1,7 @@
 #include "iconprovider.h"
 
+#include <QDir>
+#include <QFileInfo>
 #include <QImageReader>
 #include <QMutexLocker>
 #include <QPainter>
@@ -134,6 +136,16 @@ Icons *Icons::forEngine(QQmlEngine *engine)
 QUrl Icons::source(const QString &name, const QColor &color) const
 {
     return sourceUrl(name, color);
+}
+
+QStringList Icons::names(const QString &folder) const
+{
+    QStringList out;
+    const QFileInfoList files = QDir(folder).entryInfoList({u"*.svg"_s}, QDir::Files, QDir::NoSort);
+    for (const QFileInfo &file : files)
+        out.append(file.completeBaseName());
+    out.sort(); // (by code points: QDir's order depends on the locale)
+    return out;
 }
 
 QUrl Icons::sourceUrl(const QString &name, const QColor &color)

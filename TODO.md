@@ -476,9 +476,6 @@ Details in docs/PERFORMANCE.md, "Next steps":
 * measuring the QML code compiled for size (`-Oz`) on a real phone against a build with
   `-DBRULION_QML_CODE_FOR_SIZE=OFF`: journal scrolling, opening a long page, the views — on the
   desktop no slowdown was measurable (L20b);
-* developer QML and self-tests (`qml/dev`, `qml/content/*SelfTest.qml`) outside `src/app`, so that
-  releases do not package QtTest, QuickTest and Qt.labs.folderlistmodel (L9b: APK −0.84 MB, web
-  version −0.27 MB before wasm-opt);
 * **Pictures and memory: what is left** (docs/PERFORMANCE.md "Pictures and memory") — measuring a
   page of photos on a real phone (PSS, and whether one screen of reach around the view is more
   than a phone needs); the copy of every shown picture Qt Quick keeps in main memory beside its

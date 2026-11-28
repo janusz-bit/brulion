@@ -180,7 +180,7 @@ if [[ $do_build == 1 ]]; then
   # only the Basic style, no QtQuick.Dialogs (docs/PERFORMANCE.md L9).
   imports=$BUILD_DIR/src/app/.qt/qml_imports/brulion_conf.cmake
   [[ -f $imports ]] || die "$imports missing: cannot check the QML modules linked into the app"
-  unwanted='QtQuick\.Controls\.(Material|Universal|Imagine|Fusion|FluentWinUI3)|QtQuick\.Dialogs'
+  unwanted='QtQuick\.Controls\.(Material|Universal|Imagine|Fusion|FluentWinUI3)|QtQuick\.Dialogs|Qt\.labs\.folderlistmodel|QtTest'
   bad=$(grep -oE "$unwanted" "$imports" | sort -u | tr '\n' ' ' || true)
   [[ -z $bad ]] || die "QML modules that must not be in the browser build: $bad(FilePicker and QtQuick.Controls.Basic instead; $imports)"
   log "build (-j $JOBS)"

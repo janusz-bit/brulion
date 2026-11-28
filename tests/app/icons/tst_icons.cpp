@@ -381,6 +381,22 @@ private Q_SLOTS:
         QCOMPARE(m_provider->rasterCount(), before + 1);
     }
 
+    /// Every icon the app carries, by name, sorted: the gallery's list (no Qt.labs.folderlistmodel).
+    void everyIconByName()
+    {
+        const QStringList names = Icons().names(m_folder);
+        QVERIFY2(names.size() > 100, qPrintable(QString::number(names.size())));
+        QVERIFY(names.contains(u"chevron-right"_s));
+        QVERIFY(names.contains(u"key-round"_s));
+        QVERIFY(names.contains(u"dzwonek-żółty"_s));
+        QVERIFY(!names.contains(u"chevron-right.svg"_s));
+        QStringList sorted = names;
+        sorted.sort();
+        QCOMPARE(names, sorted);
+        for (const QString &name : names)
+            QVERIFY2(IconImageProvider::validName(name), qPrintable(name));
+    }
+
     /// Names come from notes too (a page's icon): none may leave the folder; others are found by
     /// their name as it is, Polish letters included.
     void names_data()

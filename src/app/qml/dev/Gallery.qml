@@ -3,7 +3,6 @@ import QtQuick
 import QtQuick.Layouts
 import QtQuick.Controls.Basic
 import QtQuick.Templates as T
-import Qt.labs.folderlistmodel
 import Brulion
 
 // Gallery — every design-system component in its states (`brulion --gallery`).
@@ -737,17 +736,13 @@ ApplicationWindow {
 
             Specimen {
                 label: "WSZYSTKIE IKONY"
-                note: iconModel.count + " plików w assets/icons"
+                note: allIcons.count + " plików w assets/icons"
                 Repeater {
-                    model: FolderListModel {
-                        id: iconModel
-                        folder: "qrc:/icons"
-                        nameFilters: ["*.svg"]
-                        showDirs: false
-                    }
+                    id: allIcons
+                    model: Icons.names()
                     delegate: Rectangle {
                         id: iconCell
-                        required property string fileBaseName
+                        required property string modelData
                         width: Theme.compact ? 84 : 104
                         height: 72
                         radius: Theme.radius
@@ -756,7 +751,7 @@ ApplicationWindow {
                         BIcon {
                             anchors.horizontalCenter: parent.horizontalCenter
                             y: 12
-                            name: iconCell.fileBaseName
+                            name: iconCell.modelData
                             size: 22
                             color: Theme.fg
                         }
@@ -765,7 +760,7 @@ ApplicationWindow {
                             y: 44
                             width: parent.width - 6
                             horizontalAlignment: Text.AlignHCenter
-                            text: iconCell.fileBaseName
+                            text: iconCell.modelData
                             elide: Text.ElideMiddle
                             color: Theme.fgMuted
                             font.pixelSize: Theme.textXs
