@@ -39,6 +39,9 @@ public:
         bool putEtag = true;          ///< ETag header on PUT answers
         bool privileges = true;       ///< current-user-privilege-set
         QString prefix = QStringLiteral("d"); ///< DAV: prefix in answers ("" = default namespace)
+        /// calendar-user-address-set of the principal (its own path is added after these)
+        QStringList addresses = {QStringLiteral("mailto:Jan.Kowalski@example.pl"), QStringLiteral("MAILTO:jan@example.pl"),
+                                 QStringLiteral("mailto:JAN@example.pl")};
     };
     struct Member {
         QByteArray data;

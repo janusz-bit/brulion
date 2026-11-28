@@ -181,7 +181,7 @@ QByteArray propfindHomeSet()
 {
     return QByteArrayLiteral("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
                              "<d:propfind xmlns:d=\"DAV:\" xmlns:c=\"urn:ietf:params:xml:ns:caldav\"><d:prop>"
-                             "<c:calendar-home-set/><d:displayname/></d:prop></d:propfind>");
+                             "<c:calendar-home-set/><c:calendar-user-address-set/><d:displayname/></d:prop></d:propfind>");
 }
 
 QByteArray propfindCalendars()

@@ -257,6 +257,12 @@ void TestWorkspaceCalendars::accountTasksAndEvents()
     const QString account = cal->addAccount(m_server.url(u"/"_s), u"jan"_s, m_server.options().password, {pracaUrl},
                                             {zakupyUrl});
     QVERIFY(!account.isEmpty());
+    // How invitations name the account: kept from the discovery (an answer finds its attendee).
+    {
+        QFile settingsFile(m_dir->filePath(u"state/calendars/calendars.json"_s));
+        QVERIFY(settingsFile.open(QIODevice::ReadOnly));
+        QVERIFY(settingsFile.readAll().contains("jan.kowalski@example.pl"));
+    }
     QCOMPARE(cal->accounts().first().toMap().value(u"calendars"_s).toList().first().toMap().value(u"statusText"_s).toString(),
              u"Not synced yet"_s);
     // The password: owner-only, not in the settings.

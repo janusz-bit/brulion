@@ -143,6 +143,9 @@ void TestCalDavClient::discovery()
     QVERIFY2(!d.error.isError(), qPrintable(d.error.message));
     QCOMPARE(d.principalUrl, server.url(server.principalPath()));
     QCOMPARE(d.homeUrl, server.url(server.homePath()));
+    // The account's own calendar addresses (RFC 6638 calendar-user-address-set): how invitations
+    // name it — e-mails without mailto: in lower case, the principal's URI as written.
+    QCOMPARE(d.addresses, (QStringList{u"jan.kowalski@example.pl"_s, u"jan@example.pl"_s, server.principalPath()}));
     QCOMPARE(d.calendars.size(), 3); // the inbox is no calendar
     QCOMPARE(d.calendars.at(0).name, u"Praca"_s);
     QCOMPARE(d.calendars.at(0).color, u"#1e88e5"_s);

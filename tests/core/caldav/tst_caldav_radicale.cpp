@@ -56,6 +56,7 @@ void TestCalDavRadicale::discoveryAndTwoWaySync()
     QVERIFY(calendar != found->calendars.end());
     QVERIFY(calendar->holdsTasks());
     QVERIFY(!calendar->syncToken.isEmpty());
+    QVERIFY(found->addresses.contains(u"/"_s + m_user + u"/"_s)); // (Radicale: the principal only)
 
     QTemporaryDir dir;
     QDir().mkpath(dir.filePath(u"notes"_s));

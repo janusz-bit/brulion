@@ -121,6 +121,22 @@ CalendarInfo calendarFrom(const DavResponse &resp, const QUrl &base)
     return info;
 }
 
+/// The calendar-user-address-set of a principal's answer, participantAddress() form, without
+/// repeats.
+QStringList addressesOf(const Multistatus &ms)
+{
+    QStringList out;
+    for (const DavResponse &resp : ms.responses) {
+        const PropValue *set = resp.prop(NsCalDav, u"calendar-user-address-set");
+        for (const QString &href : set ? set->hrefs : QStringList()) {
+            const QString address = participantAddress(QUrl::fromPercentEncoding(href.toUtf8()));
+            if (!address.isEmpty() && !out.contains(address))
+                out.append(address);
+        }
+    }
+    return out;
+}
+
 bool isCalendar(const DavResponse &resp)
 {
     const PropValue *type = resp.prop(NsDav, u"resourcetype");
@@ -337,6 +353,7 @@ void CalDavClient::discover(std::function<void(const Discovery &)> done)
                                   return;
                               }
                               QUrl home = principal;
+                              result.addresses = addressesOf(ms);
                               for (const DavResponse &resp : ms.responses) {
                                   if (const PropValue *set = resp.prop(NsCalDav, u"calendar-home-set");
                                       set && !set->hrefs.isEmpty()) {

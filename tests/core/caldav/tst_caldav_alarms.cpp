@@ -334,6 +334,12 @@ void TestCalDavAlarms::settingsOfAnOlderFile()
     QCOMPARE(s.accounts.at(1).intervalMinutes, 5);
     QCOMPARE(s.accounts.at(1).conflicts, ConflictPolicy::KeepBoth);
     QCOMPARE(s.accounts.at(2).intervalMinutes, 1440);
+    QVERIFY(s.accounts.at(0).addresses.isEmpty());
+    // The account's addresses are kept.
+    CalendarSettings withAddresses = s;
+    withAddresses.accounts[0].addresses = {u"jan@example.pl"_s, u"/dav/principals/jan/"_s};
+    QCOMPARE(CalendarSettings::fromJson(withAddresses.toJson()).accounts.at(0).addresses,
+             withAddresses.accounts.at(0).addresses);
     QCOMPARE(s.calendars.size(), 1);
     const CalendarEntry &c = s.calendars.first();
     QVERIFY(c.showEvents);

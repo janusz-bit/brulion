@@ -912,7 +912,8 @@ void WorkspaceCalendars::discover(const QString &server, const QString &user, co
             return;
         }
         self->m_lastDiscovery = QVariantMap{
-                {u"server"_s, srv}, {u"user"_s, usr}, {u"principal"_s, d.principalUrl}, {u"home"_s, d.homeUrl}};
+                {u"server"_s, srv}, {u"user"_s, usr}, {u"principal"_s, d.principalUrl}, {u"home"_s, d.homeUrl},
+                {u"addresses"_s, d.addresses}};
         QVariantList calendars;
         QSet<QString> used;
         if (self->m_store) {
@@ -984,6 +985,7 @@ QString WorkspaceCalendars::addAccount(const QString &server, const QString &use
     if (m_lastDiscovery.value(u"server"_s) == account.server && m_lastDiscovery.value(u"user"_s) == account.user) {
         account.principalUrl = m_lastDiscovery.value(u"principal"_s).toString();
         account.homeUrl = m_lastDiscovery.value(u"home"_s).toString();
+        account.addresses = m_lastDiscovery.value(u"addresses"_s).toStringList();
     }
     if (!pass.isEmpty() && !writeSecretFile(passwordFile(account.id), pass)) {
         Q_EMIT errorOccurred(tr("The password could not be saved."));

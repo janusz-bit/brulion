@@ -97,6 +97,7 @@ QJsonObject CalendarSettings::toJson() const
                                {u"user"_s, a.user},
                                {u"principal"_s, a.principalUrl},
                                {u"home"_s, a.homeUrl},
+                               {u"addresses"_s, QJsonArray::fromStringList(a.addresses)},
                                {u"name"_s, a.name},
                                {u"conflicts"_s, policyName(a.conflicts)},
                                {u"interval"_s, a.intervalMinutes}});
@@ -136,6 +137,8 @@ Account accountFromJson(const QJsonObject &o)
     a.user = o.value(u"user"_s).toString();
     a.principalUrl = o.value(u"principal"_s).toString();
     a.homeUrl = o.value(u"home"_s).toString();
+    for (const QJsonValue &address : o.value(u"addresses"_s).toArray())
+        a.addresses.append(address.toString());
     a.name = o.value(u"name"_s).toString();
     a.conflicts = o.value(u"conflicts"_s).toString() == u"both" ? ConflictPolicy::KeepBoth : ConflictPolicy::Newer;
     a.intervalMinutes = std::clamp(o.value(u"interval"_s).toInt(15), 5, 1440);

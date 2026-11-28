@@ -292,10 +292,15 @@ HttpResponse FakeCalDav::handle(const HttpRequest &request, const QString &rawPa
         }
         if (withSlash == principalPath()) {
             HttpResponse r = status(207);
+            QString addresses;
+            for (const QString &a : m_options.addresses + QStringList{principalPath()})
+                addresses += u"<%1>%2</%1>"_s.arg(tag(u"href"_s), a);
             r.body = multistatus(response(withSlash, u"<c:calendar-home-set><%1>%2</%1></c:calendar-home-set>"
-                                                     u"<%3>%4</%3><%5><%6/><%7/></%5>"_s
+                                                     u"<%3>%4</%3><%5><%6/><%7/></%5>"
+                                                     u"<c:calendar-user-address-set>%8</c:calendar-user-address-set>"_s
                                                              .arg(tag(u"href"_s), home, tag(u"displayname"_s), m_options.user,
-                                                                  tag(u"resourcetype"_s), tag(u"collection"_s), tag(u"principal"_s))));
+                                                                  tag(u"resourcetype"_s), tag(u"collection"_s), tag(u"principal"_s),
+                                                                  addresses)));
             return r;
         }
         if (withSlash == home) {

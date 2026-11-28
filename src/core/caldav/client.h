@@ -43,6 +43,9 @@ struct CalendarInfo {
 struct Discovery {
     QString principalUrl;
     QString homeUrl;
+    /// The principal's calendar-user-address-set (RFC 6638): how invitations name the account —
+    /// participantAddress() form ("jan@example.pl"; a URI as written).
+    QStringList addresses;
     QList<CalendarInfo> calendars; ///< by order, then name
     sync::WebDavError error;
 };

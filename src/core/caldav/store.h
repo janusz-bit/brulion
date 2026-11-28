@@ -47,6 +47,8 @@ struct Account {
     QString user;
     QString principalUrl; ///< found by discovery
     QString homeUrl;
+    /// How invitations name the account (Discovery::addresses; participantAddress() form).
+    QStringList addresses;
     QString name;         ///< shown ("jan @ chmura.example.pl")
     ConflictPolicy conflicts = ConflictPolicy::Newer;
     int intervalMinutes = 15; ///< automatic sync (5 … 1440)
