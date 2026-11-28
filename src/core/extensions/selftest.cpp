@@ -128,10 +128,15 @@ QVariantMap hostileSelfTest(int limitMs)
     EmptyHost host;
     Engine engine;
     QString error;
-    if (!engine.start(&host, Limits{limitMs, 16ll << 20}, &error))
+    const qint64 memory = 16ll << 20; // the heap every case gets
+    if (!engine.start(&host, Limits{limitMs, memory}, &error))
         return {{u"ok"_s, false}, {u"error"_s, error}};
     QElapsedTimer clock;
     for (const Check &c : checks) {
+        // A memory case must end by the memory limit: it gets twenty times the time, so a slow or
+        // loaded machine never ends it by the clock first (a browser at a load of 60 grew the table
+        // past the loops' 300 ms); a memory limit that does not hold still shows, as a timeout.
+        engine.setLimits(Limits{c.expected == Status::OutOfMemory ? limitMs * 20 : limitMs, memory});
         const QString name = QString::fromUtf8(c.name);
         Extension x;
         x.id = u"hostile"_s;

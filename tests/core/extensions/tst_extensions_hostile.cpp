@@ -29,6 +29,27 @@ private Q_SLOTS:
         QCOMPARE(report.value(u"failed"_s).toInt(), 0);
         QVERIFY(report.value(u"engine"_s).toString().startsWith(u"Luau"_s));
     }
+
+    void memoryEndsByTheMemoryLimit()
+    {
+        // The memory cases race no clock: with a time limit far too short for a growing table to
+        // reach the 16 MB (5 ms here; the browser at a load of 60 needed more than 300 ms), they
+        // still end out of memory — and the loops by the time limit.
+        const QVariantMap report = hostileSelfTest(5 * BRULION_TEST_SLOWDOWN);
+        int memoryCases = 0;
+        for (const QVariant &v : report.value(u"checks"_s).toList()) {
+            const QVariantMap c = v.toMap();
+            const QString name = c.value(u"name"_s).toString();
+            const QString got = c.value(u"got"_s).toString();
+            if (name == u"a string that doubles" || name == u"a table that grows" || name == u"memory in pcall") {
+                ++memoryCases;
+                QVERIFY2(got == u"out_of_memory", qPrintable(name + u": "_s + got));
+            }
+            if (name == u"a loop for ever")
+                QCOMPARE(got, u"timeout"_s);
+        }
+        QCOMPARE(memoryCases, 3);
+    }
 };
 
 QTEST_GUILESS_MAIN(TestExtensionsHostile)

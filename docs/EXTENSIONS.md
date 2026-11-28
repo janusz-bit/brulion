@@ -2611,7 +2611,12 @@ Home:7
   library and to `b` — end as these limits say, in time, the engine working afterwards, on the
   desktop (`tst_extensions_hostile`) and in the browser build, single-threaded with JavaScript's
   clock (CI's smoke test in Chrome: `scripts/wasm-smoke.mjs --extensions`, `?selftest=extensions`,
-  `extensions::hostileSelfTest`).
+  `extensions::hostileSelfTest`), and in real browser windows: Chromium 158 (`--headed`) and
+  Firefox 157 (Gecko) passed them on 2026-11-28 (docs/WEB.md "Headless browser smoke test"). The
+  memory cases run with twenty times the time limit: they must end by the memory limit, and a
+  loaded machine (a browser at a load of 60 on 16 cores) once grew the table past the loops'
+  300 ms before it reached the 16 MB — a memory limit that does not hold still shows, as a timeout
+  (`tst_extensions_hostile` `memoryEndsByTheMemoryLimit`: a 5 ms limit).
 * Luau errors are `setjmp`/`longjmp` (`LUA_USE_LONGJMP=1`; the browser's Qt links without C++
   exception catching): the engine's C functions never keep a C++ object alive when they raise or
   yield — each is a thin wrapper around an implementation that returns first (`engine.cpp`).
