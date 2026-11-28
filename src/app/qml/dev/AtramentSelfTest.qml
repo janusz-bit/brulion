@@ -636,6 +636,10 @@ QtObject {
                        && Js.indexOf(host.file("Zadania.md"), "✅") < 0
             window.waitStep(ok, "“Zadanie: bez statusu” removes the checkbox and its date: " + host.file("Zadania.md"))
         }
+        test.slashCommandsOnOtherBlocks()
+    }
+    // (Its second half: one function took qmlcachegen over its 30 s on a loaded machine.)
+    function slashCommandsOnOtherBlocks(): void {
         if (window.at()) {
             page.stopEditing()
             test.taskRow = page.insertMarkdown(page.lastVisibleRow(), "Akapit o płytkach")
