@@ -1022,6 +1022,14 @@ Item {
                     checked: AppSettings.layoutFollowsNotebook
                     onToggled: AppSettings.layoutFollowsNotebook = checked
                 }
+                SettingSwitch {
+                    objectName: "tabBarSetting"
+                    visible: !Theme.narrow
+                    text: qsTr("Show the tab bar")
+                    description: qsTr("While two or more tabs are open. Off: switch them with Ctrl+Tab or the top bar's tab switcher.")
+                    checked: AppSettings.tabBar
+                    onToggled: AppSettings.tabBar = checked
+                }
                 ShellSettingRow {
                     title: qsTr("Sidebar")
                     description: qsTr("Entries and sections of the sidebar (and the phone's menu).")

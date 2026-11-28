@@ -61,7 +61,7 @@ private Q_SLOTS:
         QVERIFY(!shown(l, u"bottom", {}).contains(u"tags"_s));
         QCOMPARE(l.warnings.size(), 2);
         QCOMPARE(l.warnings.at(0), u"line 1: more than 5 bottom buttons: “tags” left out"_s);
-        QCOMPARE(l.warnings.at(1), u"line 2: no place “tabs”"_s);
+        QCOMPARE(l.warnings.at(1), u"line 2: “off” is no item of tabs"_s);
         // (A group in the bottom bar is no button.)
         l = parse(u"#bottom(journals, |, tasks)"_s);
         QCOMPARE(shown(l, u"bottom", {}), (QStringList{u"journals"_s, u"tasks"_s}));
@@ -96,7 +96,7 @@ private Q_SLOTS:
         QVERIFY(v.value(u"rail"_s).contains(u"journals"_s));
         QVERIFY(v.value(u"panel"_s).contains(u"favorites"_s));
         QVERIFY(v.value(u"bottom"_s).contains(u"graph"_s));
-        QVERIFY(!v.contains(u"tabs"_s));
+        QCOMPARE(v.value(u"tabs"_s), QStringList{u"bar"_s}); // (the tab bar: `#tabs(-bar)` hides it)
         // Another vocabulary: its places only.
         const Layout l = parse(u"#a(x, y)\n#rail(tasks)"_s, Vocabulary{{u"a"_s, {u"x"_s, u"y"_s}}});
         QCOMPARE(shown(l, u"a", {}), (QStringList{u"x"_s, u"y"_s}));

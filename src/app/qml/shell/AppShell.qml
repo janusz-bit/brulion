@@ -84,6 +84,7 @@ FocusScope {
     }
     /// The tab bar (wide windows): two tabs or more, or a split view.
     readonly property bool tabBarShown: !Theme.narrow && (AppController.tabCount > 1 || AppController.splitTab !== 0)
+                                        && AppSettings.tabBar
     /// How much of the window's bottom the on-screen keyboard covers.
     readonly property real keyboardOverlap: KeyboardInsets.overlap
     /// Width of the strip at the left edge whose swipe opens the drawer (touch UIs), beyond the

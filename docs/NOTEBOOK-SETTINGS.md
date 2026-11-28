@@ -89,8 +89,10 @@ item hidden where it would be by default.
 * **Places** (`uilayout::defaultVocabulary()`): `rail` (the icon bar: `journals`, `calendar`, `tasks`,
   `habits`, `gym`, `flashcards`, `allPages`, `tags`, `graph`, `search`), `panel` (the pages panel's
   sections: `pages`, `favorites`, `recent`), `bottom` (the phone's bottom navigation: the views of
-  `AppSettings::bottomNavViews()`, at most five). A place left out keeps the app's own layout. (Later
-  places: `more`, the "More" menu's contents; `tabs`, once the tabs can be switched off.)
+  `AppSettings::bottomNavViews()`, at most five), `tabs` (`bar`: the tab bar of a wide window,
+  `#tabs(-bar)` hides it — `AppSettings.tabBar`, key `ui/tabs/bar`, also Settings → Appearance → Layout →
+  "Show the tab bar"; the top bar's tab switcher then shows the tabs). A place left out keeps the app's
+  own layout. (A later place: `more`, the "More" menu's contents.)
 * **Items**: the ids the app already has for them, plus `|` (a group's end) and `-id` (hidden); `//`
   starts a comment line. An unknown place or item, a second call of a place, an item twice, a sixth
   bottom button, a line that is no call are left out with a warning
@@ -131,4 +133,4 @@ item hidden where it would be by default.
    note's text changed), Settings → Appearance → Layout → "Use the notebook's layout"
    (`AppSettings.layoutFollowsNotebook`, key `ui/layout/followNotebook`, off by default): AppController
    applies the block whenever it changes or the switch goes on.
-7. Later places: `more` (the "More" menu's contents), `tabs` (once the tabs can be switched off).
+7. **(done)** `tabs` (the tab bar shown or hidden). Later: `more` (the "More" menu's contents).

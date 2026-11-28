@@ -300,7 +300,7 @@ private Q_SLOTS:
         AppSettings s(nextFile(), m_tmp.path());
         QCOMPARE(s.layoutText(), u"#rail(journals, calendar, tasks, |, habits, gym, flashcards, |, allPages, tags, graph, |, search)\n"
                                  u"#panel(pages, favorites, recent)\n"
-                                 u"#bottom(journals, allPages, search, tasks, calendar)\n"_s);
+                                 u"#bottom(journals, allPages, search, tasks, calendar)\n#tabs(bar)\n"_s);
         QCOMPARE(s.railViews().first(), u"code"_s);
         QCOMPARE(s.railGroup(u"journals"_s), 0);
         QCOMPARE(s.railGroup(u"gym"_s), 1);
@@ -322,6 +322,16 @@ private Q_SLOTS:
         // Printed back: what was applied.
         QVERIFY(s.layoutText().startsWith(u"#rail(tasks, journals, |, search, -graph, |, calendar"_s));
         QVERIFY(s.layoutText().contains(u"#panel(recent, -favorites, pages)"_s));
+        // The tab bar hidden, then shown again; kept.
+        QVERIFY(s.tabBar());
+        QSignalSpy tabs(&s, &AppSettings::tabBarChanged);
+        QVERIFY(s.applyLayoutText(u"#tabs(-bar)"_s).isEmpty());
+        QVERIFY(!s.tabBar());
+        QCOMPARE(tabs.size(), 1);
+        QVERIFY(s.layoutText().endsWith(u"#tabs(-bar)\n"_s));
+        QVERIFY(!AppSettings(s.fileName(), m_tmp.path()).tabBar());
+        QVERIFY(s.applyLayoutText(u"#tabs(bar)"_s).isEmpty());
+        QVERIFY(s.tabBar());
         // Shown again; a place left out keeps its own.
         QVERIFY(s.applyLayoutText(u"#rail(graph)"_s).isEmpty());
         QVERIFY(!s.sidebarHidden().contains(u"graph"_s));

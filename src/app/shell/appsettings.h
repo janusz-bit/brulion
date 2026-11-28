@@ -86,6 +86,9 @@ class AppSettings : public QObject {
     Q_PROPERTY(QStringList railViews READ railViews NOTIFY railOrderChanged FINAL)
     /// "Use the notebook's layout" (key `ui/layout/followNotebook`, off by default): the settings
     /// note's layout block applied here whenever it changes (AppController).
+    /// The tab bar of a wide window while two or more tabs are open (`#tabs(bar)` / `#tabs(-bar)` in
+    /// the layout's text); off: the tabs still are, switched with the keys and the top bar's switcher.
+    Q_PROPERTY(bool tabBar READ tabBar WRITE setTabBar NOTIFY tabBarChanged FINAL)
     Q_PROPERTY(bool layoutFollowsNotebook READ layoutFollowsNotebook WRITE setLayoutFollowsNotebook NOTIFY
                        layoutFollowsNotebookChanged FINAL)
     /// Quick capture's + on the top bar of phones and narrow windows (wide ones always show it).
@@ -406,6 +409,8 @@ public:
     void setRailOrder(const QStringList &order);
     QStringList railViews() const;
     bool layoutFollowsNotebook() const;
+    bool tabBar() const;
+    void setTabBar(bool on);
     void setLayoutFollowsNotebook(bool on);
     /// The group of the icon bar `view` is in (0 the first; the app's own when railOrder is empty;
     /// a view railOrder leaves out: after its groups).
@@ -797,6 +802,7 @@ Q_SIGNALS:
     void bottomNavTabsChanged();
     void railOrderChanged();
     void layoutFollowsNotebookChanged();
+    void tabBarChanged();
     void captureButtonShownChanged();
     void railExpandsChanged();
     void gymEnabledChanged();

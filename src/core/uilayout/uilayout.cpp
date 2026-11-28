@@ -71,6 +71,7 @@ const Vocabulary &defaultVocabulary()
             {u"rail"_s, {u"journals"_s, u"calendar"_s, u"tasks"_s, u"habits"_s, u"gym"_s, u"flashcards"_s, u"allPages"_s,
                          u"tags"_s, u"graph"_s, u"search"_s}},
             {u"panel"_s, {u"pages"_s, u"favorites"_s, u"recent"_s}},
+            {u"tabs"_s, {u"bar"_s}},
             {u"bottom"_s, {u"journals"_s, u"calendar"_s, u"search"_s, u"tasks"_s, u"habits"_s, u"gym"_s, u"flashcards"_s,
                            u"allPages"_s, u"tags"_s, u"graph"_s}},
     };

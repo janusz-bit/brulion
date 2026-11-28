@@ -251,7 +251,8 @@ components — no Material/Fusion look, so all targets look identical.
     (a PDF, an attachment); Move to trash between two separators; on phones Command palette; the **Notebook** submenu (New page, Sync
     center, Import notes, Import and export, Replace in notebook, Clean up, Trash, About
     Brulion) and Settings.
-    Under it, with two tabs or more, the **tab bar** (`ShellTabBar`), and the view: one pane or two
+    Under it, with two tabs or more, the **tab bar** (`ShellTabBar`; `AppSettings.tabBar` off —
+    `#tabs(-bar)` — hides it, the top bar's tab switcher `topBarTabs` shows then), and the view: one pane or two
     side by side (the split view) — "Tabs, split view and windows".
   * Side panel (`ShellSidePanel`): a page opened "in the side panel", or the current view's
     context — the accordion of "Side panel" below (`ContentSidePanel`). While the panel lists a

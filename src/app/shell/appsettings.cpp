@@ -60,6 +60,7 @@ constexpr auto kSidebarSections = "ui/sidebar/sections"_L1;
 constexpr auto kBottomNavTabs = "ui/bottomNav/tabs"_L1;
 constexpr auto kRailOrder = "ui/rail/order"_L1;
 constexpr auto kLayoutFollowsNotebook = "ui/layout/followNotebook"_L1;
+constexpr auto kTabBar = "ui/tabs/bar"_L1;
 constexpr auto kCaptureButton = "ui/captureButton"_L1;
 constexpr auto kRailExpands = "ui/rail/expands"_L1;
 constexpr auto kGym = "extensions/silownia"_L1;
@@ -496,6 +497,14 @@ void AppSettings::setRailOrder(const QStringList &order)
 
 bool AppSettings::layoutFollowsNotebook() const { return m_settings->value(kLayoutFollowsNotebook, false).toBool(); }
 
+bool AppSettings::tabBar() const { return m_settings->value(kTabBar, true).toBool(); }
+
+void AppSettings::setTabBar(bool on)
+{
+    if (store(kTabBar, on, tabBar()))
+        Q_EMIT tabBarChanged();
+}
+
 void AppSettings::setLayoutFollowsNotebook(bool on)
 {
     if (store(kLayoutFollowsNotebook, on, layoutFollowsNotebook()))
@@ -545,7 +554,10 @@ QString AppSettings::layoutText() const
     QStringList panel;
     for (const QString &section : sidebarSections())
         panel << marked(section);
-    layout.places = {{u"rail"_s, rail}, {u"panel"_s, panel}, {u"bottom"_s, bottomNavTabs()}};
+    layout.places = {{u"rail"_s, rail},
+                     {u"panel"_s, panel},
+                     {u"bottom"_s, bottomNavTabs()},
+                     {u"tabs"_s, {tabBar() ? u"bar"_s : u"-bar"_s}}};
     return uilayout::print(layout);
 }
 
@@ -571,6 +583,8 @@ QStringList AppSettings::applyLayoutText(const QString &text)
         setSidebarSections(take(panel->items));
     if (layout.place(u"bottom"))
         setBottomNavTabs(uilayout::shown(layout, u"bottom", {}));
+    if (const uilayout::Place *tabs = layout.place(u"tabs"))
+        setTabBar(!tabs->items.contains(u"-bar"_s));
     setSidebarHidden(hidden);
     return layout.warnings;
 }

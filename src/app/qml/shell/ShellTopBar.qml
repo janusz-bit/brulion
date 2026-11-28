@@ -241,11 +241,12 @@ Rectangle {
             Layout.rightMargin: Theme.narrow ? 0 : Theme.space1
         }
 
-        // Phones: the tab switcher, a square with the number of tabs (two or more).
+        // Phones, and wide windows without the tab bar: the tab switcher, a square with the number of
+        // tabs (two or more).
         T.AbstractButton {
             id: tabSwitcherButton
             objectName: "topBarTabs"
-            visible: Theme.narrow && AppController.tabCount > 1
+            visible: (Theme.narrow || !AppSettings.tabBar) && AppController.tabCount > 1
             implicitWidth: Theme.touchTarget
             implicitHeight: Theme.touchTarget
             Accessible.role: Accessible.Button
