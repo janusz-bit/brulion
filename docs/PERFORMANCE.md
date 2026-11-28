@@ -3710,6 +3710,43 @@ probe's `--env BENCH_VIEWPORT_OBSERVERS=1` (now with each observer's QML file an
 BENCH_PAGE=Album.md [--env BRULION_VIEWPORT_OBSERVERS=0]` with `perf-slice.py --window
 'mark:scroll_start..scroll_counters_end'`.
 
+### Measured on the desktop: views built ahead, fewer malloc arenas, relocated tables (2026-11-28)
+
+Three open measurements of "Next steps" and "Memory: what is left", on the x86_64 machine (Release
+`build-rel`, Clang, Xvfb, the 10 000-note notebook, first starts), while other sessions built and a
+Flatpak build ran beside them (load average 13–31): five runs of each setting, interleaved; medians
+with the range.
+
+**The views built ahead** ("Built ahead" above: Tasks, Calendar, Journal, All pages and Search
+built hidden from 1.2 s after `ready`). In the 8 s from `ready` + 1 s the window drew one frame
+(nothing moved) and the GUI thread stalled (> 12 ms) 4–17 times; the longest stall of a run 20,
+21, 62, 72 and 194 ms — what a key pressed then waits at most. (There is no switch to run without
+them; a phone and the Pi, where a stall is several times as long, are still to be measured.)
+
+**Fewer malloc arenas** (`MALLOC_ARENA_MAX=2` against glibc's default, up to eight per core):
+
+| | default | 2 arenas |
+|---|---|---|
+| anonymous memory at `mem:start` (settled, given back) | 281.0 MB (273–282) | 270.5 MB (267–282), −10.5 |
+| private memory at `mem:home` (after the tour of the views) | 425.2 MB (388–431) | 410.9 MB (404–426), −14.3 |
+| peak resident (VmHWM) | 567.0 MB (562–569) | 546.3 MB (539–548), −20.7 |
+| first start to `ready` | 3.86 s (1.66–8.98) | 2.36 s (1.80–4.85) |
+| CPU time of all threads to `ready` (the parallel indexing) | 6.74 s (6.03–7.25) | 7.11 s (6.83–7.58), +5.6 % |
+
+The memory saving holds in every run; the time to `ready` does not get worse (the 15 % of the one
+run before was noise), the workers spend some 5 % more CPU waiting on the shared arenas. Not
+switched on: on Android (Scudo) and Windows it means nothing, and the Pi — four cores, so 32 arenas
+by default — is where it would count and where its cost must be measured first
+(`mallopt(M_ARENA_MAX, …)` in the platform layer then).
+
+**The relocated read-only tables**: the program's `.data.rel.ro` is 3.1 MiB (the pointer tables of
+qmlcachegen's code and the meta objects); after the loader's relocations all of it — 3 200 KB — is
+private dirty memory of each process (`smaps` of the read-only mapping after RELRO), 7.5 MB with
+Qt's libraries. Only a program linked without PIE would keep them clean and shared (no relocations
+to apply), at the cost of the program's address randomisation, which the hardened build turns on
+on purpose (docs/ARCHITECTURE.md "Build, test, packaging": hardening). Kept as it is: one process
+of Brulion runs at a time on a desktop; `brulion-cli` and Android's background check are the others.
+
 ### Atrament's block editor against M2's gate (2026-11-27)
 
 The block editor drawn by Atrament (docs/ATRAMENT.md "The block editor in Atrament (M2)": text rows

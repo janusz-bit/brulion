@@ -452,8 +452,9 @@ done in the repository simply disappears from the list.
 
 Details in docs/PERFORMANCE.md, "Next steps":
 * measuring the bottom navigation's views built in the background after the notebook opens
-  (docs/PERFORMANCE.md "Built ahead"): start-up time, frame times while they are built and memory
-  on a phone and a Raspberry Pi;
+  (docs/PERFORMANCE.md "Built ahead"; the desktop's stalls while they are built in "Measured on
+  the desktop", 2026-11-28): start-up time, frame times while they are built and memory on a phone
+  and a Raspberry Pi;
 * faster merging of ready notes into the index on the UI thread, less view refreshing during
   loading (in the browser the first load without a ready index takes 11–16 % longer than before
   wave 5) and measuring indexing on a Raspberry Pi and a phone (L1b);
@@ -501,10 +502,10 @@ Details in docs/PERFORMANCE.md, "Next steps":
   loads every image plugin for a PNG (53 libraries with KDE's formats installed); poppler and
   what it brings are linked, not loaded with the first PDF; the Polish translation is unpacked
   onto the heap (1.3 MB); Qt Wayland keeps a picture of the whole window for its own title bar
-  where the compositor draws none (GNOME: 4 MB at 1280 × 800, 33 MB on a 4K screen); the
-  read-only data the loader relocates (2.8 MB of tables that qmlcachegen's code points into)
-  is private to every process; fewer allocator arenas (2–8 MB less private memory, but the index
-  of 10 000 notes took 15 % longer to load in the one run tried);
+  where the compositor draws none (GNOME: 4 MB at 1280 × 800, 33 MB on a 4K screen); fewer
+  allocator arenas on the Raspberry Pi (the desktop, 2026-11-28: −10 to −21 MB, +5.6 % CPU while
+  indexing, no later `ready`; docs/PERFORMANCE.md "Measured on the desktop") — then
+  `mallopt(M_ARENA_MAX, 2)` on Linux, or not;
 * **File dialogs — check by hand**: Windows (Open/Save in import, export, "Image…" and the event
   log), AppImage in a real GNOME and KDE session (the portal dialog; without a desktop session
   checked only with xdg-desktop-portal-gtk under Xvfb), Android with Google Drive (import and
