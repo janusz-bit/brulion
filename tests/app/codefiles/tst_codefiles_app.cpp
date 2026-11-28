@@ -1,6 +1,7 @@
 // The "Code" mode's project files in the app (docs/CODE-FILES.md): the shared index and its QML view,
 // the file viewer's model, the project search, the QML helpers.
 #include "codefiledocument.h"
+#include "codefiletable.h"
 #include "codefileindex.h"
 #include "codefiles.h"
 #include "codesearch.h"
@@ -338,6 +339,44 @@ private Q_SLOTS:
         doc.setPath(u"c.txt"_s);
         QTRY_COMPARE(doc.kind(), u"text"_s);
         QVERIFY(!doc.editable());
+    }
+
+    // A CSV file as a table: semicolons found, a quoted cell over two lines one cell, the header the
+    // first row; a text file is none; limits.
+    void csvAsTable()
+    {
+        QTemporaryDir dir;
+        QVERIFY(writeFile(dir.filePath(u"dane.csv"_s), "imię;miasto\nŻaneta;\"Łódź,\nBałuty\"\nOla;Kraków\n"));
+        QVERIFY(writeFile(dir.filePath(u"a.txt"_s), "a;b\n"));
+        CodeFileDocument doc;
+        doc.setFolder(dir.path());
+        doc.setPath(u"dane.csv"_s);
+        CodeFileTable table;
+        table.setDocument(&doc);
+        QSignalSpy changed(&table, &CodeFileTable::tableChanged);
+        QTRY_VERIFY(table.available());
+        QCOMPARE(table.rows(), 3);
+        QCOMPARE(table.columns(), 2);
+        QCOMPARE(table.data(table.index(0, 0), Qt::DisplayRole).toString(), u"imię"_s);
+        QCOMPARE(table.data(table.index(1, 1), Qt::DisplayRole).toString(), u"Łódź, Bałuty"_s);
+        QCOMPARE(table.data(table.index(2, 1), Qt::DisplayRole).toString(), u"Kraków"_s);
+        QVERIFY(!table.data(table.index(2, 1), Qt::EditRole).isValid());
+        QVERIFY(!table.cut());
+        doc.setPath(u"a.txt"_s);
+        QTRY_VERIFY(!table.available());
+        QCOMPARE(table.rows(), 0);
+        // Rows and cells beyond the limits.
+        QString big;
+        for (int i = 0; i < CodeFileTable::MaxRows + 5; ++i)
+            big += u"x,y\n"_s;
+        bool cut = false;
+        QCOMPARE(CodeFileTable::tableOf(u"b.csv"_s, big, &cut).size(), CodeFileTable::MaxRows);
+        QVERIFY(cut);
+        const QList<QStringList> wide = CodeFileTable::tableOf(u"c.tsv"_s, QString(CodeFileTable::MaxCellLength + 9, u'z'), &cut);
+        QVERIFY(!cut);
+        QCOMPARE(wide.at(0).at(0).size(), CodeFileTable::MaxCellLength + 1);
+        QVERIFY(CodeFileTable::tableOf(u"d.md"_s, u"a,b"_s, &cut).isEmpty());
+        QVERIFY(!changed.isEmpty());
     }
 
     // Find within the file shown (Ctrl+F in the viewer): its matches counted, line by line, with the

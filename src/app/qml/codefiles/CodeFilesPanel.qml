@@ -59,6 +59,10 @@ Item {
     }
 
     /// Show `path` (relative to the folder, "/"-separated) at `line` (0: the top).
+    /// A CSV / TSV file shown as a table (CodeFileTable), else as its text.
+    property bool asTable: true
+    readonly property bool showingTable: table.available && panel.asTable && !panel.editing
+
     // ---- Editing (docs/CODE-FILES.md "Editing") ----------------------------------------------------
     /// The file is being edited (its text in `editor`), and what it had when the edit began.
     property bool editing: false
@@ -174,6 +178,10 @@ Item {
         palette: panel.syntaxPalette
         onLoaded: applyLater.restart()
     }
+    CodeFileTable {
+        id: table
+        document: doc
+    }
     // (The rows exist once the model's reset has been laid out.)
     Later {
         id: applyLater
@@ -238,6 +246,14 @@ Item {
                 shortcut: "Ctrl+F"
                 enabled: doc.kind === "text"
                 onClicked: panel.openFind()
+            }
+            BIconButton {
+                objectName: "codeFilesTableToggle"
+                visible: table.available && !panel.editing
+                size: "small"
+                iconName: panel.asTable ? "file-text" : "table"
+                label: panel.asTable ? qsTr("Show as text") : qsTr("Show as a table")
+                onClicked: panel.asTable = !panel.asTable
             }
             BIconButton {
                 objectName: "codeFilesEdit"
@@ -348,11 +364,44 @@ Item {
                     }
                 }
             }
+            // A CSV / TSV file as a table: its first row bold (most such files' header).
+            TableView {
+                id: tableView
+                objectName: "codeFileTable"
+                anchors.fill: parent
+                visible: panel.showingTable
+                model: panel.showingTable ? table : null
+                clip: true
+                columnSpacing: 1
+                rowSpacing: 1
+                boundsBehavior: Flickable.StopAtBounds
+                T.ScrollBar.vertical: BScrollBar {}
+                T.ScrollBar.horizontal: BScrollBar {}
+                delegate: Rectangle {
+                    id: cell
+                    required property string display
+                    required property int row
+                    implicitWidth: Math.min(320, cellText.implicitWidth + 2 * Theme.space2)
+                    implicitHeight: cellText.implicitHeight + Theme.space1 * 2
+                    color: cell.row === 0 ? Theme.bgSunken : Theme.bg
+                    BText {
+                        id: cellText
+                        anchors.fill: parent
+                        anchors.leftMargin: Theme.space2
+                        anchors.rightMargin: Theme.space2
+                        verticalAlignment: Text.AlignVCenter
+                        text: cell.display
+                        font.pixelSize: Theme.textSm
+                        font.weight: cell.row === 0 ? Theme.weightSemiBold : Theme.weightNormal
+                        elide: Text.ElideRight
+                    }
+                }
+            }
             CodeFileView {
                 id: view
                 objectName: "codeFileView"
                 anchors.fill: parent
-                visible: doc.kind === "text" && !panel.editing
+                visible: doc.kind === "text" && !panel.editing && !panel.showingTable
                 document: doc
                 path: panel.path
                 onCommentRequested: (from, to) => panel.startComment(from, to)

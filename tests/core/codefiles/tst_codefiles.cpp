@@ -275,6 +275,31 @@ private Q_SLOTS:
         QCOMPARE(brulion::codefiles::encodeEdited(u"int a;\n\nint b;", shapeOf(file)), file);
     }
 
+    // A table file shown as a table: its separator by its name, else the one its first line has most
+    // of outside quotes; no table for other files.
+    void tableSeparator_data()
+    {
+        QTest::addColumn<QString>("path");
+        QTest::addColumn<QString>("firstLine");
+        QTest::addColumn<QString>("separator");
+        QTest::newRow("tsv") << "dane/a.tsv" << "a,b;c" << "\t";
+        QTest::newRow("csv commas") << "a.csv" << "imię,nazwisko,wiek" << ",";
+        QTest::newRow("csv semicolons") << "A.CSV" << "imię;nazwisko;\"miasto, kraj\"" << ";";
+        QTest::newRow("csv tabs") << "a.csv" << "a\tb\tc" << "\t";
+        QTest::newRow("csv one column") << "a.csv" << "żółw" << ",";
+        QTest::newRow("quoted commas") << "a.csv" << "\"a,b,c\";d;e" << ";";
+        QTest::newRow("no table") << "a.txt" << "a,b" << "";
+        QTest::newRow("no name") << "" << "a,b" << "";
+    }
+    void tableSeparator()
+    {
+        QFETCH(QString, path);
+        QFETCH(QString, firstLine);
+        QFETCH(QString, separator);
+        const QChar c = brulion::codefiles::tableSeparator(path, firstLine);
+        QCOMPARE(c.isNull() ? QString() : QString(c), separator);
+    }
+
     void foldersToWatch()
     {
         const FileIndex index = FileIndex::fromPaths({u"src/app/main.cpp"_s, u"src/app/qml/Main.qml"_s,

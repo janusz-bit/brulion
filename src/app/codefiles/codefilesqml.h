@@ -3,11 +3,13 @@
 //
 //   CodeFileIndex      creatable — CodeFileIndex { folder: …; query: …; kinds: "files" }: ranked rows
 //   CodeFileDocument   creatable — CodeFileDocument { folder: …; path: … }: the viewer's lines
+//   CodeFileTable      creatable — CodeFileTable { document: doc }: a CSV / TSV file as a table
 //   CodeSearch         creatable — CodeSearch { folder: … }: the project search's rows
 //   CodeFiles          singleton — links, @-mentions, review comments, recent files, the clipboard
 #pragma once
 
 #include "codefiledocument.h"
+#include "codefiletable.h"
 #include "codefileindex.h"
 #include "codefiles.h"
 #include "codesearch.h"
@@ -26,6 +28,12 @@ struct CodeFileDocumentForeign {
     Q_GADGET
     QML_FOREIGN(brulion::codefiles::CodeFileDocument)
     QML_NAMED_ELEMENT(CodeFileDocument)
+};
+
+struct CodeFileTableForeign {
+    Q_GADGET
+    QML_FOREIGN(brulion::codefiles::CodeFileTable)
+    QML_NAMED_ELEMENT(CodeFileTable)
 };
 
 struct CodeSearchForeign {

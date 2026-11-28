@@ -131,6 +131,15 @@ settings, `code/recentFiles/<hash of the folder>`, at most 20), the path as a br
 file…, Copy path, Open in editor, Reload. A thread's answer written reads the file shown again,
 keeping its place.
 
+### Tables
+
+A `.csv` or `.tsv` file read whole is shown as a **table** (`CodeFileTable`, `codeFileTable`: a
+TableView, the first row bold as most such files' header) — the header's `codeFilesTableToggle` shows
+its text instead and back. Its separator (`codefiles::tableSeparator()`): a tab for `.tsv`; for `.csv`
+the one of `,`, `;` and tab its first line has most of outside quotes (`,` when none). The cells:
+`io::parseCsv()` of the lines (RFC 4180: quotes, `""`, a line break inside quotes — one cell, shown on
+one line), at most 10 000 rows, 200 columns and 500 characters a cell (`cut`).
+
 ### Editing
 
 The header's **Edit** (`codeFilesEdit`, a pencil) — for a text file read whole, valid UTF-8
@@ -259,7 +268,8 @@ pages of the notebook.)
 
 ## Not done (yet)
 
-* Rendered views of Markdown, HTML, CSV, PDF and ZIP files (here: their text; PDFs as binary files);
+* Rendered views of Markdown, HTML, PDF and ZIP files (here: their text; PDFs and archives as binary
+  files);
   an editor with the viewer's colours (the edit is plain text).
 * T3 Code's mentions of threads and models, and `#` for pull requests.
 * Review comments as chips in the composer: here they are text.

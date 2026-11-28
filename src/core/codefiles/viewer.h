@@ -65,6 +65,11 @@ bool looksBinary(QByteArrayView head);
 /// A picture the viewer shows as one (by the extension): png, jpg, jpeg, gif, webp, bmp, svg, ico.
 bool isPictureName(QStringView name);
 
+/// The separator a table file is shown with as a table (docs/CODE-FILES.md "Tables"): a tab for
+/// ".tsv"; for ".csv" the one of ",", ";" and tab `firstLine` has most of outside quotes ("," when
+/// none); a null QChar for any other file.
+QChar tableSeparator(QStringView path, QStringView firstLine);
+
 /// The language of a file by its name, as a Markdown fence names it ("cpp", "python", "qml",
 /// "json", "dockerfile", …; "" unknown).
 QString languageForPath(QStringView path);

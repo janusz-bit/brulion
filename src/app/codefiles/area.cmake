@@ -5,6 +5,7 @@
 #                                    `git ls-files -z` or a walk, built on a pool thread, shared per
 #                                    folder), ranked by fuzzy match for the picker and @-mentions
 #   CodeFileDocument                 the file viewer's lines, read and coloured on a pool thread
+#   CodeFileTable                    a CSV / TSV file of the viewer as a table (io::parseCsv)
 #   CodeSearch                       the project search: rg --json, git grep, or Brulion's own
 #   CodeFiles                        helpers: agents' file links, @-mentions, review comments
 # QML (qml/codefiles): CodeFilesPanel (the right panel's "Files" tab: the viewer with its path, the
@@ -17,12 +18,13 @@ set(_brulion_codefiles_dir ${CMAKE_CURRENT_LIST_DIR})
 qt_add_library(brulion_codefiles STATIC
     ${_brulion_codefiles_dir}/codefileindex.h ${_brulion_codefiles_dir}/codefileindex.cpp
     ${_brulion_codefiles_dir}/codefiledocument.h ${_brulion_codefiles_dir}/codefiledocument.cpp
+    ${_brulion_codefiles_dir}/codefiletable.h ${_brulion_codefiles_dir}/codefiletable.cpp
     ${_brulion_codefiles_dir}/codesearch.h ${_brulion_codefiles_dir}/codesearch.cpp
     ${_brulion_codefiles_dir}/codefiles.h ${_brulion_codefiles_dir}/codefiles.cpp
     ${_brulion_codefiles_dir}/codefilesbackground_p.h
 )
 target_include_directories(brulion_codefiles PUBLIC ${_brulion_codefiles_dir})
-target_link_libraries(brulion_codefiles PUBLIC Qt6::Core Qt6::Gui brulion_core_codefiles PRIVATE brulion_core_gitcli)
+target_link_libraries(brulion_codefiles PUBLIC Qt6::Core Qt6::Gui brulion_core_codefiles PRIVATE brulion_core_gitcli brulion_core_io)
 qt_extract_metatypes(brulion_codefiles)
 brulion_set_warnings(brulion_codefiles)
 

@@ -183,6 +183,29 @@ ViewerFile readForViewer(const QString &absolutePath, qint64 maxBytes)
     return out;
 }
 
+QChar tableSeparator(QStringView path, QStringView firstLine)
+{
+    const QString name = path.sliced(path.lastIndexOf(u'/') + 1).toString().toLower();
+    if (name.endsWith(u".tsv"))
+        return u'\t';
+    if (!name.endsWith(u".csv"))
+        return {};
+    int commas = 0, semicolons = 0, tabs = 0;
+    bool quoted = false;
+    for (const QChar c : firstLine) {
+        if (c == u'"')
+            quoted = !quoted;
+        if (quoted)
+            continue;
+        commas += c == u',';
+        semicolons += c == u';';
+        tabs += c == u'\t';
+    }
+    if (semicolons > commas && semicolons >= tabs)
+        return u';';
+    return tabs > commas ? u'\t' : u',';
+}
+
 QString languageForPath(QStringView path)
 {
     const QStringView name = path.sliced(path.lastIndexOf(u'/') + 1);
