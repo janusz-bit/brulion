@@ -549,6 +549,15 @@ AppController::AppController(const Options &options, QObject *parent)
                                 u"info"_s, tr("Undo"));
         m_autoArchiveToasts.insert(id, paths);
     });
+    // The notebook's own layout (docs/NOTEBOOK-SETTINGS.md "The layout language"): the settings note's
+    // block applied while this device follows it — when it changes, when the switch goes on.
+    const auto notebookLayout = [this] {
+        const QString text = m_workspace->notebookLayout();
+        if (m_settings->layoutFollowsNotebook() && !text.isEmpty())
+            m_settings->applyLayoutText(text);
+    };
+    connect(m_workspace.get(), &Workspace::configChanged, this, notebookLayout);
+    connect(m_settings.get(), &AppSettings::layoutFollowsNotebookChanged, this, notebookLayout);
     // Code mode's threads untouched for a while, settled by themselves (Settings → Extensions → Code
     // mode; CodeThreads::setAutoSettleDays): never in the documentation; a toast with Undo.
     const auto autoSettle = [this] {

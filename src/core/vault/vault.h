@@ -313,6 +313,8 @@ public:
     bool saveConfig(const VaultConfig &config);
     /// The settings note config() reads over config.json (vault/settingsnote.h; "" none).
     QString settingsNote() const;
+    /// The settings note's text as last read ("" none): configChanged() when it changes.
+    QString settingsNoteText() const;
     /// The settings in use as config.json's JSON (unknown keys kept): what a migration starts from.
     QByteArray configJson() const;
 

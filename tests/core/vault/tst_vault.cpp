@@ -294,6 +294,13 @@ private Q_SLOTS:
         f.vault->rescan();
         QTRY_COMPARE(f.vault->config().weekStartsOn, Qt::Saturday);
         QVERIFY(configSpy.count() >= 1);
+        // Only its text changed (a layout block, a comment): told too.
+        const int before = int(configSpy.count());
+        f.clock.advanceMs(1000);
+        f.write(u"Ustawienia notatnika.md"_s, "---\nbrulion: settings\nweekStartsOn: 6\n---\n# Ustawienia\n\n```brulion-layout\n#rail(tasks)\n```\n");
+        f.vault->rescan();
+        QTRY_VERIFY(configSpy.count() > before);
+        QVERIFY(f.vault->settingsNoteText().contains(u"#rail(tasks)"_s));
         // Gone: config.json's alone.
         QVERIFY(f.vault->remove(u"Ustawienia notatnika.md"_s));
         QCOMPARE(f.vault->config().weekStartsOn, Qt::Monday);

@@ -1183,6 +1183,7 @@ std::optional<QByteArray> VaultPrivate::readObsidianSetting(const QString &path,
 QString VaultPrivate::readSettingsNote(ParsedVaultConfig &parsed)
 {
     settingsNotePath.clear();
+    settingsNoteText.clear();
     for (const QString &name : settingsnote::noteNames()) {
         const auto known = files.constFind(name);
         if (known == files.cend() || known->size > kMaxConfigBytes)
@@ -1192,6 +1193,7 @@ QString VaultPrivate::readSettingsNote(ParsedVaultConfig &parsed)
         if (!ok || !settingsnote::isSettingsNote(text))
             continue;
         settingsNotePath = name;
+        settingsNoteText = text;
         parsed = settingsnote::mergedOver(parsed, text);
         return text;
     }
@@ -1234,7 +1236,7 @@ bool VaultPrivate::loadConfig(bool quiet, bool rereadObsidian)
         parsed.warnings += adoption.warnings;
         adopted = std::move(adoption.adoptedKeys);
     }
-    const QString notePath = settingsNotePath;
+    const QString notePath = settingsNotePath, noteText = settingsNoteText;
     readSettingsNote(parsed);
     if (!quiet || parsed.warnings != configWarnings) {
         for (const QString &warning : std::as_const(parsed.warnings))
@@ -1243,7 +1245,8 @@ bool VaultPrivate::loadConfig(bool quiet, bool rereadObsidian)
     if (!adopted.isEmpty() && adopted != configFromObsidian)
         qCInfo(lcVault).noquote() << u"Settings taken from .obsidian/: %1"_s.arg(adopted.join(u", "_s));
     const bool differs = !sameVaultConfig(config, parsed.config) || adopted != configFromObsidian
-                         || parsed.warnings != configWarnings || notePath != settingsNotePath;
+                         || parsed.warnings != configWarnings || notePath != settingsNotePath
+                         || noteText != settingsNoteText; // (its layout block, its comments: shown elsewhere)
     config = std::move(parsed.config);
     rawConfig = std::move(parsed.raw);
     configWarnings = std::move(parsed.warnings);
@@ -1471,6 +1474,11 @@ bool Vault::saveConfig(const VaultConfig &config)
 QString Vault::settingsNote() const
 {
     return d->settingsNotePath;
+}
+
+QString Vault::settingsNoteText() const
+{
+    return d->settingsNoteText;
 }
 
 QByteArray Vault::configJson() const

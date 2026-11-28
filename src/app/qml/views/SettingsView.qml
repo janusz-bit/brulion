@@ -1013,6 +1013,15 @@ Item {
                         onClicked: layoutTextDialog.openWith(AppSettings.layoutText())
                     }
                 }
+                SettingSwitch {
+                    objectName: "layoutFollowsNotebookSetting"
+                    text: qsTr("Use the notebook's layout")
+                    description: Workspace.notebookLayout !== ""
+                                 ? qsTr("The layout written in the notebook's settings note (a brulion-layout block) is used here, also when it changes.")
+                                 : qsTr("When the notebook's settings note has a layout (a brulion-layout block), it is used here, also when it changes.")
+                    checked: AppSettings.layoutFollowsNotebook
+                    onToggled: AppSettings.layoutFollowsNotebook = checked
+                }
                 ShellSettingRow {
                     title: qsTr("Sidebar")
                     description: qsTr("Entries and sections of the sidebar (and the phone's menu).")

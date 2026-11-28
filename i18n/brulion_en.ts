@@ -1827,7 +1827,7 @@
 <context>
     <name>SettingsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1314"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1323"/>
         <source>%n word(s), kept on this device for all notebooks.</source>
         <translation>
             <numerusform>%n word, kept on this device for all notebooks.</numerusform>
@@ -1835,7 +1835,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3497"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3506"/>
         <source>%n warning(s) or error(s)</source>
         <translation>
             <numerusform>%n warning or error</numerusform>
@@ -1843,7 +1843,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3362"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3371"/>
         <source>Last check %1: %n reminder(s), the sync failed.</source>
         <translation>
             <numerusform>Last check %1: %n reminder, the sync failed.</numerusform>
@@ -1875,7 +1875,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2551"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2560"/>
         <source>%n device(s) paired. Another one scans a code.</source>
         <translation>
             <numerusform>%n device paired. Another one scans a code.</numerusform>
@@ -1883,7 +1883,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3186"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3195"/>
         <source>Type check: %n warning(s), %1</source>
         <translation>
             <numerusform>Type check: %n warning, %1</numerusform>
@@ -1891,7 +1891,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3364"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3373"/>
         <source>Last check %1: %n reminder(s).</source>
         <translation>
             <numerusform>Last check %1: %n reminder.</numerusform>
@@ -2981,7 +2981,7 @@
     </message>
     <message numerus="yes">
         <location filename="../src/app/shell/appcontroller.cpp" line="546"/>
-        <location filename="../src/app/shell/appcontroller.cpp" line="568"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="577"/>
         <source>%n day(s)</source>
         <comment>untouched for …</comment>
         <translation>
@@ -2998,7 +2998,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/appcontroller.cpp" line="565"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="574"/>
         <source>Settled %n thread(s): the pull request was merged or closed</source>
         <translation>
             <numerusform>Settled %n thread: its pull request was merged or closed</numerusform>
@@ -3006,7 +3006,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/appcontroller.cpp" line="567"/>
+        <location filename="../src/app/shell/appcontroller.cpp" line="576"/>
         <source>Settled %n thread(s) untouched for %1</source>
         <translation>
             <numerusform>Settled %n thread untouched for %1</numerusform>

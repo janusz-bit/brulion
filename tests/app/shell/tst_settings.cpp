@@ -320,6 +320,13 @@ private Q_SLOTS:
         QVERIFY(s.applyLayoutText(u"#rail(graph)"_s).isEmpty());
         QVERIFY(!s.sidebarHidden().contains(u"graph"_s));
         QVERIFY(s.sidebarHidden().contains(u"favorites"_s));
+        // Following the notebook's layout: off by default, kept.
+        QVERIFY(!s.layoutFollowsNotebook());
+        QSignalSpy follows(&s, &AppSettings::layoutFollowsNotebookChanged);
+        s.setLayoutFollowsNotebook(true);
+        s.setLayoutFollowsNotebook(true);
+        QCOMPARE(follows.size(), 1);
+        QVERIFY(s.layoutFollowsNotebook());
         // The app's own order again.
         s.setRailOrder({});
         QCOMPARE(s.railGroup(u"gym"_s), 1);

@@ -1050,6 +1050,10 @@ private Q_SLOTS:
         QVERIFY(ws->readFile(path).contains(u"weekStartsOn: 3\n"_s));
         QVERIFY(ws->readFile(u".brulion/config.json"_s).contains(u"\"weekStartsOn\": 3"_s));
         QVERIFY(ws->readFile(path).contains(u"\n# Ustawienia notatnika\n"_s));
+        // The notebook's layout: the note's brulion-layout block, followed as the note changes.
+        QCOMPARE(ws->notebookLayout(), QString());
+        QVERIFY(ws->write(path, ws->readFile(path) + u"\n```brulion-layout\n#rail(tasks, |, search)\n```\n"_s));
+        QTRY_COMPARE(ws->notebookLayout(), u"#rail(tasks, |, search)\n"_s);
         // An ordinary page of the name: left alone, the other name taken.
         auto other = open({{u"Ustawienia notatnika.md"_s, u"Moje zwykłe notatki.\n"_s}});
         QCOMPARE(other->moveSettingsToNote(), u"Notebook settings.md"_s);

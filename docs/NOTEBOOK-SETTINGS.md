@@ -126,5 +126,9 @@ item hidden where it would be by default.
    `sidebarSections`, `bottomNavTabs`) and returns the warnings; Settings → Appearance → Layout → "Edit
    as text…" (`layoutTextDialog`: applied on Apply, what did not read listed under it, the rest
    applied).
-6. The notebook's layout: "Use the notebook's layout" (a device setting) applying the settings note's
-   ` ```brulion-layout ` block (`uilayout::blockOf()`) when it changes.
+6. **(done)** The notebook's layout: `Workspace.notebookLayout` (the settings note's ` ```brulion-layout `
+   block, `uilayout::blockOf()`; `Vault::settingsNoteText()`, configChanged() also when only the
+   note's text changed), Settings → Appearance → Layout → "Use the notebook's layout"
+   (`AppSettings.layoutFollowsNotebook`, key `ui/layout/followNotebook`, off by default): AppController
+   applies the block whenever it changes or the switch goes on.
+7. Later places: `more` (the "More" menu's contents), `tabs` (once the tabs can be switched off).

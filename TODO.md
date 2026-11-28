@@ -129,9 +129,8 @@ done in the repository simply disappears from the list.
   app closed checked on a real phone (the emulator's test passes) and on a desktop that quit (nothing can show it there: a scheduled notification of the system?).
 * **A small language for the interface layout: what is still missing** — the icon bar's order and
   groups, the pages panel's sections and the bottom bar are written as text in Settings → Appearance →
-  Layout → "Edit as text…" (docs/NOTEBOOK-SETTINGS.md "The layout language"); missing: the notebook's
-  own layout (a `brulion-layout` block of the settings note, "Use the notebook's layout"), the "More"
-  menu's contents and the tabs as places.
+  Layout → "Edit as text…", and a notebook's own in its settings note (docs/NOTEBOOK-SETTINGS.md "The
+  layout language"); missing: the "More" menu's contents and the tabs as places.
 
 * **Pictures from the internet — check on a real phone.** The Android emulator
   (`scripts/android-emulator-test.sh --web-pictures`) and the Chromium and Firefox browsers

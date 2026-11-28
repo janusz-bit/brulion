@@ -59,6 +59,7 @@ constexpr auto kSidebarHidden = "ui/sidebar/hidden"_L1;
 constexpr auto kSidebarSections = "ui/sidebar/sections"_L1;
 constexpr auto kBottomNavTabs = "ui/bottomNav/tabs"_L1;
 constexpr auto kRailOrder = "ui/rail/order"_L1;
+constexpr auto kLayoutFollowsNotebook = "ui/layout/followNotebook"_L1;
 constexpr auto kCaptureButton = "ui/captureButton"_L1;
 constexpr auto kRailExpands = "ui/rail/expands"_L1;
 constexpr auto kGym = "extensions/silownia"_L1;
@@ -489,6 +490,14 @@ void AppSettings::setRailOrder(const QStringList &order)
 {
     if (store(kRailOrder, cleanRail(order), railOrder()))
         Q_EMIT railOrderChanged();
+}
+
+bool AppSettings::layoutFollowsNotebook() const { return m_settings->value(kLayoutFollowsNotebook, false).toBool(); }
+
+void AppSettings::setLayoutFollowsNotebook(bool on)
+{
+    if (store(kLayoutFollowsNotebook, on, layoutFollowsNotebook()))
+        Q_EMIT layoutFollowsNotebookChanged();
 }
 
 QStringList AppSettings::railViews() const

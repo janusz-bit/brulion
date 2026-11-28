@@ -1,5 +1,6 @@
 #include "workspace.h"
 
+#include "uilayout/uilayout.h"
 #include "vault/settingsnote.h"
 
 #include "indexworkers.h"
@@ -1670,6 +1671,11 @@ QStringList Workspace::configFromObsidian() const
 QString Workspace::settingsNote() const
 {
     return m_vault ? m_vault->settingsNote() : QString();
+}
+
+QString Workspace::notebookLayout() const
+{
+    return m_vault ? uilayout::blockOf(m_vault->settingsNoteText()) : QString();
 }
 
 QString Workspace::moveSettingsToNote()

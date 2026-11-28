@@ -84,6 +84,10 @@ class AppSettings : public QObject {
     Q_PROPERTY(QStringList railOrder READ railOrder WRITE setRailOrder NOTIFY railOrderChanged FINAL)
     /// The icon bar's views in order ("code" first, then railOrder's, then those it leaves out).
     Q_PROPERTY(QStringList railViews READ railViews NOTIFY railOrderChanged FINAL)
+    /// "Use the notebook's layout" (key `ui/layout/followNotebook`, off by default): the settings
+    /// note's layout block applied here whenever it changes (AppController).
+    Q_PROPERTY(bool layoutFollowsNotebook READ layoutFollowsNotebook WRITE setLayoutFollowsNotebook NOTIFY
+                       layoutFollowsNotebookChanged FINAL)
     /// Quick capture's + on the top bar of phones and narrow windows (wide ones always show it).
     Q_PROPERTY(bool captureButtonShown READ captureButtonShown WRITE setCaptureButtonShown NOTIFY
                        captureButtonShownChanged FINAL)
@@ -396,6 +400,8 @@ public:
     QStringList railOrder() const;
     void setRailOrder(const QStringList &order);
     QStringList railViews() const;
+    bool layoutFollowsNotebook() const;
+    void setLayoutFollowsNotebook(bool on);
     /// The group of the icon bar `view` is in (0 the first; the app's own when railOrder is empty;
     /// a view railOrder leaves out: after its groups).
     Q_INVOKABLE int railGroup(const QString &view) const;
@@ -778,6 +784,7 @@ Q_SIGNALS:
     void sidebarSectionsChanged();
     void bottomNavTabsChanged();
     void railOrderChanged();
+    void layoutFollowsNotebookChanged();
     void captureButtonShownChanged();
     void railExpandsChanged();
     void gymEnabledChanged();
