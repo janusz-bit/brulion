@@ -670,6 +670,10 @@ FocusScope {
     Connections {
         target: Workspace.projects
         function onChanged() { root.refreshPlace() }
+        function onSubmodulesFailed(folder: string, message: string) {
+            if (folder === root.folder || folder === root.envWorktree)
+                AppController.toast(qsTr("The worktree's submodules could not be checked out: %1").arg(message), "warning")
+        }
         function onWorktreeCreated(project: string, folder: string, branch: string, error: string) {
             if (!root.makingWorktree || project !== root.project)
                 return

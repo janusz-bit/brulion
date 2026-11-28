@@ -7961,7 +7961,7 @@
     </message>
     <message>
         <location filename="../src/app/qml/code/CodeView.qml" line="275"/>
-        <location filename="../src/app/qml/code/CodeView.qml" line="1187"/>
+        <location filename="../src/app/qml/code/CodeView.qml" line="1191"/>
         <source>Worktree: %1</source>
         <translation>Worktree: %1</translation>
     </message>
@@ -8006,164 +8006,169 @@
         <translation>Pull request %1 pobrany w folderze projektu (%2)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/code/CodeView.qml" line="678"/>
+        <location filename="../src/app/qml/code/CodeView.qml" line="675"/>
+        <source>The worktree&apos;s submodules could not be checked out: %1</source>
+        <translation>Nie udało się pobrać podmodułów worktree: %1</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/code/CodeView.qml" line="682"/>
         <source>The worktree could not be made: %1</source>
         <translation>Nie udało się utworzyć worktree: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/code/CodeView.qml" line="703"/>
+        <location filename="../src/app/qml/code/CodeView.qml" line="707"/>
         <source>Code mode</source>
         <translation>Tryb kodu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/code/CodeView.qml" line="704"/>
+        <location filename="../src/app/qml/code/CodeView.qml" line="708"/>
         <source>Add the folder of a project. AI agents of yours — Claude Code, Codex, OpenCode — work in it with your subscription, each thread on its own (in a git worktree if you like); you see their changes, run the project&apos;s scripts in a terminal, commit and open pull requests here. Brulion notifies you when they answer or need you.</source>
         <translation>Dodaj folder projektu. Twoi agenci AI — Claude Code, Codex, OpenCode — pracują w nim z Twoją subskrypcją, każdy wątek osobno (jeśli chcesz, w worktree gita); tutaj widzisz ich zmiany, uruchamiasz skrypty projektu w terminalu, zatwierdzasz zmiany i otwierasz pull requesty. Brulion powiadamia Cię, gdy odpowiedzą albo Cię potrzebują.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/code/CodeView.qml" line="710"/>
-        <location filename="../src/app/qml/code/CodeView.qml" line="1132"/>
+        <location filename="../src/app/qml/code/CodeView.qml" line="714"/>
+        <location filename="../src/app/qml/code/CodeView.qml" line="1136"/>
         <source>Add a project…</source>
         <translation>Dodaj projekt…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/code/CodeView.qml" line="727"/>
+        <location filename="../src/app/qml/code/CodeView.qml" line="731"/>
         <source>Set up an AI agent</source>
         <translation>Skonfiguruj agenta AI</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/code/CodeView.qml" line="755"/>
+        <location filename="../src/app/qml/code/CodeView.qml" line="759"/>
         <source>No project</source>
         <translation>Brak projektu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/code/CodeView.qml" line="759"/>
+        <location filename="../src/app/qml/code/CodeView.qml" line="763"/>
         <source>Project: %1</source>
         <translation>Projekt: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/code/CodeView.qml" line="1052"/>
+        <location filename="../src/app/qml/code/CodeView.qml" line="1056"/>
         <source>Copied: %1</source>
         <translation>Skopiowano: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/code/CodeView.qml" line="1059"/>
+        <location filename="../src/app/qml/code/CodeView.qml" line="1063"/>
         <source>Set up the AI first (Settings → Extensions → AI).</source>
         <translation>Najpierw skonfiguruj AI (Ustawienia → Rozszerzenia → AI).</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/code/CodeView.qml" line="1161"/>
+        <location filename="../src/app/qml/code/CodeView.qml" line="1165"/>
         <source>the project&apos;s folder</source>
         <translation>folder projektu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/code/CodeView.qml" line="1170"/>
+        <location filename="../src/app/qml/code/CodeView.qml" line="1174"/>
         <source>a branch and folder of its own</source>
         <translation>własna gałąź i folder</translation>
     </message>
     <message>
         <location filename="../src/app/qml/code/CodeView.qml" line="276"/>
-        <location filename="../src/app/qml/code/CodeView.qml" line="776"/>
-        <location filename="../src/app/qml/code/CodeView.qml" line="1160"/>
+        <location filename="../src/app/qml/code/CodeView.qml" line="780"/>
+        <location filename="../src/app/qml/code/CodeView.qml" line="1164"/>
         <source>Local</source>
         <translation>Lokalnie</translation>
     </message>
     <message>
         <location filename="../src/app/qml/code/CodeView.qml" line="273"/>
-        <location filename="../src/app/qml/code/CodeView.qml" line="1169"/>
+        <location filename="../src/app/qml/code/CodeView.qml" line="1173"/>
         <source>New worktree</source>
         <translation>Nowy worktree</translation>
     </message>
     <message>
         <location filename="../src/app/qml/code/CodeView.qml" line="188"/>
-        <location filename="../src/app/qml/code/CodeView.qml" line="976"/>
+        <location filename="../src/app/qml/code/CodeView.qml" line="980"/>
         <source>The editor could not be started: set its command in Settings → Extensions → Code mode.</source>
         <translation>Nie udało się uruchomić edytora: ustaw jego polecenie w Ustawienia → Rozszerzenia → Tryb kodu.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/code/CodeView.qml" line="778"/>
-        <location filename="../src/app/qml/code/CodeView.qml" line="807"/>
+        <location filename="../src/app/qml/code/CodeView.qml" line="782"/>
+        <location filename="../src/app/qml/code/CodeView.qml" line="811"/>
         <source>Branch: %1</source>
         <translation>Gałąź: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/code/CodeView.qml" line="780"/>
+        <location filename="../src/app/qml/code/CodeView.qml" line="784"/>
         <source>A worktree of its own: %1</source>
         <translation>Własny worktree: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/code/CodeView.qml" line="781"/>
+        <location filename="../src/app/qml/code/CodeView.qml" line="785"/>
         <source>The project&apos;s folder: %1</source>
         <translation>Folder projektu: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/code/CodeView.qml" line="792"/>
+        <location filename="../src/app/qml/code/CodeView.qml" line="796"/>
         <source>Where the thread works: %1</source>
         <translation>Gdzie pracuje wątek: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/code/CodeView.qml" line="803"/>
+        <location filename="../src/app/qml/code/CodeView.qml" line="807"/>
         <source>From %1</source>
         <translation>Od %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/code/CodeView.qml" line="804"/>
+        <location filename="../src/app/qml/code/CodeView.qml" line="808"/>
         <source>Branch</source>
         <translation>Gałąź</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/code/CodeView.qml" line="806"/>
+        <location filename="../src/app/qml/code/CodeView.qml" line="810"/>
         <source>The new worktree&apos;s base branch: %1</source>
         <translation>Gałąź bazowa nowego worktree: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/code/CodeView.qml" line="854"/>
+        <location filename="../src/app/qml/code/CodeView.qml" line="858"/>
         <source>Scripts</source>
         <translation>Skrypty</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/code/CodeView.qml" line="867"/>
+        <location filename="../src/app/qml/code/CodeView.qml" line="871"/>
         <source>Hide the terminal</source>
         <translation>Ukryj terminal</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/code/CodeView.qml" line="867"/>
+        <location filename="../src/app/qml/code/CodeView.qml" line="871"/>
         <source>Show the terminal</source>
         <translation>Pokaż terminal</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/code/CodeView.qml" line="875"/>
+        <location filename="../src/app/qml/code/CodeView.qml" line="879"/>
         <source>Hide the changes</source>
         <translation>Ukryj zmiany</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/code/CodeView.qml" line="875"/>
+        <location filename="../src/app/qml/code/CodeView.qml" line="879"/>
         <source>Show the changes</source>
         <translation>Pokaż zmiany</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/code/CodeView.qml" line="948"/>
+        <location filename="../src/app/qml/code/CodeView.qml" line="952"/>
         <source>No git here: the thread works in the project&apos;s folder.</source>
         <translation>Tu nie ma gita: wątek pracuje w folderze projektu.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/code/CodeView.qml" line="1226"/>
+        <location filename="../src/app/qml/code/CodeView.qml" line="1230"/>
         <source>Open preview: %1</source>
         <translation>Otwórz podgląd: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/code/CodeView.qml" line="1260"/>
+        <location filename="../src/app/qml/code/CodeView.qml" line="1264"/>
         <source>Choose the folder of a project</source>
         <translation>Wybierz folder projektu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/code/CodeView.qml" line="1267"/>
+        <location filename="../src/app/qml/code/CodeView.qml" line="1271"/>
         <source>That folder could not be added.</source>
         <translation>Nie udało się dodać tego folderu.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/code/CodeView.qml" line="719"/>
-        <location filename="../src/app/qml/code/CodeView.qml" line="1137"/>
+        <location filename="../src/app/qml/code/CodeView.qml" line="723"/>
+        <location filename="../src/app/qml/code/CodeView.qml" line="1141"/>
         <source>Clone a repository…</source>
         <translation>Sklonuj repozytorium…</translation>
     </message>
@@ -44128,7 +44133,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::shell::CodeProjects</name>
     <message>
-        <location filename="../src/app/shell/codeworktrees.cpp" line="178"/>
+        <location filename="../src/app/shell/codeworktrees.cpp" line="198"/>
         <source>git could not make the worktree.</source>
         <translation>git nie mógł utworzyć worktree.</translation>
     </message>
@@ -44138,72 +44143,72 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>„%1” to nie gałąź.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/codeworktrees.cpp" line="292"/>
+        <location filename="../src/app/shell/codeworktrees.cpp" line="316"/>
         <source>current</source>
         <translation>bieżąca</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/codeworktrees.cpp" line="294"/>
+        <location filename="../src/app/shell/codeworktrees.cpp" line="318"/>
         <source>default</source>
         <translation>domyślna</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/codeworktrees.cpp" line="296"/>
+        <location filename="../src/app/shell/codeworktrees.cpp" line="320"/>
         <source>remote</source>
         <translation>zdalna</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/codeworktrees.cpp" line="300"/>
+        <location filename="../src/app/shell/codeworktrees.cpp" line="324"/>
         <source>in the project&apos;s folder</source>
         <translation>w folderze projektu</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/codeworktrees.cpp" line="301"/>
+        <location filename="../src/app/shell/codeworktrees.cpp" line="325"/>
         <source>in the worktree %1</source>
         <translation>w worktree %1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/codeworktrees.cpp" line="325"/>
+        <location filename="../src/app/shell/codeworktrees.cpp" line="349"/>
         <source>Check out pull request #%1</source>
         <translation>Pobierz pull request #%1</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/codeworktrees.cpp" line="326"/>
+        <location filename="../src/app/shell/codeworktrees.cpp" line="350"/>
         <source>Locally or in a new worktree</source>
         <translation>Lokalnie albo w nowym worktree</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/codeworktrees.cpp" line="332"/>
+        <location filename="../src/app/shell/codeworktrees.cpp" line="356"/>
         <source>Create branch “%1”</source>
         <translation>Utwórz gałąź „%1”</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/codeworktrees.cpp" line="333"/>
+        <location filename="../src/app/shell/codeworktrees.cpp" line="357"/>
         <source>From the checked-out commit, and switch to it</source>
         <translation>Od pobranego commita, z przełączeniem na nią</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/codeworktrees.cpp" line="368"/>
+        <location filename="../src/app/shell/codeworktrees.cpp" line="392"/>
         <source>The repository has no remote to fetch the pull request from.</source>
         <translation>Repozytorium nie ma zdalnego, z którego można pobrać pull request.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/codeworktrees.cpp" line="423"/>
+        <location filename="../src/app/shell/codeworktrees.cpp" line="447"/>
         <source>The project&apos;s folder has uncommitted changes: commit them first, or check the pull request out in a new worktree.</source>
         <translation>Folder projektu ma niezatwierdzone zmiany: najpierw je zatwierdź albo pobierz pull request do nowego worktree.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/codeconfig.cpp" line="139"/>
+        <location filename="../src/app/shell/codeconfig.cpp" line="149"/>
         <source>t3.json is larger than %1 KB: it was not read.</source>
         <translation>t3.json ma więcej niż %1 KB: nie został wczytany.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/codeconfig.cpp" line="145"/>
+        <location filename="../src/app/shell/codeconfig.cpp" line="155"/>
         <source>t3.json is not valid JSON: %1 (at character %2).</source>
         <translation>t3.json nie jest poprawnym JSON-em: %1 (znak %2).</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/codeconfig.cpp" line="151"/>
+        <location filename="../src/app/shell/codeconfig.cpp" line="161"/>
         <source>t3.json is not a JSON object.</source>
         <translation>t3.json nie jest obiektem JSON.</translation>
     </message>
@@ -44213,58 +44218,63 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>defaultThreadEnvMode nie jest ani „local”, ani „worktree”: pominięte.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/codeconfig.cpp" line="61"/>
-        <location filename="../src/app/shell/codeconfig.cpp" line="65"/>
+        <location filename="../src/app/shell/codeconfig.cpp" line="71"/>
+        <location filename="../src/app/shell/codeconfig.cpp" line="75"/>
         <source>iconPath must be a picture inside the project: left out.</source>
         <translation>iconPath musi być obrazkiem w projekcie: pominięte.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/codeconfig.cpp" line="63"/>
+        <location filename="../src/app/shell/codeconfig.cpp" line="73"/>
         <source>iconPath names no file of the project: left out.</source>
         <translation>iconPath nie wskazuje żadnego pliku projektu: pominięte.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/codeconfig.cpp" line="52"/>
+        <location filename="../src/app/shell/codeconfig.cpp" line="62"/>
         <source>iconPath is not text: left out.</source>
         <translation>iconPath nie jest tekstem: pominięte.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/codeconfig.cpp" line="161"/>
+        <location filename="../src/app/shell/codeconfig.cpp" line="172"/>
         <source>scripts is not a list: left out.</source>
         <translation>scripts nie jest listą: pominięte.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/codeconfig.cpp" line="94"/>
+        <location filename="../src/app/shell/codeconfig.cpp" line="104"/>
         <source>Script %1 is not an object: left out.</source>
         <translation>Skrypt %1 nie jest obiektem: pominięty.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/codeconfig.cpp" line="84"/>
+        <location filename="../src/app/shell/codeconfig.cpp" line="52"/>
+        <source>worktreeSubmodules is neither “recursive”, “top-level” nor “none”: left out.</source>
+        <translation>worktreeSubmodules nie jest ani „recursive”, ani „top-level”, ani „none”: pominięte.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/codeconfig.cpp" line="94"/>
         <source>The previewUrl of “%1” is no http or https address: left out.</source>
         <translation>previewUrl skryptu „%1” nie jest adresem http ani https: pominięty.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/codeconfig.cpp" line="100"/>
+        <location filename="../src/app/shell/codeconfig.cpp" line="110"/>
         <source>Script %1 has no name or command as text: left out.</source>
         <translation>Skrypt %1 nie ma nazwy albo polecenia jako tekstu: pominięty.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/codeconfig.cpp" line="108"/>
+        <location filename="../src/app/shell/codeconfig.cpp" line="118"/>
         <source>Script %1 has an empty name or command: left out.</source>
         <translation>Skrypt %1 ma pustą nazwę albo polecenie: pominięty.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/codeconfig.cpp" line="112"/>
+        <location filename="../src/app/shell/codeconfig.cpp" line="122"/>
         <source>The command of “%1” is longer than 4000 characters: left out.</source>
         <translation>Polecenie „%1” ma więcej niż 4000 znaków: pominięte.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/codeconfig.cpp" line="116"/>
+        <location filename="../src/app/shell/codeconfig.cpp" line="126"/>
         <source>A second script named “%1”: left out.</source>
         <translation>Drugi skrypt o nazwie „%1”: pominięty.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/codeconfig.cpp" line="169"/>
+        <location filename="../src/app/shell/codeconfig.cpp" line="180"/>
         <source>More than %1 scripts: the others are left out.</source>
         <translation>Więcej niż %1 skryptów: pozostałe pominięte.</translation>
     </message>

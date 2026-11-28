@@ -163,6 +163,26 @@ bool CodeProjects::createWorktree(const QString &id, const QString &title, const
     return true;
 }
 
+void CodeProjects::checkOutSubmodules(const QString &id, const QString &folder, const std::function<void()> &then)
+{
+    // (t3.json's worktreeSubmodules: recursive unless it says otherwise; nothing without .gitmodules.)
+    const QString mode = m_configs.value(id).worktreeSubmodules;
+    if (mode == u"none" || !QFileInfo(QDir(folder).filePath(u".gitmodules"_s)).isFile()) {
+        then();
+        return;
+    }
+    QStringList args{u"submodule"_s, u"update"_s, u"--init"_s};
+    if (mode != u"top-level")
+        args << u"--recursive"_s;
+    gitcli::RunOptions net;
+    net.timeoutMs = git()->networkTimeoutMs();
+    git()->git(folder, args, net, [this, folder, then](const gitcli::RunResult &r) {
+        then();
+        if (!r.ok())
+            Q_EMIT submodulesFailed(folder, r.message().right(500));
+    });
+}
+
 void CodeProjects::makeWorktree(const QString &id, const QString &repo, const QString &from, const QString &name,
                                 const std::function<void(const QString &error)> &fail)
 {
@@ -174,11 +194,15 @@ void CodeProjects::makeWorktree(const QString &id, const QString &repo, const QS
             const QString folder = QDir(dir).filePath(folderName);
             git()->addWorktree(repo, folder, branch, from.isEmpty() ? u"HEAD"_s : from,
                                [this, id, folder, branch, fail](const gitcli::Outcome &o) {
-                                   if (!o.ok)
+                                   if (!o.ok) {
                                        fail(o.message.isEmpty() ? tr("git could not make the worktree.")
                                                                 : o.message.right(500));
-                                   else
+                                       return;
+                                   }
+                                   // (Ready once its submodules are there: the agent starts after it.)
+                                   checkOutSubmodules(id, folder, [this, id, folder, branch] {
                                        Q_EMIT worktreeCreated(id, folder, branch, QString());
+                                   });
                                });
         });
     };

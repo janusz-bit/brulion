@@ -101,7 +101,7 @@ yet. `codeclones.cpp` over core `gitcli` (`clone.cpp`):
 ### t3.json
 
 A project's `t3.json` at its root (T3 Code's project file: `$schema`, `iconPath`,
-`defaultThreadEnvMode`, `scripts` — the fields Brulion does not use, `worktreeSubmodules`,
+`defaultThreadEnvMode`, `worktreeSubmodules`, `scripts` — the fields Brulion does not use,
 `worktreeSparsePatternsPath`, `ignoreRepositories` and `worktreeLayout`, are ignored) is read when the project is added or
 loaded and again when it changes (a `QFileSystemWatcher` on the project's folder and the file,
 debounced), **never written**. `parseConfig()` is pure and strict: at most 256 KB, a JSON object;
@@ -113,7 +113,9 @@ false), `previewUrl` an http or https address with a host (`previewUrlOf()`; any
 with a warning, and its `autoOpenPreview` with it); a second script of a name (letter case aside), the 51st,
 and anything malformed is left out with a warning; `iconPath` a picture (`png`, `svg`, `jpg`, `jpeg`,
 `webp`, `ico`, `gif`) inside the project — no absolute path, nothing that leaves it, no link pointing
-out of it. A file that does not read is said in `configError` and nothing of it is used.
+out of it; `worktreeSubmodules` `recursive`, `top-level` or `none` (anything else left out with a
+warning; not said: recursive, T3 Code's default). A file that does not read is said in `configError`
+and nothing of it is used.
 
 Its content is data: a command of it runs only when the user clicks its button, runs it from the
 palette or its shortcut, or makes a worktree with it set to run there.
@@ -145,7 +147,12 @@ Everything through `gitcli::Client` (QProcess argument lists, never a shell; doc
   <branchPrefix><slug>}`; `createWorktree(id, title, base)`: a free name — no file of that folder name,
   no branch of that name (`git for-each-ref refs/heads/`) — then `git worktree add -b <branch> -- <folder>
   <base or HEAD>`; a remote-tracking base (`origin/main`) is fetched first (`git fetch -- origin main`;
-  offline, what is known of it). `worktreeCreated(project, folder, branch, error)`.
+  offline, what is known of it). A worktree with a `.gitmodules` then gets its submodules
+  (`checkOutSubmodules()`: `git submodule update --init [--recursive]` as t3.json's
+  `worktreeSubmodules` says — recursive by default, `top-level` without `--recursive`, `none` nothing);
+  `worktreeCreated(project, folder, branch, error)` follows only then, so a thread's first message
+  waits for them; one that cannot be fetched keeps the worktree and says so (`submodulesFailed(folder,
+  message)`: CodeView's toast).
 * **The AI names the branch** (T3 Code's AI-made branch name), when the AI of Settings → Extensions → AI
   is set up: before the worktree is made, the thread's first message (`title`) goes to it
   (`setBranchNamer()`; Workspace's asks `codeai::branchName()`: a few lowercase words joined by hyphens,
@@ -562,7 +569,7 @@ thread's files opening the viewer at their line (`CodeView.openFileInViewer(path
   waiting message taken back there; a new
   worktree there from another base than its HEAD in the UI; projects of two computers with the same id
   (the first computer's is listed).
-* t3.json's `worktreeSubmodules`, sparse checkouts, multi-repository projects and custom worktree layouts; T3 Code's branch naming
+* t3.json's sparse checkouts, multi-repository projects and custom worktree layouts; T3 Code's branch naming
   modes (a semantic prefix the AI picks, the user's own instructions for it); worktrees cleaned up by
   their age alone, whatever their threads (settled threads' worktrees are: "Settling and snoozing").
 * Cloning: other hosts' repository lists (GitLab, Forgejo, Bitbucket — their addresses clone, their

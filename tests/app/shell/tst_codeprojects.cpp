@@ -15,6 +15,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QProcess>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTemporaryDir>
@@ -241,6 +242,83 @@ private Q_SLOTS:
         projects.dropOnThread(QString(), root, {QUrl::fromLocalFile(root + u"/a"_s)});
         QCOMPARE(dropped.size(), 1);
         QVERIFY(!projects.hasThreadDrop(thread));
+    }
+
+    // t3.json's worktreeSubmodules (T3 Code's): a new worktree's submodules checked out — recursive by
+    // default, the top level only, or none; a submodule that cannot be fetched keeps the worktree,
+    // said apart.
+    void worktreeSubmodules()
+    {
+        if (!m_git)
+            QSKIP("no git");
+        // (Local submodules: git refuses the file protocol by default since 2.38.)
+        qputenv("GIT_CONFIG_COUNT", "1");
+        qputenv("GIT_CONFIG_KEY_0", "protocol.file.allow");
+        qputenv("GIT_CONFIG_VALUE_0", "always");
+        auto unset = qScopeGuard([] {
+            qunsetenv("GIT_CONFIG_COUNT");
+            qunsetenv("GIT_CONFIG_KEY_0");
+            qunsetenv("GIT_CONFIG_VALUE_0");
+        });
+        const auto repoWith = [this](const QString &name, const QString &file) {
+            const QString r = fresh(name);
+            QDir().mkpath(r);
+            git(r, {u"init"_s, u"-q"_s});
+            writeFile(r + u'/' + file, "x\n");
+            git(r, {u"add"_s, u"-A"_s});
+            git(r, {u"commit"_s, u"-qm"_s, u"x"_s});
+            return r;
+        };
+        const QString inner = repoWith(u"wewnetrzny"_s, u"glebia.txt"_s);
+        const QString lib = repoWith(u"biblioteka"_s, u"lib.txt"_s);
+        QCOMPARE(git(lib, {u"submodule"_s, u"add"_s, u"-q"_s, inner, u"wew"_s}), 0);
+        QCOMPARE(git(lib, {u"commit"_s, u"-qm"_s, u"wew"_s}), 0);
+        const QString repo = repoWith(u"projekt"_s, u"a.txt"_s);
+        QCOMPARE(git(repo, {u"submodule"_s, u"add"_s, u"-q"_s, lib, u"lib"_s}), 0);
+        QCOMPARE(git(repo, {u"commit"_s, u"-qm"_s, u"lib"_s}), 0);
+
+        CodeProjects projects;
+        projects.setPrograms(QStandardPaths::findExecutable(u"git"_s), QString());
+        projects.setWorktreesRoot(fresh(u"drzewa"_s));
+        const QString id = projects.add(repo);
+        QSignalSpy created(&projects, &CodeProjects::worktreeCreated);
+        QSignalSpy failed(&projects, &CodeProjects::submodulesFailed);
+        // Recursive by default.
+        QVERIFY(projects.createWorktree(id, u"Rekurencyjnie"_s));
+        QTRY_COMPARE_WITH_TIMEOUT(created.size(), 1, 30000);
+        QCOMPARE(created.at(0).at(3).toString(), QString());
+        const QString all = created.at(0).at(1).toString();
+        QVERIFY(QFileInfo(all + u"/lib/lib.txt"_s).isFile());
+        QVERIFY(QFileInfo(all + u"/lib/wew/glebia.txt"_s).isFile());
+        // The top level only.
+        QVERIFY(writeFile(repo + u"/t3.json"_s, R"({"worktreeSubmodules":"top-level"})"));
+        projects.reloadConfig(id);
+        QCOMPARE(projects.config(id).worktreeSubmodules, u"top-level"_s);
+        QVERIFY(projects.createWorktree(id, u"Gora"_s));
+        QTRY_COMPARE_WITH_TIMEOUT(created.size(), 2, 30000);
+        const QString top = created.at(1).at(1).toString();
+        QVERIFY(QFileInfo(top + u"/lib/lib.txt"_s).isFile());
+        QVERIFY(!QFileInfo(top + u"/lib/wew/glebia.txt"_s).isFile());
+        // None.
+        QVERIFY(writeFile(repo + u"/t3.json"_s, R"({"worktreeSubmodules":"none"})"));
+        projects.reloadConfig(id);
+        QVERIFY(projects.createWorktree(id, u"Bez"_s));
+        QTRY_COMPARE_WITH_TIMEOUT(created.size(), 3, 30000);
+        QVERIFY(!QFileInfo(created.at(2).at(1).toString() + u"/lib/lib.txt"_s).isFile());
+        QVERIFY(failed.isEmpty());
+        // A submodule gone: the worktree made all the same, the failure said.
+        QVERIFY(QDir(lib).removeRecursively());
+        QVERIFY(writeFile(repo + u"/t3.json"_s, R"({"worktreeSubmodules":"recursive"})"));
+        projects.reloadConfig(id);
+        QVERIFY(projects.createWorktree(id, u"Zgubiony"_s));
+        QTRY_COMPARE_WITH_TIMEOUT(created.size(), 4, 30000);
+        QCOMPARE(created.at(3).at(3).toString(), QString());
+        QTRY_COMPARE_WITH_TIMEOUT(failed.size(), 1, 30000);
+        QCOMPARE(failed.at(0).at(0).toString(), created.at(3).at(1).toString());
+        // A value that is none of them: the default, warned.
+        const CodeProjects::Config c = CodeProjects::parseConfig(R"({"worktreeSubmodules":"wszystkie"})", repo);
+        QCOMPARE(c.worktreeSubmodules, QString());
+        QCOMPARE(c.warnings.size(), 1);
     }
 
     void previewUrlOf_data()

@@ -167,6 +167,9 @@ public:
         /// iconPath as an absolute path inside the project ("" none, or one that leaves it, is
         /// missing or no picture).
         QString iconPath;
+        /// A new worktree's submodules: "recursive", "top-level", "none"; "" not said (recursive,
+        /// T3 Code's default).
+        QString worktreeSubmodules;
         bool operator==(const Config &) const = default;
     };
 
@@ -472,6 +475,9 @@ Q_SIGNALS:
     /// checkWorktree(): how many files have uncommitted changes (-1 unknown: `error`), its branch.
     void threadDropped(const QString &path);
     void worktreeChecked(const QString &folder, int changes, const QString &branch, const QString &error);
+    /// The submodules of the new worktree `folder` could not be checked out (t3.json's
+    /// worktreeSubmodules): the worktree is there all the same.
+    void submodulesFailed(const QString &folder, const QString &message);
     void worktreeRemoved(const QString &folder, bool ok, const QString &message);
     void worktreeRestored(const QString &folder, bool ok, const QString &message);
     void clonesChanged();
@@ -563,6 +569,8 @@ private:
     void nameWorktree(const QString &title, std::function<void(const QString &name)> done);
     /// createWorktree()'s part once named: the base fetched when it is a remote one, the worktree
     /// of a free branch and folder of `name` made; worktreeCreated() — `fail(error)` on failure.
+    /// t3.json's worktreeSubmodules checked out in the new worktree `folder` of `id`, then `then`.
+    void checkOutSubmodules(const QString &id, const QString &folder, const std::function<void()> &then);
     void makeWorktree(const QString &id, const QString &repo, const QString &from, const QString &name,
                       const std::function<void(const QString &error)> &fail);
     /// slug() without its fallback: "" when nothing is left.

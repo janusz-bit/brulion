@@ -42,6 +42,16 @@ void readEnvMode(const QJsonObject &o, CodeProjects::Config &config)
         config.warnings << CodeProjects::tr("defaultThreadEnvMode is neither “local” nor “worktree”: left out.");
 }
 
+/// t3.json's worktreeSubmodules: "recursive", "top-level" or "none", anything else left out with a warning.
+void readSubmodules(const QJsonObject &o, CodeProjects::Config &config)
+{
+    const QString mode = o.value(u"worktreeSubmodules"_s).toString();
+    if (mode == u"recursive" || mode == u"top-level" || mode == u"none")
+        config.worktreeSubmodules = mode;
+    else if (o.contains(u"worktreeSubmodules"_s))
+        config.warnings << CodeProjects::tr("worktreeSubmodules is neither “recursive”, “top-level” nor “none”: left out.");
+}
+
 /// t3.json's iconPath: a picture inside the project `folder` (no absolute path, nothing that leaves
 /// it — a link pointing out of it neither).
 void readIconPath(const QJsonObject &o, const QString &folder, CodeProjects::Config &config)
@@ -154,6 +164,7 @@ CodeProjects::Config CodeProjects::parseConfig(const QByteArray &data, const QSt
     const QJsonObject o = doc.object();
 
     readEnvMode(o, config);
+    readSubmodules(o, config);
     readIconPath(o, folder, config);
 
     const QJsonValue scripts = o.value(u"scripts"_s);
