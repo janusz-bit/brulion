@@ -494,6 +494,7 @@ void Terminal::setPrivateMode(int mode, bool on)
         break;
     case 2004: modes.bracketedPaste = on; break;
     case 2026: modes.synchronizedOutput = on; break;
+    case 2027: s.setGraphemeClusters(on); break;
     default: break;
     }
     setModes(modes);
@@ -521,6 +522,7 @@ int Terminal::privateModeState(int mode) const
     case 1006: return state(m_modes.mouseSgr);
     case 2004: return state(m_modes.bracketedPaste);
     case 2026: return state(m_modes.synchronizedOutput);
+    case 2027: return state(s.graphemeClusters());
     default: return 0;
     }
 }

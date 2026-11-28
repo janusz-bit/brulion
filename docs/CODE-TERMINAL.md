@@ -118,7 +118,7 @@ execute, ESC, CSI and OSC actions.
 | ESC | DECSC `7`, DECRC `8`, IND `D`, NEL `E`, HTS `H`, RI `M`, RIS `c` (scrollback and title stay), DECKPAM `=`, DECKPNM `>`, DECID `Z`, DECALN `#8`, charsets `( ) 0 A B`, ST (ignored) |
 | Cursor | CUU `A`, CUD `B`, CUF `C`, CUB `D`, CNL `E`, CPL `F`, CHA `G`, CUP `H`, HVP `f`, VPA `d`, HPA `` ` ``, HPR `a`, VPR `e`, CHT `I`, CBT `Z`, SCOSC `s`, SCORC `u` |
 | Editing | ED `J` (0-3), EL `K` (0-2), DECSED / DECSEL (`?J`, `?K`, as ED / EL), ICH `@`, DCH `P`, ECH `X`, IL `L`, DL `M`, SU `S`, SD `T`, REP `b`, TBC `g` (0, 3) |
-| Modes | SM / RM `h` / `l`: 4 IRM, 20 LNM. DECSET / DECRST `?h` / `?l`: 1 DECCKM, 5 DECSCNM, 6 DECOM, 7 DECAWM, 9 X10 mouse, 12 cursor blink, 25 DECTCEM, 47 / 1047 / 1049 alternate screen, 1048 save cursor, 1000 / 1002 / 1003 mouse, 1004 focus events, 1006 SGR mouse, 2004 bracketed paste, 2026 synchronized output |
+| Modes | SM / RM `h` / `l`: 4 IRM, 20 LNM. DECSET / DECRST `?h` / `?l`: 1 DECCKM, 5 DECSCNM, 6 DECOM, 7 DECAWM, 9 X10 mouse, 12 cursor blink, 25 DECTCEM, 47 / 1047 / 1049 alternate screen, 1048 save cursor, 1000 / 1002 / 1003 mouse, 1004 focus events, 1006 SGR mouse, 2004 bracketed paste, 2026 synchronized output, 2027 grapheme clusters (kitty's, WezTerm's, foot's: emoji joined by ZERO WIDTH JOINER, a flag's two regional indicators — two columns — and a skin tone after an emoji take one character's cells; off, the default, every code point counts as wcwidth() says, as most programs count; DECRQM answers 1 / 2) |
 | Style | SGR `m`: 0-9, 21-29, 30-39, 40-49, 53, 55, 90-97, 100-107; 38 / 48 with `;5;n`, `;2;r;g;b`, `:5:n`, `:2::r:g:b`, `:2:r:g:b`; 58 (underline colour) parsed and not drawn; `4:0`-`4:5` underline styles (double drawn double, the rest single). DECSCUSR `SP q` (0-6), DECSTR `!p` |
 | Replies | DSR `5n` → `CSI 0 n`; DSR `6n` → CPR (origin-relative); `?6n` → DECXCPR; DA `c` → `CSI ? 62 ; 22 c` (VT220 with ANSI colour); DA2 `>c` → `CSI > 1 ; 10 ; 0 c`; DECRQM `$p` / `?$p` for the modes above; XTWINOPS `18t` → `CSI 8 ; rows ; cols t`; OSC 10 / 11 / 12 `?` → the view's colours |
 | OSC | 0 / 2 title (control characters dropped, cut at 256), 1 ignored, 7 working directory (`file://host/path`, percent-decoded; other schemes ignored), 8 hyperlinks (stored per cell — `Screen::hyperlink(id)`, at most 4096 distinct URIs of up to 2048 characters), 10 / 11 / 12 queries answered (setting colours ignored), 52 ignored, anything else ignored |
@@ -613,7 +613,8 @@ cells on screen, not what changed.
   the shell runs (the job), unless they break away from jobs; the foreground program's directory
   (`currentDirectory()` is "" there).
 * A split's own direction inside another (a tab is all side by side or all stacked).
-* Grapheme clustering of emoji ZWJ sequences, flags and skin tones (widths follow wcwidth()).
+* Grapheme clusters by default (they are joined only in mode 2027, which a program asks for) and
+  the rest of Unicode's cluster rules (Hangul jamo sequences, Indic conjuncts: as wcwidth() counts).
 * Drawn by Atrament: colour emoji (Atrament's colour glyphs come later, docs/ATRAMENT.md D7: Brulion
   Emoji's outlines meanwhile), a system font chosen as the code font (Atrament has the bundled ones
   only), italic (no italic face bundled), and the terminal's own input in Atrament (with Atrament's

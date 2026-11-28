@@ -480,10 +480,43 @@ void Screen::joinPrevious(char32_t cp)
     markDirty(m_cursor.row);
 }
 
+namespace {
+
+/// An emoji as clusters join them (Extended_Pictographic, as far as a terminal meets it).
+bool isPictographic(char32_t cp)
+{
+    return (cp >= 0x1F000 && cp <= 0x1FAFF) || (cp >= 0x2600 && cp <= 0x27BF) || (cp >= 0x2300 && cp <= 0x23FF)
+           || (cp >= 0x2B00 && cp <= 0x2BFF);
+}
+
+bool isRegionalIndicator(char32_t cp) { return cp >= 0x1F1E6 && cp <= 0x1F1FF; }
+
+bool isSkinTone(char32_t cp) { return cp >= 0x1F3FB && cp <= 0x1F3FF; }
+
+} // namespace
+
+bool Screen::joinsCluster(char32_t cp)
+{
+    const char32_t before = std::exchange(m_previous, cp);
+    if (!m_graphemeClusters)
+        return false;
+    if (isRegionalIndicator(cp)) {
+        // (Pairs: the first opens a flag, the second closes it.)
+        m_flagOpen = !m_flagOpen || !isRegionalIndicator(before);
+        return !m_flagOpen;
+    }
+    m_flagOpen = false;
+    return (before == 0x200D && isPictographic(cp)) || (isSkinTone(cp) && isPictographic(before));
+}
+
 void Screen::print(char32_t cp)
 {
     const char32_t mapped = mapCharset(cp);
     int width = charWidth(mapped);
+    if (joinsCluster(mapped))
+        width = 0;
+    else if (m_flagOpen)
+        width = 2; // (a flag: two columns, as its emoji has)
     if (width == 0) {
         joinPrevious(mapped);
         return;
@@ -1152,6 +1185,9 @@ void Screen::reset()
     m_cursorShape = CursorShape::Block;
     m_cursorBlinking = true;
     m_autoWrap = true;
+    m_graphemeClusters = false;
+    m_previous = 0;
+    m_flagOpen = false;
     m_insertMode = false;
     m_newLineMode = false;
     m_reverseVideo = false;

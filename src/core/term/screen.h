@@ -72,6 +72,11 @@ public:
     // ---- Modes ------------------------------------------------------------------------------
     bool autoWrap() const { return m_autoWrap; }
     void setAutoWrap(bool on);
+    /// Mode 2027, grapheme clusters (kitty's, WezTerm's, foot's): emoji joined by ZERO WIDTH JOINER,
+    /// a flag's two regional indicators and a skin tone after an emoji join the cell before them —
+    /// one character's columns. Off (the default) every code point counts as wcwidth() says.
+    bool graphemeClusters() const { return m_graphemeClusters; }
+    void setGraphemeClusters(bool on) { m_graphemeClusters = on; }
     bool originMode() const { return m_cursor.originMode; }
     /// DECOM: the cursor's row counts from the scroll region's top and stays inside it; homes it.
     void setOriginMode(bool on);
@@ -242,6 +247,13 @@ private:
     CursorShape m_cursorShape = CursorShape::Block;
     bool m_cursorBlinking = true;
     bool m_autoWrap = true;
+    bool m_graphemeClusters = false;
+    /// The last code point print() had, joined or not, and whether the cell before the cursor is a
+    /// regional indicator waiting for its pair (graphemeClusters).
+    char32_t m_previous = 0;
+    bool m_flagOpen = false;
+    /// `cp` joins the cell before it as graphemeClusters says.
+    bool joinsCluster(char32_t cp);
     bool m_insertMode = false;
     bool m_newLineMode = false;
     bool m_reverseVideo = false;

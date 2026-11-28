@@ -54,6 +54,7 @@ private Q_SLOTS:
     void pendingWrap();
     void wideCharacters();
     void combiningMarks();
+    void graphemeClusters();
     void polishText();
     void sgr_data();
     void sgr();
@@ -351,6 +352,40 @@ void TestTerm::combiningMarks()
     flood.feed("\rb");
     QCOMPARE(flood.screen().line(0).cellText(0), u"b"_s);
     QVERIFY(flood.screen().line(0).clusters.isEmpty());
+}
+
+// Mode 2027 (grapheme clusters, as kitty, WezTerm and foot have it): emoji joined by ZERO WIDTH
+// JOINER, a flag's two regional indicators and a skin tone take the cells of one character; off (the
+// default, as wcwidth() counts them) each takes its own. DECRQM says which.
+void TestTerm::graphemeClusters()
+{
+    const QByteArray family = QString::fromUcs4(U"\x1F468\x200D\x1F469\x200D\x1F467").toUtf8();
+    const QByteArray flags = QString::fromUcs4(U"\x1F1F5\x1F1F1\x1F1E9\x1F1EA").toUtf8();
+    const QByteArray thumb = QString::fromUcs4(U"\x1F44D\x1F3FD").toUtf8();
+    Term off(20, 2);
+    off.feed(family);
+    QCOMPARE(off.screen().cursorColumn(), 6);
+    off.feed("\x1b[?2027$p");
+    QCOMPARE(off.replies, QByteArray("\x1b[?2027;2$y"));
+    Term on(20, 4);
+    on.feed("\x1b[?2027h\x1b[?2027$p");
+    QCOMPARE(on.replies, QByteArray("\x1b[?2027;1$y"));
+    on.feed(family + "!");
+    QCOMPARE(on.screen().cursorColumn(), 3);
+    QCOMPARE(on.screen().line(0).cellText(0), QString::fromUtf8(family));
+    QCOMPARE(on.screen().line(0).cellText(2), u"!"_s);
+    // Two flags: two characters of two cells each.
+    on.feed("\r\n" + flags);
+    QCOMPARE(on.screen().cursorColumn(), 4);
+    QCOMPARE(on.screen().line(1).cellText(0), QString::fromUcs4(U"\x1F1F5\x1F1F1"));
+    QCOMPARE(on.screen().line(1).cellText(2), QString::fromUcs4(U"\x1F1E9\x1F1EA"));
+    // A skin tone after an emoji joins it; a ZWJ before plain text does not take it.
+    on.feed("\r\n" + thumb + QString::fromUcs4(U"\x200D").toUtf8() + "a");
+    QCOMPARE(on.screen().cursorColumn(), 3);
+    QCOMPARE(on.screen().line(2).cellText(2), u"a"_s);
+    // Off again: as wcwidth() counts.
+    on.feed("\x1b[?2027l\r\n" + family);
+    QCOMPARE(on.screen().cursorColumn(), 6);
 }
 
 void TestTerm::polishText()
