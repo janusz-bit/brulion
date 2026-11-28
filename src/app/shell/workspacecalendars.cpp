@@ -26,6 +26,32 @@ using namespace std::chrono_literals;
 
 namespace {
 
+/// [from, to] is a range of valid times.
+bool isRange(const QDateTime &from, const QDateTime &to)
+{
+    return from.isValid() && to.isValid() && from <= to;
+}
+
+/// The calendar `c` holds `component` ("VEVENT", "VTODO"; a calendar that names none holds all).
+bool holds(const caldav::CalendarEntry &c, const QString &component)
+{
+    return c.components.isEmpty() || c.components.contains(component);
+}
+
+/// The plain fields of `values` (QML's names) written into `sub`: name, color, refreshMinutes,
+/// alarms — not its address.
+void applySubscriptionValues(caldav::Subscription &sub, const QVariantMap &values)
+{
+    if (values.contains(u"name"_s))
+        sub.name = values.value(u"name"_s).toString().simplified();
+    if (const QString c = caldav::normalizedColor(values.value(u"color"_s).toString()); !c.isEmpty())
+        sub.color = c;
+    if (values.contains(u"refreshMinutes"_s))
+        sub.refreshMinutes = std::clamp(values.value(u"refreshMinutes"_s).toInt(), 15, 10'080);
+    if (values.contains(u"alarms"_s))
+        sub.alarms = values.value(u"alarms"_s).toBool();
+}
+
 constexpr QChar KeySep = QChar(0x1f);
 
 QString isoDate(QDate d)
@@ -483,9 +509,32 @@ std::shared_ptr<const caldav::CalendarData> WorkspaceCalendars::dataOf(const QSt
     return data;
 }
 
+QList<ScheduledNotification> WorkspaceCalendars::alarmsWithin(const QDateTime &from, const QDateTime &to) const
+{
+    QList<ScheduledNotification> out;
+    const dates::UiLocale locale = m_language == u"pl" ? dates::UiLocale::Polish : dates::UiLocale::English;
+    const caldav::CalendarSettings s = m_store->settings();
+    // (dataOf() always has data while there is a store.)
+    const auto add = [&](const QString &id, const QString &name) {
+        out += caldav::eventNotifications(*dataOf(id), id, name, from, to, m_zone, locale);
+    };
+    for (const caldav::CalendarEntry &c : s.calendars) {
+        if (c.showEvents && c.alarms)
+            add(c.id, c.name);
+    }
+    for (const caldav::Subscription &sub : s.subscriptions) {
+        if (sub.alarms)
+            add(sub.id, sub.name);
+    }
+    std::ranges::stable_sort(out, [](const ScheduledNotification &x, const ScheduledNotification &y) {
+        return x.at != y.at ? x.at < y.at : x.id < y.id;
+    });
+    return out;
+}
+
 QList<ScheduledNotification> WorkspaceCalendars::eventAlarmsBetween(const QDateTime &from, const QDateTime &to) const
 {
-    if (!m_store || !from.isValid() || !to.isValid() || from > to)
+    if (!m_store || !isRange(from, to))
         return {};
     // The window the reminder scheduler asks about (a day's look-back, its horizon, a day of
     // slack) is computed once a day and after every change of the events; other windows directly.
@@ -493,32 +542,14 @@ QList<ScheduledNotification> WorkspaceCalendars::eventAlarmsBetween(const QDateT
     const QDate today = now.date();
     const QDateTime windowFrom(today.addDays(-9), QTime(0, 0));
     const QDateTime windowTo(today.addDays(ReminderScheduler::DefaultHorizonDays + 2), QTime(23, 59));
-    const auto compute = [this](const QDateTime &a, const QDateTime &b) {
-        QList<ScheduledNotification> out;
-        const dates::UiLocale locale = m_language == u"pl" ? dates::UiLocale::Polish : dates::UiLocale::English;
-        const caldav::CalendarSettings s = m_store->settings();
-        for (const caldav::CalendarEntry &c : s.calendars) {
-            if (!c.showEvents || !c.alarms)
-                continue;
-            if (const auto data = dataOf(c.id); data && !data->events.isEmpty())
-                out += caldav::eventNotifications(*data, c.id, c.name, a, b, m_zone, locale);
-        }
-        std::ranges::stable_sort(out, [](const ScheduledNotification &x, const ScheduledNotification &y) {
-            return x.at != y.at ? x.at < y.at : x.id < y.id;
-        });
-        return out;
-    };
     if (from < windowFrom || to > windowTo)
-        return compute(from, to);
+        return alarmsWithin(from, to);
     if (m_alarmCacheDay != today) {
-        m_alarmCache = compute(windowFrom, windowTo);
+        m_alarmCache = alarmsWithin(windowFrom, windowTo);
         m_alarmCacheDay = today;
     }
-    QList<ScheduledNotification> out;
-    for (const ScheduledNotification &n : std::as_const(m_alarmCache)) {
-        if (n.at >= from && n.at <= to)
-            out.append(n);
-    }
+    QList<ScheduledNotification> out = m_alarmCache;
+    out.removeIf([&](const ScheduledNotification &n) { return n.at < from || n.at > to; });
     return out;
 }
 
@@ -806,14 +837,7 @@ bool WorkspaceCalendars::updateSubscription(const QString &id, const QVariantMap
     for (caldav::Subscription &sub : s.subscriptions) {
         if (sub.id != id)
             continue;
-        if (values.contains(u"name"_s))
-            sub.name = values.value(u"name"_s).toString().simplified();
-        if (values.contains(u"color"_s)) {
-            if (const QString c = caldav::normalizedColor(values.value(u"color"_s).toString()); !c.isEmpty())
-                sub.color = c;
-        }
-        if (values.contains(u"refreshMinutes"_s))
-            sub.refreshMinutes = std::clamp(values.value(u"refreshMinutes"_s).toInt(), 15, 10'080);
+        applySubscriptionValues(sub, values);
         bool refetch = false;
         if (values.contains(u"url"_s)) {
             QString problem;
@@ -1219,69 +1243,78 @@ QString WorkspaceCalendars::errorText(const QString &code) const
 QVariantMap WorkspaceCalendars::row(const QString &id) const
 {
     const caldav::CalendarSettings s = m_store->settings();
-    QVariantMap r;
-    if (const caldav::Subscription *sub = s.subscription(id)) {
-        const caldav::FeedMeta meta = m_store->feedMeta(id);
-        const QString code = meta.cors ? u"cors"_s : meta.error;
-        QString status;
-        if (meta.fetchedAt.isValid())
-            status = tr("Updated %1").arg(human(meta.fetchedAt));
-        else if (meta.error.isEmpty())
-            status = tr("Not fetched yet");
-        r = QVariantMap{{u"id"_s, id},
-                        {u"kind"_s, u"subscription"_s},
-                        {u"name"_s, sub->name.isEmpty() ? QUrl(sub->url).host() : sub->name},
-                        {u"color"_s, sub->color},
-                        {u"visible"_s, sub->visible},
-                        {u"readOnly"_s, true},
-                        {u"events"_s, true},
-                        {u"tasks"_s, false},
-                        {u"taskPage"_s, QString()},
-                        {u"account"_s, QString()},
-                        {u"url"_s, sub->url},
-                        {u"error"_s, code},
-                        {u"errorText"_s, errorText(code)},
-                        {u"statusText"_s, status},
-                        {u"cors"_s, meta.cors},
-                        {u"refreshMinutes"_s, sub->refreshMinutes},
-                        {u"eventCount"_s, meta.events}};
-        return r;
-    }
-    if (const caldav::CalendarEntry *c = s.calendar(id)) {
-        const caldav::Account *a = s.account(c->account);
-        const caldav::CalendarState st = m_store->state(id);
-        QString status;
-        if (st.syncedAt.isValid() && st.error.isEmpty())
-            status = tr("Synced %1").arg(human(st.syncedAt));
-        else if (!st.syncedAt.isValid())
-            status = tr("Not synced yet");
-        int tasks = 0;
-        for (const caldav::Resource &res : st.resources)
-            tasks += res.kind == u"VTODO" ? 1 : 0;
-        r = QVariantMap{{u"id"_s, id},
-                        {u"kind"_s, u"caldav"_s},
-                        {u"name"_s, c->name},
-                        {u"color"_s, c->color},
-                        {u"visible"_s, c->visible},
-                        {u"readOnly"_s, c->readOnly},
-                        {u"events"_s, c->showEvents},
-                        {u"alarms"_s, c->alarms},
-                        {u"tasks"_s, c->syncTasks},
-                        {u"holdsEvents"_s, c->components.isEmpty() || c->components.contains(u"VEVENT"_s)},
-                        {u"holdsTasks"_s, c->components.isEmpty() || c->components.contains(u"VTODO"_s)},
-                        {u"taskPage"_s, c->taskPage},
-                        {u"account"_s, a ? a->name : QString()},
-                        {u"url"_s, c->url},
-                        {u"error"_s, st.error},
-                        {u"errorText"_s, errorText(st.error)},
-                        {u"statusText"_s, status},
-                        {u"cors"_s, false},
-                        {u"refreshMinutes"_s, a ? a->intervalMinutes : 15},
-                        {u"eventCount"_s, int(st.resources.size()) - tasks},
-                        {u"taskCount"_s, tasks},
-                        {u"outbox"_s, int(st.outbox.size())}};
-    }
-    return r;
+    if (const caldav::Subscription *sub = s.subscription(id))
+        return subscriptionRow(*sub);
+    if (const caldav::CalendarEntry *c = s.calendar(id))
+        return calendarRow(s, *c);
+    return {};
+}
+
+QVariantMap WorkspaceCalendars::subscriptionRow(const caldav::Subscription &sub) const
+{
+    const QString &id = sub.id;
+    const caldav::FeedMeta meta = m_store->feedMeta(id);
+    const QString code = meta.cors ? u"cors"_s : meta.error;
+    QString status;
+    if (meta.fetchedAt.isValid())
+        status = tr("Updated %1").arg(human(meta.fetchedAt));
+    else if (meta.error.isEmpty())
+        status = tr("Not fetched yet");
+    return QVariantMap{{u"id"_s, id},
+                    {u"kind"_s, u"subscription"_s},
+                    {u"name"_s, sub.name.isEmpty() ? QUrl(sub.url).host() : sub.name},
+                    {u"color"_s, sub.color},
+                    {u"visible"_s, sub.visible},
+                    {u"readOnly"_s, true},
+                    {u"events"_s, true},
+                    {u"tasks"_s, false},
+                    {u"taskPage"_s, QString()},
+                    {u"account"_s, QString()},
+                    {u"url"_s, sub.url},
+                    {u"error"_s, code},
+                    {u"errorText"_s, errorText(code)},
+                    {u"statusText"_s, status},
+                    {u"cors"_s, meta.cors},
+                    {u"refreshMinutes"_s, sub.refreshMinutes},
+                    {u"alarms"_s, sub.alarms},
+                    {u"eventCount"_s, meta.events}};
+}
+
+QVariantMap WorkspaceCalendars::calendarRow(const caldav::CalendarSettings &settings, const caldav::CalendarEntry &c) const
+{
+    const QString &id = c.id;
+    const caldav::Account *a = settings.account(c.account);
+    const caldav::CalendarState st = m_store->state(id);
+    QString status;
+    if (st.syncedAt.isValid() && st.error.isEmpty())
+        status = tr("Synced %1").arg(human(st.syncedAt));
+    else if (!st.syncedAt.isValid())
+        status = tr("Not synced yet");
+    int tasks = 0;
+    for (const caldav::Resource &res : st.resources)
+        tasks += res.kind == u"VTODO" ? 1 : 0;
+    return QVariantMap{{u"id"_s, id},
+                    {u"kind"_s, u"caldav"_s},
+                    {u"name"_s, c.name},
+                    {u"color"_s, c.color},
+                    {u"visible"_s, c.visible},
+                    {u"readOnly"_s, c.readOnly},
+                    {u"events"_s, c.showEvents},
+                    {u"alarms"_s, c.alarms},
+                    {u"tasks"_s, c.syncTasks},
+                    {u"holdsEvents"_s, holds(c, u"VEVENT"_s)},
+                    {u"holdsTasks"_s, holds(c, u"VTODO"_s)},
+                    {u"taskPage"_s, c.taskPage},
+                    {u"account"_s, a ? a->name : QString()},
+                    {u"url"_s, c.url},
+                    {u"error"_s, st.error},
+                    {u"errorText"_s, errorText(st.error)},
+                    {u"statusText"_s, status},
+                    {u"cors"_s, false},
+                    {u"refreshMinutes"_s, a ? a->intervalMinutes : 15},
+                    {u"eventCount"_s, int(st.resources.size()) - tasks},
+                    {u"taskCount"_s, tasks},
+                    {u"outbox"_s, int(st.outbox.size())}};
 }
 
 QVariantList WorkspaceCalendars::calendars() const

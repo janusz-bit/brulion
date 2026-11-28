@@ -5,6 +5,7 @@
 
 #include <QJsonArray>
 #include <QJsonObject>
+#include <QJsonDocument>
 #include <QTest>
 
 using namespace brulion;
@@ -63,6 +64,8 @@ private Q_SLOTS:
     void notificationFields();
     void limitsAndBroken();
     void storeAndSwitch();
+    void subscriptionsRingWhenAsked();
+    void settingsOfAnOlderFile();
 };
 
 void TestCalDavAlarms::initTestCase()
@@ -275,6 +278,75 @@ void TestCalDavAlarms::storeAndSwitch()
     cals[1] = first;
     json.insert(u"calendars"_s, cals);
     QVERIFY(CalendarSettings::fromJson(json).calendar(u"c-2"_s)->alarms);
+}
+
+void TestCalDavAlarms::subscriptionsRingWhenAsked()
+{
+    // An ICS subscription's events ring once its alarms are on (off by default: someone else's
+    // calendar), from the feed as last fetched.
+    CalendarStore store{QString()};
+    CalendarSettings settings;
+    for (const QString &id : {u"s-1"_s, u"s-2"_s, u"s-3"_s}) { // (s-3: alarms on, never fetched)
+        Subscription sub;
+        sub.id = id;
+        sub.url = u"https://example.pl/"_s + id + u".ics"_s;
+        sub.name = u"Plan "_s + id;
+        settings.subscriptions.append(sub);
+    }
+    settings.subscriptions[0].alarms = true;
+    settings.subscriptions[2].alarms = true;
+    QVERIFY(store.saveSettings(settings));
+    const QByteArray feed = calendar(
+            vevent(u"lekcja"_s, u"DTSTART;TZID=Europe/Warsaw:20261120T080000\r\nSUMMARY:Łacina\r\n"_s
+                                        + alarm(u"TRIGGER:-PT10M"_s)));
+    for (const QString &id : {u"s-1"_s, u"s-2"_s})
+        QVERIFY(store.saveFeed(id, &feed, FeedMeta{}));
+    const QList<ScheduledNotification> list = eventNotifications(store, local(2026, 11, 1), local(2026, 12, 1), Warsaw);
+    QCOMPARE(keys(list), QStringList{u"2026-11-20 07:50 Łacina"_s});
+    QVERIFY(list.first().body.startsWith(u"Plan s-1 · "_s));
+    // The switch is stored; an older file without it: off.
+    const CalendarSettings back = CalendarSettings::fromJson(settings.toJson());
+    QVERIFY(back.subscription(u"s-1"_s)->alarms);
+    QVERIFY(!back.subscription(u"s-2"_s)->alarms);
+    QJsonObject json = settings.toJson();
+    QJsonArray subs = json.value(u"subscriptions"_s).toArray();
+    QJsonObject first = subs.at(0).toObject();
+    first.remove(u"alarms"_s);
+    subs[0] = first;
+    json.insert(u"subscriptions"_s, subs);
+    QVERIFY(!CalendarSettings::fromJson(json).subscription(u"s-1"_s)->alarms);
+}
+
+void TestCalDavAlarms::settingsOfAnOlderFile()
+{
+    // A calendars.json with only what an older version (or a hand) wrote: the defaults; values
+    // out of range clamped; entries without what they need left out.
+    const QJsonObject json = QJsonDocument::fromJson(R"({
+        "accounts": [{"id": "a-1"}, {"id": "a-2", "interval": 1, "conflicts": "both"}, {"id": "a-3", "interval": 99999}, {}],
+        "calendars": [{"id": "c-1", "account": "a-1"}, {"id": "c-2", "account": "a-nie-ma"}, {"account": "a-1"}],
+        "subscriptions": [{"id": "s-1", "url": "https://example.pl/a.ics"}, {"id": "s-2", "url": "https://example.pl/b.ics", "refresh": 1},
+                          {"id": "s-3", "url": "https://example.pl/c.ics", "refresh": 99999}, {"id": "s-4"}, {"url": "https://example.pl/d.ics"}]
+    })").object();
+    const CalendarSettings s = CalendarSettings::fromJson(json);
+    QCOMPARE(s.accounts.size(), 3);
+    QCOMPARE(s.accounts.at(0).intervalMinutes, 15);
+    QCOMPARE(s.accounts.at(0).conflicts, ConflictPolicy::Newer);
+    QCOMPARE(s.accounts.at(1).intervalMinutes, 5);
+    QCOMPARE(s.accounts.at(1).conflicts, ConflictPolicy::KeepBoth);
+    QCOMPARE(s.accounts.at(2).intervalMinutes, 1440);
+    QCOMPARE(s.calendars.size(), 1);
+    const CalendarEntry &c = s.calendars.first();
+    QVERIFY(c.showEvents);
+    QVERIFY(c.alarms);
+    QVERIFY(c.visible);
+    QVERIFY(!c.readOnly);
+    QVERIFY(!c.syncTasks);
+    QCOMPARE(s.subscriptions.size(), 3);
+    QVERIFY(s.subscriptions.at(0).visible);
+    QVERIFY(!s.subscriptions.at(0).alarms);
+    QCOMPARE(s.subscriptions.at(0).refreshMinutes, 360);
+    QCOMPARE(s.subscriptions.at(1).refreshMinutes, 15);
+    QCOMPARE(s.subscriptions.at(2).refreshMinutes, 10'080);
 }
 
 QTEST_GUILESS_MAIN(TestCalDavAlarms)

@@ -44,7 +44,9 @@ public:
 };
 
 const QByteArray Feed = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nX-WR-CALNAME:Święta\r\nBEGIN:VEVENT\r\nUID:s1\r\n"
-                        "DTSTART;VALUE=DATE:20261111\r\nRRULE:FREQ=YEARLY\r\nSUMMARY:Święto Niepodległości\r\nEND:VEVENT\r\n"
+                        "DTSTART;VALUE=DATE:20261111\r\nRRULE:FREQ=YEARLY\r\nSUMMARY:Święto Niepodległości\r\n"
+                        "BEGIN:VALARM\r\nACTION:DISPLAY\r\nTRIGGER:-PT15H\r\nEND:VALARM\r\n"
+                        "BEGIN:VALARM\r\nACTION:AUDIO\r\nTRIGGER:-PT16H\r\nEND:VALARM\r\nEND:VEVENT\r\n"
                         "END:VCALENDAR\r\n";
 
 QByteArray vevent(const QString &uid, const QString &lines)
@@ -128,6 +130,9 @@ void TestWorkspaceCalendars::subscription()
     QSignalSpy events(cal, &WorkspaceCalendars::eventsChanged);
     const QString id = cal->addSubscription(u"webcal://example.pl/swieta.ics"_s, {}, {});
     QVERIFY(!id.isEmpty());
+    // Before its first fetch: named by its host, said to be waiting.
+    QCOMPARE(cal->subscriptions().first().toMap().value(u"name"_s).toString(), u"example.pl"_s);
+    QCOMPARE(cal->subscriptions().first().toMap().value(u"statusText"_s).toString(), u"Not fetched yet"_s);
     waitIdle();
     QVERIFY(cal->addSubscription(u"https://example.pl/swieta.ics"_s, {}, {}).isEmpty()); // the same again
     QTRY_VERIFY(!events.isEmpty());
@@ -160,6 +165,49 @@ void TestWorkspaceCalendars::subscription()
     cal->setCalendarVisible(id, true);
     QVERIFY(cal->updateSubscription(id, {{u"color"_s, u"#123456"_s}}));
     QCOMPARE(cal->eventsBetween(QDate(2026, 11, 1), QDate(2026, 11, 30)).first().color, u"#123456"_s);
+    // Its events' VALARMs ring once asked for (someone else's calendar: off at first).
+    const QDateTime eve(QDate(2026, 11, 10), QTime(0, 0));
+    const QDateTime eveEnd(QDate(2026, 11, 10), QTime(23, 59));
+    QVERIFY(cal->eventAlarmsBetween(eve, eveEnd).isEmpty());
+    const QVariantMap subRow = cal->subscriptions().first().toMap();
+    QVERIFY(!subRow.value(u"alarms"_s).toBool());
+    QVERIFY(subRow.value(u"readOnly"_s).toBool());
+    QVERIFY(subRow.value(u"events"_s).toBool());
+    QVERIFY(!subRow.value(u"tasks"_s).toBool());
+    QCOMPARE(subRow.value(u"refreshMinutes"_s).toInt(), 360);
+    QVERIFY(cal->updateSubscription(id, {{u"alarms"_s, true}}));
+    QVERIFY(cal->subscriptions().first().toMap().value(u"alarms"_s).toBool());
+    const QList<ScheduledNotification> ring = cal->eventAlarmsBetween(eve, eveEnd);
+    QCOMPARE(ring.size(), 2);
+    QCOMPARE(ring.at(0).at, QDateTime(QDate(2026, 11, 10), QTime(8, 0))); // (in time order)
+    QVERIFY(ring.at(0).alarm);
+    QCOMPARE(ring.at(1).title, u"Święto Niepodległości"_s);
+    QCOMPARE(ring.at(1).at, QDateTime(QDate(2026, 11, 10), QTime(9, 0)));
+    QVERIFY(!ring.at(1).alarm);
+    QCOMPARE(ring.at(1).body, u"Święta · jutro"_s); // (the notebook's language)
+    QCOMPARE(ring.at(1).path, u"calendar:2026-11-11"_s);
+    QVERIFY(cal->updateSubscription(id, {{u"alarms"_s, false}}));
+    QVERIFY(cal->eventAlarmsBetween(eve, eveEnd).isEmpty());
+    // Another address: refused when it is none (said), else fetched from there; the same one
+    // fetches nothing again.
+    QSignalSpy badAddress(cal, &WorkspaceCalendars::errorOccurred);
+    QVERIFY(!cal->updateSubscription(id, {{u"url"_s, u"ftp://zle"_s}}));
+    QCOMPARE(badAddress.size(), 1);
+    QCOMPARE(cal->subscriptions().first().toMap().value(u"url"_s).toString(), u"https://example.pl/swieta.ics"_s);
+    const int fetched = m_feeds.asked;
+    QVERIFY(cal->updateSubscription(id, {{u"url"_s, u"webcal://example.pl/swieta.ics"_s}}));
+    waitIdle();
+    QCOMPARE(m_feeds.asked, fetched);
+    QVERIFY(cal->updateSubscription(id, {{u"url"_s, u"https://example.pl/inne.ics"_s}}));
+    waitIdle();
+    QCOMPARE(cal->subscriptions().first().toMap().value(u"url"_s).toString(), u"https://example.pl/inne.ics"_s);
+    QTRY_VERIFY(m_feeds.asked > fetched);
+    QTRY_COMPARE(cal->eventsBetween(QDate(2026, 11, 1), QDate(2026, 11, 30)).size(), 1);
+    QVERIFY(!cal->updateSubscription(u"s-nie-ma"_s, {{u"alarms"_s, true}}));
+    // Its name (spaces tidied) and how often (clamped to a quarter of an hour at least).
+    QVERIFY(cal->updateSubscription(id, {{u"name"_s, u"  Święta   szkolne "_s}, {u"refreshMinutes"_s, 1}}));
+    QCOMPARE(cal->subscriptions().first().toMap().value(u"name"_s).toString(), u"Święta szkolne"_s);
+    QCOMPARE(cal->subscriptions().first().toMap().value(u"refreshMinutes"_s).toInt(), 15);
     // A server error: said in words, the copy stays.
     m_feeds.status = 404;
     cal->refresh(id);
@@ -209,6 +257,8 @@ void TestWorkspaceCalendars::accountTasksAndEvents()
     const QString account = cal->addAccount(m_server.url(u"/"_s), u"jan"_s, m_server.options().password, {pracaUrl},
                                             {zakupyUrl});
     QVERIFY(!account.isEmpty());
+    QCOMPARE(cal->accounts().first().toMap().value(u"calendars"_s).toList().first().toMap().value(u"statusText"_s).toString(),
+             u"Not synced yet"_s);
     // The password: owner-only, not in the settings.
     const QString secret = m_dir->filePath(u"secrets/caldav-"_s + account);
     QVERIFY(QFile::exists(secret));
@@ -222,6 +272,26 @@ void TestWorkspaceCalendars::accountTasksAndEvents()
     QCOMPARE(cal->accounts().size(), 1);
     QVERIFY(cal->accounts().first().toMap().value(u"hasPassword"_s).toBool());
     QCOMPARE(cal->writableCalendars().size(), 1);
+    // The calendars' rows: what each holds and counts, the account's interval.
+    QVariantMap pracaRow;
+    QVariantMap zakupyRow;
+    for (const QVariant &v : cal->accounts().first().toMap().value(u"calendars"_s).toList()) {
+        const QVariantMap m = v.toMap();
+        (m.value(u"name"_s).toString() == u"Praca"_s ? pracaRow : zakupyRow) = m;
+    }
+    QCOMPARE(pracaRow.value(u"kind"_s).toString(), u"caldav"_s);
+    QVERIFY(pracaRow.value(u"holdsEvents"_s).toBool());
+    QVERIFY(pracaRow.value(u"holdsTasks"_s).toBool()); // (it names no components: it holds both)
+    QCOMPARE(pracaRow.value(u"eventCount"_s).toInt(), 1);
+    QCOMPARE(pracaRow.value(u"taskCount"_s).toInt(), 0);
+    QCOMPARE(pracaRow.value(u"outbox"_s).toInt(), 0);
+    QVERIFY(!pracaRow.value(u"cors"_s).toBool());
+    QCOMPARE(pracaRow.value(u"refreshMinutes"_s).toInt(), cal->accounts().first().toMap().value(u"intervalMinutes"_s).toInt());
+    QCOMPARE(pracaRow.value(u"statusText"_s).toString().isEmpty(), false);
+    QVERIFY(!zakupyRow.value(u"holdsEvents"_s).toBool());
+    QVERIFY(zakupyRow.value(u"holdsTasks"_s).toBool());
+    QCOMPARE(zakupyRow.value(u"eventCount"_s).toInt(), 0);
+    QCOMPARE(zakupyRow.value(u"taskCount"_s).toInt(), 1);
     // The stand-up's occurrences, in its calendar's colour.
     QList<planning::ExternalEvent> week = cal->eventsBetween(QDate(2026, 11, 16), QDate(2026, 11, 22));
     QCOMPARE(week.size(), 7);
@@ -259,6 +329,9 @@ void TestWorkspaceCalendars::accountTasksAndEvents()
     QVERIFY(ring.first().body.endsWith(u"Kraków"_s));
     QCOMPARE(ring.first().path, u"calendar:2026-11-21"_s);
     QVERIFY(cal->eventAlarmsBetween(dayStart, QDateTime(QDate(2026, 11, 21), QTime(12, 44))).isEmpty());
+    const QDateTime ringAt(QDate(2026, 11, 21), QTime(12, 45));
+    QCOMPARE(cal->eventAlarmsBetween(ringAt, ringAt).size(), 1); // (both ends included)
+    QVERIFY(cal->eventAlarmsBetween(dayEnd, dayStart).isEmpty());
     const QVariantMap row = cal->calendars().first().toMap();
     QVERIFY(row.value(u"alarms"_s).toBool());
     QSignalSpy alarmSignals(cal, &WorkspaceCalendars::eventsChanged);

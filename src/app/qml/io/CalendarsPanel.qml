@@ -186,6 +186,13 @@ ColumnLayout {
                 onActivated: (value) => panel.calendars.updateSubscription(source.sourceId, { refreshMinutes: value })
             }
         }
+        BCheckBox {
+            Layout.leftMargin: swatch.width + Theme.space2
+            visible: source.kind === "subscription"
+            text: qsTr("Ring the reminders of events")
+            checked: AppController.routeFlag(source.modelData, "alarms")
+            onToggled: panel.calendars.updateSubscription(source.sourceId, { alarms: checked })
+        }
     }
 
     // ---- Status ----------------------------------------------------------------------------------------

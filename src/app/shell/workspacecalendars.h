@@ -20,7 +20,8 @@
 //                     color, visible, readOnly, events (shows events), tasks (syncs tasks), taskPage,
 //                     account (its name), url, error (code, "" none), errorText (translated),
 //                     statusText ("Updated today 10:32"), cors }]
-//   subscriptions    the subscriptions: the same rows plus refreshMinutes
+//   subscriptions    the subscriptions: the same rows plus refreshMinutes and alarms (their
+//                     events' reminders ring: off until asked for)
 //   accounts         [{ id, name, server, user, conflicts ("newer" | "both"), intervalMinutes,
 //                     hasPassword, calendars: [rows as above] }]
 //                     (a CalDAV row also has `alarms`: the events' reminders ring)
@@ -60,6 +61,8 @@ class SyncScheduler;
 
 namespace brulion::caldav {
 class CalendarStore;
+struct CalendarEntry;
+struct Subscription;
 class CalendarSync;
 struct CalendarData;
 struct CalendarSettings;
@@ -130,7 +133,8 @@ public:
     // ---- EventSource --------------------------------------------------------------------
     QList<planning::ExternalEvent> eventsBetween(QDate from, QDate to) const override;
     /// The reminders of the events' VALARMs ringing within [from, to] (local wall-clock time,
-    /// inclusive) of the CalDAV calendars that show events and have their alarms on — what the
+    /// inclusive) of the CalDAV calendars that show events and have their alarms on, and of the
+    /// subscriptions with their alarms on — what the
     /// reminder scheduler takes as its extra source (ReminderScheduler::setExtraSource()). The
     /// window the scheduler normally asks about is kept until the events change.
     QList<ScheduledNotification> eventAlarmsBetween(const QDateTime &from, const QDateTime &to) const;
@@ -236,10 +240,14 @@ private:
     void onRunFinished();
     void invalidate(const QString &id);
     void scheduleEventsChanged();
+    /// eventAlarmsBetween() computed for [from, to], without its cache.
+    QList<ScheduledNotification> alarmsWithin(const QDateTime &from, const QDateTime &to) const;
     std::shared_ptr<const caldav::CalendarData> dataOf(const QString &id) const;
     QString passwordFile(const QString &accountId) const;
     QString password(const QString &accountId) const;
     QVariantMap row(const QString &id) const;
+    QVariantMap subscriptionRow(const caldav::Subscription &sub) const;
+    QVariantMap calendarRow(const caldav::CalendarSettings &settings, const caldav::CalendarEntry &c) const;
     QString errorText(const QString &code) const;
     QString human(const QDateTime &time) const;
     QString nextColor() const;

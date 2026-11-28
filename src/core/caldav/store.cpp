@@ -121,56 +121,74 @@ QJsonObject CalendarSettings::toJson() const
                                 {u"name"_s, s.name},
                                 {u"color"_s, s.color},
                                 {u"visible"_s, s.visible},
-                                {u"refresh"_s, s.refreshMinutes}});
+                                {u"refresh"_s, s.refreshMinutes},
+                                {u"alarms"_s, s.alarms}});
     return QJsonObject{{u"version"_s, 1}, {u"accounts"_s, acc}, {u"calendars"_s, cals}, {u"subscriptions"_s, subs}};
 }
+
+namespace {
+
+Account accountFromJson(const QJsonObject &o)
+{
+    Account a;
+    a.id = o.value(u"id"_s).toString();
+    a.server = o.value(u"server"_s).toString();
+    a.user = o.value(u"user"_s).toString();
+    a.principalUrl = o.value(u"principal"_s).toString();
+    a.homeUrl = o.value(u"home"_s).toString();
+    a.name = o.value(u"name"_s).toString();
+    a.conflicts = o.value(u"conflicts"_s).toString() == u"both" ? ConflictPolicy::KeepBoth : ConflictPolicy::Newer;
+    a.intervalMinutes = std::clamp(o.value(u"interval"_s).toInt(15), 5, 1440);
+    return a;
+}
+
+CalendarEntry calendarFromJson(const QJsonObject &o)
+{
+    CalendarEntry c;
+    c.id = o.value(u"id"_s).toString();
+    c.account = o.value(u"account"_s).toString();
+    c.url = o.value(u"url"_s).toString();
+    c.name = o.value(u"name"_s).toString();
+    c.color = o.value(u"color"_s).toString();
+    for (const QJsonValue &comp : o.value(u"components"_s).toArray())
+        c.components.append(comp.toString());
+    c.readOnly = o.value(u"readOnly"_s).toBool();
+    c.showEvents = o.value(u"showEvents"_s).toBool(true);
+    c.alarms = o.value(u"alarms"_s).toBool(true);
+    c.syncTasks = o.value(u"syncTasks"_s).toBool();
+    c.taskPage = o.value(u"taskPage"_s).toString();
+    c.visible = o.value(u"visible"_s).toBool(true);
+    return c;
+}
+
+Subscription subscriptionFromJson(const QJsonObject &o)
+{
+    Subscription sub;
+    sub.id = o.value(u"id"_s).toString();
+    sub.url = o.value(u"url"_s).toString();
+    sub.name = o.value(u"name"_s).toString();
+    sub.color = o.value(u"color"_s).toString();
+    sub.visible = o.value(u"visible"_s).toBool(true);
+    sub.refreshMinutes = std::clamp(o.value(u"refresh"_s).toInt(360), 15, 10'080);
+    sub.alarms = o.value(u"alarms"_s).toBool(false);
+    return sub;
+}
+
+} // namespace
 
 CalendarSettings CalendarSettings::fromJson(const QJsonObject &json)
 {
     CalendarSettings s;
     for (const QJsonValue &v : json.value(u"accounts"_s).toArray()) {
-        const QJsonObject o = v.toObject();
-        Account a;
-        a.id = o.value(u"id"_s).toString();
-        a.server = o.value(u"server"_s).toString();
-        a.user = o.value(u"user"_s).toString();
-        a.principalUrl = o.value(u"principal"_s).toString();
-        a.homeUrl = o.value(u"home"_s).toString();
-        a.name = o.value(u"name"_s).toString();
-        a.conflicts = o.value(u"conflicts"_s).toString() == u"both" ? ConflictPolicy::KeepBoth : ConflictPolicy::Newer;
-        a.intervalMinutes = std::clamp(o.value(u"interval"_s).toInt(15), 5, 1440);
-        if (!a.id.isEmpty())
+        if (Account a = accountFromJson(v.toObject()); !a.id.isEmpty())
             s.accounts.append(a);
     }
     for (const QJsonValue &v : json.value(u"calendars"_s).toArray()) {
-        const QJsonObject o = v.toObject();
-        CalendarEntry c;
-        c.id = o.value(u"id"_s).toString();
-        c.account = o.value(u"account"_s).toString();
-        c.url = o.value(u"url"_s).toString();
-        c.name = o.value(u"name"_s).toString();
-        c.color = o.value(u"color"_s).toString();
-        for (const QJsonValue &comp : o.value(u"components"_s).toArray())
-            c.components.append(comp.toString());
-        c.readOnly = o.value(u"readOnly"_s).toBool();
-        c.showEvents = o.value(u"showEvents"_s).toBool(true);
-        c.alarms = o.value(u"alarms"_s).toBool(true);
-        c.syncTasks = o.value(u"syncTasks"_s).toBool();
-        c.taskPage = o.value(u"taskPage"_s).toString();
-        c.visible = o.value(u"visible"_s).toBool(true);
-        if (!c.id.isEmpty() && s.account(c.account))
+        if (CalendarEntry c = calendarFromJson(v.toObject()); !c.id.isEmpty() && s.account(c.account))
             s.calendars.append(c);
     }
     for (const QJsonValue &v : json.value(u"subscriptions"_s).toArray()) {
-        const QJsonObject o = v.toObject();
-        Subscription sub;
-        sub.id = o.value(u"id"_s).toString();
-        sub.url = o.value(u"url"_s).toString();
-        sub.name = o.value(u"name"_s).toString();
-        sub.color = o.value(u"color"_s).toString();
-        sub.visible = o.value(u"visible"_s).toBool(true);
-        sub.refreshMinutes = std::clamp(o.value(u"refresh"_s).toInt(360), 15, 10'080);
-        if (!sub.id.isEmpty() && !sub.url.isEmpty())
+        if (Subscription sub = subscriptionFromJson(v.toObject()); !sub.id.isEmpty() && !sub.url.isEmpty())
             s.subscriptions.append(sub);
     }
     return s;

@@ -288,8 +288,7 @@ done in the repository simply disappears from the list.
   in-memory server and a real Radicale (`scripts/caldav-radicale-test.sh`). Missing: checks against
   real Nextcloud, Fastmail, iCloud and Baïkal (Digest), with Thunderbird and DAVx⁵ / Tasks.org on the
   other side and on a real phone (Android's background check, which also arms the events' alarms);
-  invitations (attendees, iTIP) and free/busy; the alarms of an ICS subscription's events (they
-  ring nothing); a task the server moved under another one (the notes keep the line's place), an
+  invitations (attendees, iTIP) and free/busy; a task the server moved under another one (the notes keep the line's place), an
   `RRULE` inside a `RANGE=THISANDFUTURE` exception (ignored; clients normally split the series
   instead); Google's own CalDAV (it needs an OAuth sign-in — its secret iCal
   address works as a subscription).

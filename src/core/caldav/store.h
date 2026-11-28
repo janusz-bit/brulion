@@ -30,6 +30,9 @@ struct Subscription {
     QString color; ///< "#rrggbb"
     bool visible = true;
     int refreshMinutes = 360; ///< how often it is fetched again (15 … 10 080; default 6 h)
+    /// The VALARMs of its events ring (eventalarms.h) — off until asked for: someone else's
+    /// calendar (a school's, a team's) need not ring on this device.
+    bool alarms = false;
     friend bool operator==(const Subscription &, const Subscription &) = default;
 };
 

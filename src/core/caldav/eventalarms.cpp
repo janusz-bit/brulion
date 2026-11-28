@@ -137,6 +137,11 @@ QList<ScheduledNotification> eventNotifications(const CalendarStore &store, cons
         }
         out += eventNotifications(data, c.id, c.name, from, to, zone, locale, limits);
     }
+    for (const Subscription &sub : settings.subscriptions) {
+        if (sub.alarms)
+            out += eventNotifications(parseCalendarData(store.feedData(sub.id)), sub.id, sub.name, from, to, zone,
+                                      locale, limits);
+    }
     std::ranges::stable_sort(out, [](const ScheduledNotification &a, const ScheduledNotification &b) {
         return a.at != b.at ? a.at < b.at : a.id < b.id;
     });

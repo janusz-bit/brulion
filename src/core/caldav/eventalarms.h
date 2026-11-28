@@ -48,8 +48,8 @@ QList<ScheduledNotification> eventNotifications(const CalendarData &data, const 
                                                 const EventAlarmLimits &limits = {});
 
 /// The same for every CalDAV calendar of `store` that shows events and has its alarms on, read
-/// from the members the last sync kept (the Android background check, which has no calendar view
-/// loaded). Subscriptions ring nothing.
+/// from the members the last sync kept, and every subscription with its alarms on, read from the
+/// feed as last fetched (the Android background check, which has no calendar view loaded).
 QList<ScheduledNotification> eventNotifications(const CalendarStore &store, const QDateTime &from, const QDateTime &to,
                                                 const QTimeZone &zone, dates::UiLocale locale = dates::UiLocale::Polish,
                                                 const EventAlarmLimits &limits = {});

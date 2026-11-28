@@ -7747,7 +7747,7 @@ Nextcloud app password (`<app data>/secrets/caldav-<account>`). A second device 
   colours, each ticked when shown (a click hides or shows it: `setCalendarVisible`), "New event…"
   (when a writable CalDAV calendar shows events), "Refresh calendars" and "Manage calendars…" (the
   sync center's tab; "Add a calendar…" while there are none).
-* **Reminders of events** — the `VALARM`s of an event of a CalDAV calendar ring in Brulion like a
+* **Reminders of events** — the `VALARM`s of an event of a CalDAV calendar or of a subscription ring in Brulion like a
   note's `⏰`: `caldav/eventalarms.h` turns them into notifications
   (`eventNotifications()`; `WorkspaceCalendars::eventAlarmsBetween()` keeps the scheduler's window
   until the events change) that `ReminderScheduler` takes as its extra source
@@ -7766,8 +7766,9 @@ Nextcloud app password (`<app data>/secrets/caldav-<account>`). A second device 
   the app lock's "Hide the note's text" says "Reminder" as for notes). Android's background check
   arms them too, from what the last sync kept (`<device state>/calendars`; it does not sync
   calendars that only show events). Each CalDAV calendar has "Ring the reminders of events" (the
-  Calendars tab, on while the calendar shows events; `alarms` in its settings, on by default);
-  subscriptions ring nothing. The event dialog's "reminder" choice writes the `VALARM` they use.
+  Calendars tab, on while the calendar shows events; `alarms` in its settings, on by default), and so
+  has each ICS subscription — off by default there (someone else's calendar, a school's or a team's,
+  need not ring on this device), its events' alarms read from the feed as last fetched. The event dialog's "reminder" choice writes the `VALARM` they use.
 * **An event** (`qml/planning/CalendarEventDialog.qml`, a click or right-click on an event): its
   title, when ("Fri, Nov 20, 14:00–15:30"), its calendar with the colour, "Read-only" for
   subscriptions and calendars without the write privilege, the series ("every week", or the rule as
