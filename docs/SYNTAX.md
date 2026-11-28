@@ -1472,7 +1472,7 @@ works on it — and the line keeps its task by its **block id**:
   | `⏰` / `⏰!` | VALARM DISPLAY / AUDIO, an absolute trigger (a done task's alarms are not sent) |
   | the trailing `#tags` of the text | CATEGORIES (a category with spaces becomes `#Dom-i-ogród`) |
   | the continuation lines (not properties or drawers) | DESCRIPTION (a line that would start a list or a heading gets a `\`) |
-  | nesting under a synced task | RELATED-TO;RELTYPE=PARENT (sent when a task is created, and again when the line is moved under another synced task or out to the top level) |
+  | nesting under a synced task | RELATED-TO;RELTYPE=PARENT (sent when a task is created, and again when the line is moved under another synced task or out to the top level; the server's own move moves the line) |
 
   Dates without a time are DATE values; times are wall-clock times written with the device's zone
   (TZID and a VTIMEZONE) and read in it. Everything else of the server's VTODO (X- properties,
@@ -1482,9 +1482,11 @@ works on it — and the line keeps its task by its **block id**:
   RELATED-TO with another RELTYPE (CHILD, SIBLING) stays as the server has it — and it is one of
   the fields merged when both sides changed. The parent is the synced task of the same calendar
   the line is nested under, so a line moved under a line that was written a moment ago (not sent
-  yet) gets it on the sync after. The nesting is decided in the notes: a task the *server* moved
-  under another is not moved in the notes, and where both moved it the line's place wins (the
-  server's RELATED-TO is not changed back for a change made only on the server).
+  yet) gets it on the sync after. A task the *server* moved under another (another app changed its
+  RELATED-TO) moves in the notes too: its line, with the blocks nested in it, becomes the last
+  child of its new parent's line; moved out to the top level, it follows the top-level item it was
+  nested in. It stays where it is when the new parent's line is in another note or is nested in
+  the line itself. Where both sides moved it, the line's place wins (and is sent).
 * **Recurring tasks.** Completing one in Brulion writes its next occurrence above it (§5); the
   sync moves the id to that new line and sends the series on with its next date (as task apps keep
   a series), the done line staying the note's record. A task completed on the server is done here.

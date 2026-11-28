@@ -16,14 +16,14 @@ namespace brulion::caldav::detail {
 using namespace Qt::StringLiterals;
 
 struct TaskReconciler::NoteEdit {
-    enum class Kind { SetFields, MoveId, AssignId, InsertAfter, InsertUnder, Append, Remove };
+    enum class Kind { SetFields, MoveId, AssignId, InsertAfter, InsertUnder, Append, Remove, MoveUnder };
     Kind kind = Kind::SetFields;
     QString blockId; ///< the block (SetFields, Remove, MoveId: the done line), the anchor (InsertAfter, InsertUnder)
     int line = -1;   ///< MoveId: the new occurrence's first line; AssignId: the block's first line
     unsigned mask = 0;
     TaskFields fields;
     QString body;  ///< inserts
-    QString newId; ///< MoveId, AssignId
+    QString newId; ///< MoveId, AssignId; MoveUnder: the new parent ("" the top level)
 };
 
 struct TaskReconciler::NoteInfo {
@@ -136,6 +136,49 @@ TaskFields TaskReconciler::fieldsOf(const NoteInfo &info, int block) const
     return f;
 }
 
+namespace {
+
+/// The top-level block block `i` is nested in (itself for a top-level block).
+int topLevelOf(const markdown::BlockDocument &doc, int i)
+{
+    while (i > 0 && doc.at(i).depth > 0)
+        --i;
+    return i;
+}
+
+/// The block of uid `block` with its subtree moved to be the last child of the block of uid
+/// `parent` — 0: to the top level, right after the top-level block it is nested in. Its lines
+/// keep their text; indentation and markers follow the new place.
+void moveSubtree(markdown::BlockDocument &doc, quint64 block, quint64 parent)
+{
+    const int i = doc.indexOfUid(block);
+    if (i < 0 || (!parent && doc.at(i).depth == 0))
+        return; // (gone; already at the top level)
+    const quint64 anchor = parent ? parent : doc.at(topLevelOf(doc, i)).uid;
+    QList<std::pair<QString, int>> rows; // body, depth under the moved block
+    const markdown::RowRange range = doc.subtreeRange(i);
+    for (int k = range.first; k <= range.last(); ++k)
+        rows.append({doc.at(k).body, doc.at(k).depth - doc.at(i).depth});
+    doc.remove(i, true);
+    const int p = doc.indexOfUid(anchor);
+    int at = doc.subtreeRange(p).last();
+    const int depth = parent ? doc.at(p).depth + 1 : 0;
+    for (const auto &[body, below] : std::as_const(rows))
+        at = doc.insertAfter(at, body, depth + below).focus;
+}
+
+/// The MoveUnder edits of `edits` done in `doc` (`uidOf`: a block id's block uid, 0 none).
+template<typename UidOf>
+void moveSubtrees(markdown::BlockDocument &doc, const QList<TaskReconciler::NoteEdit> &edits, const UidOf &uidOf)
+{
+    for (const TaskReconciler::NoteEdit &e : edits) {
+        if (e.kind == TaskReconciler::NoteEdit::Kind::MoveUnder)
+            moveSubtree(doc, uidOf(e.blockId), e.newId.isEmpty() ? 0 : uidOf(e.newId));
+    }
+}
+
+} // namespace
+
 QString TaskReconciler::parentUidOf(const ParsedNote &parsed, int block) const
 {
     const int parent = parsed.blocks.at(block).parent;
@@ -145,6 +188,38 @@ QString TaskReconciler::parentUidOf(const ParsedNote &parsed, int block) const
     if (!p.task || p.id.isEmpty())
         return {};
     return m_uidOfBlock.value(p.id);
+}
+
+void TaskReconciler::followServerNesting(const Located &line, const QString &blockId, const QString &parentUid,
+                                         const QHash<QString, Located> &localOf, TaskFields &target) const
+{
+    if (target.parentUid == parentUid)
+        return;
+    if (const std::optional<NoteEdit> move = nestingEdit(line, blockId, parentUid, localOf)) {
+        line.info->edits.append(*move);
+        target.parentUid = parentUid;
+    }
+}
+
+std::optional<TaskReconciler::NoteEdit> TaskReconciler::nestingEdit(const Located &line, const QString &blockId,
+                                                                    const QString &parentUid,
+                                                                    const QHash<QString, Located> &localOf) const
+{
+    NoteEdit move;
+    move.kind = NoteEdit::Kind::MoveUnder;
+    move.blockId = blockId;
+    if (parentUid.isEmpty())
+        return move;
+    // Only under a line of the same note, and never under its own subtask.
+    const auto it = localOf.constFind(parentUid);
+    if (it == localOf.constEnd() || it->info != line.info)
+        return std::nullopt;
+    for (int b = it->block; b >= 0; b = line.info->parsed.blocks.at(b).parent) {
+        if (b == line.block)
+            return std::nullopt;
+    }
+    move.newId = line.info->parsed.blocks.at(it->block).id;
+    return move;
 }
 
 TodoContext TaskReconciler::todoContext() const
@@ -346,6 +421,8 @@ void TaskReconciler::run()
             const unsigned conflict = lc & rc & differ & ~FieldParent;
             TaskFields target = withFields(L, r.fields, rc & ~lc);
             target.parentUid = L.parentUid;
+            if (rc & ~lc & FieldParent)
+                followServerNesting(l, base.blockId, r.fields.parentUid, localOf, target);
             bool keepBoth = false;
             if (conflict) {
                 const QString summary = L.summary.isEmpty() ? r.fields.summary : L.summary;
@@ -735,6 +812,7 @@ void TaskReconciler::writeNotes()
                 doc.insertAfter(doc.subtreeRange(i).last(), e.body, depth);
             }
         }
+        moveSubtrees(doc, info->edits, uidOfId);
         for (const Resolved &r : std::as_const(list)) {
             if (r.edit->kind != NoteEdit::Kind::Remove)
                 continue;

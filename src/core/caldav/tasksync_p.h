@@ -69,15 +69,25 @@ public:
     void remoteDone(const RemoteOp &op, const QString &etag, const QString &path, bool ok, int status);
     const TaskReport &report() const { return m_report; }
 
+    /// A change of one note planned by run() (tasksync.cpp; the note's helpers there use it).
+    struct NoteEdit;
+
 private:
     struct Located;
-    struct NoteEdit;
     struct NoteInfo;
 
     NoteInfo *note(const QString &path);
     std::optional<Located> locate(const TrackedTask &task);
     TaskFields fieldsOf(const NoteInfo &info, int block) const;
     QString parentUidOf(const ParsedNote &parsed, int block) const;
+    /// The server moved the task of `line` under `parentUid` ("" the top level) while its line did
+    /// not move: the line follows where it can (nestingEdit()), `target` then nested there too.
+    void followServerNesting(const Located &line, const QString &blockId, const QString &parentUid,
+                             const QHash<QString, Located> &localOf, TaskFields &target) const;
+    /// The edit moving `line` (block `blockId`) under the task `parentUid` ("" the top level) —
+    /// nullopt when it cannot follow there: a task of another note, or one nested in the line.
+    std::optional<NoteEdit> nestingEdit(const Located &line, const QString &blockId, const QString &parentUid,
+                                        const QHash<QString, Located> &localOf) const;
     void writeNotes();
     QDateTime remoteTime(const QByteArray &ics) const;
     QDateTime localTime(const QString &path) const;

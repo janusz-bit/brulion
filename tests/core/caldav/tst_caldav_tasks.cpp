@@ -167,6 +167,8 @@ private Q_SLOTS:
     void secondDevicePairsLines();
     void movedLineKeepsSyncing();
     void movedSubtaskUpdatesRelatedTo();
+    void serverMovesSubtask();
+    void serverMovesSubtaskAtTheEdges();
     void eventsChangedHere();
     void eventsFromTheInbox();
     void eventChangedOnBothSidesKeepBoth();
@@ -622,15 +624,105 @@ void TestCalDavTasks::movedSubtaskUpdatesRelatedTo()
     QVERIFY(dev.page().contains(u"Jaźń 2 ^"_s + ic));
     QVERIFY(!memberText(server, u"b.ics"_s).contains(u"RELTYPE=PARENT"_s));
 
-    // The server moved a task: its line stays (nesting is decided in the notes), and the move is
-    // not undone there.
+    // The server moved a task: its line follows (serverMovesSubtask), and the move is not undone
+    // there.
     server.putMember(u"praca"_s, u"c.ics"_s,
                      vtodo(u"c"_s, u"SUMMARY:Jaźń 2\r\nRELATED-TO;RELTYPE=PARENT:b\r\n"_s));
     server.clearLog();
     dev.run();
     QCOMPARE(server.count("PUT"), 0);
     QVERIFY(memberText(server, u"c.ics"_s).contains(u"RELTYPE=PARENT:b"_s));
-    QVERIFY(dev.page().contains(u"\t- [ ] Jaźń 2 ^"_s + ic));
+    QVERIFY(dev.page().contains(u"- [ ] Zażółć gęślą ^"_s + ib + u"\n\t- [ ] Jaźń 2 ^"_s + ic));
+}
+
+void TestCalDavTasks::serverMovesSubtask()
+{
+    // A task the server (another app) moved under another task: its line moves there in the
+    // notes, with the blocks nested in it; out to the top level, after the list it was in. The
+    // rest of the note stays byte for byte.
+    FakeCalDav server;
+    server.addCalendar(u"praca"_s, praca());
+    server.putMember(u"praca"_s, u"a.ics"_s, vtodo(u"a"_s, u"SUMMARY:Ścieżka żółwia\r\n"_s));
+    server.putMember(u"praca"_s, u"b.ics"_s, vtodo(u"b"_s, u"SUMMARY:Zażółć gęślą\r\n"_s));
+    server.putMember(u"praca"_s, u"c.ics"_s, vtodo(u"c"_s, u"SUMMARY:Jaźń\r\nRELATED-TO;RELTYPE=PARENT:a\r\n"_s));
+    Device dev(&server);
+    QVERIFY(!dev.run().error.isError());
+    const QString ia = u" ^"_s + blockIdForUid(u"a"_s), ib = u" ^"_s + blockIdForUid(u"b"_s),
+                  ic = u" ^"_s + blockIdForUid(u"c"_s);
+    const QString top = u"# Praca\r\n\r\nWstęp, bez zmian.\r\n\r\n"_s;
+    dev.write(top + u"- [ ] Ścieżka żółwia"_s + ia + u"\r\n\t- [ ] Jaźń"_s + ic + u"\r\n\t\t- notatka do jaźni\r\n"_s
+              + u"- [ ] Zażółć gęślą"_s + ib + u"\r\n\r\nKoniec.\r\n"_s);
+    dev.run();
+
+    // Under b, with its note.
+    server.putMember(u"praca"_s, u"c.ics"_s, vtodo(u"c"_s, u"SUMMARY:Jaźń\r\nRELATED-TO;RELTYPE=PARENT:b\r\n"_s));
+    server.clearLog();
+    CalendarRunReport report = dev.run();
+    QVERIFY2(!report.error.isError(), qPrintable(report.error.message));
+    QCOMPARE(server.count("PUT"), 0);
+    QCOMPARE(dev.page(), top + u"- [ ] Ścieżka żółwia"_s + ia + u"\r\n- [ ] Zażółć gęślą"_s + ib + u"\r\n\t- [ ] Jaźń"_s + ic
+                                 + u"\r\n\t\t- notatka do jaźni\r\n\r\nKoniec.\r\n"_s);
+    QCOMPARE(dev.state().tasks.value(u"c"_s).local.parentUid, u"b"_s);
+    server.clearLog();
+    dev.run();
+    QCOMPARE(server.count("PUT"), 0);
+
+    // Out to the top level: after the list item it was nested in.
+    server.putMember(u"praca"_s, u"c.ics"_s, vtodo(u"c"_s, u"SUMMARY:Jaźń\r\n"_s));
+    dev.run();
+    QCOMPARE(dev.page(), top + u"- [ ] Ścieżka żółwia"_s + ia + u"\r\n- [ ] Zażółć gęślą"_s + ib + u"\r\n- [ ] Jaźń"_s + ic
+                                 + u"\r\n\t- notatka do jaźni\r\n\r\nKoniec.\r\n"_s);
+    QVERIFY(dev.state().tasks.value(u"c"_s).local.parentUid.isEmpty());
+
+    // Under a task of another note, or under its own subtask (a loop): the line stays.
+    const QString before = dev.page();
+    QVERIFY(dev.vault->writeText(u"Inne.md"_s, u"- [ ] Obca ^obca01\n"_s));
+    server.putMember(u"praca"_s, u"c.ics"_s, vtodo(u"c"_s, u"SUMMARY:Jaźń\r\nRELATED-TO;RELTYPE=PARENT:nie-ma\r\n"_s));
+    report = dev.run();
+    QVERIFY2(!report.error.isError(), qPrintable(report.error.message));
+    QCOMPARE(dev.page(), before);
+    server.putMember(u"praca"_s, u"c.ics"_s, vtodo(u"c"_s, u"SUMMARY:Jaźń\r\n"_s));
+    dev.run();
+    dev.write(top + u"- [ ] Ścieżka żółwia"_s + ia + u"\r\n\t- [ ] Zażółć gęślą"_s + ib + u"\r\n- [ ] Jaźń"_s + ic + u"\r\n"_s);
+    dev.run();
+    QCOMPARE(dev.state().tasks.value(u"b"_s).local.parentUid, u"a"_s);
+    server.putMember(u"praca"_s, u"a.ics"_s, vtodo(u"a"_s, u"SUMMARY:Ścieżka żółwia\r\nRELATED-TO;RELTYPE=PARENT:b\r\n"_s));
+    const QString looped = dev.page();
+    report = dev.run();
+    QVERIFY2(!report.error.isError(), qPrintable(report.error.message));
+    QCOMPARE(dev.page(), looped);
+}
+
+void TestCalDavTasks::serverMovesSubtaskAtTheEdges()
+{
+    // The note's first block moved under a later task; a task two levels deep out to the top
+    // level (after its top-level item); a loop where the line is the note's first block.
+    FakeCalDav server;
+    server.addCalendar(u"praca"_s, praca());
+    for (const QString &uid : {u"a"_s, u"b"_s, u"c"_s})
+        server.putMember(u"praca"_s, uid + u".ics"_s, vtodo(uid, u"SUMMARY:Zadanie "_s + uid + u"\r\n"_s));
+    Device dev(&server);
+    QVERIFY(!dev.run().error.isError());
+    const QString ia = u" ^"_s + blockIdForUid(u"a"_s), ib = u" ^"_s + blockIdForUid(u"b"_s),
+                  ic = u" ^"_s + blockIdForUid(u"c"_s);
+    dev.write(u"- [ ] Zadanie a"_s + ia + u"\n- [ ] Zadanie b"_s + ib + u"\n- [ ] Zadanie c"_s + ic + u"\n"_s);
+    dev.run();
+    server.putMember(u"praca"_s, u"a.ics"_s, vtodo(u"a"_s, u"SUMMARY:Zadanie a\r\nRELATED-TO;RELTYPE=PARENT:c\r\n"_s));
+    dev.run();
+    QCOMPARE(dev.page(), u"- [ ] Zadanie b"_s + ib + u"\n- [ ] Zadanie c"_s + ic + u"\n\t- [ ] Zadanie a"_s + ia + u"\n"_s);
+
+    dev.write(u"- [ ] Zadanie b"_s + ib + u"\n\t- [ ] Zadanie c"_s + ic + u"\n\t\t- [ ] Zadanie a"_s + ia + u"\n"_s);
+    dev.run();
+    QCOMPARE(dev.state().tasks.value(u"a"_s).local.parentUid, u"c"_s);
+    server.putMember(u"praca"_s, u"a.ics"_s, vtodo(u"a"_s, u"SUMMARY:Zadanie a\r\n"_s));
+    dev.run();
+    QCOMPARE(dev.page(), u"- [ ] Zadanie b"_s + ib + u"\n\t- [ ] Zadanie c"_s + ic + u"\n- [ ] Zadanie a"_s + ia + u"\n"_s);
+
+    const QString looped = dev.page();
+    server.putMember(u"praca"_s, u"b.ics"_s, vtodo(u"b"_s, u"SUMMARY:Zadanie b\r\nRELATED-TO;RELTYPE=PARENT:c\r\n"_s));
+    const CalendarRunReport report = dev.run();
+    QVERIFY2(!report.error.isError(), qPrintable(report.error.message));
+    QCOMPARE(dev.page(), looped);
 }
 
 void TestCalDavTasks::eventsChangedHere()
