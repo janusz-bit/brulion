@@ -511,7 +511,11 @@ bool JournalView::keeps(int day) const
     const PageController *c = controller(day);
     if (!c)
         return false;
-    if (day == m_active || c->editingRow() >= 0 || c->selectionCount() > 0 || c->zoomBlock() >= 0)
+    // (A day's part of a selection over several days is the stream selection's — by its path and
+    // rows: given back when the day is made again —, not a reason to keep it, the day written in's
+    // either: with every day of the span far away no tools of it show, a tap edits and ends it.)
+    const bool span = spansDays();
+    if (c->editingRow() >= 0 || c->zoomBlock() >= 0 || (!span && (day == m_active || c->selectionCount() > 0)))
         return true;
     if (const at::Entity<PageView> *p = page(day)) {
         const PageView &v = p->read(*m_app);
@@ -640,6 +644,7 @@ void JournalView::releaseFarDays()
     // Kept within two screens of the view (made within one: a little hysteresis).
     const float from = top - 2 * vh;
     const float to = top + 3 * vh;
+    const int active = m_active;
     for (std::size_t r = 0; r < n; ++r) {
         if (!m_slots[r].day)
             continue;
@@ -651,6 +656,9 @@ void JournalView::releaseFarDays()
             continue;
         releaseDay(int(r));
     }
+    // (The day written in went: none is now.)
+    if (active >= 0 && m_active < 0 && onActiveDayChanged)
+        onActiveDayChanged(-1);
 }
 
 void JournalView::dayActivity(PageController *ctl, at::Context<JournalView> &cx)
@@ -663,6 +671,26 @@ void JournalView::dayActivity(PageController *ctl, at::Context<JournalView> &cx)
     const bool zoomed = ctl->zoomBlock() >= 0;
     if ((editing || selected || zoomed) && day != m_active)
         activateDay(day, cx);
+    // Its own selection or editing: the other days' selections end (one day's at a time, unless a
+    // selection over several days spans them).
+    if ((editing || selected) && !spansDays())
+        clearOtherSelections(day);
+}
+
+bool JournalView::spansDays() const
+{
+    return spanActive ? spanActive() : (m_stream && m_stream->active());
+}
+
+void JournalView::clearOtherSelections(int day)
+{
+    m_applyingActive = true;
+    for (int d : madeDays()) {
+        PageController *c = controller(d);
+        if (d != day && c && c->selectionCount() > 0)
+            c->setSelectedRow(-1);
+    }
+    m_applyingActive = false;
 }
 
 void JournalView::activateDay(int day, at::Context<JournalView> &cx)
@@ -676,18 +704,19 @@ void JournalView::activateDay(int day, at::Context<JournalView> &cx)
     const int old = m_active;
     m_active = day;
     m_activeDayPage = day >= 0 ? m_slots[std::size_t(day)].day->page.id() : 0;
-    const bool span = spanActive ? spanActive() : (m_stream && m_stream->active());
+    const bool span = spansDays();
     if (old >= 0 && old < dayCount() && m_slots[std::size_t(old)].day) {
         Day &d = *m_slots[std::size_t(old)].day;
-        // The day written in before stops editing and its selection goes — unless a selection over
-        // several days spans them (each keeps its part).
+        // The day written in before stops editing — unless a selection over several days spans
+        // them (each keeps its part). Its selection stays until the new day selects or edits on its
+        // own (dayActivity): a Shift+click or a tap in the selection mode there extends it
+        // (StreamSelection.extendTo), and the click makes its day this one first.
         m_applyingActive = true;
         if (!span && d.controller) {
             // A word an input method is still composing there is the day's text first (it would go
             // with the field: the controller never saw it).
             d.page.update(cx.app(), [](PageView &v, at::Context<PageView> &pc) { v.commitComposition(pc); });
             d.controller->stopEditing();
-            d.controller->setSelectedRow(-1);
         }
         d.page.update(cx.app(), [span](PageView &v, at::Context<PageView> &pc) {
             if (!span)

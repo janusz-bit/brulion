@@ -892,14 +892,17 @@ by name):
   made in `render()`, before the list lays them out: the day's `PageController` from the host's
   factory (`makeController`: its host, path, read-only state…), a PageView in embedded mode set up by
   the host (`setUpPage`: looks, callbacks; the same as a page's). Days farther away are released
-  after the frame (their controllers save on destruction), unless being edited, with blocks
-  selected, zoomed into, or the active day: one PageView and controller per day near the view. A
+  after the frame (their controllers save on destruction), unless being edited, zoomed into, or —
+  without a selection over several days, whose parts the stream selection keeps by path and row —
+  with blocks selected or the active day: one PageView and controller per day near the view. A
   day released keeps its measured height; heights are kept by date across the model's resets and
   moves (a new day at midnight is inserted above: the anchor follows its day).
 * **The active day** (the one written in: the side panel's, the find bar's, Back's zoom, the
   commands'): the day that started editing, selected blocks or zoomed (its controller's signals), or
-  that the host made active (`activateDay`); the day active before stops editing and loses its
-  selection, unless a selection over several days spans them (`spanActive`). `onActiveDayChanged`.
+  that the host made active (`activateDay`); the day active before stops editing, unless a selection
+  over several days spans them (`spanActive`), and loses its selection once the new day selects or
+  edits on its own (a Shift+click there extends it first). `onActiveDayChanged` (−1 when the day
+  written in went far away with only a part of a span).
 * **The heading** (ContentJournalDay's): the long date (the host's `formatDate`) in the editor's
   face, semibold, larger for today; "Today" / "Yesterday" as a badge; "Open as page" at the right —
   compact (phones): the weekday and the badge's word as a small line above the date, the button an
@@ -995,9 +998,30 @@ stream: a long day laid out where it shows"): a wheel step through a 1 000-block
 (17–22 ms laid out whole), 81 of its rows laid out a frame. Tested by `tst_atrament_list`
 (`anchorOnAPartOfARow`) and `tst_atrament_journal` (`longDayLaidOutWhereItShows`,
 `longDayRowsMeasuredLateMoveNothing` — a row in view moves by the scroll alone, 48 px off without
-the anchor —, `longDayRevealsADeepBlock`). **Not yet**: the QML stream's span self-test
-(`tst_content_journals_span_qml`) against this stream, a hosted row's delegate showing the active
-day's editing state while its own day is not active.
+the anchor —, `longDayRevealsADeepBlock`). **The span self-test against this stream**:
+`tst_content_journals_span_atrament_qml` (desktop) and `…_touch` (a phone) run
+ContentJournalsSpanSelfTest's steps (qml/content/ContentJournalsSpanAtramentSelfTest.qml, loaded by
+JournalsView for `--editor-script journals-span-selftest --atrament-editor`) with real mouse, touch and
+key events at the places the stream says its days' blocks are — Shift+click and a tap in the
+selection mode into the next day, the floating and the docked tools with the stream's count, Ctrl+C
+and the tools' Copy with the days' links, Delete, Tab, Cut and the block menu's Move up changing
+nothing, Shift+↓/↑ across a day's edge, Esc and Back, a mouse drag into the next day and on, held at
+the stream's bottom edge, into the days coming in, the span's days scrolled far away and back, a tap
+with none of them on screen editing and ending it. It found, and these changed: a day made the one
+written in by a click took the selection of the day before away before the editor could extend it
+(Shift+click and the selection mode's tap selected the clicked block alone) — its selection now
+goes when the new day selects or edits on its own (`dayActivity` → `clearOtherSelections`); two keys
+before a frame went to the day whose key layer the last frame drew, not to the day the span's end had
+just moved into (an embedded page's key layer listens always and takes a key only while its day is
+the active one); a long press on a row Atrament draws set the editor's "the release is no tap" flag,
+which nothing reset there (Atrament cancels the press itself), so the next tap — into the next day —
+did nothing (`BlockEditor.longPressBlock`, EditorAtramentPage's long press, without the flag); a day's
+part of a selection over several days kept the day made, and the day written in too, so its tools
+showed with no day of the span on screen and a tap far away extended the span instead of editing (a
+span's days, the day written in among them, go when far away; the stream is told no day is written
+in, and the editor's selection mode, one for the stream, ends with a day that has no block selected
+and no span to extend). **Not yet**: a hosted row's delegate showing the active day's editing state
+while its own day is not active.
 
 ### Steps
 
@@ -1488,7 +1512,8 @@ scrolling, `tst_atrament_editor`) before the next:
   get their counterpart in `tst_atrament_editor` as its step lands — the gate's "the editor's
   existing behaviour tests pass against it" is that list, complete.
 * `tests/atrament/editor/tst_atrament_journal`: the journal stream as one list ("The journal stream
-  as one list"); `tst_content_journals_atrament_qml`: its self-test in the app.
+  as one list"); `tst_content_journals_atrament_qml`: its self-test in the app;
+  `tst_content_journals_span_atrament_qml[_touch]`: the selection over several days in the app.
 * `tst_editor_qml_atrament` (desktop) and `tst_editor_qml_atrament_touch` (a phone, `--touch`):
   the editor playground's `atramenttest` (qml/dev/AtramentSelfTest.qml) runs the outline and keys
   parts of `selftest` against the page drawn by Atrament (`--atrament-editor`, `DevTools.atramentEditor`: the

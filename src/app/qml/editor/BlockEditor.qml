@@ -3388,28 +3388,34 @@ FocusScope {
         else if (!autoHeight)
             list.interactive = !held
     }
-    /// A long press on the text of `row` (touch UIs; not the block being edited): the selection
-    /// mode with that block selected — or, already in it, the selection extended there; moving the
-    /// finger without lifting it extends it further.
-    function longPressText(row: int): void {
+    /// A finger held on block `row` (touch UIs): the selection mode with that block selected — or,
+    /// already in it, the selection extended there ("One by one": the block picked). Whether it did.
+    /// A block the page drawn by Atrament draws calls it as it is: Atrament cancels the press (its
+    /// release clicks nothing) and follows the finger (a journal day's next tap extends the selection
+    /// into it).
+    function longPressBlock(row: int): bool {
         if (!touch || !controller || row < 0 || controller.blocks.viewAt(row) === "frontmatter")
-            return
-        if (selectionMode && pickMode && controller.selectionCount > 0) {
-            // "One by one": a long press picks like a tap (its release is no tap).
+            return false
+        if (selectionMode && pickMode && controller.selectionCount > 0)
             toggleBlock(row)
-            drag.selected = true
-            return
-        }
-        if (selectionMode && controller.selectionCount > 0) {
+        else if (selectionMode && controller.selectionCount > 0)
             controller.extendSelectionTo(row)
-        } else {
+        else
             selectBlock(row)
-        }
-        if (usesAtrament) {
-            // The page drawn by Atrament follows the finger itself (its release is no tap either).
-            drag.selected = true
+        return true
+    }
+    /// A long press on the text of `row` (touch UIs; not the block being edited) in a QML row: as
+    /// longPressBlock(); moving the finger without lifting it extends it further, and the release is
+    /// no tap.
+    function longPressText(row: int): void {
+        const picking = selectionMode && pickMode && controller !== null && controller.selectionCount > 0
+        if (!longPressBlock(row))
             return
-        }
+        // (Its release is no tap.)
+        drag.selected = true
+        // "One by one" picks like a tap; the page drawn by Atrament follows the finger itself.
+        if (picking || usesAtrament)
+            return
         drag.armed = true
         drag.selected = true
         drag.mouse = false

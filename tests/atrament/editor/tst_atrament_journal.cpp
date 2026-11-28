@@ -264,6 +264,10 @@ private Q_SLOTS:
     void longDayLaidOutWhereItShows();
     void longDayRowsMeasuredLateMoveNothing();
     void longDayRevealsADeepBlock();
+    void activatingADayKeepsAnothersSelection();
+    void shiftArrowsBackAcrossADaysEdge();
+    void spanDaysScrolledAwayGoAndComeBack();
+    void spanDayWrittenInGoesFarAway();
 };
 
 void TestAtramentJournal::daysLaidOutInOrder()
@@ -842,6 +846,128 @@ void TestAtramentJournal::longDayRevealsADeepBlock()
     QVERIFY2(b->top() >= 0 && b->bottom() <= 700.5f, qPrintable(u"%1..%2"_s.arg(b->top()).arg(b->bottom())));
     QCOMPARE(h.page(1)->editedRow(), 900);
     QVERIFY(h.page(1)->drawnRows() < 400);
+}
+
+void TestAtramentJournal::activatingADayKeepsAnothersSelection()
+{
+    // A tap or a click in another day makes it the one written in before the editor handles it: a
+    // block selected in the day before stays until the new day selects or edits on its own — a
+    // Shift+click (a tap in the selection mode) extends it there (StreamSelection.extendTo).
+    Harness h(4);
+    PageController *first = h.day(1);
+    PageController *second = h.day(2);
+    first->setSelectedRow(1);
+    h.tw.settle();
+    QCOMPARE(h.view().activeDay(), 1);
+    h.journal.update(h.app, [](JournalView &j, at::Context<JournalView> &cx) { j.activateDay(2, cx); });
+    QCOMPARE(h.view().activeDay(), 2);
+    QCOMPARE(first->selectionCount(), 1);
+    QVERIFY(h.stream.extendTo(second, 2));
+    h.tw.settle();
+    QVERIFY(h.stream.active());
+    QCOMPARE(first->selectionFirstRow(), 1);
+    QCOMPARE(second->selectionLastRow(), 2);
+    h.stream.clear();
+    // Its own selection there ends the other day's.
+    first->setSelectedRow(1);
+    h.journal.update(h.app, [](JournalView &j, at::Context<JournalView> &cx) { j.activateDay(2, cx); });
+    second->setSelectedRow(0);
+    h.tw.settle();
+    QCOMPARE(first->selectionCount(), 0);
+    QCOMPARE(second->selectionCount(), 1);
+    // And so does editing there.
+    first->setSelectedRow(1);
+    h.tw.settle();
+    QCOMPARE(h.view().activeDay(), 1);
+    QCOMPARE(second->selectionCount(), 0);
+    h.journal.update(h.app, [](JournalView &j, at::Context<JournalView> &cx) { j.activateDay(2, cx); });
+    second->startEditing(0, 0);
+    h.tw.settle();
+    QCOMPARE(first->selectionCount(), 0);
+    QCOMPARE(second->editingRow(), 0);
+}
+
+void TestAtramentJournal::shiftArrowsBackAcrossADaysEdge()
+{
+    // A span from day 1's second block to day 2's last one; Shift+↓ goes on into day 3, Shift+↑
+    // comes back to day 2's end and on up in it.
+    Harness h(4);
+    PageController *first = h.day(1);
+    PageController *second = h.day(2);
+    PageController *third = h.day(3);
+    first->setSelectedRow(1);
+    h.tw.settle();
+    QVERIFY(h.stream.extendTo(second, second->lastVisibleRow()));
+    h.tw.settle();
+    QVERIFY(h.stream.active());
+    QVERIFY(h.tw.simulateKeystrokes(u"shift-down"));
+    h.tw.settle();
+    QCOMPARE(h.focusDay(), 3);
+    QCOMPARE(third->selectionCount(), 1);
+    QCOMPARE(h.view().activeDay(), 3);
+    QVERIFY(h.tw.simulateKeystrokes(u"shift-up"));
+    h.tw.settle();
+    QCOMPARE(h.focusDay(), 2);
+    QCOMPARE(third->selectionCount(), 0);
+    QCOMPARE(second->selectedRow(), second->lastVisibleRow());
+    QVERIFY(h.tw.simulateKeystrokes(u"shift-up"));
+    h.tw.settle();
+    QCOMPARE(h.focusDay(), 2);
+    QCOMPARE(second->selectedRow(), second->lastVisibleRow() - 1);
+    QCOMPARE(first->selectionFirstRow(), 1);
+}
+
+void TestAtramentJournal::spanDaysScrolledAwayGoAndComeBack()
+{
+    // A selection over two days scrolled far away: its days go (their parts are the stream
+    // selection's, by their paths and rows); scrolled back, the day made again shows its part.
+    Harness h(30);
+    PageController *first = h.day(1);
+    first->setSelectedRow(1);
+    h.tw.settle();
+    QVERIFY(h.stream.extendTo(h.day(2), 1));
+    h.tw.settle();
+    QCOMPARE(h.view().activeDay(), 2);
+    h.scrollToDay(28);
+    QVERIFY(!h.day(1));
+    QVERIFY(h.stream.active());
+    // (Day 1's part read from its file meanwhile.)
+    QVERIFY2(h.stream.markdown().startsWith(u"[["_s + dayDate(1) + u"]]\n\n- Blok 1"_s), qPrintable(h.stream.markdown()));
+    h.scrollToDay(1);
+    QVERIFY(h.day(1));
+    QCOMPARE(h.day(1)->selectionFirstRow(), 1);
+    QVERIFY(h.stream.active());
+}
+
+void TestAtramentJournal::spanDayWrittenInGoesFarAway()
+{
+    // Every day of a span far from the view, the day written in too: it goes (no tools of the span
+    // left anywhere — a tap there edits and ends it), the stream told it has none.
+    Harness h(40);
+    std::vector<int> active;
+    h.journal.update(h.app, [&](JournalView &j, at::Context<JournalView> &) {
+        j.onActiveDayChanged = [&](int day) { active.push_back(day); };
+    });
+    h.day(1)->setSelectedRow(1);
+    h.tw.settle();
+    QVERIFY(h.stream.extendTo(h.day(2), 1));
+    h.tw.settle();
+    QCOMPARE(h.view().activeDay(), 2);
+    h.scrollToDay(38);
+    h.tw.settle();
+    QVERIFY(!h.day(1) && !h.day(2));
+    QCOMPARE(h.view().activeDay(), -1);
+    QVERIFY(!active.empty() && active.back() == -1);
+    QVERIFY(h.stream.active());
+    QVERIFY(!h.stream.toolsController());
+    // A day with its own selection (no span) stays while it is the one written in.
+    h.stream.clear();
+    h.scrollToDay(1);
+    h.day(1)->setSelectedRow(0);
+    h.tw.settle();
+    h.scrollToDay(38);
+    h.tw.settle();
+    QVERIFY(h.day(1));
 }
 
 QTEST_MAIN(TestAtramentJournal)

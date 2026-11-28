@@ -402,9 +402,10 @@ AtramentView {
         root.editor.leaveEditingForSelection()
         root.editor.controller.selectRange(anchor, focus)
     }
+    // (A block Atrament draws: its release clicks nothing, the next tap is one — no flag to eat it.)
     onRowLongPressed: row => {
         if (root.editor)
-            root.editor.longPressText(row)
+            root.editor.longPressBlock(row)
     }
     onBlockMenuRequested: (row, sceneX, sceneY) => {
         if (root.editor)

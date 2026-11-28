@@ -95,6 +95,7 @@ if(BRULION_DEV_QML_ENABLED)
     # AtramentView, built only where Atrament is (registered here: the editor's library exists from
     # this area on).
     if(TARGET brulion_editor_atrament AND TARGET brulion_atrament_gallery)
-        qt_target_qml_sources(brulion QML_FILES qml/content/ContentJournalsAtramentSelfTest.qml)
+        qt_target_qml_sources(brulion QML_FILES qml/content/ContentJournalsAtramentSelfTest.qml
+            qml/content/ContentJournalsSpanAtramentSelfTest.qml)
     endif()
 endif()

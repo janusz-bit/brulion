@@ -148,7 +148,7 @@ public:
     // Makes day `day` now (scrolled to, a find's next match there); whether it exists.
     bool makeDay(int day, atrament::Context<JournalView> &cx);
     // The day written in (−1: none). activateDay() makes it first; the day active before stops
-    // editing and loses its selection unless spanActive().
+    // editing unless spanActive(); its selection goes once the new day selects or edits on its own.
     int activeDay() const { return m_active; }
     void activateDay(int day, atrament::Context<JournalView> &cx);
     // Starts writing in a day: its last block edited, or — no blocks yet — the journal template's
@@ -232,6 +232,10 @@ private:
     void keepAnchorOnBlock(atrament::Window &window);
     std::optional<atrament::Rect> m_viewport; // the list's view by the last frame
     void dayActivity(PageController *controller, atrament::Context<JournalView> &cx);
+    // A selection over several days is shown (spanActive, else the stream's selection).
+    bool spansDays() const;
+    // Every day but `day` loses its block selection.
+    void clearOtherSelections(int day);
     bool pastEdge(PageController *from, bool up, float x, atrament::Context<JournalView> &cx);
     // Today's date by the days' model (its isToday row).
     QString todayDate() const;

@@ -998,19 +998,23 @@ FocusScope {
 
             // Dev: the stream's self-test against the list drawn by Atrament (ctest
             // tst_content_journals_atrament_qml), loaded from its file in developer builds only.
+            // (…and its span self-test, ctest tst_content_journals_span_atrament_qml*.)
             Loader {
                 id: atramentSelfTestLoader
-                active: DevTools.editorScript === "journals-selftest" && root.streamView !== null
+                readonly property bool span: DevTools.editorScript === "journals-span-selftest"
+                active: (DevTools.editorScript === "journals-selftest" || span) && root.streamView !== null
                 onActiveChanged: {
                     if (!atramentSelfTestLoader.active)
                         return
                     frame.selfTestValues = { stream: root.streamView, editor: streamEditor, days: atramentDays,
                                              selection: atramentStream, streamFind: streamFind, journalsView: root }
-                    atramentSelfTestLoader.setSource(frame.selfTestSource, frame.selfTestValues)
+                    atramentSelfTestLoader.setSource(atramentSelfTestLoader.span ? frame.spanSelfTestSource : frame.selfTestSource,
+                                                     frame.selfTestValues)
                 }
             }
             property var selfTestValues: ({})
             readonly property url selfTestSource: Qt.resolvedUrl("../content/ContentJournalsAtramentSelfTest.qml")
+            readonly property url spanSelfTestSource: Qt.resolvedUrl("../content/ContentJournalsSpanAtramentSelfTest.qml")
 
             // "Go to day" (JournalsJumpDialog, loaded when it first opens).
             Loader { id: atramentJumpLoader }

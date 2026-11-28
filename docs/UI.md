@@ -6953,7 +6953,11 @@ list"; `qml/editor/EditorAtramentJournal.qml`, loaded by JournalsView by its fil
   the days coming in taking the selection's end — also once the day it began in has scrolled away.
   Blocks dragged by their bullet (or a selection long-pressed in the selection mode) into another
   day show the drop line there and move to that day's file when let go; Ctrl+Z right after takes the
-  move back in both days, Ctrl+Y does it again.
+  move back in both days, Ctrl+Y does it again. Shift+click (a tap in the selection mode) in another
+  day extends a day's selection there as in the QML stream, and a span's days — the one written in
+  too — go when scrolled far away (the selection kept by the stream; a tap far away edits and ends
+  it). The QML stream's span self-test runs against it (`tst_content_journals_span_atrament_qml`,
+  `…_touch`).
 * **A long day is laid out only where it shows**: its blocks within a screen of the view (the edited
   one, one being shown, always), the rest as room of their heights; the block at the view's top
   stays put while blocks above it get their real heights (a wheel step through a 1 000-block day

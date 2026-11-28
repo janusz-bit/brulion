@@ -94,8 +94,17 @@ EditorAtramentPage {
         }
     }
     onActiveControllerChanged: {
-        if (root.editor)
-            root.editor.controller = root.activeController as PageController
+        if (!root.editor)
+            return
+        root.editor.controller = root.activeController as PageController
+        // (One editor for the stream: its selection mode was the day before's. A day with no block
+        // selected is in it only while a tap there extends a selection — of another day, or over
+        // several days some of which are on screen: BlockEditor.blockTappedWith's rule.)
+        const page = root.editor.controller
+        const stream = root.editor.stream
+        if (root.editor.selectionMode && (page === null || page.selectionCount === 0)
+                && !(stream !== null && (stream.active ? stream.toolsController !== null : page !== null && stream.othersSelected(page))))
+            root.editor.selectionMode = false
     }
     Component.onCompleted: {
         if (root.editor)
