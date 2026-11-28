@@ -3256,6 +3256,10 @@ private Q_SLOTS:
                 reply.ok(QJsonObject{{u"path"_s, path},
                                      {u"state"_s, u"idle"_s},
                                      {u"answer"_s, QJsonObject{{u"position"_s, 1}, {u"text"_s, u"Plan jest dobry."_s}}}});
+            } else if (request.method == u"chatResume" && path.contains(u"pusta"_s)) {
+                reply.fail(u"not_held"_s, u"Nothing held"_s, {});
+            } else if (request.method == u"chatOption" && request.params.value(u"value"_s).toString() == u"gpt"_s) {
+                reply.fail(u"bad_option"_s, u"gpt is no value"_s, {{u"values"_s, QJsonArray{u"opus"_s}}});
             } else if (request.method == u"chatSend" && path.contains(u"zajęta"_s)) {
                 reply.fail(u"busy"_s, u"Its turn runs"_s, {{u"state"_s, u"running"_s}});
             } else if (request.method == u"chatRequestSecret"
@@ -3320,6 +3324,51 @@ private Q_SLOTS:
                 requests.last().params,
                 (QJsonObject{
                         {u"path"_s, u"AI/Plan"_s}, {u"text"_s, u"I żółwie"_s}, {u"queue"_s, true}, {u"wake"_s, true}}));
+        // Pictures with a message: read from the files, as chatSend takes them; a file that is none, or
+        // no picture, refused here (exit 2) before the app.
+        const QString photo = QDir(m_tmp.path()).filePath(u"zdjęcie łąki.png"_s);
+        {
+            QFile f(photo);
+            QVERIFY(f.open(QIODevice::WriteOnly));
+            f.write("\x89PNG\r\n");
+        }
+        r = cliLive({u"app"_s, u"chat"_s, u"send"_s, u"AI/Plan"_s, u"Co"_s, u"tu"_s, u"jest?"_s, u"--pictures"_s, photo});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(requests.last().method, u"chatSend"_s);
+        const QJsonArray sentPictures = requests.last().params.value(u"pictures"_s).toArray();
+        QCOMPARE(sentPictures.size(), 1);
+        QCOMPARE(sentPictures.at(0).toObject().value(u"name"_s).toString(), u"zdjęcie łąki.png"_s);
+        QCOMPARE(QByteArray::fromBase64(sentPictures.at(0).toObject().value(u"data"_s).toString().toLatin1()),
+                 QByteArray("\x89PNG\r\n"));
+        r = cliLive({u"app"_s, u"chat"_s, u"start"_s, u"Jak"_s, u"na"_s, u"zdjęciu"_s, u"--pictures"_s, photo + u","_s + photo});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(requests.last().params.value(u"pictures"_s).toArray().size(), 2);
+        const qsizetype askedBefore = requests.size();
+        r = cliLive({u"app"_s, u"chat"_s, u"send"_s, u"AI/Plan"_s, u"x"_s, u"--pictures"_s, photo + u".nie-ma.png"_s});
+        QCOMPARE(r.code, 2);
+        QCOMPARE(r.errorCode(), u"bad_pictures"_s);
+        const QString script = QDir(m_tmp.path()).filePath(u"skrypt.sh"_s);
+        QFile(photo).copy(script);
+        r = cliLive({u"app"_s, u"chat"_s, u"send"_s, u"AI/Plan"_s, u"x"_s, u"--pictures"_s, script});
+        QCOMPARE(r.code, 2);
+        QCOMPARE(r.errorCode(), u"bad_pictures"_s);
+        QCOMPARE(requests.size(), askedBefore); // (nothing went to the app)
+        // An agent's option of a conversation; its held messages resumed.
+        r = cliLive({u"app"_s, u"chat"_s, u"option"_s, u"AI/Plan"_s, u"model"_s, u"opus"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(requests.last().method, u"chatOption"_s);
+        QCOMPARE(requests.last().params,
+                 (QJsonObject{{u"path"_s, u"AI/Plan"_s}, {u"option"_s, u"model"_s}, {u"value"_s, u"opus"_s}}));
+        r = cliLive({u"app"_s, u"chat"_s, u"option"_s, u"AI/Plan"_s, u"model"_s, u"gpt"_s});
+        QCOMPARE(r.code, 2);
+        QCOMPARE(r.errorCode(), u"bad_option"_s);
+        r = cliLive({u"app"_s, u"chat"_s, u"resume"_s, u"AI/Plan"_s});
+        QCOMPARE(r.code, 0);
+        QCOMPARE(requests.last().method, u"chatResume"_s);
+        QCOMPARE(requests.last().params, (QJsonObject{{u"path"_s, u"AI/Plan"_s}}));
+        r = cliLive({u"app"_s, u"chat"_s, u"resume"_s, u"AI/pusta"_s});
+        QCOMPARE(r.code, 4);
+        QCOMPARE(r.errorCode(), u"not_held"_s);
         // What the others ask.
         r = cliLive({u"app"_s, u"chat"_s, u"list"_s, u"--parent"_s, u"AI/Plan"_s, u"--limit"_s, u"7"_s});
         QCOMPARE(r.code, 0);

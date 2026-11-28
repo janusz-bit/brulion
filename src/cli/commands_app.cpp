@@ -17,6 +17,7 @@
 #include "appmessage.h"
 #include "controlclient.h"
 #include "controlprotocol.h"
+#include "acp/appchats.h"
 #include "extensions/appapi.h"
 #include "notebook/itemref.h"
 #include "singleinstance.h"
@@ -50,10 +51,11 @@ int exitFor(const QString &code)
             {QLatin1String(E::Ambiguous), ExitConflict},  {QLatin1String(E::NotReady), ExitUnavailable},
             {QLatin1String(E::Refused), ExitRefused},     {QLatin1String(E::Unauthorized), ExitUnavailable},
             {QLatin1String(E::Busy), ExitConflict}};
-    // (chatAnswer's: nothing is asked there, not one of the question's options.)
-    if (code == u"no_question")
+    // (chatAnswer's: nothing is asked there, not one of the question's options; chatResume's: nothing
+    // held; chatSend's pictures.)
+    if (code == u"no_question" || code == u"not_held")
         return ExitConflict;
-    if (code == u"bad_option")
+    if (code == u"bad_option" || code == u"bad_pictures")
         return ExitUsage;
     return exits.value(code, ExitInternal);
 }
@@ -838,12 +840,55 @@ Result appChatRead(Call &call)
     return chatCommand(call, u"chatRead"_s, params);
 }
 
+/// --pictures: the files ("a.jpg,b.png" on the command line, a list from an MCP client) read into
+/// `params` as chatSend and chatStart take them (acp/appchats.h); false: the call failed.
+bool readPictures(Call &call, QJsonObject &params)
+{
+    if (!call.has(u"pictures"_s))
+        return true;
+    const QJsonValue given = call.args.value(u"pictures"_s);
+    QStringList files;
+    if (given.isArray()) {
+        for (const QJsonValue &v : given.toArray())
+            files << v.toString();
+    } else {
+        files = given.toString().split(u',');
+    }
+    QList<acp::RemotePicture> pictures;
+    for (QString file : std::as_const(files)) {
+        file = file.trimmed();
+        if (file.isEmpty())
+            continue;
+        QFile f(file);
+        if (f.size() > acp::MaxRemotePictureBytes || !f.open(QIODevice::ReadOnly)) {
+            call.setError(ExitUsage, u"bad_pictures"_s,
+                          tr("%1 cannot be sent: no such file, or larger than %2 bytes")
+                                  .arg(file)
+                                  .arg(acp::MaxRemotePictureBytes));
+            return false;
+        }
+        pictures.append({QFileInfo(file).fileName(), f.readAll()});
+    }
+    // (The app checks them again: their kind, how many, their size in all.)
+    QString why;
+    const QJsonArray list = acp::toJson(pictures);
+    if (!acp::remotePicturesFromJson(list, &why)) {
+        call.setError(ExitUsage, u"bad_pictures"_s, why);
+        return false;
+    }
+    if (!list.isEmpty())
+        params.insert(u"pictures"_s, list);
+    return true;
+}
+
 Result appChatStart(Call &call)
 {
     QJsonObject params{{u"text"_s, call.str(u"text"_s)}};
     copyGiven(call, params, {u"partner"_s, u"page"_s, u"parent"_s, u"project"_s, u"worktree"_s, u"branch"_s});
     if (call.flag(u"wake"_s))
         params.insert(u"wake"_s, true);
+    if (!readPictures(call, params))
+        return call.failed();
     return chatCommand(call, u"chatStart"_s, params, true);
 }
 
@@ -858,7 +903,22 @@ Result appChatSend(Call &call)
         params.insert(u"mode"_s, u"steer"_s);
     if (call.flag(u"wake"_s))
         params.insert(u"wake"_s, true);
+    if (!readPictures(call, params))
+        return call.failed();
     return chatCommand(call, u"chatSend"_s, params, true);
+}
+
+Result appChatOption(Call &call)
+{
+    return chatCommand(call, u"chatOption"_s,
+                       {{u"path"_s, call.str(u"conversation"_s)},
+                        {u"option"_s, call.str(u"option"_s)},
+                        {u"value"_s, call.str(u"value"_s)}});
+}
+
+Result appChatResume(Call &call)
+{
+    return chatCommand(call, u"chatResume"_s, {{u"path"_s, call.str(u"conversation"_s)}});
 }
 
 Result appChatWait(Call &call)
@@ -1428,6 +1488,10 @@ void addAppCommands(QList<Command> &out)
     const Arg wakeFlag = flag(u"wake"_s, QT_TRANSLATE_NOOP("brulion::cli",
                                                            "When its turn ends, wake the parent conversation with the "
                                                            "answer (no wait needed)"));
+    const Arg picturesOption =
+            option(u"pictures"_s, ArgType::String,
+                   QT_TRANSLATE_NOOP("brulion::cli",
+                                     "Pictures sent with the message: files, comma-separated (8 at most, 4 MiB each)"));
     const Arg timeoutOption = option(u"timeout"_s, ArgType::Int,
                                QT_TRANSLATE_NOOP("brulion::cli",
                                                  "How long to wait for the answer, ms (default 60000, at most 600000)"));
@@ -1486,7 +1550,7 @@ void addAppCommands(QList<Command> &out)
                                                       "project (its folder)")),
              option(u"branch"_s, ArgType::String,
                     QT_TRANSLATE_NOOP("brulion::cli", "With --project: the thread's branch")),
-             wakeFlag, waitFlag, timeoutOption},
+             picturesOption, wakeFlag, waitFlag, timeoutOption},
             true);
     c.help = cliText(QT_TRANSLATE_NOOP(
             "brulion::cli",
@@ -1509,7 +1573,7 @@ void addAppCommands(QList<Command> &out)
              flag(u"steer"_s, QT_TRANSLATE_NOOP("brulion::cli",
                                                 "While its turn runs: send it now, ahead of the waiting messages (the "
                                                 "turn is stopped first)")),
-             wakeFlag, waitFlag, timeoutOption},
+             picturesOption, wakeFlag, waitFlag, timeoutOption},
             true);
     c.help = cliText(QT_TRANSLATE_NOOP("brulion::cli",
                                        "Refused while its turn runs (exit 4, busy) — unless --queue puts it in line, "
@@ -1517,6 +1581,33 @@ void addAppCommands(QList<Command> &out)
                                        "--steer sends it now (the running turn stopped first). An "
                                        "agent the app started sends only to its own sub-conversations. --wake: the end "
                                        "of its turn wakes the agent's own conversation (a script's: its parent)."));
+    out.append(c);
+    c = chatCommandOf(u"app.chat.option"_s,
+                      QT_TRANSLATE_NOOP("brulion::cli",
+                                        "Set one of the AI agent's options of a conversation (its model, mode …)"),
+                      appChatOption,
+                      {conversation,
+                       positional(u"option"_s, ArgType::String,
+                                  QT_TRANSLATE_NOOP("brulion::cli", "The option's id, as app chat live --path lists "
+                                                                    "them (detail.options)"),
+                                  true),
+                       positional(u"value"_s, ArgType::String,
+                                  QT_TRANSLATE_NOOP("brulion::cli",
+                                                    "One of its choices' values (true or false for one on or off)"),
+                                  true)},
+                      true);
+    c.help = cliText(QT_TRANSLATE_NOOP("brulion::cli",
+                                       "{path, option, value}; exit 2 bad_option with the options or the values it "
+                                       "takes. It applies to the conversation's next turn (an agent may take it at "
+                                       "once)."));
+    out.append(c);
+    c = chatCommandOf(u"app.chat.resume"_s,
+                      QT_TRANSLATE_NOOP("brulion::cli",
+                                        "The messages held after a conversation's turn stopped or failed go on"),
+                      appChatResume, {conversation}, true);
+    c.help = cliText(QT_TRANSLATE_NOOP("brulion::cli",
+                                       "{path, resumed}: the first is sent now, the rest after it; exit 4 not_held "
+                                       "when none are held (app chat live --path: detail.held)."));
     out.append(c);
     c = chatCommandOf(u"app.chat.wait"_s,
                       QT_TRANSLATE_NOOP("brulion::cli",
