@@ -3787,6 +3787,30 @@ formula's layouts are larger than a paragraph's). The text page's view keeps not
 over passes: +263 B per block in the second pass are a warm-up (a third pass: +2 B), the model's
 caches after a first pass 6.5 kB per block.
 
+### Atrament's journal stream: a long day laid out where it shows (2026-11-28)
+
+`tests/bench/bench_atrament_journal` (Release, Clang, the machine shared with two other builds —
+upper bounds): the journal stream drawn by Atrament (docs/ATRAMENT.md "The journal stream as one
+list") at 1280 × 800 with today, a day of 1 000 blocks (bench_atrament_page's generator) and five
+ordinary days; the stream scrolled to the long day, then the wheel through it in 120 px steps
+(266 steps; each the dispatch and the frame's scene). Three runs each, before and after the
+embedded page laid out only its rows near the view (`PageView::setEmbeddedView`, the list's
+`anchorOnPart`):
+
+| | before | after |
+|---|---:|---:|
+| the long day's rows a frame lays out (the most of any frame) | 1 000 | 81 |
+| a wheel step, median / p95 / max | 16.7–22.1 / 29.3–31.2 / 50–130 ms | 1.57–1.66 / 1.72–1.87 / 2.5–3.3 ms |
+| the scroll to the long day (its first frame) | 46–52 ms | 1.3–1.9 ms |
+| heap: the stream opened (the long day near the top, made at once) | +40.9 MB | +5.0 MB |
+| heap: the long day scrolled to | +11.4 MB | +0.6 MB |
+| heap: after the wheel through it (the model's text rendered for every block seen) | −5.7 MB | +7.1 MB |
+
+What it says: a day of 1 000 blocks cost what a page of 1 000 blocks laid out whole would — 17 to
+22 ms a step, past 120 fps' 8.3 ms and even 60 fps' 16.7 ms; laid out near the view it costs what
+the page drawn by Atrament costs (1.2–1.6 ms a step above). The heap after the wheel is the model's
+rendered-text caches of the blocks shown, which the day laid out whole paid at once when it opened.
+
 ### Budgets
 
 Desktop = the laptop above (the graph: a GitHub runner, see its row), phone = Pi 4 (floor) and the

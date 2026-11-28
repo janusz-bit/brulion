@@ -6954,8 +6954,10 @@ list"; `qml/editor/EditorAtramentJournal.qml`, loaded by JournalsView by its fil
   Blocks dragged by their bullet (or a selection long-pressed in the selection mode) into another
   day show the drop line there and move to that day's file when let go; Ctrl+Z right after takes the
   move back in both days, Ctrl+Y does it again.
-* Not yet: a long day laid out only where it shows (a day is laid out whole, as ContentJournalDay
-  builds all its blocks).
+* **A long day is laid out only where it shows**: its blocks within a screen of the view (the edited
+  one, one being shown, always), the rest as room of their heights; the block at the view's top
+  stays put while blocks above it get their real heights (a wheel step through a 1 000-block day
+  1.6 ms where laying it out whole took 17–22 ms: docs/PERFORMANCE.md).
 
 ### The task list drawn by Atrament
 

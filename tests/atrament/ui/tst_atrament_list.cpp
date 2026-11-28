@@ -97,6 +97,37 @@ struct Paragraphs {
     }
 };
 
+// Rows of 100 px but row 50: a part of `above` px (blue), a red stripe of 20, 60 px under it — a
+// journal day whose blocks above the one on screen are laid out anew.
+struct Parted {
+    RowHeights heights{100, 100.0f};
+    ListHandle handle;
+    float above = 40;
+    AnyElement render(Window &, Context<Parted> &)
+    {
+        Parted *self = this;
+        return div().sizeFull().flexCol().child(
+                list(u"parted", heights,
+                     [self](std::size_t i, Window &, App &) -> AnyElement {
+                         if (i != 50)
+                             return div().h(100).bg(kGreen);
+                         return div()
+                                 .flexCol()
+                                 .child(div().h(self->above).bg(kBlue))
+                                 .child(div().h(20).bg(kRed))
+                                 .child(div().h(60).bg(kBlue));
+                     })
+                        .trackScroll(handle)
+                        .flex1());
+    }
+    // The view kept on the red stripe, `into` px below its top.
+    void keepOnStripe(float into)
+    {
+        Parted *self = this;
+        handle.anchorOnPart(50, [self](Window &) -> std::optional<RowPart> { return RowPart{self->above, 20}; }, into);
+    }
+};
+
 } // namespace
 
 class TestAtramentList : public QObject {
@@ -112,6 +143,7 @@ private Q_SLOTS:
     void scrollToRow_data();
     void scrollToRow();
     void scrollToRowPart();
+    void anchorOnAPartOfARow();
     void rowsInsertedInFront();
     void fingerDrag();
     void accessibility();
@@ -423,6 +455,66 @@ void TestAtramentList::scrollToRowPart()
     QVERIFY(near(h.tw.pixel(50, 1), kRed));
     QVERIFY(near(h.tw.pixel(50, 98), kRed));
     QVERIFY(!near(h.tw.pixel(50, 102), kRed));
+}
+
+void TestAtramentList::anchorOnAPartOfARow()
+{
+    Harness h({100, 200});
+    Entity<Parted> parted = h.app.newEntity<Parted>();
+    h.open(parted);
+    parted.update(h.app, [](Parted &p, Context<Parted> &cx) {
+        p.handle.scrollToAnchor(50, 40);
+        cx.notify();
+    });
+    h.tw.settle();
+    QVERIFY(near(h.tw.pixel(50, 1), kRed)); // the stripe at the view's top
+    QVERIFY(near(h.tw.pixel(50, 21), kBlue));
+    // The part above it grows by 60 px: anchored on the row, the stripe goes down with it…
+    parted.update(h.app, [](Parted &p, Context<Parted> &cx) {
+        p.above = 100;
+        cx.notify();
+    });
+    h.tw.settle();
+    QVERIFY(near(h.tw.pixel(50, 61), kRed));
+    // …kept on the part, it stays where it is.
+    parted.update(h.app, [](Parted &p, Context<Parted> &cx) {
+        p.handle.scrollToAnchor(50, 100);
+        cx.notify();
+    });
+    h.tw.settle();
+    QVERIFY(near(h.tw.pixel(50, 1), kRed));
+    parted.update(h.app, [](Parted &p, Context<Parted> &cx) {
+        p.above = 30;
+        p.keepOnStripe(0);
+        cx.notify();
+    });
+    h.tw.settle();
+    QVERIFY(near(h.tw.pixel(50, 1), kRed));
+    QVERIFY(near(h.tw.pixel(50, 21), kBlue));
+    QCOMPARE(parted.read(h.app).handle.anchorInto(), 30.0f);
+    // A scroll meanwhile moves it by the scroll only: 10 px up, the part grown again.
+    parted.update(h.app, [](Parted &p, Context<Parted> &) {
+        p.above = 90;
+        p.keepOnStripe(0);
+    });
+    h.tw.simulateScroll({50, 50}, {0, -10});
+    QVERIFY(near(h.tw.pixel(50, 11), kRed));
+    QVERIFY(!near(h.tw.pixel(50, 9), kRed));
+    // For one frame only: the part changes again, nobody keeps the view on it — it goes with the row.
+    parted.update(h.app, [](Parted &p, Context<Parted> &cx) {
+        p.above = 120;
+        cx.notify();
+    });
+    h.tw.settle();
+    QVERIFY(near(h.tw.pixel(50, 41), kRed));
+    // A jump (scrollToRow) wins over a part kept.
+    parted.update(h.app, [](Parted &p, Context<Parted> &cx) {
+        p.keepOnStripe(0);
+        p.handle.scrollToRow(10);
+        cx.notify();
+    });
+    h.tw.settle();
+    QCOMPARE(parted.read(h.app).handle.anchorRow(), std::size_t(10));
 }
 
 void TestAtramentList::rowsInsertedInFront()

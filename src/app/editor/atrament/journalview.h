@@ -19,6 +19,8 @@
 
 #include "foreignrows.h"
 #include "pageview.h"
+#include "streamfind.h"
+#include "streamselection.h"
 
 #include "ui/atrament.h"
 
@@ -35,8 +37,6 @@
 
 namespace brulion::editor {
 class PageController;
-class StreamSelection;
-class StreamFind;
 
 namespace atr {
 
@@ -223,6 +223,14 @@ private:
     void takeReveals();
     // A day zoomed into a block: its heading, the zoom's breadcrumb and the block in view.
     void revealZoom(int day);
+    // The list's view height and the rows' y the next frame shows at its top.
+    float viewHeight(atrament::Window &window) const;
+    float nextViewTop(float vh) const;
+    // Before the list lays the days out: each made day told what of it the next frame shows (a long
+    // day lays out only its rows near that). After the frame: the view kept on the block at its top.
+    void tellDaysTheirView(atrament::Window &window);
+    void keepAnchorOnBlock(atrament::Window &window);
+    std::optional<atrament::Rect> m_viewport; // the list's view by the last frame
     void dayActivity(PageController *controller, atrament::Context<JournalView> &cx);
     bool pastEdge(PageController *from, bool up, float x, atrament::Context<JournalView> &cx);
     // Today's date by the days' model (its isToday row).

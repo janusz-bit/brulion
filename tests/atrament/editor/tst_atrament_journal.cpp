@@ -89,6 +89,16 @@ QString note(int daysAgo, int blocks)
     return s;
 }
 
+// A long day: `blocks` list items, every seventh three lines tall (its estimate is one line).
+QString longNote(int blocks)
+{
+    QString s;
+    for (int b = 0; b < blocks; ++b)
+        s += b % 7 == 3 ? u"- Blok %1 — zażółć gęślą jaźń\n  ciąg dalszy, źdźbło\n  i jeszcze łódź\n"_s.arg(b)
+                        : u"- Blok %1 — zażółć gęślą jaźń\n"_s.arg(b);
+    return s;
+}
+
 struct Harness {
     FakeEditorHost host;
     Days days;
@@ -102,7 +112,8 @@ struct Harness {
 
     // Today without a note, then `count` days with notes of `blocks` blocks each (every fifth day a
     // longer one).
-    explicit Harness(int count = 8, int blocks = 3, at::Size size = {600, 700}, bool todayWritten = false)
+    explicit Harness(int count = 8, int blocks = 3, at::Size size = {600, 700}, bool todayWritten = false,
+                     int longDay = 0)
         : tw(platform->newWindow(size, 1))
     {
         host.setNow(u"2026-11-27 10:00"_s);
@@ -110,7 +121,7 @@ struct Harness {
         if (todayWritten)
             host.setFile(dayPath(0), note(0, blocks));
         for (int d = 1; d <= count; ++d) {
-            host.setFile(dayPath(d), note(d, d % 5 == 0 ? blocks * 3 : blocks));
+            host.setFile(dayPath(d), d == 1 && longDay > 0 ? longNote(longDay) : note(d, d % 5 == 0 ? blocks * 3 : blocks));
             days.append(d, true);
         }
         host.setFile(u"Szablony/Dziennik.md"_s, u"## Plan dnia\n- \n"_s);
@@ -250,6 +261,9 @@ private Q_SLOTS:
     void zoomShowsTheDaysTop();
     void blockMovedIntoAnotherDay();
     void blockDraggedPastTheEdgeLandsInADayScrolledIn();
+    void longDayLaidOutWhereItShows();
+    void longDayRowsMeasuredLateMoveNothing();
+    void longDayRevealsADeepBlock();
 };
 
 void TestAtramentJournal::daysLaidOutInOrder()
@@ -767,6 +781,67 @@ void TestAtramentJournal::blockDraggedPastTheEdgeLandsInADayScrolledIn()
     QVERIFY(!first->sourceText().contains(u"Dzień 1:"_s));
     QVERIFY(to->sourceText().contains(u"Dzień 1: zakupy, mleko i chleb"_s));
     QVERIFY(h.settledAfterDrag());
+}
+
+void TestAtramentJournal::longDayLaidOutWhereItShows()
+{
+    // A day of 1 000 blocks: a frame lays out the part of it in and near the view, not all of it.
+    Harness h(4, 3, {600, 700}, false, 1000);
+    h.scrollToDay(1);
+    const PageView *p = h.page(1);
+    QVERIFY(p && p->model()->rowCount() == 1000);
+    QVERIFY2(p->drawnRows() > 10 && p->drawnRows() < 200, qPrintable(QString::number(p->drawnRows())));
+    // Deep inside it: the rows in view are laid out (a click there edits at the character).
+    h.journal.update(h.app, [](JournalView &j, at::Context<JournalView> &cx) {
+        j.handle().scrollBy(15000);
+        cx.notify();
+    });
+    h.tw.settle();
+    QVERIFY2(p->drawnRows() > 10 && p->drawnRows() < 200, qPrintable(QString::number(p->drawnRows())));
+    const int row = p->rowAtY(350);
+    QVERIFY2(row > 300, qPrintable(QString::number(row)));
+    QVERIFY(p->rowText(row));
+    h.clickInto(1, row, 2);
+    QCOMPARE(h.day(1)->editingRow(), row);
+}
+
+void TestAtramentJournal::longDayRowsMeasuredLateMoveNothing()
+{
+    // Far into a long day by its anchor (the rows above never laid out, their estimates wrong):
+    // scrolling up into them moves a row in view by the scroll alone.
+    Harness h(4, 3, {600, 700}, false, 1000);
+    h.scrollToDay(1);
+    h.journal.update(h.app, [](JournalView &j, at::Context<JournalView> &cx) {
+        j.handle().scrollToAnchor(1, 20000);
+        cx.notify();
+    });
+    h.tw.settle();
+    const PageView *p = h.page(1);
+    const int row = p->rowAtY(300);
+    QVERIFY(row > 400);
+    float top = h.view().rowBounds(1, row)->top();
+    for (int step = 0; step < 15; ++step) {
+        h.tw.simulateScroll({300, 350}, {0, -40});
+        h.tw.settle();
+        const float now = h.view().rowBounds(1, row)->top();
+        QVERIFY2(std::abs(now - (top + 40)) < 0.5f, qPrintable(u"step %1: %2 → %3"_s.arg(step).arg(top).arg(now)));
+        top = now;
+    }
+}
+
+void TestAtramentJournal::longDayRevealsADeepBlock()
+{
+    // A block far down a long day edited (a find's match there, ↓ from the block above): it is laid
+    // out and shown with its field.
+    Harness h(4, 3, {600, 700}, false, 1000);
+    h.scrollToDay(1);
+    h.day(1)->startEditing(900, 0);
+    h.tw.settle();
+    const std::optional<at::Rect> b = h.view().rowBounds(1, 900);
+    QVERIFY(b);
+    QVERIFY2(b->top() >= 0 && b->bottom() <= 700.5f, qPrintable(u"%1..%2"_s.arg(b->top()).arg(b->bottom())));
+    QCOMPARE(h.page(1)->editedRow(), 900);
+    QVERIFY(h.page(1)->drawnRows() < 400);
 }
 
 QTEST_MAIN(TestAtramentJournal)

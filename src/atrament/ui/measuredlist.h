@@ -141,6 +141,10 @@ public:
         RowPartResolver scrollToPart; // a part of the row (scrollToRowPart), else the whole row
         float scrollToAbove = 0;      // air kept above and below it
         float scrollToBelow = 0;
+        // The view kept on a part of a row in the next frame (anchorOnPart).
+        std::size_t partRow = 0;
+        RowPartResolver part;
+        float partInto = 0;
     };
 
     ListHandle() : m_state(std::make_shared<State>()) { }
@@ -165,9 +169,22 @@ public:
         m_state->scrollToAbove = std::max(0.0f, above);
         m_state->scrollToBelow = std::max(0.0f, below);
     }
+    // The next frame keeps the view on a part of `row` (a block inside a journal day's section): once
+    // the list laid the row out, `part` says where the part starts in it and the view's top goes
+    // `into` px below that (a scroll since added) — so content of the row above the part laid out
+    // anew (a long day's blocks measured as they come near) moves nothing on screen. For one frame:
+    // the owner gives it again after each; a jump (scrollToRow, scrollToTop, scrollToAnchor), the
+    // list at its top or its end, rows inserted or removed drop it.
+    void anchorOnPart(std::size_t row, RowPartResolver part, float into)
+    {
+        m_state->partRow = row;
+        m_state->part = std::move(part);
+        m_state->partInto = into;
+    }
     // The next frame shows the list's very top, its header too (a page opened anew).
     void scrollToTop()
     {
+        m_state->part = nullptr;
         m_state->scrollTo.reset();
         m_state->atEnd = false;
         m_state->atTop = true;
@@ -179,6 +196,7 @@ public:
     // estimated height).
     void scrollToAnchor(std::size_t row, float into)
     {
+        m_state->part = nullptr;
         m_state->scrollTo.reset();
         m_state->atEnd = false;
         m_state->atTop = false;
@@ -241,6 +259,11 @@ private:
     void layoutRows(float y, float viewport, Rect inner, Window &window, App &app);
     // Row `row` rendered and laid out at `width`; its height told to the extents.
     AnyElement measureRow(std::size_t row, float width, Window &window, App &app);
+    // The anchor on the part of a row the owner keeps the view on (anchorOnPart), the scroll since
+    // the last frame added; whether there was one.
+    bool anchorOnPart(ListHandle::State &st, float scrolled, float width, Window &window, App &app);
+    // A scroll since the last frame: the anchor at the new pixel offset.
+    void anchorAtOffset(ListHandle::State &st, float oldLead, float viewport);
 
     ElementId m_id;
     RowExtents *m_extents;

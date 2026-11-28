@@ -38,10 +38,7 @@ bool onlyListItems(const PageController &c)
 
 std::optional<at::Rect> JournalView::viewport() const
 {
-    for (const ForeignFrame &f : m_edgeFrames)
-        if (f.kind == ForeignFrame::Kind::Header)
-            return f.mask;
-    return std::nullopt;
+    return m_viewport;
 }
 
 float JournalView::scrolledSinceFrame() const

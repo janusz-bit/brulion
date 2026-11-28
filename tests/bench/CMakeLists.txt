@@ -62,4 +62,7 @@ endif()
 # block, the frames of a scroll through 1 000 blocks, a keystroke.
 if(TARGET brulion_editor_atrament)
     brulion_add_bench(bench_atrament_page SOURCES bench_atrament_page.cpp LIBS brulion_editor_atrament)
+    # The journal stream with a 1 000-block day: its first frame, the wheel through it, the rows a
+    # frame lays out of it.
+    brulion_add_bench(bench_atrament_journal SOURCES bench_atrament_journal.cpp LIBS brulion_editor_atrament)
 endif()

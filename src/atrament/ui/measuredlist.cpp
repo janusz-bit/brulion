@@ -153,6 +153,7 @@ void ListHandle::rowsInserted(std::size_t first, std::size_t n)
         s.anchorRow += n;
     if (s.focusedRow && first <= *s.focusedRow)
         *s.focusedRow += n;
+    s.part = nullptr; // (its row may have moved: the owner gives it again)
 }
 
 void ListHandle::rowsRemoved(std::size_t first, std::size_t n)
@@ -171,6 +172,7 @@ void ListHandle::rowsRemoved(std::size_t first, std::size_t n)
         else if (*s.focusedRow >= first)
             s.focusedRow.reset();
     }
+    s.part = nullptr;
 }
 
 // --- MeasuredList -------------------------------------------------------------------------------
@@ -226,6 +228,46 @@ void MeasuredList::layoutRows(float y, float viewport, Rect inner, Window &windo
         m_indices.push_back(i);
         m_tops.push_back(top);
     }
+}
+
+bool MeasuredList::anchorOnPart(ListHandle::State &st, float scrolled, float width, Window &window, App &app)
+{
+    // (One frame's: the owner gives it again after each.)
+    const RowPartResolver part = std::move(st.part);
+    st.part = nullptr;
+    RowExtents &ex = *m_extents;
+    if (!part || st.scrollTo || st.atEnd || st.atTop || st.partRow >= ex.count() || ex.isHidden(st.partRow))
+        return false;
+    measureRow(st.partRow, width, window, app);
+    const std::optional<RowPart> p = part(window);
+    if (!p)
+        return false;
+    st.anchorRow = st.partRow;
+    st.anchorInto = p->top + st.partInto + scrolled;
+    return true;
+}
+
+void MeasuredList::anchorAtOffset(ListHandle::State &st, float oldLead, float viewport)
+{
+    // On the first measured row in view if there is one (the rows shown last frame are), so rows
+    // measured above it later move nothing. (The offset is the last frame's: below the header as it
+    // was then.)
+    RowExtents &ex = *m_extents;
+    const std::size_t n = ex.count();
+    const float py = st.scroll.offset.y;
+    std::size_t row = ex.rowAt(py - oldLead);
+    if (row >= n) {
+        row = 0;
+    } else {
+        for (std::size_t k = row; k < n && oldLead + ex.offsetOf(k) < py + viewport; ++k) {
+            if (ex.isMeasured(k) && !ex.isHidden(k)) {
+                row = k;
+                break;
+            }
+        }
+    }
+    st.anchorRow = row;
+    st.anchorInto = py - oldLead - ex.offsetOf(row);
 }
 
 void MeasuredList::prepaint(Rect bounds, Window &window, App &app)
@@ -310,27 +352,16 @@ void MeasuredList::prepaint(Rect bounds, Window &window, App &app)
     auto measure = [&](std::size_t row) { return measureRow(row, inner.width(), window, app); };
 
     // Someone scrolled since the last frame (the wheel, a finger, a fling, a caret revealed, a
-    // screen reader): the anchor moves to the pixel offset — on the first measured row in view if
-    // there is one (the rows shown last frame are), so rows measured above it later move nothing.
-    // (The offset is the last frame's: below the header as it was then.)
-    if (std::abs(st.scroll.offset.y - st.lastY) > 0.01f) {
+    // screen reader): the anchor moves by as much — on a part of a row (anchorOnPart) where the
+    // row's new layout put it, else to the pixel offset.
+    const float scrolled = st.scroll.offset.y - st.lastY;
+    if (std::abs(scrolled) > 0.01f) {
         const float py = st.scroll.offset.y;
         st.atEnd = py > 0 && py >= st.scroll.maxOffset().y - 0.5f;
         st.atTop = py <= 0.01f;
-        std::size_t row = ex.rowAt(py - oldLead);
-        if (row >= n) {
-            row = 0;
-        } else {
-            for (std::size_t k = row; k < n && oldLead + ex.offsetOf(k) < py + viewport; ++k) {
-                if (ex.isMeasured(k) && !ex.isHidden(k)) {
-                    row = k;
-                    break;
-                }
-            }
-        }
-        st.anchorRow = row;
-        st.anchorInto = py - oldLead - ex.offsetOf(row);
     }
+    if (!anchorOnPart(st, scrolled, inner.width(), window, app) && std::abs(scrolled) > 0.01f)
+        anchorAtOffset(st, oldLead, viewport);
 
     if (st.scrollTo) {
         const std::size_t row = std::min(*st.scrollTo, n - 1);

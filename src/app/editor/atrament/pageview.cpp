@@ -377,6 +377,12 @@ bool PageView::drawsRow(int row) const
 
 at::AnyElement PageView::render(at::Window &window, at::Context<PageView> &cx)
 {
+    // Embedded: the rows this frame lays out, from where the last frame put the page (before its
+    // frames go; the same for every layout of the page in the frame).
+    if (m_embedding && window.frameCount() != m_embeddedFrame) {
+        m_embeddedFrame = window.frameCount();
+        m_embeddedRanges = embeddedRows(window);
+    }
     m_drawn.clear();
     m_foreign.clear();
     m_foreignFrames.clear();

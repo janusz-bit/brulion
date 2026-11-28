@@ -539,25 +539,39 @@ void JournalView::releaseDay(int day)
     d.reset();
 }
 
+float JournalView::viewHeight(at::Window &window) const
+{
+    const std::shared_ptr<at::ListHandle::State> st = m_handle.shared();
+    return st->scroll.viewport.height > 0 ? st->scroll.viewport.height : window.viewportSize().height;
+}
+
+float JournalView::nextViewTop(float vh) const
+{
+    // The rows' coordinates of what the next frame shows: a row asked for, the bottom, the top, a
+    // scroll since the last frame, else the anchor.
+    const std::size_t n = m_heights.count();
+    const std::shared_ptr<at::ListHandle::State> st = m_handle.shared();
+    if (n == 0)
+        return 0;
+    if (st->scrollTo)
+        return m_heights.offsetOf(std::min(*st->scrollTo, n - 1));
+    if (st->atEnd)
+        return std::max(0.0f, m_heights.total() + st->trailing - vh);
+    if (std::abs(st->scroll.offset.y - st->lastY) > 0.01f)
+        return st->scroll.offset.y - st->leading;
+    if (!st->atTop)
+        return m_heights.offsetOf(std::min(st->anchorRow, n - 1)) + st->anchorInto;
+    return 0;
+}
+
 void JournalView::makeDaysNear(at::Window &window, at::Context<JournalView> &cx)
 {
     const std::size_t n = m_heights.count();
     if (!makeController || n == 0)
         return;
     const std::shared_ptr<at::ListHandle::State> st = m_handle.shared();
-    const float vh = st->scroll.viewport.height > 0 ? st->scroll.viewport.height : window.viewportSize().height;
-    const float lead = st->leading;
-    // The rows' coordinates of what the next frame shows: a row asked for, the bottom, the top, a
-    // scroll since the last frame, else the anchor.
-    float top = 0;
-    if (st->scrollTo)
-        top = m_heights.offsetOf(std::min(*st->scrollTo, n - 1));
-    else if (st->atEnd)
-        top = std::max(0.0f, m_heights.total() + st->trailing - vh);
-    else if (std::abs(st->scroll.offset.y - st->lastY) > 0.01f)
-        top = st->scroll.offset.y - lead;
-    else if (!st->atTop)
-        top = m_heights.offsetOf(std::min(st->anchorRow, n - 1)) + st->anchorInto;
+    const float vh = viewHeight(window);
+    const float top = nextViewTop(vh);
     // A screen above and below what shows.
     const float from = std::max(0.0f, top - vh);
     const float to = top + 2 * vh;
@@ -565,6 +579,46 @@ void JournalView::makeDaysNear(at::Window &window, at::Context<JournalView> &cx)
         makeDay(int(r), cx);
     if (st->scrollTo)
         makeDay(int(std::min(*st->scrollTo, n - 1)), cx);
+}
+
+void JournalView::tellDaysTheirView(at::Window &window)
+{
+    // (A long day lays out only its rows near it: pageview.h setEmbeddedView. The page's place in
+    // its section — under the line and the heading — is in the screen of margin it adds.)
+    const float vh = viewHeight(window);
+    const float top = nextViewTop(vh);
+    for (int d : madeDays()) {
+        if (PageView *v = m_app->tryGet<PageView>(m_slots[std::size_t(d)].day->page.id())) {
+            const float from = top - m_heights.offsetOf(std::size_t(d));
+            v->setEmbeddedView(from, from + vh);
+        }
+    }
+}
+
+void JournalView::keepAnchorOnBlock(at::Window &window)
+{
+    // The view's top inside a day's blocks: kept on the block there in the next frame, so the day's
+    // blocks above it laid out anew (estimated, then measured) move nothing on screen.
+    const std::shared_ptr<at::ListHandle::State> st = m_handle.shared();
+    const std::size_t day = st->anchorRow;
+    if (st->atTop || st->atEnd || day >= m_slots.size() || !m_slots[day].day)
+        return;
+    const at::EntityId pageId = m_slots[day].day->page.id();
+    const PageView *v = m_app->tryGet<PageView>(pageId);
+    const std::optional<std::pair<quint64, at::RowPart>> block = v ? v->embeddedRowAt(st->anchorInto, window)
+                                                                   : std::nullopt;
+    if (!block)
+        return;
+    at::App *app = m_app;
+    const quint64 uid = block->first;
+    m_handle.anchorOnPart(
+            day,
+            [app, pageId, uid](at::Window &w) -> std::optional<at::RowPart> {
+                const PageView *page = app->tryGet<PageView>(pageId);
+                const int row = page && page->model() ? page->model()->rowOfUid(uid) : -1;
+                return row >= 0 ? page->embeddedPart(row, w) : std::nullopt;
+            },
+            st->anchorInto - block->second.top);
 }
 
 void JournalView::releaseFarDays()
@@ -957,6 +1011,9 @@ at::AnyElement JournalView::edgeElement(ForeignFrame::Kind kind)
     JournalView *self = this;
     return at::div().h(h).ariaHidden().child(at::canvas([self, kind](at::Rect bounds, at::Window &window, at::App &) {
                                                  self->m_edgeFrames.push_back({kind, -1, 0, bounds, window.contentMask()});
+                                                 // (The list's view, kept for the next frame's layout.)
+                                                 if (kind == ForeignFrame::Kind::Header)
+                                                     self->m_viewport = window.contentMask();
                                              }).sizeFull());
 }
 
@@ -1034,6 +1091,7 @@ at::AnyElement JournalView::render(at::Window &window, at::Context<JournalView> 
     // their pages asked to show is the list's to scroll to in this frame.
     makeDaysNear(window, cx);
     takeReveals();
+    tellDaysTheirView(window);
     JournalView *self = this;
     const at::EntityId id = m_selfId;
     return at::div()
@@ -1094,8 +1152,9 @@ at::AnyElement JournalView::render(at::Window &window, at::Context<JournalView> 
                    })
                            .absolute()
                            .size(0))
-            // After the frame: the days far from the view go.
-            .child(at::canvas([self](at::Rect, at::Window &, at::App &app) {
+            // After the frame: the days far from the view go; the view kept on the block at its top.
+            .child(at::canvas([self](at::Rect, at::Window &window, at::App &app) {
+                       self->keepAnchorOnBlock(window);
                        if (self->m_releaseScheduled)
                            return;
                        self->m_releaseScheduled = true;

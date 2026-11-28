@@ -360,6 +360,13 @@ public:
     // layout's root (the section the page is drawn in) and its height; nothing for a row the page
     // did not lay out.
     std::optional<atrament::RowPart> embeddedPart(int row, atrament::Window &window) const;
+    // Embedded: the part of the page the next frame of the view around shows, in px from the page's
+    // top (its header's) — it lays out the rows near it (and near where the last frame showed it,
+    // the edited row, a row revealed), the rest of the column is room of their heights.
+    void setEmbeddedView(float top, float bottom);
+    // Embedded: the row the last layout of the page put at `y` (from the section's top, as
+    // embeddedPart's), its uid and its part; nothing between rows or for a row not laid out.
+    std::optional<std::pair<quint64, atrament::RowPart>> embeddedRowAt(float y, atrament::Window &window) const;
     // Embedded: the block selection's keys (those no focused element took) are this page's — the
     // stream's active day's only.
     void setKeysActive(bool on, atrament::Context<PageView> &cx);
@@ -392,6 +399,14 @@ private:
     float m_footerTap = 0;
     // Embedded: each row's layout node in the frame's last layout of the page (embeddedPart()).
     std::vector<std::pair<int, atrament::NodeId>> m_rowNodes;
+    // Embedded: the rows the frame lays out (first, last; in order), the frame they are for, what
+    // the view around said its next frame shows, a row revealed in the next frame.
+    std::vector<std::pair<std::size_t, std::size_t>> m_embeddedRanges;
+    std::uint64_t m_embeddedFrame = std::uint64_t(-1);
+    std::optional<std::pair<float, float>> m_embeddedView;
+    std::optional<int> m_layoutAround;
+    std::vector<std::pair<float, float>> embeddedSpans(float screen) const;
+    std::vector<std::pair<std::size_t, std::size_t>> embeddedRows(atrament::Window &window);
     class RowBox;
     // Shows a row: the page's list (scrollToRow), or embedded, the view around (takeReveal()).
     void scrollRowTo(std::size_t row, atrament::ListPosition position);

@@ -862,9 +862,9 @@ flattened into the stream's rows (a row per block, the days' `PageRows` behind o
 `RowExtents`). It would virtualize inside a long day, but every part of PageView that scrolls,
 reveals, drags, selects or hosts foreign rows works on one page's rows and its own list; a nested
 page keeps all of it, the stream's anchor — a day and an offset into it — is what
-`viewState()` already saves, and a day laid out whole is what the QML stream does (ContentJournalDay
-builds all of a day's blocks: BlockEditor.autoHeight). A long day is not virtualized inside yet
-(later: the embedded column laying out only the rows inside the window's content mask).
+`viewState()` already saves. A long day is laid out only where it shows (built: "A long day laid out
+where it shows" below), unlike the QML stream (ContentJournalDay builds all of a day's blocks:
+BlockEditor.autoHeight).
 
 **Embedded mode** (`PageView::setEmbedding(PageEmbedding *)`):
 * `render()` returns the page's column — the header, each shown row, the footer, the layers — at
@@ -977,9 +977,27 @@ moves and its release are followed by the stream (a capture listener painted aft
 whose day scrolled away — no longer laid out, no layer of its own — still ends where it is let go.
 Tested by `tst_atrament_journal` (`mouseDragAcrossDaysScrollsTheStream`,
 `fingerSelectionAcrossDaysScrolls`: they failed before — the day's own drag took the moves into the
-next day and selected inside its own day). **Not yet**: a long day laid out only where it shows,
-the QML stream's span self-test (`tst_content_journals_span_qml`) against this stream, a hosted
-row's delegate showing the active day's editing state while its own day is not active.
+next day and selected inside its own day). **A long day laid out where it shows**: an embedded
+page lays out only its rows within a screen of what the stream shows of it — where the last frame
+put it (its header's place, the scroll since), where the stream says its next frame goes
+(`PageView::setEmbeddedView`, told to every day made before the list lays them out:
+`JournalView::tellDaysTheirView`), the edited row and a row being revealed (`takeReveal`: its part is
+what the stream scrolls to) — and the rest of its column is room of the rows' heights (measured, or
+the estimate); the rows are chosen once per frame, before the page's frames of the last one go
+(`embeddedRows`). Rows above the view laid out as they come near get their real heights, and the
+stream's anchor — a day and an offset into it — would let what is on screen move by the difference:
+after each frame the stream keeps the view on the block at its top
+(`JournalView::keepAnchorOnBlock` → `ListHandle::anchorOnPart(row, part, into)`, generic in
+`ui/measuredlist.h`: the next frame lays that row out, asks the resolver where the part starts now
+and puts the view `into` px below it, the scroll since added; one frame's, dropped by a jump, the
+list at its top or end, rows inserted or removed). Measured (docs/PERFORMANCE.md "Atrament's journal
+stream: a long day laid out where it shows"): a wheel step through a 1 000-block day 1.6 ms median
+(17–22 ms laid out whole), 81 of its rows laid out a frame. Tested by `tst_atrament_list`
+(`anchorOnAPartOfARow`) and `tst_atrament_journal` (`longDayLaidOutWhereItShows`,
+`longDayRowsMeasuredLateMoveNothing` — a row in view moves by the scroll alone, 48 px off without
+the anchor —, `longDayRevealsADeepBlock`). **Not yet**: the QML stream's span self-test
+(`tst_content_journals_span_qml`) against this stream, a hosted row's delegate showing the active
+day's editing state while its own day is not active.
 
 ### Steps
 
