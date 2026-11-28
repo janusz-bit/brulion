@@ -1018,8 +1018,9 @@ std::optional<http::Response> AcpHost::onHeaders(const http::Request &head, qint
     if (parts.at(0) == u"projects") {
         const bool list = parts.size() == 1;
         const bool git = parts.size() == 3 && acp::RemoteGitRequest::kindOf(parts.at(2)).has_value();
-        const bool action = parts.size() == 3
-                            && (git || parts.at(2) == u"worktrees" || parts.at(2) == u"changes" || parts.at(2) == u"diff");
+        const bool action =
+                parts.size() == 3
+                && (git || parts.at(2) == u"worktrees" || parts.at(2) == u"changes" || parts.at(2) == u"diff");
         if (!list && !action)
             return apiError(404, u"not_found"_s, u"Not found"_s);
         const QByteArray method = action && (git || parts.at(2) == u"worktrees") ? "POST"_ba : "GET"_ba;
@@ -3153,18 +3154,12 @@ void AcpHost::gitRequest(const QString &project, const acp::RemoteGitRequest &re
                          const QString top = info.topLevel;
                          self->say(u"a device's %1 in %2"_s.arg(acp::RemoteGitRequest::endpoint(request.kind), top));
                          switch (request.kind) {
-                         case acp::RemoteGitRequest::Kind::Commit:
-                             self->gitCommit(top, request, reply);
-                             break;
-                         case acp::RemoteGitRequest::Kind::Push:
-                             self->gitPush(top, reply);
-                             break;
+                         case acp::RemoteGitRequest::Kind::Commit: self->gitCommit(top, request, reply); break;
+                         case acp::RemoteGitRequest::Kind::Push: self->gitPush(top, reply); break;
                          case acp::RemoteGitRequest::Kind::PullRequest:
                              self->gitPullRequest(top, request, reply);
                              break;
-                         case acp::RemoteGitRequest::Kind::Revert:
-                             self->gitRevert(top, request, reply);
-                             break;
+                         case acp::RemoteGitRequest::Kind::Revert: self->gitRevert(top, request, reply); break;
                          }
                      });
                  });
@@ -3251,29 +3246,30 @@ void AcpHost::gitPullRequest(const QString &top, const acp::RemoteGitRequest &re
             if (!self)
                 return;
             const QString head = s.status.branch.head;
-            self->git()->pullRequestTarget(top, head, [self, top, request, reply, head](const gitcli::ForkTarget &fork) {
-                if (!self)
-                    return;
-                gitcli::PullRequest pr;
-                pr.title = request.title.trimmed();
-                pr.body = request.body;
-                pr.draft = request.draft;
-                pr.base = request.base;
-                pr.head = fork.head.isEmpty() ? head : fork.head;
-                pr.repo = fork.repo;
-                self->git()->createPullRequest(top, pr, [reply, head](const gitcli::Outcome &o) {
-                    if (!o.ok) {
-                        reply.send(gitFailed(o.message));
-                        return;
-                    }
-                    acp::RemoteGitResult r;
-                    r.message = o.message;
-                    r.branch = head;
-                    r.url = o.url;
-                    r.number = acp::pullRequestNumber(o.url);
-                    reply.send(gitAnswer(r));
-                });
-            });
+            self->git()->pullRequestTarget(
+                    top, head, [self, top, request, reply, head](const gitcli::ForkTarget &fork) {
+                        if (!self)
+                            return;
+                        gitcli::PullRequest pr;
+                        pr.title = request.title.trimmed();
+                        pr.body = request.body;
+                        pr.draft = request.draft;
+                        pr.base = request.base;
+                        pr.head = fork.head.isEmpty() ? head : fork.head;
+                        pr.repo = fork.repo;
+                        self->git()->createPullRequest(top, pr, [reply, head](const gitcli::Outcome &o) {
+                            if (!o.ok) {
+                                reply.send(gitFailed(o.message));
+                                return;
+                            }
+                            acp::RemoteGitResult r;
+                            r.message = o.message;
+                            r.branch = head;
+                            r.url = o.url;
+                            r.number = acp::pullRequestNumber(o.url);
+                            reply.send(gitAnswer(r));
+                        });
+                    });
         });
     });
 }

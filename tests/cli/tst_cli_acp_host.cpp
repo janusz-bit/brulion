@@ -2319,8 +2319,9 @@ private Q_SLOTS:
         QFile::remove(m_agentLog);
         const QString repo = m_tmp.filePath(u"Kod żółwia"_s);
         QVERIFY(gitRepo(repo));
-        for (const QStringList &c : {QStringList{u"user.name"_s, u"Ala"_s}, QStringList{u"user.email"_s, u"ala@example.com"_s},
-                                     QStringList{u"commit.gpgsign"_s, u"false"_s}})
+        for (const QStringList &c :
+             {QStringList{u"user.name"_s, u"Ala"_s}, QStringList{u"user.email"_s, u"ala@example.com"_s},
+              QStringList{u"commit.gpgsign"_s, u"false"_s}})
             QCOMPARE(git(repo, QStringList{u"config"_s} + c), 0);
         const QString bare = m_tmp.filePath(u"zdalne żółwia.git"_s);
         QCOMPARE(QProcess::execute(u"git"_s, {u"init"_s, u"-q"_s, u"--bare"_s, bare}), 0);
@@ -2342,9 +2343,12 @@ private Q_SLOTS:
         startHost(*m_ctx, o);
         const QString token = pair();
         const auto post = [&](const QString &endpoint, const QJsonObject &body, const QString &project = u"kod"_s) {
-            return http("POST", u"projects/%1/%2"_s.arg(project, endpoint), QJsonDocument(body).toJson(), bearer(token));
+            return http("POST", u"projects/%1/%2"_s.arg(project, endpoint), QJsonDocument(body).toJson(),
+                        bearer(token));
         };
-        const auto codeOf = [](const HttpResult &r) { return r.json.value(u"error"_s).toObject().value(u"code"_s).toString(); };
+        const auto codeOf = [](const HttpResult &r) {
+            return r.json.value(u"error"_s).toObject().value(u"code"_s).toString();
+        };
         const auto device = [&](const acp::RemoteGitRequest &request) {
             std::pair<acp::RemoteGitResult, acp::RemoteError> out;
             bool done = false;
@@ -2370,8 +2374,10 @@ private Q_SLOTS:
         HttpResult r = post(u"commit"_s, {{u"message"_s, u"  \n "_s}});
         QCOMPARE(r.status, 400);
         QCOMPARE(codeOf(r), u"bad_message"_s);
-        QCOMPARE(codeOf(post(u"commit"_s, {{u"message"_s, u"x"_s}, {u"files"_s, QJsonArray{u"../obcy"_s}}})), u"bad_files"_s);
-        QCOMPARE(codeOf(post(u"commit"_s, {{u"message"_s, u"x"_s}, {u"files"_s, QJsonArray{u".git/config"_s}}})), u"bad_files"_s);
+        QCOMPARE(codeOf(post(u"commit"_s, {{u"message"_s, u"x"_s}, {u"files"_s, QJsonArray{u"../obcy"_s}}})),
+                 u"bad_files"_s);
+        QCOMPARE(codeOf(post(u"commit"_s, {{u"message"_s, u"x"_s}, {u"files"_s, QJsonArray{u".git/config"_s}}})),
+                 u"bad_files"_s);
         QCOMPARE(codeOf(post(u"pr"_s, {{u"title"_s, u"t"_s}, {u"base"_s, u"a..b"_s}})), u"bad_base"_s);
         QCOMPARE(codeOf(post(u"revert"_s, {{u"checkpoint"_s, u"../x"_s}})), u"bad_checkpoint"_s);
         QCOMPARE(http("POST", u"projects/kod/push"_s, "[]", bearer(token)).status, 400);
@@ -2385,7 +2391,8 @@ private Q_SLOTS:
         QCOMPARE(out({u"rev-list"_s, u"--count"_s, u"HEAD"_s}), u"1"_s); // (nothing committed)
 
         // A commit of one file: only it; the other change stays.
-        r = post(u"commit"_s, {{u"message"_s, u"Nowy żółw\n\nOd telefonu"_s}, {u"files"_s, QJsonArray{u"Nowy żółw.md"_s}}});
+        r = post(u"commit"_s,
+                 {{u"message"_s, u"Nowy żółw\n\nOd telefonu"_s}, {u"files"_s, QJsonArray{u"Nowy żółw.md"_s}}});
         QCOMPARE(r.status, 200);
         QCOMPARE(r.json.value(u"branch"_s).toString(), u"main"_s);
         QCOMPARE(r.json.value(u"commit"_s).toString(), out({u"rev-parse"_s, u"HEAD"_s}));

@@ -272,7 +272,8 @@ private Q_SLOTS:
         QCOMPARE(push.toJson(), QJsonObject());
         QCOMPARE(RemoteGitRequest::fromJson(Kind::Push, QJsonObject()).value_or(RemoteGitRequest{}), push);
         // A worktree as it is cleaned; no object: refused.
-        QCOMPARE(RemoteGitRequest::fromJson(Kind::Push, QJsonObject{{u"worktree"_s, u"/a/b/../c/"_s}})->worktree, u"/a/c"_s);
+        QCOMPARE(RemoteGitRequest::fromJson(Kind::Push, QJsonObject{{u"worktree"_s, u"/a/b/../c/"_s}})->worktree,
+                 u"/a/c"_s);
         QString code;
         QVERIFY(!RemoteGitRequest::fromJson(Kind::Push, QJsonArray{}, &code));
         QCOMPARE(code, u"bad_request"_s);
@@ -292,26 +293,32 @@ private Q_SLOTS:
             return o;
         };
         QTest::newRow("no message") << k(Kind::Commit) << QJsonObject() << u"bad_message"_s;
-        QTest::newRow("blank message") << k(Kind::Commit) << QJsonObject{{u"message"_s, u" \n\t "_s}} << u"bad_message"_s;
+        QTest::newRow("blank message") << k(Kind::Commit) << QJsonObject{{u"message"_s, u" \n\t "_s}}
+                                       << u"bad_message"_s;
         QTest::newRow("message not text") << k(Kind::Commit) << QJsonObject{{u"message"_s, 7}} << u"bad_message"_s;
         QTest::newRow("long message") << k(Kind::Commit)
                                       << QJsonObject{{u"message"_s, QString(MaxCommitMessageChars + 1, u'ż')}}
                                       << u"bad_message"_s;
-        QTest::newRow("relative worktree") << k(Kind::Commit) << with(u"worktree"_s, u"drzewa/x"_s) << u"bad_worktree"_s;
+        QTest::newRow("relative worktree")
+                << k(Kind::Commit) << with(u"worktree"_s, u"drzewa/x"_s) << u"bad_worktree"_s;
         QTest::newRow("worktree NUL") << k(Kind::Push) << QJsonObject{{u"worktree"_s, u"/a\0b"_s}} << u"bad_worktree"_s;
         QTest::newRow("worktree not text") << k(Kind::Push) << QJsonObject{{u"worktree"_s, true}} << u"bad_worktree"_s;
         QTest::newRow("files not a list") << k(Kind::Commit) << with(u"files"_s, u"Dom.md"_s) << u"bad_files"_s;
         QTest::newRow("a file not text") << k(Kind::Commit) << with(u"files"_s, QJsonArray{3}) << u"bad_files"_s;
         QTest::newRow("dot dot") << k(Kind::Commit) << with(u"files"_s, QJsonArray{u"../obcy"_s}) << u"bad_files"_s;
-        QTest::newRow("inner dot dot") << k(Kind::Commit) << with(u"files"_s, QJsonArray{u"a/../../b"_s}) << u"bad_files"_s;
-        QTest::newRow("absolute") << k(Kind::Commit) << with(u"files"_s, QJsonArray{u"/etc/passwd"_s}) << u"bad_files"_s;
+        QTest::newRow("inner dot dot") << k(Kind::Commit) << with(u"files"_s, QJsonArray{u"a/../../b"_s})
+                                       << u"bad_files"_s;
+        QTest::newRow("absolute") << k(Kind::Commit) << with(u"files"_s, QJsonArray{u"/etc/passwd"_s})
+                                  << u"bad_files"_s;
         QTest::newRow("backslash") << k(Kind::Commit) << with(u"files"_s, QJsonArray{u"a\\..\\b"_s}) << u"bad_files"_s;
         QTest::newRow(".git") << k(Kind::Commit) << with(u"files"_s, QJsonArray{u".git/config"_s}) << u"bad_files"_s;
         QTest::newRow(".git alone") << k(Kind::Commit) << with(u"files"_s, QJsonArray{u".git"_s}) << u"bad_files"_s;
-        QTest::newRow(".GIT inside") << k(Kind::Commit) << with(u"files"_s, QJsonArray{u"a/.GIT/hooks/x"_s}) << u"bad_files"_s;
+        QTest::newRow(".GIT inside") << k(Kind::Commit) << with(u"files"_s, QJsonArray{u"a/.GIT/hooks/x"_s})
+                                     << u"bad_files"_s;
         QTest::newRow("empty file") << k(Kind::Commit) << with(u"files"_s, QJsonArray{QString()}) << u"bad_files"_s;
         QTest::newRow("file NUL") << k(Kind::Commit) << with(u"files"_s, QJsonArray{u"a\0b"_s}) << u"bad_files"_s;
-        QTest::newRow("long file") << k(Kind::Commit) << with(u"files"_s, QJsonArray{QString(MaxRemotePathChars + 1, u'a')})
+        QTest::newRow("long file") << k(Kind::Commit)
+                                   << with(u"files"_s, QJsonArray{QString(MaxRemotePathChars + 1, u'a')})
                                    << u"bad_files"_s;
         QJsonArray many;
         for (int i = 0; i <= MaxRemoteChanges; ++i)
@@ -320,29 +327,33 @@ private Q_SLOTS:
         QTest::newRow("no title") << k(Kind::PullRequest) << QJsonObject() << u"bad_title"_s;
         QTest::newRow("blank title") << k(Kind::PullRequest) << QJsonObject{{u"title"_s, u"   "_s}} << u"bad_title"_s;
         QTest::newRow("long title") << k(Kind::PullRequest)
-                                    << QJsonObject{{u"title"_s, QString(MaxPullRequestTitleChars + 1, u'a')}} << u"bad_title"_s;
+                                    << QJsonObject{{u"title"_s, QString(MaxPullRequestTitleChars + 1, u'a')}}
+                                    << u"bad_title"_s;
         QTest::newRow("long body") << k(Kind::PullRequest)
-                                   << QJsonObject{{u"title"_s, u"t"_s}, {u"body"_s, QString(MaxPullRequestBodyChars + 1, u'a')}}
+                                   << QJsonObject{{u"title"_s, u"t"_s},
+                                                  {u"body"_s, QString(MaxPullRequestBodyChars + 1, u'a')}}
                                    << u"bad_body"_s;
-        QTest::newRow("base option") << k(Kind::PullRequest) << QJsonObject{{u"title"_s, u"t"_s}, {u"base"_s, u"--repo=x"_s}}
-                                     << u"bad_base"_s;
+        QTest::newRow("base option") << k(Kind::PullRequest)
+                                     << QJsonObject{{u"title"_s, u"t"_s}, {u"base"_s, u"--repo=x"_s}} << u"bad_base"_s;
         QTest::newRow("base dots") << k(Kind::PullRequest) << QJsonObject{{u"title"_s, u"t"_s}, {u"base"_s, u"a..b"_s}}
                                    << u"bad_base"_s;
         QTest::newRow("base space") << k(Kind::PullRequest) << QJsonObject{{u"title"_s, u"t"_s}, {u"base"_s, u"a b"_s}}
                                     << u"bad_base"_s;
-        QTest::newRow("base long") << k(Kind::PullRequest) << QJsonObject{{u"title"_s, u"t"_s}, {u"base"_s, QString(251, u'a')}}
+        QTest::newRow("base long") << k(Kind::PullRequest)
+                                   << QJsonObject{{u"title"_s, u"t"_s}, {u"base"_s, QString(251, u'a')}}
                                    << u"bad_base"_s;
         QTest::newRow("no checkpoint") << k(Kind::Revert) << QJsonObject() << u"bad_checkpoint"_s;
-        QTest::newRow("checkpoint path") << k(Kind::Revert) << QJsonObject{{u"checkpoint"_s, u"../x"_s}} << u"bad_checkpoint"_s;
-        QTest::newRow("checkpoint Polish") << k(Kind::Revert) << QJsonObject{{u"checkpoint"_s, u"żółw"_s}}
-                                           << u"bad_checkpoint"_s;
+        QTest::newRow("checkpoint path") << k(Kind::Revert) << QJsonObject{{u"checkpoint"_s, u"../x"_s}}
+                                         << u"bad_checkpoint"_s;
+        QTest::newRow("checkpoint Polish")
+                << k(Kind::Revert) << QJsonObject{{u"checkpoint"_s, u"żółw"_s}} << u"bad_checkpoint"_s;
         // Fine: what each takes.
-        QTest::newRow("commit") << k(Kind::Commit) << with(u"files"_s, QJsonArray{u"src/a b/żółw.md"_s, u".gitignore"_s})
-                                << QString();
+        QTest::newRow("commit") << k(Kind::Commit)
+                                << with(u"files"_s, QJsonArray{u"src/a b/żółw.md"_s, u".gitignore"_s}) << QString();
         QTest::newRow("commit all") << k(Kind::Commit) << ok << QString();
         QTest::newRow("push") << k(Kind::Push) << QJsonObject{{u"worktree"_s, u"/home/ala/x"_s}} << QString();
-        QTest::newRow("pr") << k(Kind::PullRequest) << QJsonObject{{u"title"_s, u"Żółw"_s}, {u"base"_s, u"release/2.0"_s}}
-                            << QString();
+        QTest::newRow("pr") << k(Kind::PullRequest)
+                            << QJsonObject{{u"title"_s, u"Żółw"_s}, {u"base"_s, u"release/2.0"_s}} << QString();
         QTest::newRow("revert") << k(Kind::Revert) << QJsonObject{{u"checkpoint"_s, u"abc-12_x"_s}} << QString();
     }
     void gitRefusals()
@@ -421,10 +432,11 @@ private Q_SLOTS:
         RemoteGitResult result;
         RemoteError error{RemoteError::Kind::Network, 0, {}, {}};
         const auto ask = [&](const RemoteGitRequest &request) {
-            remoteGit(&transport, base, u"bat_x"_s, u"zolw"_s, request, [&](const RemoteGitResult &r, const RemoteError &e) {
-                result = r;
-                error = e;
-            });
+            remoteGit(&transport, base, u"bat_x"_s, u"zolw"_s, request,
+                      [&](const RemoteGitResult &r, const RemoteError &e) {
+                          result = r;
+                          error = e;
+                      });
         };
         RemoteGitRequest commit;
         commit.message = u"Napraw żółwia"_s;

@@ -333,7 +333,7 @@ void RemoteProjects::askGit(int serial, const QString &id, const QString &action
     const Computer c = *computer;
     acp::remoteGit(transport, QUrl(c.url), c.token, id, request,
                    [this, alive, serial, action, failure, c, then](const acp::RemoteGitResult &result,
-                                                                    const acp::RemoteError &error) {
+                                                                   const acp::RemoteError &error) {
                        if (alive.expired())
                            return;
                        if (error.failed()) {
@@ -358,7 +358,8 @@ int RemoteProjects::commit(const QString &id, const QString &worktree, const QSt
         return serial;
     }
     askGit(serial, id, u"commit"_s, request, QString(),
-           [this, serial, id, worktree, message, push, createPr, prTitle, prBody, draft](const acp::RemoteGitResult &c) {
+           [this, serial, id, worktree, message, push, createPr, prTitle, prBody,
+            draft](const acp::RemoteGitResult &c) {
                const QString commit = c.commit.left(7);
                if (!push && !createPr) {
                    gitFinished(serial, u"commit"_s, true,

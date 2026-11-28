@@ -367,14 +367,10 @@ void fetchRemoteDiff(sync::HttpTransport *transport, const QUrl &base, const QSt
 QString RemoteGitRequest::endpoint(Kind kind)
 {
     switch (kind) {
-    case Kind::Commit:
-        return u"commit"_s;
-    case Kind::Push:
-        return u"push"_s;
-    case Kind::PullRequest:
-        return u"pr"_s;
-    case Kind::Revert:
-        break;
+    case Kind::Commit: return u"commit"_s;
+    case Kind::Push: return u"push"_s;
+    case Kind::PullRequest: return u"pr"_s;
+    case Kind::Revert: break;
     }
     return u"revert"_s;
 }
@@ -407,11 +403,8 @@ QJsonObject RemoteGitRequest::toJson() const
         if (draft)
             o.insert(u"draft"_s, true);
         break;
-    case Kind::Revert:
-        o.insert(u"checkpoint"_s, checkpoint);
-        break;
-    case Kind::Push:
-        break;
+    case Kind::Revert: o.insert(u"checkpoint"_s, checkpoint); break;
+    case Kind::Push: break;
     }
     return o;
 }
@@ -502,8 +495,7 @@ QString RemoteGitRequest::problem() const
         if (!isCheckpointId(checkpoint))
             return u"bad_checkpoint"_s;
         break;
-    case Kind::Push:
-        break;
+    case Kind::Push: break;
     }
     return QString();
 }
@@ -569,8 +561,7 @@ void remoteGit(sync::HttpTransport *transport, const QUrl &base, const QString &
         return;
     }
     const QJsonObject body = request.toJson();
-    const QString endpoint =
-            u"projects/%1/%2"_s.arg(queryValue(project), RemoteGitRequest::endpoint(request.kind));
+    const QString endpoint = u"projects/%1/%2"_s.arg(queryValue(project), RemoteGitRequest::endpoint(request.kind));
     sync::HttpRequest r = remoteRequest("POST", base, endpoint, token, &body);
     // (Hooks run there; a push and gh go over the network.)
     const bool network =

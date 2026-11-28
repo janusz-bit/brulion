@@ -223,15 +223,15 @@ struct RemoteGitRequest {
 };
 /// What git did there.
 struct RemoteGitResult {
-    QString message;        ///< the computer's words of it
-    QString commit;         ///< Commit: the new commit
-    QString branch;         ///< Commit, Push: the branch ("" a detached HEAD)
-    QString remote;         ///< Push: where it went ("origin")
-    QString url;            ///< PullRequest: its address
-    int number = 0;         ///< PullRequest: its number (0 unknown)
-    QStringList restored;   ///< Revert: files written back
-    QStringList removed;    ///< Revert: files added since, deleted
-    QStringList kept;       ///< Revert: left as they are (ignored now, submodules)
+    QString message;      ///< the computer's words of it
+    QString commit;       ///< Commit: the new commit
+    QString branch;       ///< Commit, Push: the branch ("" a detached HEAD)
+    QString remote;       ///< Push: where it went ("origin")
+    QString url;          ///< PullRequest: its address
+    int number = 0;       ///< PullRequest: its number (0 unknown)
+    QStringList restored; ///< Revert: files written back
+    QStringList removed;  ///< Revert: files added since, deleted
+    QStringList kept;     ///< Revert: left as they are (ignored now, submodules)
     QJsonObject toJson() const;
     static RemoteGitResult fromJson(const QJsonObject &o);
     friend bool operator==(const RemoteGitResult &, const RemoteGitResult &) = default;

@@ -3986,12 +3986,11 @@ private Q_SLOTS:
         QVERIFY(writeRaw(repo + u"/Dom.md"_s, "# Sklep żółwia\n"));
         const QString bare = m_tmp.filePath(u"komputer-zdalne.git"_s);
         QCOMPARE(QProcess::execute(u"git"_s, {u"init"_s, u"-q"_s, u"--bare"_s, bare}), 0);
-        for (const QStringList &args : {QStringList{u"init"_s, u"-q"_s, u"-b"_s, u"main"_s}, QStringList{u"add"_s, u"-A"_s},
-                                        QStringList{u"config"_s, u"user.name"_s, u"Ala"_s},
-                                        QStringList{u"config"_s, u"user.email"_s, u"a@b.c"_s},
-                                        QStringList{u"config"_s, u"commit.gpgsign"_s, u"false"_s},
-                                        QStringList{u"commit"_s, u"-qm"_s, u"start"_s},
-                                        QStringList{u"remote"_s, u"add"_s, u"origin"_s, bare}})
+        for (const QStringList &args :
+             {QStringList{u"init"_s, u"-q"_s, u"-b"_s, u"main"_s}, QStringList{u"add"_s, u"-A"_s},
+              QStringList{u"config"_s, u"user.name"_s, u"Ala"_s}, QStringList{u"config"_s, u"user.email"_s, u"a@b.c"_s},
+              QStringList{u"config"_s, u"commit.gpgsign"_s, u"false"_s}, QStringList{u"commit"_s, u"-qm"_s, u"start"_s},
+              QStringList{u"remote"_s, u"add"_s, u"origin"_s, bare}})
             QCOMPARE(QProcess::execute(u"git"_s, QStringList{u"-C"_s, repo} + args), 0);
         const QString root = m_tmp.filePath(u"komputer-drzewa"_s);
         const QString projectsFile = m_tmp.filePath(u"komputer-projekty.json"_s);
@@ -4124,7 +4123,8 @@ private Q_SLOTS:
         QTRY_COMPARE_WITH_TIMEOUT(git.size(), 2, 20000);
         QVERIFY(!git.last().at(2).toBool());
         QCOMPARE(git.last().at(3).toString(), u"Write a commit message first."_s);
-        asked = remote->commit(u"sklep"_s, QString(), u"Od agenta\n\nZ telefonu"_s, {}, true, false, QString(), QString(), false);
+        asked = remote->commit(u"sklep"_s, QString(), u"Od agenta\n\nZ telefonu"_s, {}, true, false, QString(),
+                               QString(), false);
         QTRY_COMPARE_WITH_TIMEOUT(git.size(), 3, 60000);
         QCOMPARE(git.last().at(0).toInt(), asked);
         QVERIFY2(git.last().at(2).toBool(), qPrintable(git.last().at(3).toString()));

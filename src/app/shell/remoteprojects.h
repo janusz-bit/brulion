@@ -111,9 +111,8 @@ public:
     /// A commit there of `files` (none: every change) with `message` (never empty), then — `push` —
     /// pushed, or — `createPr` — pushed with a pull request (`prTitle`, "" the message's first line):
     /// gitDone(serial, "commit", …) once all of it is done or one step failed (said which).
-    Q_INVOKABLE int commit(const QString &id, const QString &worktree, const QString &message,
-                           const QStringList &files, bool push, bool createPr, const QString &prTitle,
-                           const QString &prBody, bool draft);
+    Q_INVOKABLE int commit(const QString &id, const QString &worktree, const QString &message, const QStringList &files,
+                           bool push, bool createPr, const QString &prTitle, const QString &prBody, bool draft);
     /// The branch there pushed: gitDone(serial, "push", …).
     Q_INVOKABLE int push(const QString &id, const QString &worktree);
     /// A pull request there into `base` ("" the default branch), the branch pushed first:
