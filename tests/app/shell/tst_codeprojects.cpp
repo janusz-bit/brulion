@@ -253,7 +253,9 @@ private Q_SLOTS:
             QSKIP("no git");
         // (Local submodules: git refuses the file protocol to a submodule's own submodules since 2.38
         // and its security backports — Ubuntu 22.04's 2.34 —, and older ones drop GIT_CONFIG_COUNT for
-        // a submodule's processes: a HOME of the test's own with a .gitconfig reaches every one.)
+        // a submodule's processes: a HOME of the test's own with a .gitconfig reaches every one.
+        // Reproduced with nixos-21.11's git 2.33.3 first on PATH and GIT_CONFIG_SYSTEM naming a file
+        // with protocol.file.allow = user: GIT_CONFIG_COUNT left lib/wew/glebia.txt missing.)
         const QString home = fresh(u"dom"_s);
         QVERIFY(writeFile(home + u"/.gitconfig"_s, "[protocol \"file\"]\n\tallow = always\n"));
         const QByteArray oldHome = qgetenv("HOME");
