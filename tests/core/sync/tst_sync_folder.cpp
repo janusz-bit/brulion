@@ -831,7 +831,9 @@ private Q_SLOTS:
         QTest::qWait(50);
         QCOMPARE(pieces, handed); // nothing after the transport has gone
         QCOMPARE(answered, 0);
-        QVERIFY2(storage->piecesRead.load() <= 2, qPrintable(QString::number(storage->piecesRead.load()))); // (the worker stopped: not 16)
+        // The worker stopped at the piece it waited with: at most one read past those handed (not all 16).
+        QVERIFY2(storage->piecesRead.load() <= handed + 1,
+                 qPrintable(u"%1 read, %2 handed"_s.arg(storage->piecesRead.load()).arg(handed)));
     }
 
     void aStorageThatDoesNotStreamAnswersPiecesToo()
