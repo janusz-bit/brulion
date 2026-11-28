@@ -6,7 +6,6 @@
 #include <QHash>
 #include <QMap>
 #include <QSet>
-#include <QStringDecoder>
 
 #include <algorithm>
 #include <cmath>
@@ -771,13 +770,23 @@ QChar pdfDocChar(quint8 c)
     return c >= 0x80 && c - 0x80 < PdfDocHigh.size() ? PdfDocHigh[c - 0x80] : QChar(char16_t(c));
 }
 
+/// UTF-16BE code units (a text string after its BOM) as a QString, two bytes each, read as bytes
+/// (never through a QStringDecoder: on the aarch64 AppImage, GCC 13 Release, it gave empty titles);
+/// an odd last byte is dropped.
+QString utf16be(QByteArrayView bytes)
+{
+    QString out;
+    out.reserve(bytes.size() / 2);
+    for (qsizetype i = 0; i + 1 < bytes.size(); i += 2)
+        out += QChar(char16_t((quint8(bytes[i]) << 8) | quint8(bytes[i + 1])));
+    return out;
+}
+
 QString textString(const QByteArray &bytes)
 {
-    if (bytes.startsWith("\xFE\xFF")) {
-        QStringDecoder decoder(QStringDecoder::Utf16BE);
-        return decoder(bytes.mid(2));
-    }
-    if (bytes.startsWith("\xEF\xBB\xBF"))
+    if (bytes.size() >= 2 && quint8(bytes[0]) == 0xFE && quint8(bytes[1]) == 0xFF)
+        return utf16be(QByteArrayView(bytes).sliced(2));
+    if (bytes.size() >= 3 && quint8(bytes[0]) == 0xEF && quint8(bytes[1]) == 0xBB && quint8(bytes[2]) == 0xBF)
         return QString::fromUtf8(bytes.mid(3));
     QString out;
     out.reserve(bytes.size());

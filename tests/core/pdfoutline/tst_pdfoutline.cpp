@@ -210,6 +210,15 @@ private Q_SLOTS:
         QCOMPARE(got.at(0).title, u"Zżółć"_s);
         QCOMPARE(got.at(1).title, u"Łł—€ (2)\\"_s);
         QCOMPARE(got.at(2).title, u"dwielinie\r\noraz tekst i dalej"_s);
+        // UTF-16BE to the last code unit: a surrogate pair, an odd last byte dropped, a BOM alone.
+        QList<QByteArray> sixteen = withOutline({"<< /Title <FEFFD83DDE00017C> /Next 8 0 R >>",
+                                                 "<< /Title (\\376\\377\\001\\101\\000) /Next 9 0 R >>", "<< /Title <FEFF> >>"});
+        sixteen[5] = "<< /Type /Outlines /First 7 0 R >>";
+        const QList<Entry> wide = readOutline(pdfOf(sixteen));
+        QCOMPARE(wide.size(), 3);
+        QCOMPARE(wide.at(0).title, u"😀ż"_s);
+        QCOMPARE(wide.at(1).title, u"Ł"_s); // (FE FF 01 41 00: the odd last byte dropped)
+        QCOMPARE(wide.at(2).title, QString());
     }
 
     void hostile_data()

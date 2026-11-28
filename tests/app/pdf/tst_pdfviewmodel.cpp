@@ -579,12 +579,8 @@ private Q_SLOTS:
             QSKIP("no outline or links with PdfRenderer");
         // Page 1's links come as it is shown: Rozdział 2, the web page, Rozdział 3 (never the script).
         QTRY_COMPARE(model->linkRects(1).size(), 3);
-        if (brulion::platform::pdfBackendName() != u"poppler"_s) {
-            QTest::qWait(200);
-            QVERIFY(model->outline().isEmpty()); // (poppler only)
-        } else {
-            QTRY_COMPARE(model->outline().size(), 5);
-        }
+        // (poppler's own outline; Qt PDF's read by core pdfoutline from the file)
+        QTRY_COMPARE(model->outline().size(), 5);
         if (!model->outline().isEmpty()) {
             const QVariantMap chapter = model->outline().at(1).toMap();
             QCOMPARE(chapter.value(u"title"_s).toString(), u"Rozdział 2 — żółw"_s);
