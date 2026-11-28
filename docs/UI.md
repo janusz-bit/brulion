@@ -2496,7 +2496,8 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   Claude Code on 2026-11-27; `realAgentChatFeatures` — a message queued while a turn runs, one
   steered in, a side chat, a fork, "Edit from here" — and `realAgentUndoesItsChanges` — a file the
   turn changed with the agent's editing tool or a shell command, put back by Undo —, tried with
-  Claude Code (Haiku) on 2026-11-28; the played agent's shell command: `shellChangesUndone`), `tst_shell_chattools` (the calls in words,
+  Claude Code (Haiku) and Codex (gpt-6-luna; its default gpt-6-sol is refused on a ChatGPT
+  account) on 2026-11-28; the played agent's shell command: `shellChangesUndone`), `tst_shell_chattools` (the calls in words,
   English and Polish plural forms), the shell self-test's `checkChatDrawings` (the drawings of an
   answer, ChatActivity under each "Tool calls in chat") and `checkCodeMode` (Code mode: a project and
   its thread, the header, the sidebar, the Changes panel, the file picker, find in the thread).
