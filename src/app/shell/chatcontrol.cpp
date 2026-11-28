@@ -21,6 +21,7 @@
 #include <QSet>
 
 #include <algorithm>
+#include <tuple>
 
 using namespace Qt::StringLiterals;
 
@@ -1088,6 +1089,17 @@ const ChatControl::Facts &ChatControl::factsOf(const QString &path)
     return f;
 }
 
+namespace {
+
+/// chatLive's order: the newer (activity, end) first, else by path.
+bool newerFirst(const std::tuple<qint64, qint64> &a, const QString &aPath, const std::tuple<qint64, qint64> &b,
+                const QString &bPath)
+{
+    return a != b ? a > b : aPath < bPath;
+}
+
+} // namespace
+
 QStringList ChatControl::livePaths()
 {
     // The conversations whose turn runs, waits or asks, and those that ended lately: newest
@@ -1111,10 +1123,9 @@ QStringList ChatControl::livePaths()
         consider(t->path(), 0);
     for (const auto &[path, at] : recentlyEnded())
         consider(path, at.toMSecsSinceEpoch());
+    // (Newest activity first, then the newest end, then by path.)
     std::ranges::sort(entries, [](const Entry &a, const Entry &b) {
-        if (a.order != b.order)
-            return a.order > b.order;
-        return a.ended != b.ended ? a.ended > b.ended : a.path < b.path;
+        return newerFirst(std::tuple(a.order, a.ended), a.path, std::tuple(b.order, b.ended), b.path);
     });
     QStringList out;
     for (const Entry &e : std::as_const(entries)) {
@@ -1296,6 +1307,21 @@ QJsonObject ChatControl::liveAnswer(const QString &wanted)
     return out.toJson();
 }
 
+namespace {
+
+/// The values `option` takes: "true" / "false", else its choices'.
+QStringList valuesOf(const acp::RemoteChatOption &option)
+{
+    if (option.boolean)
+        return {u"true"_s, u"false"_s};
+    QStringList values;
+    for (const acp::RemoteChatChoice &c : option.choices)
+        values << c.value;
+    return values;
+}
+
+} // namespace
+
 void ChatControl::setOption(const QJsonObject &params, const Caller &caller, const Reply &reply)
 {
     const QString path = conversationOf(params, reply);
@@ -1310,21 +1336,10 @@ void ChatControl::setOption(const QJsonObject &params, const Caller &caller, con
         ids << option.id;
         if (option.id != id)
             continue;
-        const bool fits = option.boolean
-                                  ? value == u"true" || value == u"false"
-                                  : std::ranges::any_of(option.choices, [&value](const acp::RemoteChatChoice &c) {
-                                        return c.value == value;
-                                    });
-        if (!fits) {
-            QStringList values{u"true"_s, u"false"_s};
-            if (!option.boolean) {
-                values.clear();
-                for (const acp::RemoteChatChoice &c : option.choices)
-                    values << c.value;
-            }
+        const QStringList values = valuesOf(option);
+        if (!values.contains(value))
             return reply.fail(BadOption, u"%1 is no value of the option %2"_s.arg(value.left(200), id),
                               {{u"param"_s, u"value"_s}, {u"values"_s, QJsonArray::fromStringList(values)}});
-        }
         m_chats->setAgentOption(path, partner, id, value);
         liveChanged();
         return reply.ok(QJsonObject{{u"path"_s, path}, {u"option"_s, id}, {u"value"_s, value}});

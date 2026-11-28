@@ -918,6 +918,9 @@ private:
     /// runs or ended lately, or a thread of a project of that computer, while its app shares its
     /// conversations —, "" none (this device runs it: a thread through that computer's shared agent).
     QString computerFor(const QString &path) const;
+    /// The address of the computer that runs `path` now (a message of it on its way there, or it
+    /// lists it), "" none.
+    QString computerRunning(const QString &path) const;
     /// `pictures` (vault paths) as a computer's app takes them: prepared for the model
     /// (Workspace::aiPicture, as this device's turn would send them) within acp's limits; nullopt
     /// when one cannot be (said in a toast naming `host`).

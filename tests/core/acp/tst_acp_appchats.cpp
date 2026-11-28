@@ -422,6 +422,51 @@ private Q_SLOTS:
         QVERIFY(remoteChatOptionFromJson(QJsonObject{{u"id"_s, u"x"_s}, {u"boolean"_s, true}}));
     }
 
+    void heldNeedsWaiting()
+    {
+        // Held means messages wait: none waiting, none held — on the row and in the detail; and a
+        // detail said to be cut stays so, however short.
+        const auto row = [](const QJsonObject &extra) {
+            QJsonObject o{{u"path"_s, Path}, {u"state"_s, u"idle"_s}};
+            for (auto it = extra.begin(); it != extra.end(); ++it)
+                o.insert(it.key(), it.value());
+            return remoteChatFromJson(o);
+        };
+        QVERIFY(!row({{u"held"_s, true}})->held);
+        QVERIFY(!row({{u"held"_s, false}, {u"waiting"_s, 2}})->held);
+        QVERIFY(row({{u"held"_s, true}, {u"waiting"_s, 2}})->held);
+        const auto detail = [](const QJsonObject &extra) {
+            QJsonObject o{{u"path"_s, Path}, {u"state"_s, u"idle"_s}};
+            for (auto it = extra.begin(); it != extra.end(); ++it)
+                o.insert(it.key(), it.value());
+            return remoteChatDetailFromJson(o);
+        };
+        QVERIFY(!detail({{u"held"_s, true}})->held);
+        QVERIFY(!detail({{u"waiting"_s, QJsonArray{u"Potem"_s}}})->held);
+        QVERIFY(detail({{u"held"_s, true}, {u"waiting"_s, QJsonArray{u"Potem"_s}}})->held);
+        RemoteChatDetail cut;
+        cut.path = Path;
+        cut.state = u"running"_s;
+        cut.partial = u"…koniec"_s;
+        cut.partialCut = true;
+        QVERIFY(remoteChatDetailFromJson(toJson(cut))->partialCut);
+    }
+
+    void choicesNeedValues()
+    {
+        // A choice without a value is none; a value twice counts once; a nameless one is named by it.
+        const std::optional<RemoteChatOption> o = remoteChatOptionFromJson(QJsonObject{
+                {u"id"_s, u"model"_s},
+                {u"choices"_s,
+                 QJsonArray{QJsonObject{{u"name"_s, u"Bez wartości"_s}}, QJsonObject{{u"value"_s, u"opus"_s}},
+                            QJsonObject{{u"value"_s, u"opus"_s}, {u"name"_s, u"Drugi raz"_s}}}}});
+        QVERIFY(o);
+        QCOMPARE(o->choices.size(), 1);
+        QCOMPARE(o->choices.at(0), (RemoteChatChoice{u"opus"_s, u"opus"_s, QString()}));
+        QVERIFY(!remoteChatOptionFromJson(
+                QJsonObject{{u"id"_s, u"x"_s}, {u"choices"_s, QJsonArray{QJsonObject{{u"name"_s, u"Bez"_s}}}}}));
+    }
+
     void pictures_data()
     {
         QTest::addColumn<QJsonValue>("value");

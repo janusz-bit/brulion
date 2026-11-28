@@ -840,25 +840,27 @@ Result appChatRead(Call &call)
     return chatCommand(call, u"chatRead"_s, params);
 }
 
+/// --pictures' file names: "a.jpg,b.png", or a list (an MCP client's); blanks left out.
+QStringList pictureFiles(const QJsonValue &given)
+{
+    QStringList files;
+    const QJsonArray list =
+            given.isArray() ? given.toArray() : QJsonArray::fromStringList(given.toString().split(u','));
+    for (const QJsonValue &v : list) {
+        if (const QString file = v.toString().trimmed(); !file.isEmpty())
+            files << file;
+    }
+    return files;
+}
+
 /// --pictures: the files ("a.jpg,b.png" on the command line, a list from an MCP client) read into
 /// `params` as chatSend and chatStart take them (acp/appchats.h); false: the call failed.
 bool readPictures(Call &call, QJsonObject &params)
 {
     if (!call.has(u"pictures"_s))
         return true;
-    const QJsonValue given = call.args.value(u"pictures"_s);
-    QStringList files;
-    if (given.isArray()) {
-        for (const QJsonValue &v : given.toArray())
-            files << v.toString();
-    } else {
-        files = given.toString().split(u',');
-    }
     QList<acp::RemotePicture> pictures;
-    for (QString file : std::as_const(files)) {
-        file = file.trimmed();
-        if (file.isEmpty())
-            continue;
+    for (const QString &file : pictureFiles(call.args.value(u"pictures"_s))) {
         QFile f(file);
         if (f.size() > acp::MaxRemotePictureBytes || !f.open(QIODevice::ReadOnly)) {
             call.setError(ExitUsage, u"bad_pictures"_s,

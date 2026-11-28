@@ -1890,16 +1890,15 @@ std::optional<QString> queryValue(const http::Request &request, const QString &n
 std::optional<http::Response> AcpHost::chatsHeaders(const QStringList &parts, const QByteArray &method, qint64 *maxBody)
 {
     static const QStringList actions{u"send"_s, u"start"_s, u"stop"_s, u"answer"_s, u"option"_s, u"resume"_s};
-    const bool list = parts.size() == 1;
-    const bool page = parts.size() == 2 && parts.at(1) == u"page";
-    const bool action = parts.size() == 2 && actions.contains(parts.at(1));
-    if (!list && !page && !action)
+    // chats (the list), chats/page, chats/<action>.
+    const QString what = parts.size() == 2 ? parts.at(1) : QString();
+    const bool action = actions.contains(what);
+    if (parts.size() > 2 || (parts.size() == 2 && what != u"page" && !action))
         return apiError(404, u"not_found"_s, u"Not found"_s);
     if (method != (action ? "POST"_ba : "GET"_ba))
         return apiError(405, u"method"_s, u"Method not allowed"_s);
     // (A message carries its pictures.)
-    if (action)
-        *maxBody = parts.at(1) == u"send" || parts.at(1) == u"start" ? kMaxChatMessageBody : kMaxChatSmallBody;
+    *maxBody = !action ? 0 : what == u"send" || what == u"start" ? kMaxChatMessageBody : kMaxChatSmallBody;
     return std::nullopt;
 }
 
@@ -2070,66 +2069,91 @@ int AcpHost::chatTimeout() const
     return m_options.appCallTimeoutMs + kAppCallMarginMs;
 }
 
-void AcpHost::chatSend(const PairedDevice &device, const QString &path, const QJsonObject &body,
-                       const http::Reply &reply)
+namespace {
+
+/// chatSend's parameters of chats/send's body (`*refusal`: the device's error when it is none).
+std::optional<QJsonObject> sendParams(const QString &path, const QJsonObject &body, http::Response *refusal)
 {
     const QJsonValue text = body.value(u"text"_s);
     const QString mode = body.value(u"mode"_s).toString();
-    http::Response refusal = http::Response::json(200, {});
-    const std::optional<QJsonArray> pictures = picturesOf(body, &refusal);
-    if (!pictures) {
-        reply.send(refusal);
-        return;
-    }
+    const std::optional<QJsonArray> pictures = picturesOf(body, refusal);
+    if (!pictures)
+        return std::nullopt;
     // (A message of pictures only is one too.)
     if (!text.isString() || (text.toString().trimmed().isEmpty() && pictures->isEmpty())) {
-        reply.send(apiError(400, u"bad_request"_s, u"The message (text) is needed"_s));
-        return;
+        *refusal = apiError(400, u"bad_request"_s, u"The message (text) is needed"_s);
+        return std::nullopt;
     }
     if (!mode.isEmpty() && mode != u"queue" && mode != u"steer") {
-        reply.send(apiError(400, u"bad_mode"_s, u"mode is \"\", \"queue\" or \"steer\""_s));
-        return;
+        *refusal = apiError(400, u"bad_mode"_s, u"mode is \"\", \"queue\" or \"steer\""_s);
+        return std::nullopt;
     }
     QJsonObject params{{u"path"_s, path}, {u"text"_s, text.toString()}};
     if (!mode.isEmpty())
         params.insert(u"mode"_s, mode);
     if (!pictures->isEmpty())
         params.insert(u"pictures"_s, *pictures);
-    say(u"%1 (%2) sends a message to %3%4%5"_s.arg(
-            device.name, device.id, path, mode.isEmpty() ? QString() : u" (" + mode + u')',
-            pictures->isEmpty() ? QString() : u", %1 picture(s)"_s.arg(pictures->size())));
-    relay(u"chatSend"_s, params, chatTimeout(), reply,
-          [path](const QJsonObject &result) { return pathAnswer(path, result); });
+    return params;
 }
 
-void AcpHost::chatStart(const PairedDevice &device, const QJsonObject &body, const http::Reply &reply)
+/// chatStart's parameters of chats/start's body (as sendParams()).
+std::optional<QJsonObject> startParams(const QJsonObject &body, http::Response *refusal)
 {
     const QString project = body.value(u"project"_s).toString().trimmed();
     const QJsonValue text = body.value(u"text"_s);
     if (project.isEmpty() || !text.isString() || text.toString().trimmed().isEmpty()) {
-        reply.send(apiError(400, u"bad_request"_s, u"The project and the first message (text) are needed"_s));
-        return;
+        *refusal = apiError(400, u"bad_request"_s, u"The project and the first message (text) are needed"_s);
+        return std::nullopt;
     }
-    http::Response refusal = http::Response::json(200, {});
-    const std::optional<QJsonArray> pictures = picturesOf(body, &refusal);
-    if (!pictures) {
-        reply.send(refusal);
-        return;
-    }
+    const std::optional<QJsonArray> pictures = picturesOf(body, refusal);
+    if (!pictures)
+        return std::nullopt;
     QJsonObject params{{u"project"_s, project}, {u"text"_s, text.toString()}};
     for (const QString &key : {u"partner"_s, u"worktree"_s, u"branch"_s}) {
         const QJsonValue v = body.value(key);
         if (!v.isUndefined() && !v.isNull() && !v.isString()) {
-            reply.send(apiError(400, u"bad_request"_s, u"%1 is a string"_s.arg(key)));
-            return;
+            *refusal = apiError(400, u"bad_request"_s, u"%1 is a string"_s.arg(key));
+            return std::nullopt;
         }
         if (!v.toString().trimmed().isEmpty())
             params.insert(key, v.toString().trimmed());
     }
     if (!pictures->isEmpty())
         params.insert(u"pictures"_s, *pictures);
-    say(u"%1 (%2) starts a thread of %3 in the app"_s.arg(device.name, device.id, project));
-    relay(u"chatStart"_s, params, chatTimeout(), reply, [](const QJsonObject &result) {
+    return params;
+}
+
+} // namespace
+
+void AcpHost::chatSend(const PairedDevice &device, const QString &path, const QJsonObject &body,
+                       const http::Reply &reply)
+{
+    http::Response refusal = http::Response::json(200, {});
+    const std::optional<QJsonObject> params = sendParams(path, body, &refusal);
+    if (!params) {
+        reply.send(refusal);
+        return;
+    }
+    const QString mode = params->value(u"mode"_s).toString();
+    const qsizetype pictures = params->value(u"pictures"_s).toArray().size();
+    say(u"%1 (%2) sends a message to %3%4%5"_s.arg(device.name, device.id, path,
+                                                   mode.isEmpty() ? QString() : u" (" + mode + u')',
+                                                   pictures == 0 ? QString() : u", %1 picture(s)"_s.arg(pictures)));
+    relay(u"chatSend"_s, *params, chatTimeout(), reply,
+          [path](const QJsonObject &result) { return pathAnswer(path, result); });
+}
+
+void AcpHost::chatStart(const PairedDevice &device, const QJsonObject &body, const http::Reply &reply)
+{
+    http::Response refusal = http::Response::json(200, {});
+    const std::optional<QJsonObject> params = startParams(body, &refusal);
+    if (!params) {
+        reply.send(refusal);
+        return;
+    }
+    say(u"%1 (%2) starts a thread of %3 in the app"_s.arg(device.name, device.id,
+                                                          params->value(u"project"_s).toString()));
+    relay(u"chatStart"_s, *params, chatTimeout(), reply, [](const QJsonObject &result) {
         const QString p = result.value(u"path"_s).toString();
         return acp::isRemoteChatPath(p) ? http::Response::json(200, QJsonObject{{u"path"_s, p}})
                                         : apiError(502, u"bad_answer"_s, u"The app's answer names no conversation"_s);

@@ -142,57 +142,73 @@ std::optional<RemoteChat> remoteChatFromJson(const QJsonObject &o)
     return c;
 }
 
+namespace {
+
+/// `value` under `key` unless it is empty.
+void put(QJsonObject &o, const QString &key, const QString &value)
+{
+    if (!value.isEmpty())
+        o.insert(key, value);
+}
+
+QJsonArray toJson(const QList<RemoteChatTool> &tools)
+{
+    QJsonArray list;
+    for (const RemoteChatTool &t : tools) {
+        QJsonObject tool{{u"title"_s, t.title}, {u"status"_s, t.status}};
+        put(tool, u"kind"_s, t.kind);
+        list.append(tool);
+    }
+    return list;
+}
+
+QJsonObject toJson(const RemoteChatQuestion &question)
+{
+    QJsonObject q{{u"text"_s, question.text}, {u"options"_s, QJsonArray::fromStringList(question.options)}};
+    put(q, u"details"_s, question.details);
+    put(q, u"plan"_s, question.plan);
+    if (!question.file.isEmpty())
+        q.insert(u"diff"_s, QJsonObject{{u"path"_s, question.file},
+                                        {u"oldText"_s, question.oldText},
+                                        {u"newText"_s, question.newText}});
+    return q;
+}
+
+/// The detail's lists (tools, plan, question, waiting, options), those it has.
+void putLists(QJsonObject &o, const RemoteChatDetail &d)
+{
+    if (!d.tools.isEmpty())
+        o.insert(u"tools"_s, toJson(d.tools));
+    QJsonArray plan;
+    for (const RemoteChatStep &s : d.plan)
+        plan.append(QJsonObject{{u"content"_s, s.content}, {u"status"_s, s.status}});
+    if (!plan.isEmpty())
+        o.insert(u"plan"_s, plan);
+    if (!d.question.isEmpty())
+        o.insert(u"question"_s, toJson(d.question));
+    if (!d.waiting.isEmpty())
+        o.insert(u"waiting"_s, QJsonArray::fromStringList(d.waiting));
+    QJsonArray options;
+    for (const RemoteChatOption &option : d.options)
+        options.append(acp::toJson(option));
+    if (!options.isEmpty())
+        o.insert(u"options"_s, options);
+}
+
+} // namespace
+
 QJsonObject toJson(const RemoteChatDetail &d)
 {
     QJsonObject o{{u"path"_s, d.path}, {u"state"_s, d.state}, {u"messages"_s, d.messages}};
-    if (!d.status.isEmpty())
-        o.insert(u"status"_s, d.status);
-    if (!d.partial.isEmpty())
-        o.insert(u"partial"_s, d.partial);
+    put(o, u"status"_s, d.status);
+    put(o, u"partial"_s, d.partial);
     if (d.partialCut)
         o.insert(u"partialCut"_s, true);
-    if (!d.thoughts.isEmpty())
-        o.insert(u"thoughts"_s, d.thoughts);
-    if (!d.failure.isEmpty())
-        o.insert(u"failure"_s, d.failure);
-    if (!d.tools.isEmpty()) {
-        QJsonArray tools;
-        for (const RemoteChatTool &t : d.tools) {
-            QJsonObject tool{{u"title"_s, t.title}, {u"status"_s, t.status}};
-            if (!t.kind.isEmpty())
-                tool.insert(u"kind"_s, t.kind);
-            tools.append(tool);
-        }
-        o.insert(u"tools"_s, tools);
-    }
-    if (!d.plan.isEmpty()) {
-        QJsonArray plan;
-        for (const RemoteChatStep &s : d.plan)
-            plan.append(QJsonObject{{u"content"_s, s.content}, {u"status"_s, s.status}});
-        o.insert(u"plan"_s, plan);
-    }
-    if (!d.question.isEmpty()) {
-        QJsonObject q{{u"text"_s, d.question.text}, {u"options"_s, QJsonArray::fromStringList(d.question.options)}};
-        if (!d.question.details.isEmpty())
-            q.insert(u"details"_s, d.question.details);
-        if (!d.question.plan.isEmpty())
-            q.insert(u"plan"_s, d.question.plan);
-        if (!d.question.file.isEmpty())
-            q.insert(u"diff"_s, QJsonObject{{u"path"_s, d.question.file},
-                                            {u"oldText"_s, d.question.oldText},
-                                            {u"newText"_s, d.question.newText}});
-        o.insert(u"question"_s, q);
-    }
-    if (!d.waiting.isEmpty())
-        o.insert(u"waiting"_s, QJsonArray::fromStringList(d.waiting));
+    put(o, u"thoughts"_s, d.thoughts);
+    put(o, u"failure"_s, d.failure);
     if (d.held)
         o.insert(u"held"_s, true);
-    if (!d.options.isEmpty()) {
-        QJsonArray options;
-        for (const RemoteChatOption &option : d.options)
-            options.append(acp::toJson(option));
-        o.insert(u"options"_s, options);
-    }
+    putLists(o, d);
     return o;
 }
 
@@ -218,24 +234,36 @@ QJsonObject toJson(const RemoteChatOption &option)
     return o;
 }
 
+namespace {
+
+/// An option's choices: bounded, each with a value, none twice (a nameless one named by its value).
+QList<RemoteChatChoice> choicesFromJson(const QJsonArray &list)
+{
+    QList<RemoteChatChoice> choices;
+    for (const QJsonValue &v : list) {
+        const QJsonObject c = v.toObject();
+        RemoteChatChoice choice{line(c, "value"_L1), line(c, "name"_L1), line(c, "group"_L1)};
+        const bool twice =
+                std::ranges::any_of(choices, [&choice](const RemoteChatChoice &k) { return k.value == choice.value; });
+        if (choice.value.isEmpty() || twice)
+            continue;
+        if (choice.name.isEmpty())
+            choice.name = choice.value;
+        choices.append(choice);
+        if (choices.size() >= MaxOptionChoices)
+            break;
+    }
+    return choices;
+}
+
+} // namespace
+
 std::optional<RemoteChatOption> remoteChatOptionFromJson(const QJsonObject &o)
 {
     RemoteChatOption option;
     option.id = line(o, "id"_L1);
     option.boolean = o.value(u"boolean"_s).toBool();
-    for (const QJsonValue &v : o.value(u"choices"_s).toArray()) {
-        const QJsonObject c = v.toObject();
-        RemoteChatChoice choice{line(c, "value"_L1), line(c, "name"_L1), line(c, "group"_L1)};
-        const bool twice = std::ranges::any_of(
-                option.choices, [&choice](const RemoteChatChoice &k) { return k.value == choice.value; });
-        if (choice.value.isEmpty() || twice)
-            continue;
-        if (choice.name.isEmpty())
-            choice.name = choice.value;
-        option.choices.append(choice);
-        if (option.choices.size() >= MaxOptionChoices)
-            break;
-    }
+    option.choices = choicesFromJson(o.value(u"choices"_s).toArray());
     if (option.id.isEmpty() || (!option.boolean && option.choices.isEmpty()))
         return std::nullopt;
     option.name = line(o, "name"_L1);
@@ -282,6 +310,25 @@ std::optional<RemotePicture> pictureFromJson(const QJsonValue &value, QString *w
     return RemotePicture{name, decoded.decoded};
 }
 
+/// Each picture of the list ("" `*why`: all taken, MaxRemotePicturesBytes at most in all).
+QList<RemotePicture> picturesOf(const QJsonArray &list, QString *why)
+{
+    QList<RemotePicture> pictures;
+    qsizetype total = 0;
+    for (const QJsonValue &v : list) {
+        const std::optional<RemotePicture> picture = pictureFromJson(v, why);
+        if (!picture)
+            break;
+        total += picture->data.size();
+        if (total > MaxRemotePicturesBytes) {
+            *why = u"the pictures are %1 bytes at most in all"_s.arg(MaxRemotePicturesBytes);
+            break;
+        }
+        pictures.append(*picture);
+    }
+    return pictures;
+}
+
 } // namespace
 
 std::optional<QList<RemotePicture>> remotePicturesFromJson(const QJsonValue &value, QString *why)
@@ -290,24 +337,12 @@ std::optional<QList<RemotePicture>> remotePicturesFromJson(const QJsonValue &val
     QList<RemotePicture> pictures;
     if (value.isUndefined() || value.isNull())
         return pictures;
-    if (!value.isArray()) {
+    if (!value.isArray())
         reason = u"pictures is a list"_s;
-    } else if (value.toArray().size() > MaxRemotePictures) {
+    else if (value.toArray().size() > MaxRemotePictures)
         reason = u"%1 pictures at most"_s.arg(MaxRemotePictures);
-    } else {
-        qsizetype total = 0;
-        for (const QJsonValue &v : value.toArray()) {
-            const std::optional<RemotePicture> picture = pictureFromJson(v, &reason);
-            if (!picture)
-                break;
-            total += picture->data.size();
-            if (total > MaxRemotePicturesBytes) {
-                reason = u"the pictures are %1 bytes at most in all"_s.arg(MaxRemotePicturesBytes);
-                break;
-            }
-            pictures.append(*picture);
-        }
-    }
+    else
+        pictures = picturesOf(value.toArray(), &reason);
     if (reason.isEmpty())
         return pictures;
     if (why)
@@ -315,20 +350,11 @@ std::optional<QList<RemotePicture>> remotePicturesFromJson(const QJsonValue &val
     return std::nullopt;
 }
 
-std::optional<RemoteChatDetail> remoteChatDetailFromJson(const QJsonObject &o)
+namespace {
+
+/// The detail's tool calls and plan steps (each with its words; bounded).
+void readActivity(const QJsonObject &o, RemoteChatDetail &d)
 {
-    RemoteChatDetail d;
-    d.path = o.value(u"path"_s).toString();
-    d.state = o.value(u"state"_s).toString();
-    if (!isRemoteChatPath(d.path) || !knownState(d.state))
-        return std::nullopt;
-    d.status = line(o, "status"_L1);
-    bool cut = false;
-    d.partial = keepEnd(o.value(u"partial"_s).toString(), MaxLiveTextChars, &cut);
-    d.partialCut = cut || o.value(u"partialCut"_s).toBool();
-    d.thoughts = keepEnd(o.value(u"thoughts"_s).toString(), MaxLiveThoughtsChars);
-    d.failure = line(o, "failure"_L1, 2000);
-    d.messages = count(o, "messages"_L1);
     for (const QJsonValue &v : o.value(u"tools"_s).toArray()) {
         const QJsonObject t = v.toObject();
         RemoteChatTool tool{line(t, "title"_L1, 300), line(t, "status"_L1, 20), line(t, "kind"_L1, 20)};
@@ -347,26 +373,37 @@ std::optional<RemoteChatDetail> remoteChatDetailFromJson(const QJsonObject &o)
         if (d.plan.size() >= MaxLiveSteps)
             break;
     }
-    const QJsonObject q = o.value(u"question"_s).toObject();
+}
+
+/// Its question: none without options (at most MaxQuestionOptions, none twice).
+RemoteChatQuestion questionFromJson(const QJsonObject &q)
+{
+    RemoteChatQuestion question;
     for (const QJsonValue &v : q.value(u"options"_s).toArray()) {
         const QString option = v.toString().simplified().left(200);
-        if (option.isEmpty() || d.question.options.contains(option))
+        if (option.isEmpty() || question.options.contains(option))
             continue;
-        d.question.options.append(option);
-        if (d.question.options.size() >= MaxQuestionOptions)
+        question.options.append(option);
+        if (question.options.size() >= MaxQuestionOptions)
             break;
     }
-    if (!d.question.options.isEmpty()) {
-        d.question.text = line(q, "text"_L1, 500);
-        d.question.details = text(q, "details"_L1, MaxQuestionChars);
-        d.question.plan = text(q, "plan"_L1, MaxLiveTextChars);
-        const QJsonObject diff = q.value(u"diff"_s).toObject();
-        d.question.file = line(diff, "path"_L1, MaxRemotePathChars);
-        if (!d.question.file.isEmpty()) {
-            d.question.oldText = text(diff, "oldText"_L1, MaxLiveTextChars);
-            d.question.newText = text(diff, "newText"_L1, MaxLiveTextChars);
-        }
+    if (question.options.isEmpty())
+        return question;
+    question.text = line(q, "text"_L1, 500);
+    question.details = text(q, "details"_L1, MaxQuestionChars);
+    question.plan = text(q, "plan"_L1, MaxLiveTextChars);
+    const QJsonObject diff = q.value(u"diff"_s).toObject();
+    question.file = line(diff, "path"_L1, MaxRemotePathChars);
+    if (!question.file.isEmpty()) {
+        question.oldText = text(diff, "oldText"_L1, MaxLiveTextChars);
+        question.newText = text(diff, "newText"_L1, MaxLiveTextChars);
     }
+    return question;
+}
+
+/// The messages waiting (held or not) and the agent's options.
+void readWaitingAndOptions(const QJsonObject &o, RemoteChatDetail &d)
+{
     for (const QJsonValue &v : o.value(u"waiting"_s).toArray()) {
         const QString message = keepStart(v.toString(), 4000);
         if (message.trimmed().isEmpty())
@@ -387,6 +424,27 @@ std::optional<RemoteChatDetail> remoteChatDetailFromJson(const QJsonObject &o)
         if (d.options.size() >= MaxLiveOptions)
             break;
     }
+}
+
+} // namespace
+
+std::optional<RemoteChatDetail> remoteChatDetailFromJson(const QJsonObject &o)
+{
+    RemoteChatDetail d;
+    d.path = o.value(u"path"_s).toString();
+    d.state = o.value(u"state"_s).toString();
+    if (!isRemoteChatPath(d.path) || !knownState(d.state))
+        return std::nullopt;
+    d.status = line(o, "status"_L1);
+    bool cut = false;
+    d.partial = keepEnd(o.value(u"partial"_s).toString(), MaxLiveTextChars, &cut);
+    d.partialCut = cut || o.value(u"partialCut"_s).toBool();
+    d.thoughts = keepEnd(o.value(u"thoughts"_s).toString(), MaxLiveThoughtsChars);
+    d.failure = line(o, "failure"_L1, 2000);
+    d.messages = count(o, "messages"_L1);
+    readActivity(o, d);
+    d.question = questionFromJson(o.value(u"question"_s).toObject());
+    readWaitingAndOptions(o, d);
     return d;
 }
 
