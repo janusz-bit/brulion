@@ -10,6 +10,7 @@
 #include <QQuickWindow>
 
 #include <algorithm>
+#include <optional>
 #include <unordered_set>
 
 namespace brulion::editor::atr {
@@ -57,30 +58,26 @@ void ForeignRowHost::adopt(QQuickItem *edge)
 
 void ForeignRowHost::setHeader(QQuickItem *header)
 {
-    if (header == m_header)
-        return;
-    const bool had = m_header;
-    if (m_header)
-        disconnect(m_header, nullptr, this, nullptr);
-    m_header = header;
-    adopt(header);
-    // (Its item gone, the page has no room above its blocks: a day zoomed out.)
-    if (had && !header)
-        tellEdge(ForeignFrame::Kind::Header);
-    itemHeightChanged();
+    setEdge(m_header, header, ForeignFrame::Kind::Header);
 }
 
 void ForeignRowHost::setFooter(QQuickItem *footer)
 {
-    if (footer == m_footer)
+    setEdge(m_footer, footer, ForeignFrame::Kind::Footer);
+}
+
+void ForeignRowHost::setEdge(QPointer<QQuickItem> &edge, QQuickItem *item, ForeignFrame::Kind kind)
+{
+    if (item == edge)
         return;
-    const bool had = m_footer;
-    if (m_footer)
-        disconnect(m_footer, nullptr, this, nullptr);
-    m_footer = footer;
-    adopt(footer);
-    if (had && !footer)
-        tellEdge(ForeignFrame::Kind::Footer);
+    const bool had = edge;
+    if (edge)
+        disconnect(edge, nullptr, this, nullptr);
+    edge = item;
+    adopt(item);
+    // (Its item gone, the page has no room there: a day zoomed out has no breadcrumb.)
+    if (had && !item)
+        tellEdge(kind);
     itemHeightChanged();
 }
 
@@ -198,13 +195,12 @@ bool ForeignRowHost::tellHeights()
     for (const auto &[uid, h] : m_hosted)
         if (h.item)
             rows.push_back({h.row, float(h.item->height())});
-    QQuickItem *header = m_header.data();
-    QQuickItem *footer = m_footer.data();
+    const std::optional<float> header = m_header ? std::optional<float>(float(m_header->height())) : std::nullopt;
+    const std::optional<float> footer = m_footer ? std::optional<float>(float(m_footer->height())) : std::nullopt;
     return m_page.update(m_app, [&](PageView &page, at::Context<PageView> &cx) {
         // Each edge while it has an item (a day of the journal stream: the room under its blocks is
         // the stream's, a header only while it is zoomed into a block).
-        bool changed = header && page.setHeaderHeight(float(header->height()));
-        changed = (footer && page.setFooterHeight(float(footer->height()))) || changed;
+        bool changed = page.setEdgeHeights(header, footer);
         for (const Height &h : rows) {
             // Only rows the page does not draw itself (a delegate on its way out keeps nothing).
             if (!page.drawsRow(h.row))

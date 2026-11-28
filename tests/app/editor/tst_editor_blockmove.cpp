@@ -49,6 +49,7 @@ private Q_SLOTS:
     void refused_data();
     void refused();
     void placeOfBlocksFromElsewhere();
+    void placeOfBlocksMovedHere();
     void stepsOnTheDocumentItself();
 };
 
@@ -168,6 +169,27 @@ void TestEditorBlockMove::placeOfBlocksFromElsewhere()
     QVERIFY(!placeTarget(doc, {0, 1}));
     QVERIFY(!placeTarget(doc, {3, 3}));
     QVERIFY(!placeTarget(doc, {2, 0}));
+}
+
+void TestEditorBlockMove::placeOfBlocksMovedHere()
+{
+    // The blocks moved are rows [first, end): a place is never under one of them or inside them.
+    const BlockDocument doc(Fruit);
+    QVERIFY(!placeTarget(doc, {7, 1}, 6, 7)); // under "zioła", the block moved
+    QVERIFY(!placeTarget(doc, {3, 1}, 0, 3)); // under "owoce", the first row moved
+    QVERIFY(!placeTarget(doc, {2, 1}, 0, 3)); // inside its subtree
+    QVERIFY(!placeTarget(doc, {1, 2}, 0, 3));
+    // Right before or after them, the next block jumped over: the sibling after them.
+    std::optional<PlaceTarget> t = placeTarget(doc, {0, 0}, 0, 3);
+    QVERIFY(t);
+    QCOMPARE(t->before, doc.at(3).uid);
+    t = placeTarget(doc, {3, 0}, 0, 3);
+    QVERIFY(t);
+    QCOMPARE(t->before, doc.at(3).uid);
+    // Without them, under "owoce" there.
+    t = placeTarget(doc, {3, 1});
+    QVERIFY(t);
+    QCOMPARE(t->parent, doc.at(0).uid);
 }
 
 void TestEditorBlockMove::stepsOnTheDocumentItself()

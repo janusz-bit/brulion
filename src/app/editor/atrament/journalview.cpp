@@ -305,198 +305,68 @@ PageMetrics JournalView::dayMetrics(int day) const
     return m;
 }
 
+namespace {
+
+// `f(journal, cx)` in an update of the stream `self`: what it gives (`fallback` when the stream went).
+template<class R, class F>
+R inJournal(at::App *app, at::EntityId self, R fallback, F &&f)
+{
+    R r = fallback;
+    app->updateEntity<JournalView>(self, [&](JournalView &j, at::Context<JournalView> &c) { r = f(j, c); });
+    return r;
+}
+
+// What a selection key extends the stream's selection by: the step, and whether only a selection
+// over several days is extended (Shift+↑/↓ inside a day) or one may begin (past the day's edge).
+struct Extension {
+    int step = 0;
+    bool spanOnly = false;
+};
+std::optional<Extension> extensionOf(PageView::SelectionCommand c)
+{
+    using Command = PageView::SelectionCommand;
+    switch (c) {
+    case Command::ExtendUp:
+        return Extension{-1, true};
+    case Command::ExtendDown:
+        return Extension{1, true};
+    case Command::ExtendPastTop:
+        return Extension{-1, false};
+    case Command::ExtendPastBottom:
+        return Extension{1, false};
+    default:
+        return std::nullopt;
+    }
+}
+
+// A selection key past a day's edge, the stream's way (StreamSelection), when the host took none.
+bool streamSelectionCommand(StreamSelection *stream, PageController *day, PageView::SelectionCommand c)
+{
+    const std::optional<Extension> e = extensionOf(c);
+    if (!stream || !day || !e || (e->spanOnly && !stream->active()))
+        return false;
+    // (Inside a span the key is taken whether its end moved or not.)
+    return stream->extendBy(day, e->step) || e->spanOnly;
+}
+
+} // namespace
+
 bool JournalView::makeDay(int day, at::Context<JournalView> &cx)
 {
     if (day < 0 || day >= dayCount())
         return false;
     if (m_slots[std::size_t(day)].day)
         return true;
-    if (!makeController)
+    PageController *ctl = newDay(day, cx);
+    if (!ctl)
         return false;
-    std::unique_ptr<PageController> made = makeController(m_slots[std::size_t(day)].info);
-    if (!made)
-        return false;
-    auto d = std::make_unique<Day>();
-    d->controller = std::move(made);
-    PageController *ctl = d->controller.get();
-    d->page = cx.newEntity<PageView>(ctl->blocks(), dayMetrics(day), m_palette);
-    d->page.update(cx.app(), [ctl](PageView &v, at::Context<PageView> &pc) { v.setController(ctl, pc); });
-    m_slots[std::size_t(day)].day = std::move(d);
     // (The slot's day is read again below: setUpPage may change the model's rows.)
     const at::Entity<PageView> page = m_slots[std::size_t(day)].day->page;
     if (setUpPage)
         setUpPage(day, page, ctl);
-    // The stream's own parts of the page: it scrolls the stream, ↑/↓ past its edges go on to the
-    // days around, the tap strip under its blocks, the find bar's matches.
-    at::App *app = m_app;
-    const at::EntityId self = m_selfId;
-    QPointer<PageController> guard = ctl;
-    const bool keys = m_activeDayPage == page.id();
-    page.update(*app, [&](PageView &v, at::Context<PageView> &pc) {
-        PageView::PageEmbedding e;
-        e.scrollBy = [app, self](float dy) {
-            bool moved = false;
-            app->updateEntity<JournalView>(self, [&](JournalView &j, at::Context<JournalView> &c) {
-                moved = j.m_handle.scrollBy(dy);
-                if (moved)
-                    c.notify();
-            });
-            return moved;
-        };
-        e.scrolledSinceFrame = [app, self] {
-            const JournalView *j = app->tryGet<JournalView>(self);
-            if (!j)
-                return 0.0f;
-            const std::shared_ptr<at::ListHandle::State> st = j->m_handle.shared();
-            return st->scroll.offset.y - st->lastY;
-        };
-        e.pastEdge = [app, self, guard](bool up, float x) {
-            bool took = false;
-            app->updateEntity<JournalView>(self, [&](JournalView &j, at::Context<JournalView> &c) {
-                took = j.pastEdge(guard.data(), up, x, c);
-            });
-            return took;
-        };
-        // Its drags: the stream's view, the selection going on into the other days.
-        e.viewport = [app, self] {
-            const JournalView *j = app->tryGet<JournalView>(self);
-            return j ? j->viewport() : std::nullopt;
-        };
-        e.selectTo = [app, self, guard](int fixedRow, at::Point p) {
-            bool took = false;
-            app->updateEntity<JournalView>(self, [&](JournalView &j, at::Context<JournalView> &) {
-                took = j.selectAcross(guard.data(), fixedRow, p).has_value();
-            });
-            return took;
-        };
-        // Its blocks dragged into another day, moved there.
-        e.dragBlocksTo = [app, self, guard](at::Point p, float textX) {
-            bool took = false;
-            app->updateEntity<JournalView>(self, [&](JournalView &j, at::Context<JournalView> &c) {
-                took = j.dragBlocksTo(guard.data(), p, textX);
-                c.notify();
-            });
-            return took;
-        };
-        e.endBlockDrag = [app, self, guard](bool drop) {
-            app->updateEntity<JournalView>(self, [&](JournalView &j, at::Context<JournalView> &c) {
-                j.endBlockDrag(guard.data(), drop);
-                c.notify();
-            });
-        };
-        v.setEmbedding(std::move(e), pc);
-        v.setStyle(dayMetrics(day), m_palette);
-        v.setKeysActive(keys, pc);
-        // The selection's keys past the day's edges go on into the days around (StreamSelection),
-        // when the host does not take them its way (BlockEditor.atramentSelectionCommand).
-        std::function<bool(PageView::SelectionCommand, int)> hostCommand = v.onSelectionCommand;
-        v.onSelectionCommand = [hostCommand, app, self, guard](PageView::SelectionCommand c, int row) {
-            if (hostCommand && hostCommand(c, row))
-                return true;
-            const JournalView *j = app->tryGet<JournalView>(self);
-            StreamSelection *stream = j ? j->m_stream.data() : nullptr;
-            if (!stream || !guard)
-                return false;
-            switch (c) {
-            case PageView::SelectionCommand::ExtendUp:
-            case PageView::SelectionCommand::ExtendDown:
-                if (!stream->active())
-                    return false;
-                stream->extendBy(guard.data(), c == PageView::SelectionCommand::ExtendDown ? 1 : -1);
-                return true;
-            case PageView::SelectionCommand::ExtendPastTop:
-            case PageView::SelectionCommand::ExtendPastBottom:
-                return stream->extendBy(guard.data(), c == PageView::SelectionCommand::ExtendPastBottom ? 1 : -1);
-            default:
-                return false;
-            }
-        };
-        // Ctrl+Z / Ctrl+Y right after a move across days: both of its days.
-        std::function<void(bool)> hostUndo = v.onUndo;
-        v.onUndo = [hostUndo, app, self, guard](bool redo) {
-            bool paired = false;
-            app->updateEntity<JournalView>(self, [&](JournalView &j, at::Context<JournalView> &) {
-                paired = j.undoMoveAcross(guard.data(), redo);
-            });
-            if (paired || !guard)
-                return;
-            if (hostUndo)
-                hostUndo(redo);
-            else if (redo)
-                guard->redo();
-            else
-                guard->undo();
-        };
-        // Shift+↑/↓ past the edited block's text at the day's edge: into the day around.
-        if (!v.onExtendSelection)
-            v.onExtendSelection = [app, self, guard](int row, int step) {
-                if (!guard)
-                    return;
-                if (guard->extendSelection(step))
-                    return;
-                const JournalView *j = app->tryGet<JournalView>(self);
-                if (j && j->m_stream && j->m_stream->extendBy(guard.data(), step))
-                    return;
-                guard->selectRange(row, row);
-            };
-        v.setFooterHeight(m_look.space3);
-        v.setFooterTapHeight(m_look.touch ? m_look.touchTarget : m_look.space3);
-        if (!m_findState.query.isEmpty())
-            v.setFind(m_findState.query, m_findState.matchCase, m_findState.matchDiacritics, m_findState.wholeWord,
-                      m_findState.color, pc);
-    });
-    Day &made2 = *m_slots[std::size_t(day)].day;
-    // The day becomes the one written in when it starts editing, selects blocks or zooms
-    // (ContentJournalDay's rules); Ctrl+E opens it as a page in source mode; its note mode its geometry.
-    auto activity = [app, self, guard] {
-        app->updateEntity<JournalView>(self, [&](JournalView &j, at::Context<JournalView> &c) {
-            j.dayActivity(guard.data(), c);
-        });
-    };
-    made2.connections.push_back(QObject::connect(ctl, &PageController::editingRowChanged, ctl, activity));
-    made2.connections.push_back(QObject::connect(ctl, &PageController::selectionChanged, ctl, activity));
-    made2.connections.push_back(QObject::connect(ctl, &PageController::zoomChanged, ctl, activity));
-    // Zoomed into a block: the day's top with its breadcrumb and the block in view (the day got
-    // shorter: what was in view may be past its end).
-    made2.connections.push_back(QObject::connect(ctl, &PageController::zoomChanged, ctl, [app, self, guard] {
-        app->updateEntity<JournalView>(self, [&](JournalView &j, at::Context<JournalView> &c) {
-            j.revealZoom(j.dayOfController(guard.data()));
-            c.notify();
-        });
-    }));
-    made2.connections.push_back(QObject::connect(ctl, &PageController::sourceModeChanged, ctl, [app, self, guard] {
-        if (!guard || !guard->sourceMode())
-            return;
-        guard->setSourceMode(false);
-        app->updateEntity<JournalView>(self, [&](JournalView &j, at::Context<JournalView> &) {
-            const int d = j.dayOfController(guard.data());
-            if (d >= 0 && j.onOpenAsPage)
-                j.onOpenAsPage(j.m_slots[std::size_t(d)].info.date, true);
-        });
-    }));
-    made2.connections.push_back(QObject::connect(ctl, &PageController::modeChanged, ctl, [app, self, guard] {
-        app->updateEntity<JournalView>(self, [&](JournalView &j, at::Context<JournalView> &c) {
-            const int d = j.dayOfController(guard.data());
-            if (const at::Entity<PageView> *p = j.page(d))
-                p->update(c.app(), [&](PageView &v, at::Context<PageView> &pc) {
-                    v.setStyle(j.dayMetrics(d), j.m_palette);
-                    pc.notify();
-                });
-            c.notify();
-        });
-    }));
-    // Loaded, emptied, filled: the prompt comes or goes.
-    made2.connections.push_back(QObject::connect(ctl, &PageController::loadingChanged, ctl, [app, self] {
-        app->updateEntity<JournalView>(self, [](JournalView &, at::Context<JournalView> &c) { c.notify(); });
-    }));
-    made2.connections.push_back(
-            QObject::connect(ctl->blocks(), &BlockListModel::visibleCountChanged, ctl, [app, self] {
-                app->updateEntity<JournalView>(self, [](JournalView &, at::Context<JournalView> &c) { c.notify(); });
-            }));
-    if (m_stream)
-        m_stream->attach(ctl);
-    if (m_find)
-        m_find->attach(ctl);
+    embedDay(day, page, ctl);
+    connectDay(*m_slots[std::size_t(day)].day, ctl);
+    attachDay(ctl);
     // Today is the day written in until another one is.
     if (m_active < 0 && m_slots[std::size_t(day)].info.isToday)
         activateDay(day, cx);
@@ -504,6 +374,209 @@ bool JournalView::makeDay(int day, at::Context<JournalView> &cx)
     dayActivity(ctl, cx);
     cx.notify();
     return true;
+}
+
+void JournalView::attachDay(PageController *ctl)
+{
+    // The stream's selection and find over the days.
+    if (m_stream)
+        m_stream->attach(ctl);
+    if (m_find)
+        m_find->attach(ctl);
+}
+
+PageController *JournalView::newDay(int day, at::Context<JournalView> &cx)
+{
+    std::unique_ptr<PageController> made = makeController ? makeController(m_slots[std::size_t(day)].info) : nullptr;
+    if (!made)
+        return nullptr;
+    auto d = std::make_unique<Day>();
+    d->controller = std::move(made);
+    PageController *ctl = d->controller.get();
+    d->page = cx.newEntity<PageView>(ctl->blocks(), dayMetrics(day), m_palette);
+    d->page.update(cx.app(), [ctl](PageView &v, at::Context<PageView> &pc) { v.setController(ctl, pc); });
+    m_slots[std::size_t(day)].day = std::move(d);
+    return ctl;
+}
+
+PageView::PageEmbedding JournalView::embeddingOf(PageController *controller) const
+{
+    // It scrolls the stream, ↑/↓ past its edges go on to the days around, its drags go on in the
+    // stream (the selection into the other days, blocks moved into another day).
+    at::App *app = m_app;
+    const at::EntityId self = m_selfId;
+    QPointer<PageController> guard = controller;
+    PageView::PageEmbedding e;
+    e.scrollBy = [app, self](float dy) {
+        return inJournal(app, self, false, [dy](JournalView &j, at::Context<JournalView> &c) {
+            const bool moved = j.m_handle.scrollBy(dy);
+            if (moved)
+                c.notify();
+            return moved;
+        });
+    };
+    e.scrolledSinceFrame = [app, self] {
+        const JournalView *j = app->tryGet<JournalView>(self);
+        return j ? j->scrolledSinceFrame() : 0.0f;
+    };
+    e.pastEdge = [app, self, guard](bool up, float x) {
+        return inJournal(app, self, false,
+                         [&](JournalView &j, at::Context<JournalView> &c) { return j.pastEdge(guard.data(), up, x, c); });
+    };
+    e.viewport = [app, self] {
+        const JournalView *j = app->tryGet<JournalView>(self);
+        return j ? j->viewport() : std::nullopt;
+    };
+    e.selectTo = [app, self, guard](int fixedRow, at::Point p) {
+        return inJournal(app, self, false, [&](JournalView &j, at::Context<JournalView> &) {
+            return j.selectAcross(guard.data(), fixedRow, p).has_value();
+        });
+    };
+    e.dragBlocksTo = [app, self, guard](at::Point p, float textX) {
+        return inJournal(app, self, false, [&](JournalView &j, at::Context<JournalView> &c) {
+            c.notify();
+            return j.dragBlocksTo(guard.data(), p, textX);
+        });
+    };
+    e.endBlockDrag = [app, self, guard](bool drop) {
+        inJournal(app, self, false, [&](JournalView &j, at::Context<JournalView> &c) {
+            j.endBlockDrag(guard.data(), drop);
+            c.notify();
+            return true;
+        });
+    };
+    return e;
+}
+
+void JournalView::embedDay(int day, const at::Entity<PageView> &page, PageController *ctl)
+{
+    // The stream's own parts of the page: the embedding, the tap strip under its blocks, the find
+    // bar's matches, its keys past its edges and right after a move across days.
+    const bool keys = m_activeDayPage == page.id();
+    page.update(*m_app, [&](PageView &v, at::Context<PageView> &pc) {
+        v.setEmbedding(embeddingOf(ctl), pc);
+        v.setStyle(dayMetrics(day), m_palette);
+        v.setKeysActive(keys, pc);
+        wrapDayKeys(v, ctl);
+        v.setFooterHeight(m_look.space3);
+        v.setFooterTapHeight(m_look.touch ? m_look.touchTarget : m_look.space3);
+        if (!m_findState.query.isEmpty())
+            v.setFind(m_findState.query, m_findState.matchCase, m_findState.matchDiacritics, m_findState.wholeWord,
+                      m_findState.color, pc);
+    });
+}
+
+void JournalView::wrapDayKeys(PageView &v, PageController *ctl)
+{
+    at::App *app = m_app;
+    const at::EntityId self = m_selfId;
+    QPointer<PageController> guard = ctl;
+    // The selection's keys past the day's edges go on into the days around (StreamSelection),
+    // when the host does not take them its way (BlockEditor.atramentSelectionCommand).
+    std::function<bool(PageView::SelectionCommand, int)> hostCommand = v.onSelectionCommand;
+    v.onSelectionCommand = [hostCommand, app, self, guard](PageView::SelectionCommand c, int row) {
+        if (hostCommand && hostCommand(c, row))
+            return true;
+        const JournalView *j = app->tryGet<JournalView>(self);
+        return streamSelectionCommand(j ? j->m_stream.data() : nullptr, guard.data(), c);
+    };
+    // Ctrl+Z / Ctrl+Y right after a move across days: both of its days.
+    std::function<void(bool)> hostUndo = v.onUndo;
+    v.onUndo = [hostUndo, app, self, guard](bool redo) {
+        const bool paired = inJournal(app, self, false, [&](JournalView &j, at::Context<JournalView> &) {
+            return j.undoMoveAcross(guard.data(), redo);
+        });
+        if (!paired)
+            dayUndo(guard.data(), redo, hostUndo);
+    };
+    // Shift+↑/↓ past the edited block's text at the day's edge: into the day around.
+    if (!v.onExtendSelection)
+        v.onExtendSelection = [app, self, guard](int row, int step) {
+            const JournalView *j = app->tryGet<JournalView>(self);
+            extendFromDay(j ? j->m_stream.data() : nullptr, guard.data(), row, step);
+        };
+}
+
+void JournalView::dayUndo(PageController *day, bool redo, const std::function<void(bool)> &hostUndo)
+{
+    if (!day)
+        return;
+    if (hostUndo)
+        hostUndo(redo);
+    else if (redo)
+        day->redo();
+    else
+        day->undo();
+}
+
+void JournalView::extendFromDay(StreamSelection *stream, PageController *day, int row, int step)
+{
+    if (!day || day->extendSelection(step))
+        return;
+    if (stream && stream->extendBy(day, step))
+        return;
+    day->selectRange(row, row);
+}
+
+void JournalView::connectDay(Day &made, PageController *ctl)
+{
+    // The day becomes the one written in when it starts editing, selects blocks or zooms
+    // (ContentJournalDay's rules); a zoom shows the day's top; Ctrl+E opens it as a page in source
+    // mode; its note mode its geometry; loaded, emptied, filled: the prompt comes or goes.
+    at::App *app = m_app;
+    const at::EntityId self = m_selfId;
+    QPointer<PageController> guard = ctl;
+    auto call = [app, self, guard](void (JournalView::*f)(PageController *, at::Context<JournalView> &)) {
+        return [app, self, guard, f] {
+            inJournal(app, self, false, [&](JournalView &j, at::Context<JournalView> &c) {
+                (j.*f)(guard.data(), c);
+                return true;
+            });
+        };
+    };
+    made.connections.push_back(QObject::connect(ctl, &PageController::editingRowChanged, ctl, call(&JournalView::dayActivity)));
+    made.connections.push_back(QObject::connect(ctl, &PageController::selectionChanged, ctl, call(&JournalView::dayActivity)));
+    made.connections.push_back(QObject::connect(ctl, &PageController::zoomChanged, ctl, call(&JournalView::dayActivity)));
+    made.connections.push_back(QObject::connect(ctl, &PageController::zoomChanged, ctl, call(&JournalView::dayZoomed)));
+    made.connections.push_back(QObject::connect(ctl, &PageController::sourceModeChanged, ctl, call(&JournalView::daySourceMode)));
+    made.connections.push_back(QObject::connect(ctl, &PageController::modeChanged, ctl, call(&JournalView::dayModeChanged)));
+    made.connections.push_back(QObject::connect(ctl, &PageController::loadingChanged, ctl, call(&JournalView::dayChanged)));
+    made.connections.push_back(
+            QObject::connect(ctl->blocks(), &BlockListModel::visibleCountChanged, ctl, call(&JournalView::dayChanged)));
+}
+
+void JournalView::dayZoomed(PageController *ctl, at::Context<JournalView> &cx)
+{
+    // Zoomed into a block: the day's top with its breadcrumb and the block in view (the day got
+    // shorter: what was in view may be past its end).
+    revealZoom(dayOfController(ctl));
+    cx.notify();
+}
+
+void JournalView::daySourceMode(PageController *ctl, at::Context<JournalView> &)
+{
+    if (!ctl || !ctl->sourceMode())
+        return;
+    ctl->setSourceMode(false);
+    const int d = dayOfController(ctl);
+    if (d >= 0 && onOpenAsPage)
+        onOpenAsPage(m_slots[std::size_t(d)].info.date, true);
+}
+
+void JournalView::dayModeChanged(PageController *ctl, at::Context<JournalView> &cx)
+{
+    const int d = dayOfController(ctl);
+    if (const at::Entity<PageView> *p = page(d))
+        p->update(cx.app(), [&](PageView &v, at::Context<PageView> &pc) {
+            v.setStyle(dayMetrics(d), m_palette);
+            pc.notify();
+        });
+    cx.notify();
+}
+
+void JournalView::dayChanged(PageController *, at::Context<JournalView> &cx)
+{
+    cx.notify();
 }
 
 bool JournalView::keeps(int day) const
@@ -517,12 +590,9 @@ bool JournalView::keeps(int day) const
     const bool span = spansDays();
     if (c->editingRow() >= 0 || c->zoomBlock() >= 0 || (!span && (day == m_active || c->selectionCount() > 0)))
         return true;
-    if (const at::Entity<PageView> *p = page(day)) {
-        const PageView &v = p->read(*m_app);
-        if (v.editedCell().row >= 0 || v.dragKind() != PageView::DragKind::None)
-            return true;
-    }
-    return false;
+    // A table's cell edited, a drag of its blocks.
+    const at::Entity<PageView> *p = page(day);
+    return p && p->read(*m_app).busy();
 }
 
 void JournalView::releaseDay(int day)
@@ -609,8 +679,7 @@ void JournalView::keepAnchorOnBlock(at::Window &window)
         return;
     const at::EntityId pageId = m_slots[day].day->page.id();
     const PageView *v = m_app->tryGet<PageView>(pageId);
-    const std::optional<std::pair<quint64, at::RowPart>> block = v ? v->embeddedRowAt(st->anchorInto, window)
-                                                                   : std::nullopt;
+    const std::optional<std::pair<quint64, at::RowPart>> block = v->embeddedRowAt(st->anchorInto, window);
     if (!block)
         return;
     at::App *app = m_app;
@@ -619,42 +688,38 @@ void JournalView::keepAnchorOnBlock(at::Window &window)
             day,
             [app, pageId, uid](at::Window &w) -> std::optional<at::RowPart> {
                 const PageView *page = app->tryGet<PageView>(pageId);
-                const int row = page && page->model() ? page->model()->rowOfUid(uid) : -1;
-                return row >= 0 ? page->embeddedPart(row, w) : std::nullopt;
+                return page ? page->embeddedPartOfBlock(uid, w) : std::nullopt;
             },
             st->anchorInto - block->second.top);
+}
+
+void JournalView::forgetOldParts()
+{
+    // The places of days not drawn for a while are forgotten.
+    std::erase_if(m_parts, [frame = m_frame](const auto &drawn) { return drawn.second.frame + 2 < frame; });
+}
+
+std::pair<float, float> JournalView::keptSpan() const
+{
+    // Within two screens of the view (made within one: a little hysteresis), in the rows' coordinates.
+    const std::shared_ptr<at::ListHandle::State> st = m_handle.shared();
+    const float vh = std::max(1.0f, st->scroll.viewport.height);
+    const float top = std::max(0.0f, st->lastY - st->leading);
+    return {top - 2 * vh, top + 3 * vh};
 }
 
 void JournalView::releaseFarDays()
 {
     m_releaseScheduled = false;
-    // The places of days not drawn for a while are forgotten.
-    for (auto it = m_parts.begin(); it != m_parts.end();) {
-        if (it->second.frame + 2 < m_frame)
-            it = m_parts.erase(it);
-        else
-            ++it;
-    }
+    forgetOldParts();
     const std::size_t n = m_heights.count();
-    if (n == 0)
-        return;
-    const std::shared_ptr<at::ListHandle::State> st = m_handle.shared();
-    const float vh = std::max(1.0f, st->scroll.viewport.height);
-    const float top = std::max(0.0f, st->lastY - st->leading);
-    // Kept within two screens of the view (made within one: a little hysteresis).
-    const float from = top - 2 * vh;
-    const float to = top + 3 * vh;
+    const auto [from, to] = keptSpan();
     const int active = m_active;
     for (std::size_t r = 0; r < n; ++r) {
-        if (!m_slots[r].day)
-            continue;
         const float a = m_heights.offsetOf(r);
         const float b = a + m_heights.heightOf(r);
-        if (b >= from && a <= to)
-            continue;
-        if (keeps(int(r)))
-            continue;
-        releaseDay(int(r));
+        if (m_slots[r].day && (b < from || a > to) && !keeps(int(r)))
+            releaseDay(int(r));
     }
     // (The day written in went: none is now.)
     if (active >= 0 && m_active < 0 && onActiveDayChanged)
@@ -666,15 +731,19 @@ void JournalView::dayActivity(PageController *ctl, at::Context<JournalView> &cx)
     const int day = dayOfController(ctl);
     if (day < 0 || m_applyingActive)
         return;
-    const bool editing = ctl->editingRow() >= 0;
-    const bool selected = ctl->selectionCount() > 0 && !(m_stream && m_stream->applying());
-    const bool zoomed = ctl->zoomBlock() >= 0;
-    if ((editing || selected || zoomed) && day != m_active)
+    const bool own = ownActivity(*ctl);
+    if ((own || ctl->zoomBlock() >= 0) && day != m_active)
         activateDay(day, cx);
     // Its own selection or editing: the other days' selections end (one day's at a time, unless a
     // selection over several days spans them).
-    if ((editing || selected) && !spansDays())
+    if (own && !spansDays())
         clearOtherSelections(day);
+}
+
+bool JournalView::ownActivity(const PageController &ctl) const
+{
+    // Editing, or blocks selected — not the stream selection's part it is being given.
+    return ctl.editingRow() >= 0 || (ctl.selectionCount() > 0 && !(m_stream && m_stream->applying()));
 }
 
 bool JournalView::spansDays() const
@@ -704,34 +773,35 @@ void JournalView::activateDay(int day, at::Context<JournalView> &cx)
     const int old = m_active;
     m_active = day;
     m_activeDayPage = day >= 0 ? m_slots[std::size_t(day)].day->page.id() : 0;
-    const bool span = spansDays();
-    if (old >= 0 && old < dayCount() && m_slots[std::size_t(old)].day) {
-        Day &d = *m_slots[std::size_t(old)].day;
-        // The day written in before stops editing — unless a selection over several days spans
-        // them (each keeps its part). Its selection stays until the new day selects or edits on its
-        // own (dayActivity): a Shift+click or a tap in the selection mode there extends it
-        // (StreamSelection.extendTo), and the click makes its day this one first.
-        m_applyingActive = true;
-        if (!span && d.controller) {
-            // A word an input method is still composing there is the day's text first (it would go
-            // with the field: the controller never saw it).
-            d.page.update(cx.app(), [](PageView &v, at::Context<PageView> &pc) { v.commitComposition(pc); });
-            d.controller->stopEditing();
-        }
-        d.page.update(cx.app(), [span](PageView &v, at::Context<PageView> &pc) {
-            if (!span)
-                v.stopEditingCell(pc);
-            v.setKeysActive(false, pc);
-        });
-        m_applyingActive = false;
-    }
-    if (day >= 0)
-        m_slots[std::size_t(day)].day->page.update(cx.app(), [](PageView &v, at::Context<PageView> &pc) {
-            v.setKeysActive(true, pc);
-        });
+    if (page(old))
+        leaveDay(*m_slots[std::size_t(old)].day, cx);
+    if (const at::Entity<PageView> *now = page(day))
+        now->update(cx.app(), [](PageView &v, at::Context<PageView> &pc) { v.setKeysActive(true, pc); });
     cx.notify();
     if (onActiveDayChanged)
         onActiveDayChanged(m_active);
+}
+
+void JournalView::leaveDay(Day &d, at::Context<JournalView> &cx)
+{
+    // The day written in before stops editing — unless a selection over several days spans them
+    // (each keeps its part). Its selection stays until the new day selects or edits on its own
+    // (dayActivity): a Shift+click or a tap in the selection mode there extends it
+    // (StreamSelection.extendTo), and the click makes its day this one first.
+    const bool span = spansDays();
+    m_applyingActive = true;
+    if (!span && d.controller) {
+        // A word an input method is still composing there is the day's text first (it would go
+        // with the field: the controller never saw it).
+        d.page.update(cx.app(), [](PageView &v, at::Context<PageView> &pc) { v.commitComposition(pc); });
+        d.controller->stopEditing();
+    }
+    d.page.update(cx.app(), [span](PageView &v, at::Context<PageView> &pc) {
+        if (!span)
+            v.stopEditingCell(pc);
+        v.setKeysActive(false, pc);
+    });
+    m_applyingActive = false;
 }
 
 QString JournalView::todayDate() const
@@ -1034,16 +1104,12 @@ bool JournalView::setFooterHeight(float height)
     return true;
 }
 
-at::AnyElement JournalView::edgeElement(ForeignFrame::Kind kind)
+void JournalView::edgePainted(const ForeignFrame &f)
 {
-    const float h = kind == ForeignFrame::Kind::Header ? m_headerHeight : m_footerHeight;
-    JournalView *self = this;
-    return at::div().h(h).ariaHidden().child(at::canvas([self, kind](at::Rect bounds, at::Window &window, at::App &) {
-                                                 self->m_edgeFrames.push_back({kind, -1, 0, bounds, window.contentMask()});
-                                                 // (The list's view, kept for the next frame's layout.)
-                                                 if (kind == ForeignFrame::Kind::Header)
-                                                     self->m_viewport = window.contentMask();
-                                             }).sizeFull());
+    m_edgeFrames.push_back(f);
+    // (The list's view, kept for the next frame's layout.)
+    if (f.kind == ForeignFrame::Kind::Header)
+        m_viewport = f.mask;
 }
 
 // --- The last frame -----------------------------------------------------------------------------
@@ -1152,10 +1218,12 @@ at::AnyElement JournalView::render(at::Window &window, at::Context<JournalView> 
                             })
                            .trackScroll(m_handle)
                            .header([self](at::Window &, at::App &) {
-                               return self->edgeElement(ForeignFrame::Kind::Header);
+                               return edgeBox(ForeignFrame::Kind::Header, self->m_headerHeight,
+                                              [self](const ForeignFrame &f) { self->edgePainted(f); });
                            })
                            .footer([self](at::Window &, at::App &) {
-                               return self->edgeElement(ForeignFrame::Kind::Footer);
+                               return edgeBox(ForeignFrame::Kind::Footer, self->m_footerHeight,
+                                              [self](const ForeignFrame &f) { self->edgePainted(f); });
                            })
                            .ariaLabel(u"Journals")
                            .flex1()

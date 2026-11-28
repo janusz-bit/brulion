@@ -89,6 +89,7 @@ private:
     void itemHeightChanged();
     void adopt(QQuickItem *edge);
     void tellEdge(ForeignFrame::Kind kind);
+    void setEdge(QPointer<QQuickItem> &edge, QQuickItem *item, ForeignFrame::Kind kind);
 
     QPointer<atrament::AtramentItem> m_item;
     atrament::App &m_app;

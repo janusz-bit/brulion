@@ -742,10 +742,10 @@ bool PageController::placeInZoom(BlockPlace place) const
 
 std::optional<QList<MoveStep>> PageController::selectionMovePlan(BlockPlace place) const
 {
+    // (No selection: planBlockMove() has no blocks. The zoomed block in it: every place inside the
+    // zoom is inside the blocks moved, which planBlockMove() refuses.)
     const RowRange range = selectionRange();
-    const int zoom = zoomBlock();
-    if (m_readOnly || range.count <= 0 || !m_selectionContiguous || (zoom >= range.first && zoom <= range.last())
-        || !placeInZoom(place))
+    if (m_readOnly || !m_selectionContiguous || !placeInZoom(place))
         return std::nullopt;
     return planBlockMove(m_model->document(), range.first, range.last(), place);
 }
@@ -785,44 +785,52 @@ bool PageController::canInsertBlocksAt(BlockPlace place) const
     return !m_readOnly && placeInZoom(place) && placeTarget(m_model->document(), place).has_value();
 }
 
+std::optional<BlockDocument> PageController::movedBlocks(const QString &markdown, int depth)
+{
+    // A move: the blocks' ids go with them (only one this page has already is left out).
+    const QStringList ids = markdown::blockIdsOf(markdown);
+    BlockDocument blocks(withoutTakenIds(markdown, QSet<QString>(ids.cbegin(), ids.cend())).trimmed());
+    // (A paragraph, a heading, a table… only at the top level.)
+    const bool nested = depth > 0;
+    if (nested && std::ranges::any_of(std::views::iota(0, blocks.count()),
+                                      [&](int k) { return blocks.at(k).kind != BlockKind::ListItem; }))
+        return std::nullopt;
+    return blocks;
+}
+
+int PageController::insertMovedBlock(int after, const BlockDocument &blocks, int k, int depth)
+{
+    // BlockDocument::insertAfter: deeper than `after` makes it its first child, else it follows the
+    // subtree of `after`'s ancestor at that depth; a block that is no list item written as it is.
+    // (One that is no list item comes only at the top level: `depth` and its own are 0.)
+    const markdown::BlockEntry &e = blocks.at(k);
+    const bool listItem = e.kind == BlockKind::ListItem;
+    const QString body = listItem ? e.body : blocks.blockSource(k);
+    return applyOp([&](BlockDocument &d) { return d.insertAfter(after, body, depth + e.depth, listItem); }).focus;
+}
+
 markdown::RowRange PageController::insertBlocksAt(BlockPlace place, const QString &markdown)
 {
     if (refusesEdit() || !canInsertBlocksAt(place))
         return {};
-    QString text = markdown;
-    text.replace(u"\r\n"_s, u"\n"_s).replace(u'\r', u'\n');
-    // A move: the blocks' ids go with them (only one this page has already is left out).
-    const QStringList ids = markdown::blockIdsOf(text);
-    text = withoutTakenIds(text, QSet<QString>(ids.cbegin(), ids.cend()));
-    const BlockDocument inserted(text.trimmed());
-    if (inserted.isEmpty())
+    const std::optional<BlockDocument> blocks = movedBlocks(markdown, place.depth);
+    if (!blocks)
         return {};
-    // (A paragraph, a heading, a table… only at the top level.)
-    for (int k = 0; k < inserted.count() && place.depth > 0; ++k) {
-        if (inserted.at(k).kind != BlockKind::ListItem)
-            return {};
-    }
-    // Each block after the one before it (BlockDocument::insertAfter: deeper than that row is its
-    // first child, else after its ancestor's subtree at that depth) — the first one after the row
-    // before the place.
+    // Each block after the one before it — the first one after the row before the place.
     int last = place.gap - 1;
     int first = -1;
     beginCommand();
-    for (int k = 0; k < inserted.count(); ++k) {
-        const markdown::BlockEntry &e = inserted.at(k);
-        const bool listItem = e.kind == BlockKind::ListItem;
-        const QString body = listItem ? e.body : inserted.blockSource(k);
-        const EditResult r = applyOp([&](BlockDocument &d) {
-            return d.insertAfter(last, body, listItem ? place.depth + e.depth : 0, listItem);
-        });
-        if (r.focus >= 0) {
-            last = r.focus;
-            if (first < 0)
-                first = r.focus;
-        }
+    for (int k = 0; k < blocks->count(); ++k) {
+        const int row = insertMovedBlock(last, *blocks, k, place.depth);
+        last = row >= 0 ? row : last;
+        first = first < 0 ? row : first;
     }
     const RowRange rows = first >= 0 ? RowRange{first, last - first + 1} : RowRange{};
-    endCommand(Focus{-1, -1, rows.count > 0 ? rows.first : -1, rows.count > 0 ? rows.first : -1});
+    // (Redone, they are selected.)
+    Focus focus;
+    focus.selectionAnchor = first;
+    focus.selectionFocus = first;
+    endCommand(focus);
     return rows;
 }
 

@@ -25,12 +25,18 @@ class App;
 }
 
 class AtramentView;
+namespace brulion::editor {
+class PageController;
+}
 namespace brulion::editor::atr {
+class JournalView;
 class PageView;
 }
 namespace brulion::atrament {
 template<class T>
 class Context;
+template<class T>
+class Entity;
 }
 
 // A table drawn by Atrament as BlockEditor reaches a TableBlockView — by name, through QmlCall
@@ -727,6 +733,16 @@ private:
     struct Journal;
     std::unique_ptr<Journal> m_journal;
     void attachJournal();
+    // The stream's parts that are this view's: the days' controllers and pages, the dates, its signals.
+    void hookJournal(brulion::editor::atr::JournalView &journal);
+    // A day's controller as ContentJournalDay makes it; its page set up as a page is (its signals
+    // through the day written in, looks, hosted rows, the zoom's breadcrumb).
+    std::unique_ptr<brulion::editor::PageController> makeDayController(const QString &path);
+    bool dayFoldsRestored(QObject *controller) const;
+    void releaseDayItems(QObject *controller);
+    QString dayLongDate(const QString &date) const;
+    void setUpDay(const brulion::atrament::Entity<brulion::editor::atr::PageView> &page,
+                  brulion::editor::PageController *controller);
     void applyJournal();
     void applyJournalLook();
     void applyDayOptions();
@@ -734,6 +750,7 @@ private:
     void journalActiveChanged(int day);
     // A day zoomed into a block gets its dayHeader item; zoomed out, it goes.
     void updateDayHeader(QObject *controller);
+    QQuickItem *makeDayHeader(QObject *controller);
     void placeStreamEdges();
     void tellStreamEdges();
     QPointer<QObject> m_daysModel;

@@ -1053,63 +1053,47 @@ void AtramentView::setDelegate(QQmlComponent *delegate)
 
 void AtramentView::setDayHeader(QQmlComponent *component)
 {
+    // (Set once, as the view is made: days zoomed into later get theirs from it.)
     if (component == m_dayHeader)
         return;
     m_dayHeader = component;
-#ifdef BRULION_HAS_ATRAMENT_EDITOR
-    if (m_journal) {
-        std::vector<QObject *> controllers;
-        for (auto &[controller, day] : m_journal->days) {
-            // (Made again from the new component.)
-            if (day.host)
-                day.host->setHeader(nullptr);
-            if (day.header)
-                day.header->deleteLater();
-            day.header = nullptr;
-            controllers.push_back(controller);
-        }
-        for (QObject *controller : controllers)
-            updateDayHeader(controller);
-    }
-#endif
     Q_EMIT dayHeaderChanged();
 }
 
 void AtramentView::updateDayHeader(QObject *controller)
 {
 #ifdef BRULION_HAS_ATRAMENT_EDITOR
-    using namespace brulion::editor;
-    if (!m_journal)
-        return;
+    // (Called for a day set up: its host exists.)
     const auto it = m_journal->days.find(controller);
-    auto *page = qobject_cast<PageController *>(controller);
-    if (it == m_journal->days.end() || !it->second.host || !page)
+    auto *page = qobject_cast<brulion::editor::PageController *>(controller);
+    if (it == m_journal->days.end() || !page)
         return;
     Journal::Day &day = it->second;
     const bool zoomed = page->zoomBlock() >= 0 && m_dayHeader && m_dayHeader->isReady();
     if (zoomed == bool(day.header))
         return;
-    if (!zoomed) {
-        day.host->setHeader(nullptr);
+    if (day.header)
         day.header->deleteLater();
-        day.header = nullptr;
-        return;
-    }
+    day.header = zoomed ? makeDayHeader(page) : nullptr;
+    day.host->setHeader(day.header);
+#else
+    Q_UNUSED(controller)
+#endif
+}
+
+QQuickItem *AtramentView::makeDayHeader(QObject *controller)
+{
     QQmlContext *context = m_dayHeader->creationContext() ? m_dayHeader->creationContext() : qmlContext(this);
     QObject *object = context ? m_dayHeader->beginCreate(context) : nullptr;
     auto *item = qobject_cast<QQuickItem *>(object);
     if (!item) {
         delete object;
-        return;
+        return nullptr;
     }
-    m_dayHeader->setInitialProperties(item, {{u"controller"_s, QVariant::fromValue<QObject *>(page)}});
+    m_dayHeader->setInitialProperties(item, {{u"controller"_s, QVariant::fromValue(controller)}});
     item->setParentItem(this);
     m_dayHeader->completeCreate();
-    day.header = item;
-    day.host->setHeader(item);
-#else
-    Q_UNUSED(controller)
-#endif
+    return item;
 }
 
 void AtramentView::setHeader(QQuickItem *item)
@@ -1304,100 +1288,7 @@ void AtramentView::attachJournal()
     m_page = std::make_unique<Page>(); // the active day's page, once there is one
     m_journal = std::make_unique<Journal>();
     m_journal->entity = r.app.newEntity<JournalView>(days);
-    QPointer<AtramentView> guard = this;
-    m_journal->entity.update(r.app, [guard](JournalView &j, at::Context<JournalView> &) {
-        // A day's controller as ContentJournalDay makes it.
-        j.makeController = [guard](const JournalView::DayInfo &info) -> std::unique_ptr<PageController> {
-            if (!guard)
-                return nullptr;
-            auto c = std::make_unique<PageController>();
-            QQmlEngine::setObjectOwnership(c.get(), QQmlEngine::CppOwnership);
-            c->setObjectName(u"journalDayController"_s);
-            c->setHost(qobject_cast<brulion::EditorHost *>(guard->m_editorHost.data()));
-            c->setActive(guard->m_daysActive);
-            c->setAllowNewBlockIds(guard->m_dayAllowNewBlockIds);
-            c->setReadOnly(guard->m_dayReadOnly);
-            if (!guard->m_dayPalette.isEmpty())
-                c->setPalette(guard->m_dayPalette);
-            if (!guard->m_dayLocale.isEmpty())
-                c->setLocale(guard->m_dayLocale);
-            c->setNow(guard->m_dayNow);
-            PageController *page = c.get();
-            QObject::connect(page, &PageController::foldStateChanged, guard.data(), [guard, page] {
-                if (!guard || !guard->m_journal)
-                    return;
-                const auto it = guard->m_journal->days.find(page);
-                if (it != guard->m_journal->days.end() && it->second.foldsRestored && page->loaded() && !page->loading())
-                    Q_EMIT guard->dayFoldStateChanged(page);
-            });
-            QObject::connect(page, &PageController::externallyChanged, guard.data(), [guard, page](bool merged) {
-                if (guard)
-                    Q_EMIT guard->dayExternallyChanged(page, merged);
-            });
-            QObject::connect(page, &PageController::loadingChanged, guard.data(), [guard, page] {
-                if (guard && page->loaded() && !page->loading())
-                    Q_EMIT guard->dayLoaded(page);
-            });
-            c->setPath(info.path);
-            return c;
-        };
-        // Its page: the page's signals (through the day written in), looks and hosted rows.
-        j.setUpPage = [guard](int, const at::Entity<PageView> &page, PageController *controller) {
-            if (!guard || !guard->m_journal)
-                return;
-            Journal::Day &day = guard->m_journal->days[controller];
-            day.page = page;
-            const PageHandle handle{page, controller->blocks(), true};
-            guard->connectPageSignals(handle);
-            guard->connectHoverSignals(handle);
-            guard->connectEditing(handle);
-            guard->connectTablesOf(handle);
-            guard->styleOne(handle);
-            guard->styleTablesOf(handle);
-            guard->extrasOf(handle);
-            guard->touchSelectionOf(handle);
-            day.host = std::make_unique<ForeignRowHost>(guard.data(), runtime().app, page, controller->blocks());
-            day.host->setDelegate(guard->m_delegate);
-            QObject::connect(controller, &PageController::zoomChanged, guard.data(), [guard, controller] {
-                if (guard)
-                    guard->updateDayHeader(controller);
-            });
-            guard->updateDayHeader(controller);
-            Q_EMIT guard->dayMade(controller);
-        };
-        j.onDayReleased = [guard](int, PageController *controller) {
-            if (!guard || !guard->m_journal)
-                return;
-            const auto it = guard->m_journal->days.find(controller);
-            if (it == guard->m_journal->days.end())
-                return;
-            it->second.host.reset();
-            if (it->second.header)
-                it->second.header->deleteLater();
-            guard->m_journal->days.erase(it);
-            Q_EMIT guard->dayReleased(controller);
-        };
-        j.formatDate = [guard](const QString &date) {
-            const bool english = guard && guard->m_dayLocale == u"en";
-            return brulion::dates::longDate(QDate::fromString(date, Qt::ISODate),
-                                            english ? brulion::dates::UiLocale::English
-                                                    : brulion::dates::UiLocale::Polish);
-        };
-        j.onOpenAsPage = [guard](const QString &date, bool source) {
-            if (guard)
-                Q_EMIT guard->openAsPageRequested(date, source);
-        };
-        j.onBeginRequested = [guard](int day) {
-            if (!guard)
-                return false;
-            Q_EMIT guard->beginRequested(day);
-            return true;
-        };
-        j.onActiveDayChanged = [guard](int day) {
-            if (guard)
-                guard->journalActiveChanged(day);
-        };
-    });
+    m_journal->entity.update(r.app, [this](JournalView &j, at::Context<JournalView> &) { hookJournal(j); });
     applyJournal();
     applyJournalLook();
     applyDayOptions();
@@ -1407,6 +1298,127 @@ void AtramentView::attachJournal()
     m_attached = true;
 #endif
 }
+
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+std::unique_ptr<brulion::editor::PageController> AtramentView::makeDayController(const QString &path)
+{
+    using brulion::editor::PageController;
+    auto c = std::make_unique<PageController>();
+    QQmlEngine::setObjectOwnership(c.get(), QQmlEngine::CppOwnership);
+    c->setObjectName(u"journalDayController"_s);
+    c->setHost(qobject_cast<brulion::EditorHost *>(m_editorHost.data()));
+    c->setActive(m_daysActive);
+    c->setAllowNewBlockIds(m_dayAllowNewBlockIds);
+    c->setReadOnly(m_dayReadOnly);
+    if (!m_dayPalette.isEmpty())
+        c->setPalette(m_dayPalette);
+    if (!m_dayLocale.isEmpty())
+        c->setLocale(m_dayLocale);
+    c->setNow(m_dayNow);
+    PageController *page = c.get();
+    QPointer<AtramentView> guard = this;
+    QObject::connect(page, &PageController::foldStateChanged, this, [guard, page] {
+        if (guard && guard->dayFoldsRestored(page) && page->loaded() && !page->loading())
+            Q_EMIT guard->dayFoldStateChanged(page);
+    });
+    QObject::connect(page, &PageController::externallyChanged, this,
+                     [this, page](bool merged) { Q_EMIT dayExternallyChanged(page, merged); });
+    QObject::connect(page, &PageController::loadingChanged, this, [this, page] {
+        if (page->loaded() && !page->loading())
+            Q_EMIT dayLoaded(page);
+    });
+    c->setPath(path);
+    return c;
+}
+
+void AtramentView::releaseDayItems(QObject *controller)
+{
+    // A day released: the QML items over it go. (None while the stream itself goes.)
+    if (!m_journal)
+        return;
+    const auto it = m_journal->days.find(controller);
+    if (it == m_journal->days.end())
+        return;
+    it->second.host.reset();
+    if (it->second.header)
+        it->second.header->deleteLater();
+    m_journal->days.erase(it);
+    Q_EMIT dayReleased(controller);
+}
+
+bool AtramentView::dayFoldsRestored(QObject *controller) const
+{
+    return m_journal && m_journal->days.count(controller) > 0 && m_journal->days.at(controller).foldsRestored;
+}
+
+QString AtramentView::dayLongDate(const QString &date) const
+{
+    return brulion::dates::longDate(QDate::fromString(date, Qt::ISODate), m_dayLocale == u"en"
+                                                                            ? brulion::dates::UiLocale::English
+                                                                            : brulion::dates::UiLocale::Polish);
+}
+
+void AtramentView::setUpDay(const at::Entity<brulion::editor::atr::PageView> &page,
+                            brulion::editor::PageController *controller)
+{
+    using namespace brulion::editor;
+    if (!m_journal)
+        return;
+    Journal::Day &day = m_journal->days[controller];
+    day.page = page;
+    const PageHandle handle{page, controller->blocks(), true};
+    connectPageSignals(handle);
+    connectHoverSignals(handle);
+    connectEditing(handle);
+    connectTablesOf(handle);
+    styleOne(handle);
+    styleTablesOf(handle);
+    extrasOf(handle);
+    touchSelectionOf(handle);
+    day.host = std::make_unique<atr::ForeignRowHost>(this, runtime().app, page, controller->blocks());
+    day.host->setDelegate(m_delegate);
+    // Zoomed into a block: its breadcrumb (dayHeader) over the page's header.
+    QObject::connect(controller, &PageController::zoomChanged, this, [this, controller] { updateDayHeader(controller); });
+    updateDayHeader(controller);
+    Q_EMIT dayMade(controller);
+}
+#endif
+
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+void AtramentView::hookJournal(brulion::editor::atr::JournalView &j)
+{
+    using namespace brulion::editor;
+    using namespace brulion::editor::atr;
+    QPointer<AtramentView> guard = this;
+    // A day's controller as ContentJournalDay makes it.
+    j.makeController = [guard](const JournalView::DayInfo &info) -> std::unique_ptr<PageController> {
+        return guard ? guard->makeDayController(info.path) : nullptr;
+    };
+    // Its page: the page's signals (through the day written in), looks and hosted rows.
+    j.setUpPage = [guard](int, const at::Entity<PageView> &page, PageController *controller) {
+        if (guard)
+            guard->setUpDay(page, controller);
+    };
+    j.onDayReleased = [guard](int, PageController *controller) {
+        if (guard)
+            guard->releaseDayItems(controller);
+    };
+    j.formatDate = [guard](const QString &date) { return guard ? guard->dayLongDate(date) : date; };
+    j.onOpenAsPage = [guard](const QString &date, bool source) {
+        if (guard)
+            Q_EMIT guard->openAsPageRequested(date, source);
+    };
+    j.onBeginRequested = [guard](int day) {
+        if (guard)
+            Q_EMIT guard->beginRequested(day);
+        return bool(guard);
+    };
+    j.onActiveDayChanged = [guard](int day) {
+        if (guard)
+            guard->journalActiveChanged(day);
+    };
+}
+#endif
 
 void AtramentView::applyJournal()
 {

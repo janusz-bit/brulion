@@ -40,6 +40,7 @@ struct PlaceTarget {
 std::optional<PlaceTarget> placeTarget(const markdown::BlockDocument &doc, BlockPlace place, int movedFirst = -1,
                                        int movedEnd = -1);
 
+// (In the order of applyMoveStep's table of BlockDocument's range operations.)
 enum class MoveStep : std::uint8_t { Up, Down, Indent, Outdent };
 
 // The steps that take the blocks of rows [first, last] — their top blocks (rangeTops), consecutive

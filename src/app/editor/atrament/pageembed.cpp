@@ -102,6 +102,16 @@ std::vector<std::pair<float, float>> PageView::embeddedSpans(float screen) const
     return spans;
 }
 
+void PageView::chooseEmbeddedRows(at::Window &window)
+{
+    // Embedded: the rows this frame lays out, from where the last frame put the page (before its
+    // frames go; the same for every layout of the page in the frame).
+    if (m_embedding && window.frameCount() != m_embeddedFrame) {
+        m_embeddedFrame = window.frameCount();
+        m_embeddedRanges = embeddedRows(window);
+    }
+}
+
 std::vector<std::pair<std::size_t, std::size_t>> PageView::embeddedRows(at::Window &window)
 {
     const std::size_t n = m_extents.count();
@@ -111,7 +121,14 @@ std::vector<std::pair<std::size_t, std::size_t>> PageView::embeddedRows(at::Wind
     const float screen = std::max(1.0f, view ? view->height() : window.viewportSize().height);
     const std::vector<std::pair<float, float>> spans = embeddedSpans(screen);
     m_layoutAround.reset();
-    // A screen around each, as rows, in order and merged.
+    return rowRanges(spans, screen);
+}
+
+std::vector<std::pair<std::size_t, std::size_t>> PageView::rowRanges(const std::vector<std::pair<float, float>> &spans,
+                                                                     float screen) const
+{
+    // A screen around each span, as rows, in order and merged.
+    const std::size_t n = m_extents.count();
     std::vector<std::pair<std::size_t, std::size_t>> ranges;
     for (const auto &[from, to] : spans) {
         if (to + screen < 0 || from - screen > m_extents.total())
@@ -129,6 +146,17 @@ std::vector<std::pair<std::size_t, std::size_t>> PageView::embeddedRows(at::Wind
             merged.push_back(r);
     }
     return merged;
+}
+
+std::optional<at::RowPart> PageView::embeddedPartOfBlock(quint64 uid, at::Window &window) const
+{
+    const int row = m_model ? m_model->rowOfUid(uid) : -1;
+    return row >= 0 ? embeddedPart(row, window) : std::nullopt;
+}
+
+bool PageView::busy() const
+{
+    return editedCell().row >= 0 || dragKind() != DragKind::None;
 }
 
 std::optional<std::pair<quint64, at::RowPart>> PageView::embeddedRowAt(float y, at::Window &window) const
@@ -233,6 +261,37 @@ at::AnyElement PageView::embeddedFooter()
                            }));
 }
 
+void PageView::embeddedPointer(const at::MouseMoveEvent &e, at::Context<PageView> &cx)
+{
+    // A drag of blocks follows the pointer; the mouse's press dragged across blocks selects them.
+    if (m_drag.kind != DragKind::None) {
+        if (followsPointer(e.pointer))
+            dragMoved(e.position, cx);
+    } else if (e.pointer == at::PointerKind::Mouse && e.pressedButton == at::MouseButton::Left) {
+        dragOver(e.position, cx);
+    }
+}
+
+void PageView::embeddedRowsInto(at::Div &column)
+{
+    // Only the rows near what the view around shows (and the edited one, one being revealed); the
+    // rest are room of their heights — measured, or the estimate.
+    float laidTo = 0;
+    for (const auto &[first, last] : m_embeddedRanges) {
+        if (last >= m_extents.count())
+            break; // (rows removed since the frame began)
+        if (const float gap = m_extents.offsetOf(first) - laidTo; gap > 0.01f)
+            std::move(column).child(at::div().h(gap).flexShrink0().ariaHidden());
+        for (std::size_t r = first; r <= last; ++r) {
+            if (!m_extents.isHidden(r)) // (a fold, a zoom)
+                std::move(column).child(RowBox(renderRow(r), this, r, m_model ? m_model->uidAt(int(r)) : 0));
+        }
+        laidTo = m_extents.offsetOf(last + 1);
+    }
+    if (const float rest = m_extents.total() - laidTo; rest > 0.01f)
+        std::move(column).child(at::div().h(rest).flexShrink0().ariaHidden());
+}
+
 at::AnyElement PageView::embeddedColumn()
 {
     m_rowNodes.clear();
@@ -255,33 +314,11 @@ at::AnyElement PageView::embeddedColumn()
                                         })
                              .onMouseMove([rootSelf](const at::MouseMoveEvent &e, at::Window &, at::App &a) {
                                  a.updateEntity<PageView>(rootSelf, [&](PageView &v, at::Context<PageView> &c) {
-                                     if (v.m_drag.kind != DragKind::None) {
-                                         if (v.followsPointer(e.pointer))
-                                             v.dragMoved(e.position, c);
-                                     } else if (e.pointer == at::PointerKind::Mouse
-                                                && e.pressedButton == at::MouseButton::Left)
-                                         v.dragOver(e.position, c);
+                                     v.embeddedPointer(e, c);
                                  });
                              });
     std::move(column).child(edgeElement(ForeignFrame::Kind::Header));
-    // Only the rows near what the view around shows (and the edited one, one being revealed); the
-    // rest are room of their heights — measured, or the estimate.
-    float laidTo = 0;
-    for (const auto &[first, last] : m_embeddedRanges) {
-        if (last >= m_extents.count())
-            break; // (rows removed since the frame began)
-        if (const float gap = m_extents.offsetOf(first) - laidTo; gap > 0.01f)
-            std::move(column).child(at::div().h(gap).flexShrink0().ariaHidden());
-        for (std::size_t r = first; r <= last; ++r) {
-            if (m_extents.isHidden(r))
-                continue; // a fold, a zoom
-            const quint64 uid = m_model ? m_model->uidAt(int(r)) : 0;
-            std::move(column).child(RowBox(renderRow(r), this, r, uid));
-        }
-        laidTo = m_extents.offsetOf(last + 1);
-    }
-    if (const float rest = m_extents.total() - laidTo; rest > 0.01f)
-        std::move(column).child(at::div().h(rest).flexShrink0().ariaHidden());
+    embeddedRowsInto(column);
     return std::move(column)
             .child(embeddedFooter())
             // A drag of blocks: the drop line, the listener that follows it (pagedrag.cpp); the

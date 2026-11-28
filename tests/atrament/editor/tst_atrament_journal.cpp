@@ -108,6 +108,7 @@ struct Harness {
     at::Entity<JournalView> journal;
     StreamSelection stream;
     std::vector<QString> opened; // onOpenAsPage's dates
+    bool openedSource = false;   // and whether the last one asked for source mode
     int made = 0;
 
     // Today without a note, then `count` days with notes of `blocks` blocks each (every fifth day a
@@ -141,7 +142,10 @@ struct Harness {
             j.formatDate = [](const QString &date) {
                 return QDate::fromString(date, Qt::ISODate).toString(u"dddd, d MMMM yyyy"_s);
             };
-            j.onOpenAsPage = [this](const QString &date, bool) { opened.push_back(date); };
+            j.onOpenAsPage = [this](const QString &date, bool source) {
+                opened.push_back(date);
+                openedSource = source;
+            };
             j.setJournalTemplate(u"Szablony/Dziennik.md"_s);
             j.setStreamSelection(&stream);
             PageMetrics m;
@@ -268,6 +272,8 @@ private Q_SLOTS:
     void shiftArrowsBackAcrossADaysEdge();
     void spanDaysScrolledAwayGoAndComeBack();
     void spanDayWrittenInGoesFarAway();
+    void sourceModeOpensTheDayAsAPage();
+    void undoAndRedoInADay();
 };
 
 void TestAtramentJournal::daysLaidOutInOrder()
@@ -968,6 +974,39 @@ void TestAtramentJournal::spanDayWrittenInGoesFarAway()
     h.scrollToDay(38);
     h.tw.settle();
     QVERIFY(h.day(1));
+}
+
+void TestAtramentJournal::sourceModeOpensTheDayAsAPage()
+{
+    // Ctrl+E in a day (its controller asked for source mode): the day opens as a page in source
+    // mode; in the stream it stays as it is.
+    Harness h(3);
+    PageController *first = h.day(1);
+    first->setSourceMode(true);
+    h.tw.settle();
+    QVERIFY(!first->sourceMode());
+    QVERIFY(!h.opened.empty());
+    QCOMPARE(h.opened.back(), dayDate(1));
+    QVERIFY(h.openedSource);
+}
+
+void TestAtramentJournal::undoAndRedoInADay()
+{
+    // Ctrl+Z / Ctrl+Y in a day with no move across days to pair: the day's own undo.
+    Harness h(3);
+    PageController *first = h.day(1);
+    const QString before = first->sourceText();
+    h.clickInto(1, 0, 2);
+    h.tw.simulateKeystrokes(u"end");
+    h.tw.simulateTyping(u" źdźbło");
+    h.tw.settle();
+    QVERIFY(first->sourceText().contains(u"źdźbło"_s));
+    QVERIFY(h.tw.simulateKeystrokes(u"ctrl-z"));
+    h.tw.settle();
+    QCOMPARE(first->sourceText(), before);
+    QVERIFY(h.tw.simulateKeystrokes(u"ctrl-y"));
+    h.tw.settle();
+    QVERIFY(first->sourceText().contains(u"źdźbło"_s));
 }
 
 QTEST_MAIN(TestAtramentJournal)

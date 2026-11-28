@@ -232,6 +232,28 @@ private:
     void keepAnchorOnBlock(atrament::Window &window);
     std::optional<atrament::Rect> m_viewport; // the list's view by the last frame
     void dayActivity(PageController *controller, atrament::Context<JournalView> &cx);
+    // A day made: its page embedded in the stream (the stream's hooks, keys and looks), its
+    // controller's signals followed.
+    PageView::PageEmbedding embeddingOf(PageController *controller) const;
+    void embedDay(int day, const atrament::Entity<PageView> &page, PageController *controller);
+    void wrapDayKeys(PageView &page, PageController *controller);
+    static void dayUndo(PageController *day, bool redo, const std::function<void(bool)> &hostUndo);
+    static void extendFromDay(StreamSelection *stream, PageController *day, int row, int step);
+    void connectDay(Day &made, PageController *controller);
+    void dayZoomed(PageController *controller, atrament::Context<JournalView> &cx);
+    void daySourceMode(PageController *controller, atrament::Context<JournalView> &cx);
+    void dayModeChanged(PageController *controller, atrament::Context<JournalView> &cx);
+    void dayChanged(PageController *controller, atrament::Context<JournalView> &cx);
+    // The day written in before another one: it stops editing (unless a span spans them).
+    void leaveDay(Day &day, atrament::Context<JournalView> &cx);
+    // A day's own activity: editing, or blocks selected that are not the stream selection's part.
+    bool ownActivity(const PageController &controller) const;
+    void forgetOldParts();
+    // Days are kept within these rows' y (releaseFarDays).
+    std::pair<float, float> keptSpan() const;
+    // A day's controller and page made into its slot (null: the host made none).
+    PageController *newDay(int day, atrament::Context<JournalView> &cx);
+    void attachDay(PageController *controller);
     // A selection over several days is shown (spanActive, else the stream's selection).
     bool spansDays() const;
     // Every day but `day` loses its block selection.
@@ -278,11 +300,16 @@ private:
         QString fromToken;
         QString toToken;
         bool undone = false;
+        bool stands(PageController *in, bool redo) const;
     } m_lastMove;
+    // Blocks of `from` would go to day `day` at window point `p` (the last frame's coordinates).
+    std::optional<PageView::DropTarget> dropInto(int day, const PageController &from, atrament::Point p,
+                                                 float textX) const;
     atrament::AnyElement renderDay(std::size_t row);
     atrament::AnyElement heading(int day, const DayInfo &info);
     atrament::AnyElement prompt(int day, const DayInfo &info);
-    atrament::AnyElement edgeElement(ForeignFrame::Kind kind);
+    // Where a frame painted the stream's header or footer (the header's mask: the list's view).
+    void edgePainted(const ForeignFrame &frame);
     bool dayEmpty(int day) const;
 
     QPointer<QAbstractItemModel> m_days;

@@ -30,15 +30,20 @@ at::AnyElement PageView::foreignRow(std::size_t row)
                                 }).sizeFull());
 }
 
+at::AnyElement edgeBox(ForeignFrame::Kind kind, float height, std::function<void(const ForeignFrame &)> painted)
+{
+    return at::div().h(height).ariaHidden().child(
+            at::canvas([kind, painted = std::move(painted)](at::Rect bounds, at::Window &window, at::App &) {
+                painted({kind, -1, 0, bounds, window.contentMask()});
+            }).sizeFull());
+}
+
 at::AnyElement PageView::edgeElement(ForeignFrame::Kind kind)
 {
-    const float h = kind == ForeignFrame::Kind::Header ? m_headerHeight : m_footerHeight;
     PageView *self = this;
     // (Painted also when it is 0 px tall: the header's place says where the rows start.)
-    return at::div().h(h).ariaHidden().child(at::canvas([self, kind](at::Rect bounds, at::Window &window, at::App &) {
-                                                 self->m_foreignFrames.push_back(
-                                                         {kind, -1, 0, bounds, window.contentMask()});
-                                             }).sizeFull());
+    return edgeBox(kind, kind == ForeignFrame::Kind::Header ? m_headerHeight : m_footerHeight,
+                   [self](const ForeignFrame &f) { self->m_foreignFrames.push_back(f); });
 }
 
 const ForeignFrame *PageView::edgeFrame(ForeignFrame::Kind kind) const
@@ -60,6 +65,13 @@ bool PageView::setForeignHeight(int row, float height)
         return false;
     m_rows->setRowHeight(t, height, true);
     return true;
+}
+
+bool PageView::setEdgeHeights(std::optional<float> header, std::optional<float> footer)
+{
+    const bool a = header && setHeaderHeight(*header);
+    const bool b = footer && setFooterHeight(*footer);
+    return a || b;
 }
 
 bool PageView::setHeaderHeight(float height)

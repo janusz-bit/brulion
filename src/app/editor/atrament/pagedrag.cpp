@@ -19,6 +19,8 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
+#include <vector>
 
 namespace brulion::editor::atr {
 
@@ -35,8 +37,7 @@ float PageView::scrolledSinceFrame() const
 {
     if (m_embedding)
         return m_embedding->scrolledSinceFrame ? m_embedding->scrolledSinceFrame() : 0.0f;
-    const std::shared_ptr<at::ListHandle::State> st = m_handle.shared();
-    return st->scroll.offset.y - st->lastY;
+    return m_handle.scrolledSinceFrame();
 }
 
 std::optional<at::Rect> PageView::listViewport() const
@@ -64,14 +65,18 @@ int PageView::dragRowAt(at::Point p) const
     const int row = rowAtY(y);
     if (row >= 0)
         return row;
-    if (y < header->bounds.bottom()) {
-        // Above the blocks (the title, the properties): the first block that is no property.
-        int first = m_controller->nextVisibleRow(-1);
-        while (first >= 0 && m_model->index(first, 0).data(BlockListModel::ViewRole).toString() == u"frontmatter")
-            first = m_controller->nextVisibleRow(first);
-        return first;
-    }
-    return m_controller->lastVisibleRow();
+    // Above the blocks (the title, the properties), below them.
+    return y < header->bounds.bottom() ? firstBlockRow() : m_controller->lastVisibleRow();
+}
+
+int PageView::firstBlockRow() const
+{
+    if (!m_controller || !m_model)
+        return -1;
+    int first = m_controller->nextVisibleRow(-1);
+    while (first >= 0 && m_model->index(first, 0).data(BlockListModel::ViewRole).toString() == u"frontmatter")
+        first = m_controller->nextVisibleRow(first);
+    return first;
 }
 
 bool PageView::followsPointer(at::PointerKind pointer) const
@@ -154,28 +159,39 @@ void PageView::dragMoved(at::Point p, at::Context<PageView> &cx)
     if (m_drag.kind == DragKind::None)
         return;
     m_drag.last = p;
-    if (!m_drag.active) {
-        // A bullet's press: a drag once it went a few px (else it stays a click).
-        if (std::max(std::abs(p.x - m_drag.start.x), std::abs(p.y - m_drag.start.y)) < kDragThreshold)
-            return;
-        const int row = m_model ? m_model->rowOfUid(m_drag.uid) : -1;
-        if (row < 0 || !m_controller) {
-            m_drag = {};
-            return;
-        }
-        // The pressed block's selection moves; a block outside it is selected alone first.
-        if (!m_model->index(row, 0).data(BlockListModel::IsSelectedRole).toBool()) {
-            if (onDragSelect) {
-                onDragSelect(row, row);
-            } else {
-                m_controller->stopEditing();
-                m_controller->selectRange(row, row);
-            }
-        }
-        m_drag.active = true;
-        grabMovedBlocks();
-    }
+    if (!m_drag.active && !activateBulletDrag(p))
+        return;
     dragUpdate(cx);
+    followEdge(p, cx);
+    cx.notify();
+}
+
+bool PageView::activateBulletDrag(at::Point p)
+{
+    // A bullet's press: a drag once it went a few px (else it stays a click).
+    if (std::max(std::abs(p.x - m_drag.start.x), std::abs(p.y - m_drag.start.y)) < kDragThreshold)
+        return false;
+    const int row = m_model ? m_model->rowOfUid(m_drag.uid) : -1;
+    if (row < 0 || !m_controller) {
+        m_drag = {};
+        return false;
+    }
+    // The pressed block's selection moves; a block outside it is selected alone first.
+    if (!m_model->index(row, 0).data(BlockListModel::IsSelectedRole).toBool()) {
+        if (onDragSelect) {
+            onDragSelect(row, row);
+        } else {
+            m_controller->stopEditing();
+            m_controller->selectRange(row, row);
+        }
+    }
+    m_drag.active = true;
+    grabMovedBlocks();
+    return true;
+}
+
+void PageView::followEdge(at::Point p, at::Context<PageView> &cx)
+{
     // Near the view's top or bottom edge the page scrolls while the drag stays there.
     const std::optional<at::Rect> view = listViewport();
     const float speed =
@@ -195,7 +211,6 @@ void PageView::dragMoved(at::Point p, at::Context<PageView> &cx)
             }
         });
     });
-    cx.notify();
 }
 
 void PageView::dragUpdate(at::Context<PageView> &)
@@ -207,32 +222,41 @@ void PageView::dragUpdate(at::Context<PageView> &)
     case DragKind::None:
         return;
     case DragKind::Select:
-    case DragKind::Extend: {
-        // A mouse's press dragged across blocks (dragOver began it), a grip or a long press (the
-        // fixed end stays, the pointer moves the other one).
-        const int fixed = m_model->rowOfUid(m_drag.kind == DragKind::Select ? m_dragUid : m_drag.uid);
-        if (fixed < 0)
-            return;
-        // Over another page of the view around: the selection goes on there.
-        if (m_embedding && m_embedding->selectTo && m_embedding->selectTo(fixed, m_drag.last)) {
-            m_dragFocus = -1;
-            return;
-        }
-        const int row = dragRowAt(m_drag.last);
-        if (row < 0 || m_model->index(row, 0).data(BlockListModel::ViewRole).toString() == u"frontmatter")
-            return;
-        selectDraggedTo(fixed, row);
+    case DragKind::Extend:
+        selectionDragUpdate();
         return;
-    }
     case DragKind::Move:
-        // Over another page of the view around: its drop line shows where the blocks would go.
-        if (m_embedding && m_embedding->dragBlocksTo && m_embedding->dragBlocksTo(m_drag.last, dragTextX())) {
-            m_drag.drop.reset();
-            return;
-        }
-        updateDropTarget();
+        moveDragUpdate();
         return;
     }
+}
+
+void PageView::moveDragUpdate()
+{
+    // Over another page of the view around: its drop line shows where the blocks would go.
+    if (m_embedding && m_embedding->dragBlocksTo && m_embedding->dragBlocksTo(m_drag.last, dragTextX())) {
+        m_drag.drop.reset();
+        return;
+    }
+    updateDropTarget();
+}
+
+void PageView::selectionDragUpdate()
+{
+    // A mouse's press dragged across blocks (dragOver began it), a grip or a long press (the fixed
+    // end stays, the pointer moves the other one).
+    const int fixed = m_model->rowOfUid(m_drag.kind == DragKind::Select ? m_dragUid : m_drag.uid);
+    if (fixed < 0)
+        return;
+    // Over another page of the view around: the selection goes on there.
+    if (m_embedding && m_embedding->selectTo && m_embedding->selectTo(fixed, m_drag.last)) {
+        m_dragFocus = -1;
+        return;
+    }
+    const int row = dragRowAt(m_drag.last);
+    if (row < 0 || m_model->index(row, 0).data(BlockListModel::ViewRole).toString() == u"frontmatter")
+        return;
+    selectDraggedTo(fixed, row);
 }
 
 void PageView::selectDraggedTo(int fixed, int row)
@@ -269,48 +293,52 @@ void PageView::updateDropTarget()
                       : std::nullopt;
 }
 
-std::optional<PageView::DropTarget> PageView::dropAt(at::Point p, float textX,
-                                                     const std::function<bool(BlockPlace)> &takes) const
+std::pair<int, int> PageView::rowsAround(float into) const
+{
+    // Above or below the half of the shown row there, before the first one, after the last one.
+    const PageController *ctl = m_controller.data();
+    if (into < 0)
+        return {-1, ctl->nextVisibleRow(-1)};
+    if (into >= m_extents.total())
+        return {ctl->lastVisibleRow(), -1};
+    const std::size_t r = m_extents.rowAt(into);
+    if (into < m_extents.offsetOf(r) + m_extents.heightOf(r) / 2)
+        return {ctl->previousVisibleRow(int(r)), int(r)};
+    return {int(r), ctl->nextVisibleRow(int(r))};
+}
+
+std::optional<PageView::DropGap> PageView::dropGapAt(at::Point p) const
 {
     const ForeignFrame *header = edgeFrame(ForeignFrame::Kind::Header);
     const PageController *ctl = m_controller.data();
-    if (!header || !ctl || !m_model || !takes)
+    if (!header || !ctl || !m_model)
         return std::nullopt;
+    // The gap nearest the pointer, where the rows are now; the levels it allows: from the next
+    // block's (a sibling of it) to a child of the one above.
+    const auto [above, below] = rowsAround(p.y + scrolledSinceFrame() - header->bounds.bottom());
     const markdown::BlockDocument &doc = m_model->document();
-    // The gap nearest the pointer (where the rows are now): above or below the half of the shown
-    // row under it, before the first one, after the last one.
-    const float into = p.y + scrolledSinceFrame() - header->bounds.bottom();
-    int above = -1;
-    int below = -1;
-    if (into < 0) {
-        below = ctl->nextVisibleRow(-1);
-    } else if (into >= m_extents.total()) {
-        above = ctl->lastVisibleRow();
-    } else {
-        const std::size_t r = m_extents.rowAt(into);
-        if (into < m_extents.offsetOf(r) + m_extents.heightOf(r) / 2) {
-            below = int(r);
-            above = ctl->previousVisibleRow(int(r));
-        } else {
-            above = int(r);
-            below = ctl->nextVisibleRow(int(r));
-        }
-    }
     const int zoom = ctl->zoomBlock();
     const int end = zoom >= 0 ? doc.subtreeRange(zoom).last() + 1 : doc.count();
-    const int gap = below >= 0 ? below : end;
-    // The levels the gap allows: from the next block's (a sibling of it) to a child of the one
-    // above; the one nearest the moved blocks' text column that takes them.
     const int lo = below >= 0 ? doc.at(below).depth : (zoom >= 0 ? doc.at(zoom).depth + 1 : 0);
-    const int hi = std::max(lo, above >= 0 ? doc.at(above).depth + 1 : lo);
-    const int wanted = std::clamp(depthAtX(textX), lo, hi);
-    for (int k = 0; k <= hi - lo; ++k) {
-        for (const int depth : {wanted - k, wanted + k}) {
-            if (depth < lo || depth > hi || (k > 0 && depth == wanted))
-                continue;
-            if (takes({gap, depth}))
-                return DropTarget{{gap, depth}, {}};
-        }
+    return DropGap{below >= 0 ? below : end, lo, std::max(lo, above >= 0 ? doc.at(above).depth + 1 : lo)};
+}
+
+std::optional<PageView::DropTarget> PageView::dropAt(at::Point p, float textX,
+                                                     const std::function<bool(BlockPlace)> &takes) const
+{
+    const std::optional<DropGap> g = takes ? dropGapAt(p) : std::nullopt;
+    if (!g)
+        return std::nullopt;
+    // Its levels nearest the moved blocks' text column first (the shallower of two as near).
+    const int wanted = depthAtX(textX);
+    std::vector<int> levels;
+    for (int depth = g->lo; depth <= g->hi; ++depth)
+        levels.push_back(depth);
+    std::stable_sort(levels.begin(), levels.end(),
+                     [wanted](int a, int b) { return std::abs(a - wanted) < std::abs(b - wanted); });
+    for (const int depth : levels) {
+        if (takes({g->gap, depth}))
+            return DropTarget{{g->gap, depth}, {}};
     }
     return std::nullopt;
 }
@@ -340,14 +368,18 @@ void PageView::dragReleased(bool cancelled, at::Context<PageView> &cx)
     m_dragUid = 0;
     m_dragSelected = false;
     m_dragFocus = -1;
-    if (kind == DragKind::Move && active) {
-        if (!cancelled && drop && m_controller && m_controller->moveSelectionTo(drop->place))
-            revealRow(m_controller->selectedRow(), cx);
-        // (Embedded: let go over another page, the view around moves them there.)
-        if (m_embedding && m_embedding->endBlockDrag)
-            m_embedding->endBlockDrag(!cancelled && !drop);
-    }
+    if (kind == DragKind::Move && active)
+        dropMoved(drop, cancelled, cx);
     cx.notify();
+}
+
+void PageView::dropMoved(const std::optional<DropTarget> &drop, bool cancelled, at::Context<PageView> &cx)
+{
+    if (!cancelled && drop && m_controller && m_controller->moveSelectionTo(drop->place))
+        revealRow(m_controller->selectedRow(), cx);
+    // (Embedded: let go over another page, the view around moves them there.)
+    if (m_embedding && m_embedding->endBlockDrag)
+        m_embedding->endBlockDrag(!cancelled && !drop);
 }
 
 void PageView::paintDropLine(DropTarget &t, at::Window &window)
@@ -385,25 +417,32 @@ bool PageView::followDrag(const at::PlatformInput &input, at::Context<PageView> 
     }
     if (m_drag.kind == DragKind::None)
         return false;
-    if (move) {
-        // Only the dragging pointer's moves (not a hover Qt Quick makes where a finger is).
-        if (!followsPointer(move->pointer))
-            return false;
-        // A mouse released where the window did not see it: the drag is over.
-        if (move->pointer == at::PointerKind::Mouse && move->pressedButton != at::MouseButton::Left) {
-            dragReleased(true, c);
-            return false;
-        }
-        dragMoved(move->position, c);
-        return m_drag.active;
+    return move ? followMove(*move, c) : followRelease(*up, c);
+}
+
+bool PageView::followMove(const at::MouseMoveEvent &move, at::Context<PageView> &c)
+{
+    // Only the dragging pointer's moves (not a hover Qt Quick makes where a finger is).
+    if (!followsPointer(move.pointer))
+        return false;
+    // A mouse released where the window did not see it: the drag is over.
+    if (move.pointer == at::PointerKind::Mouse && move.pressedButton != at::MouseButton::Left) {
+        dragReleased(true, c);
+        return false;
     }
+    dragMoved(move.position, c);
+    return m_drag.active;
+}
+
+bool PageView::followRelease(const at::MouseUpEvent &up, at::Context<PageView> &c)
+{
     const bool stop = m_drag.active;
     // (Where it was let go counts: a last stretch no move showed.)
-    if (m_drag.active && !up->cancelled && !(up->position == m_drag.last)) {
-        m_drag.last = up->position;
+    if (m_drag.active && !up.cancelled && !(up.position == m_drag.last)) {
+        m_drag.last = up.position;
         dragUpdate(c);
     }
-    dragReleased(up->cancelled, c);
+    dragReleased(up.cancelled, c);
     return stop;
 }
 
@@ -428,23 +467,24 @@ at::AnyElement PageView::dragLayer()
                    self->paintDropLine(*self->m_drag.drop, window);
                else if (self->m_incomingDrop)
                    self->paintDropLine(*self->m_incomingDrop, window);
-               if (!listens)
-                   return;
-               // The drag's moves and its release before anything under it sees them.
-               window.onMouseEvent([id](const at::PlatformInput &input, at::DispatchPhase phase, at::Window &w,
-                                        at::App &app) {
-                   if (phase != at::DispatchPhase::Capture)
-                       return;
-                   bool stop = false;
-                   app.updateEntity<PageView>(id, [&](PageView &v, at::Context<PageView> &c) {
-                       stop = v.followDrag(input, c);
-                   });
-                   if (stop)
-                       w.stopPropagation();
-               });
+               if (listens)
+                   listenToDrag(window, id);
            })
             .absolute()
             .size(0);
+}
+
+void PageView::listenToDrag(at::Window &window, at::EntityId page)
+{
+    // The drag's moves and its release before anything under it sees them.
+    window.onMouseEvent([page](const at::PlatformInput &input, at::DispatchPhase phase, at::Window &w, at::App &app) {
+        if (phase != at::DispatchPhase::Capture)
+            return;
+        bool stop = false;
+        app.updateEntity<PageView>(page, [&](PageView &v, at::Context<PageView> &c) { stop = v.followDrag(input, c); });
+        if (stop)
+            w.stopPropagation();
+    });
 }
 
 } // namespace brulion::editor::atr

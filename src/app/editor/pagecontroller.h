@@ -1424,6 +1424,11 @@ private:
     std::optional<QList<MoveStep>> selectionMovePlan(BlockPlace place) const;
     /// Whether `place` is inside the zoomed block, below it (always without a zoom).
     bool placeInZoom(BlockPlace place) const;
+    /// insertBlocksAt()'s blocks: `markdown` parsed (blocksMarkdown()'s: "\n" line breaks), its block
+    /// ids kept but one this page has already; nothing when `depth` > 0 and one is no list item.
+    std::optional<markdown::BlockDocument> movedBlocks(const QString &markdown, int depth);
+    /// Block `k` of `blocks` inserted after row `after`, `depth` deeper than its own: its row.
+    int insertMovedBlock(int after, const markdown::BlockDocument &blocks, int k, int depth);
     markdown::RowRange rangeOf(int anchor, int focus) const;
     /// The top blocks of the selection (each stands for its subtree), ascending.
     QList<int> selectionTops() const;

@@ -367,6 +367,10 @@ public:
     // Embedded: the row the last layout of the page put at `y` (from the section's top, as
     // embeddedPart's), its uid and its part; nothing between rows or for a row not laid out.
     std::optional<std::pair<quint64, atrament::RowPart>> embeddedRowAt(float y, atrament::Window &window) const;
+    // Embedded: embeddedPart() of the block `uid` (wherever its row is now).
+    std::optional<atrament::RowPart> embeddedPartOfBlock(quint64 uid, atrament::Window &window) const;
+    // A table's cell is edited, or a drag of blocks goes on: the page is busy (the stream keeps it).
+    bool busy() const;
     // Embedded: the block selection's keys (those no focused element took) are this page's — the
     // stream's active day's only.
     void setKeysActive(bool on, atrament::Context<PageView> &cx);
@@ -388,6 +392,8 @@ public:
     // page's drag layer calls it, or — embedded — the view around, which sees the drag's events while
     // this page is scrolled away.
     bool dragging() const;
+    // The first shown block that is none of the page's properties (−1: none).
+    int firstBlockRow() const;
     bool followDrag(const atrament::PlatformInput &input, atrament::Context<PageView> &cx);
     // The find bar's query the rows tint (tests).
     const QString &findQuery() const { return m_find.query; }
@@ -407,6 +413,10 @@ private:
     std::optional<int> m_layoutAround;
     std::vector<std::pair<float, float>> embeddedSpans(float screen) const;
     std::vector<std::pair<std::size_t, std::size_t>> embeddedRows(atrament::Window &window);
+    std::vector<std::pair<std::size_t, std::size_t>> rowRanges(const std::vector<std::pair<float, float>> &spans,
+                                                               float screen) const;
+    void embeddedRowsInto(atrament::Div &column);
+    void embeddedPointer(const atrament::MouseMoveEvent &e, atrament::Context<PageView> &cx);
     class RowBox;
     // Shows a row: the page's list (scrollToRow), or embedded, the view around (takeReveal()).
     void scrollRowTo(std::size_t row, atrament::ListPosition position);
@@ -420,6 +430,12 @@ private:
     // The fold arrow's names for screen readers ("Expand", "Collapse": BlockDelegate's texts).
     QString m_foldNames[2];
     atrament::AnyElement renderRow(std::size_t row);
+    // A frame's start: the edited field focused and shown, the text of rows long gone forgotten.
+    void focusEdited(atrament::Window &window, atrament::Context<PageView> &cx);
+    void forgetOldRowText(std::uint64_t frame);
+    // The page's own list (not embedded) and its listeners; embedded, the rows this frame lays out.
+    atrament::AnyElement pageColumn();
+    void chooseEmbeddedRows(atrament::Window &window);
     // Editing (pageediting.cpp).
     void controllerEditingChanged(atrament::Context<PageView> &cx);
     void controllerTextReset(int row, const QString &text, int cursor, atrament::Context<PageView> &cx);
@@ -513,6 +529,8 @@ public:
     // The heights of the QML items above the blocks and below them.
     bool setHeaderHeight(float height);
     bool setFooterHeight(float height);
+    // Those of them given; whether one changed.
+    bool setEdgeHeights(std::optional<float> header, std::optional<float> footer);
     float headerHeight() const { return m_headerHeight; }
     float footerHeight() const { return m_footerHeight; }
     // The foreign rows from `above` px above the view to `below` px below it, laid out or not, by
@@ -1241,6 +1259,25 @@ private:
     float depthX(int depth) const;
     int depthAtX(float x) const;
     void paintDropLine(DropTarget &target, atrament::Window &window);
+    // A drop's gap (the row it is before) and the levels it allows.
+    struct DropGap {
+        int gap = 0;
+        int lo = 0;
+        int hi = 0;
+    };
+    std::optional<DropGap> dropGapAt(atrament::Point p) const;
+    // The shown rows above and below the gap nearest `into` px under the rows' top (−1: none).
+    std::pair<int, int> rowsAround(float into) const;
+    // Parts of a drag: a bullet's press past the threshold (whether it is a drag now), the edge
+    // scrolling, a selecting drag's step, the moved blocks let go, its moves and its release.
+    bool activateBulletDrag(atrament::Point p);
+    void followEdge(atrament::Point p, atrament::Context<PageView> &cx);
+    void selectionDragUpdate();
+    void moveDragUpdate();
+    void dropMoved(const std::optional<DropTarget> &drop, bool cancelled, atrament::Context<PageView> &cx);
+    bool followMove(const atrament::MouseMoveEvent &move, atrament::Context<PageView> &cx);
+    bool followRelease(const atrament::MouseUpEvent &up, atrament::Context<PageView> &cx);
+    static void listenToDrag(atrament::Window &window, atrament::EntityId page);
     // The row under window point `p` for a drag (the nearest above or below the rows, the pointer
     // held into the view), as the rows are now (scrolled since the last frame: by that much).
     int dragRowAt(atrament::Point p) const;

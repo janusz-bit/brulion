@@ -684,7 +684,9 @@ In **Atrament** (`src/atrament/ui`, Qt-free, generic — nothing Brulion-specifi
   (`trackScroll`) shares the anchor: `scrollToRow(row, Start | Center | End | Nearest)`,
   `scrollToRowPart(row, part, position, above, below)` — a part of a row (a block inside a journal day's
   section) given by a resolver once the row is laid out in that frame, with air around it —,
-  `rowsInserted` / `rowsRemoved` in front of the anchor (the top is sticky); a user's scroll
+  `rowsInserted` / `rowsRemoved` in front of the anchor (the top is sticky), `scrolledSinceFrame()`
+  (the scroll its next frame takes), `anchorOnPart(row, part, into)` (the view kept on a part of a
+  row for one frame: a long journal day's block, "The journal stream as one list"); a user's scroll
   re-anchors on the first measured row in view (rows above measured later move nothing on
   screen); a list scrolled to its end stays there (the rows filling the view from the bottom
   measured first); a new width makes every height an estimate (`markAllEstimated`). A header and a

@@ -12,10 +12,12 @@
 #pragma once
 
 #include "base/geometry.h"
+#include "ui/element.h"
 
 #include <QtGlobal>
 
 #include <cstdint>
+#include <functional>
 
 namespace brulion::editor::atr {
 
@@ -28,5 +30,9 @@ struct ForeignFrame {
     atrament::Rect bounds; // window logical px
     atrament::Rect mask;   // the part of the window the list shows (its rows' content mask)
 };
+
+// The box of a header or a footer QML item placed over a list: `height` px, nothing drawn, no node
+// for screen readers (the item's own are Qt Quick's); `painted(frame)` once a frame painted it.
+atrament::AnyElement edgeBox(ForeignFrame::Kind kind, float height, std::function<void(const ForeignFrame &)> painted);
 
 } // namespace brulion::editor::atr

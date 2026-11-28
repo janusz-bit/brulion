@@ -375,21 +375,12 @@ bool PageView::drawsRow(int row) const
     return text.drawable() && drawable(index.data(BlockListModel::ViewRole).toString());
 }
 
-at::AnyElement PageView::render(at::Window &window, at::Context<PageView> &cx)
+void PageView::focusEdited(at::Window &window, at::Context<PageView> &cx)
 {
-    // Embedded: the rows this frame lays out, from where the last frame put the page (before its
-    // frames go; the same for every layout of the page in the frame).
-    if (m_embedding && window.frameCount() != m_embeddedFrame) {
-        m_embeddedFrame = window.frameCount();
-        m_embeddedRanges = embeddedRows(window);
-    }
-    m_drawn.clear();
-    m_foreign.clear();
-    m_foreignFrames.clear();
-    m_extents.foreign = &m_foreign;
     // Editing: the field takes the focus when a row of Atrament's starts being edited, and the
     // edited row is scrolled into view (a split made a row under the view's end, ↑/↓ went off it).
-    if (const int edited = editedRow(); edited >= 0 && m_input) {
+    const int edited = editedRow();
+    if (edited >= 0 && m_input) {
         if (m_focusInput)
             m_input->read(cx.app()).focusHandle().focus(window);
         if (m_revealEdited && !m_embedding)
@@ -398,25 +389,40 @@ at::AnyElement PageView::render(at::Window &window, at::Context<PageView> &cx)
     m_focusInput = false;
     // (Embedded: the view around takes the reveal before the frame — takeReveal(); one asked for
     // since goes with the next frame.)
-    if (m_embedding && m_revealEdited && editedRow() >= 0)
-        m_reveal = Reveal{editedRow(), at::ListPosition::Nearest};
+    if (m_embedding && m_revealEdited && edited >= 0)
+        m_reveal = Reveal{edited, at::ListPosition::Nearest};
     m_revealEdited = false;
+}
+
+void PageView::forgetOldRowText(std::uint64_t frame)
+{
     // The text of rows not drawn for a while is forgotten (the handles of the rows on screen stay).
-    const std::uint64_t frame = window.frameCount();
-    for (auto it = m_rowTextFrame.begin(); it != m_rowTextFrame.end();) {
-        if (it->second + 2 < frame) {
-            m_rowText.erase(it->first);
-            it = m_rowTextFrame.erase(it);
-        } else {
-            ++it;
-        }
-    }
-    m_frame = frame;
+    std::erase_if(m_rowTextFrame, [&](const auto &drawn) {
+        const bool old = drawn.second + 2 < frame;
+        if (old)
+            m_rowText.erase(drawn.first);
+        return old;
+    });
+}
+
+at::AnyElement PageView::render(at::Window &window, at::Context<PageView> &cx)
+{
+    chooseEmbeddedRows(window);
+    m_drawn.clear();
+    m_foreign.clear();
+    m_foreignFrames.clear();
+    m_extents.foreign = &m_foreign;
+    focusEdited(window, cx);
+    forgetOldRowText(window.frameCount());
+    m_frame = window.frameCount();
     mediaFrame(); // (the pictures and texts of the last frame forgotten, whether media rows show or not)
     m_selfId = cx.entityId();
     m_viewWidth = window.viewportSize().width;
-    if (m_embedding)
-        return embeddedColumn();
+    return m_embedding ? embeddedColumn() : pageColumn();
+}
+
+at::AnyElement PageView::pageColumn()
+{
     PageView *self = this;
     const at::EntityId rootSelf = m_selfId;
     return at::div()

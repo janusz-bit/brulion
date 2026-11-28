@@ -182,39 +182,34 @@ public:
         m_state->partInto = into;
     }
     // The next frame shows the list's very top, its header too (a page opened anew).
-    void scrollToTop()
-    {
-        m_state->part = nullptr;
-        m_state->scrollTo.reset();
-        m_state->atEnd = false;
-        m_state->atTop = true;
-        m_state->anchorRow = 0;
-        m_state->anchorInto = 0;
-    }
+    void scrollToTop() { jumpTo(0, 0, true); }
     // The next frame puts the view's top `into` px below the top of `row` (< 0: above it): a scroll
     // by rows, which no estimate of the rows around changes (scrollBy clamps to the last frame's
     // estimated height).
-    void scrollToAnchor(std::size_t row, float into)
-    {
-        m_state->part = nullptr;
-        m_state->scrollTo.reset();
-        m_state->atEnd = false;
-        m_state->atTop = false;
-        m_state->anchorRow = row;
-        m_state->anchorInto = into;
-    }
+    void scrollToAnchor(std::size_t row, float into) { jumpTo(row, into, false); }
     std::size_t anchorRow() const { return m_state->anchorRow; }
     float anchorInto() const { return m_state->anchorInto; }
     const ScrollState &scroll() const { return m_state->scroll; }
     // Scrolls by `dy` px (clamped to the content as the last frame measured it); the list takes
     // the new offset in its next frame, as after the wheel (refresh the window).
     bool scrollBy(float dy) { return m_state->scroll.scrollBy({0, dy}); }
+    // How far the list was scrolled since its last frame (it takes that in its next one).
+    float scrolledSinceFrame() const { return m_state->scroll.offset.y - m_state->lastY; }
     // The rows changed in front of the anchor: it follows its row.
     void rowsInserted(std::size_t first, std::size_t n);
     void rowsRemoved(std::size_t first, std::size_t n);
     std::shared_ptr<State> shared() const { return m_state; }
 
 private:
+    void jumpTo(std::size_t row, float into, bool top)
+    {
+        m_state->part = nullptr;
+        m_state->scrollTo.reset();
+        m_state->atEnd = false;
+        m_state->atTop = top;
+        m_state->anchorRow = row;
+        m_state->anchorInto = into;
+    }
     std::shared_ptr<State> m_state;
 };
 
@@ -264,6 +259,30 @@ private:
     bool anchorOnPart(ListHandle::State &st, float scrolled, float width, Window &window, App &app);
     // A scroll since the last frame: the anchor at the new pixel offset.
     void anchorAtOffset(ListHandle::State &st, float oldLead, float viewport);
+    // The parts of a frame's prepaint (its state, the inner bounds, their height, the rows).
+    struct Frame {
+        ListHandle::State *st;
+        Rect inner;
+        float viewport;
+        std::size_t n;
+        Window *window;
+        App *app;
+    };
+    float measureEdge(const RenderEdge &render, AnyElement &into, std::uint32_t sibling, float width, Window &window,
+                      App &app);
+    void placeEdges(const Frame &f, float y, float rowsHeight);
+    void prepaintEmpty(const Frame &f);
+    void prepaintRows(const Frame &f, float oldLead);
+    void fitAnchor(const Frame &f);
+    void followScroll(const Frame &f, float oldLead);
+    std::optional<std::size_t> keptRow(const Frame &f) const;
+    float clampedY(const Frame &f) const;
+    // A row asked for (scrollToRow, scrollToRowPart): the anchor that shows it there.
+    void anchorForScrollTo(const Frame &f);
+    void anchorOn(const Frame &f, std::size_t row, ListPosition position, float into, float h, float y);
+    void measureFromEnd(const Frame &f);
+    float layoutSettled(const Frame &f);
+    void prepaintShown(const Frame &f, float y, std::optional<std::size_t> kept, AnyElement keptRow);
 
     ElementId m_id;
     RowExtents *m_extents;

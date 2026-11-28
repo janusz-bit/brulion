@@ -270,6 +270,162 @@ void MeasuredList::anchorAtOffset(ListHandle::State &st, float oldLead, float vi
     st.anchorInto = py - oldLead - ex.offsetOf(row);
 }
 
+float MeasuredList::measureEdge(const RenderEdge &render, AnyElement &into, std::uint32_t sibling, float width,
+                                Window &window, App &app)
+{
+    if (!render)
+        return 0.0f;
+    into = render(window, app);
+    into.setSiblingIndex(sibling);
+    const Size size = into.layoutAsRoot(AvailableSpace::definite(width), AvailableSpace::maxContent(), window, app);
+    return std::max(0.0f, size.height);
+}
+
+void MeasuredList::placeEdges(const Frame &f, float y, float rowsHeight)
+{
+    if (!m_header.isEmpty())
+        m_header.prepaintAt({f.inner.left(), f.inner.top() - y}, *f.window, *f.app);
+    if (!m_footer.isEmpty())
+        m_footer.prepaintAt({f.inner.left(), f.inner.top() + f.st->leading + rowsHeight - y}, *f.window, *f.app);
+}
+
+void MeasuredList::prepaintEmpty(const Frame &f)
+{
+    ListHandle::State &st = *f.st;
+    const float edges = st.leading + st.trailing;
+    st.scroll.content = edges > 0 ? Size{f.inner.width(), edges} : Size{};
+    st.scroll.scrollBy({});
+    st.anchorRow = 0;
+    st.anchorInto = 0;
+    st.lastY = st.scroll.offset.y;
+    st.atTop = st.lastY <= 0.01f;
+    f.window->pushContentMask(f.inner);
+    f.window->pushScrollFrame(st.scroll, f.inner, false, true, m_hitbox);
+    placeEdges(f, st.lastY, 0);
+    f.window->popScrollFrame();
+    f.window->popContentMask();
+}
+
+float MeasuredList::clampedY(const Frame &f) const
+{
+    // y is the scrolled content's: the header from 0, the rows from `leading` on.
+    const ListHandle::State &st = *f.st;
+    const RowExtents &ex = *m_extents;
+    const float maxY = std::max(0.0f, st.leading + ex.total() + st.trailing - f.viewport);
+    if (st.atEnd)
+        return maxY;
+    if (st.atTop)
+        return 0.0f;
+    return std::clamp(st.leading + ex.offsetOf(st.anchorRow) + st.anchorInto, 0.0f, maxY);
+}
+
+void MeasuredList::anchorForScrollTo(const Frame &f)
+{
+    ListHandle::State &st = *f.st;
+    RowExtents &ex = *m_extents;
+    const std::size_t row = std::min(*st.scrollTo, f.n - 1);
+    const ListPosition position = st.scrollToPosition;
+    const RowPartResolver part = std::move(st.scrollToPart);
+    const float above = st.scrollToAbove;
+    const float below = st.scrollToBelow;
+    st.scrollTo.reset();
+    st.scrollToPart = nullptr;
+    st.scrollToAbove = 0;
+    st.scrollToBelow = 0;
+    st.atEnd = false;
+    const float y = clampedY(f);
+    st.atTop = false;
+    const bool hidden = ex.isHidden(row);
+    if (!hidden)
+        measureRow(row, f.inner.width(), *f.window, *f.app);
+    float h = hidden ? 0.0f : ex.heightOf(row);
+    // A part of the row, where the layout just made put it (and the air around it).
+    float into = 0;
+    if (const std::optional<RowPart> p = part && !hidden ? part(*f.window) : std::nullopt) {
+        into = p->top;
+        h = std::max(0.0f, p->height);
+    }
+    anchorOn(f, row, position, into - above, h + above + below, y);
+}
+
+void MeasuredList::anchorOn(const Frame &f, std::size_t row, ListPosition position, float into, float h, float y)
+{
+    ListHandle::State &st = *f.st;
+    const RowExtents &ex = *m_extents;
+    const float top = st.leading + ex.offsetOf(row) + into;
+    // Nearest: the least scroll — none when it is in view (also in the header's part of the list).
+    if (position == ListPosition::Nearest && top >= y && h <= f.viewport) {
+        if (top + h <= y + f.viewport) {
+            st.anchorRow = std::min(ex.rowAt(y - st.leading), f.n - 1);
+            st.anchorInto = y - st.leading - ex.offsetOf(st.anchorRow);
+            st.atTop = y <= 0.01f;
+            return;
+        }
+        position = ListPosition::End;
+    }
+    st.anchorRow = row;
+    switch (position) {
+    case ListPosition::Start:
+    case ListPosition::Nearest:
+        st.anchorInto = into;
+        break;
+    case ListPosition::Center:
+        st.anchorInto = into + (h - f.viewport) / 2;
+        break;
+    case ListPosition::End:
+        st.anchorInto = into + h - f.viewport;
+        break;
+    }
+}
+
+void MeasuredList::measureFromEnd(const Frame &f)
+{
+    // At the end: the rows that fill the view from the bottom up are measured first, so the last row
+    // ends at the bottom however wrong the estimates were.
+    RowExtents &ex = *m_extents;
+    float filled = f.st->trailing;
+    for (std::size_t i = f.n; i-- > 0 && filled < f.viewport;) {
+        if (ex.isHidden(i))
+            continue;
+        measureRow(i, f.inner.width(), *f.window, *f.app);
+        filled += ex.heightOf(i);
+    }
+}
+
+float MeasuredList::layoutSettled(const Frame &f)
+{
+    // Rows measured at the end can make the page shorter than the view's place in it: laid out again
+    // at the clamped y (a few passes at most — each one measures the rows it shows).
+    float y = clampedY(f);
+    for (int pass = 0; pass < 4; ++pass) {
+        layoutRows(y, f.viewport, f.inner, *f.window, *f.app);
+        const float again = clampedY(f);
+        if (std::abs(again - y) < 0.5f)
+            break;
+        y = again;
+    }
+    return y;
+}
+
+void MeasuredList::prepaintShown(const Frame &f, float y, std::optional<std::size_t> kept, AnyElement keptRow)
+{
+    ListHandle::State &st = *f.st;
+    const RowExtents &ex = *m_extents;
+    f.window->pushContentMask(f.inner);
+    f.window->pushScrollFrame(st.scroll, f.inner, false, true, m_hitbox);
+    for (std::size_t k = 0; k < m_items.size(); ++k)
+        m_items[k].prepaintAt({f.inner.left(), f.inner.top() + m_tops[k] - y}, *f.window, *f.app);
+    if (kept && std::find(m_indices.begin(), m_indices.end(), *kept) == m_indices.end()) {
+        m_keptIndex = *kept;
+        m_kept = std::move(keptRow);
+        m_kept.prepaintAt({f.inner.left(), f.inner.top() + st.leading + ex.offsetOf(m_keptIndex) - y}, *f.window,
+                          *f.app);
+    }
+    placeEdges(f, y, ex.total());
+    f.window->popScrollFrame();
+    f.window->popContentMask();
+}
+
 void MeasuredList::prepaint(Rect bounds, Window &window, App &app)
 {
     m_hitbox = window.insertHitbox(bounds);
@@ -277,8 +433,7 @@ void MeasuredList::prepaint(Rect bounds, Window &window, App &app)
     m_state = &st;
     RowExtents &ex = *m_extents;
     const Rect inner = bounds.inset(m_style.layout.padding).inset(m_style.layout.border);
-    const float viewport = inner.height();
-    const std::size_t n = ex.count();
+    const Frame f{&st, inner, inner.height(), ex.count(), &window, &app};
     m_items.clear();
     m_indices.clear();
     m_tops.clear();
@@ -293,184 +448,80 @@ void MeasuredList::prepaint(Rect bounds, Window &window, App &app)
     if (pushText)
         window.pushTextStyle(m_style.text);
     // The header and the footer, laid out at the list's width in every frame.
-    auto measureEdge = [&](const RenderEdge &render, AnyElement &into, std::uint32_t sibling) -> float {
-        if (!render)
-            return 0.0f;
-        into = render(window, app);
-        into.setSiblingIndex(sibling);
-        const Size size =
-                into.layoutAsRoot(AvailableSpace::definite(inner.width()), AvailableSpace::maxContent(), window, app);
-        return std::max(0.0f, size.height);
-    };
     const float oldLead = st.leading;
-    st.leading = measureEdge(m_renderHeader, m_header, kHeaderSibling);
-    st.trailing = measureEdge(m_renderFooter, m_footer, kFooterSibling);
-    const float lead = st.leading;
-    const float trail = st.trailing;
-    auto placeEdges = [&](float y, float rowsHeight) {
-        if (!m_header.isEmpty())
-            m_header.prepaintAt({inner.left(), inner.top() - y}, window, app);
-        if (!m_footer.isEmpty())
-            m_footer.prepaintAt({inner.left(), inner.top() + lead + rowsHeight - y}, window, app);
-    };
+    st.leading = measureEdge(m_renderHeader, m_header, kHeaderSibling, inner.width(), window, app);
+    st.trailing = measureEdge(m_renderFooter, m_footer, kFooterSibling, inner.width(), window, app);
+    if (!m_render || f.n == 0)
+        prepaintEmpty(f);
+    else
+        prepaintRows(f, oldLead);
+    if (pushText)
+        window.popTextStyle();
+}
 
-    if (!m_render || n == 0) {
-        st.scroll.content = lead + trail > 0 ? Size{inner.width(), lead + trail} : Size{};
-        st.scroll.scrollBy({});
-        st.anchorRow = 0;
-        st.anchorInto = 0;
-        st.lastY = st.scroll.offset.y;
-        st.atTop = st.lastY <= 0.01f;
-        window.pushContentMask(inner);
-        window.pushScrollFrame(st.scroll, inner, false, true, m_hitbox);
-        placeEdges(st.lastY, 0);
-        window.popScrollFrame();
-        window.popContentMask();
-        if (pushText)
-            window.popTextStyle();
-        return;
-    }
-    if (st.width != inner.width()) {
+void MeasuredList::fitAnchor(const Frame &f)
+{
+    // A new width: every height an estimate again; the anchor among the rows there are.
+    ListHandle::State &st = *f.st;
+    if (st.width != f.inner.width()) {
         if (st.width >= 0)
-            ex.markAllEstimated();
-        st.width = inner.width();
+            m_extents->markAllEstimated();
+        st.width = f.inner.width();
     }
-    if (st.anchorRow >= n) {
-        st.anchorRow = n - 1;
+    if (st.anchorRow >= f.n) {
+        st.anchorRow = f.n - 1;
         st.anchorInto = 0;
     }
+}
 
-    // y is the scrolled content's: the header from 0, the rows from `lead` on.
-    auto clampedY = [&] {
-        const float maxY = std::max(0.0f, lead + ex.total() + trail - viewport);
-        if (st.atEnd)
-            return maxY;
-        if (st.atTop)
-            return 0.0f;
-        return std::clamp(lead + ex.offsetOf(st.anchorRow) + st.anchorInto, 0.0f, maxY);
-    };
-    auto measure = [&](std::size_t row) { return measureRow(row, inner.width(), window, app); };
-
+void MeasuredList::followScroll(const Frame &f, float oldLead)
+{
     // Someone scrolled since the last frame (the wheel, a finger, a fling, a caret revealed, a
     // screen reader): the anchor moves by as much — on a part of a row (anchorOnPart) where the
     // row's new layout put it, else to the pixel offset.
+    ListHandle::State &st = *f.st;
     const float scrolled = st.scroll.offset.y - st.lastY;
-    if (std::abs(scrolled) > 0.01f) {
+    const bool moved = std::abs(scrolled) > 0.01f;
+    if (moved) {
         const float py = st.scroll.offset.y;
         st.atEnd = py > 0 && py >= st.scroll.maxOffset().y - 0.5f;
         st.atTop = py <= 0.01f;
     }
-    if (!anchorOnPart(st, scrolled, inner.width(), window, app) && std::abs(scrolled) > 0.01f)
-        anchorAtOffset(st, oldLead, viewport);
+    if (!anchorOnPart(st, scrolled, f.inner.width(), *f.window, *f.app) && moved)
+        anchorAtOffset(st, oldLead, f.viewport);
+}
 
-    if (st.scrollTo) {
-        const std::size_t row = std::min(*st.scrollTo, n - 1);
-        const ListPosition position = st.scrollToPosition;
-        const RowPartResolver part = std::move(st.scrollToPart);
-        const float above = st.scrollToAbove;
-        const float below = st.scrollToBelow;
-        st.scrollTo.reset();
-        st.scrollToPart = nullptr;
-        st.scrollToAbove = 0;
-        st.scrollToBelow = 0;
-        st.atEnd = false;
-        const float y = clampedY();
-        st.atTop = false;
-        float h = ex.isHidden(row) ? 0.0f : (measure(row), ex.heightOf(row));
-        // A part of the row, where the layout just made put it (and the air around it).
-        float into = 0;
-        if (part && !ex.isHidden(row)) {
-            if (const std::optional<RowPart> p = part(window)) {
-                into = p->top;
-                h = std::max(0.0f, p->height);
-            }
-        }
-        into -= above;
-        h += above + below;
-        const float top = lead + ex.offsetOf(row) + into;
-        switch (position) {
-        case ListPosition::Start:
-            st.anchorRow = row;
-            st.anchorInto = into;
-            break;
-        case ListPosition::Center:
-            st.anchorRow = row;
-            st.anchorInto = into + (h - viewport) / 2;
-            break;
-        case ListPosition::End:
-            st.anchorRow = row;
-            st.anchorInto = into + h - viewport;
-            break;
-        case ListPosition::Nearest:
-            if (top < y || h > viewport) {
-                st.anchorRow = row;
-                st.anchorInto = into;
-            } else if (top + h > y + viewport) {
-                st.anchorRow = row;
-                st.anchorInto = into + h - viewport;
-            } else {
-                // In view: it stays where it is (also in the header's part of the list).
-                st.anchorRow = std::min(ex.rowAt(y - lead), n - 1);
-                st.anchorInto = y - lead - ex.offsetOf(st.anchorRow);
-                st.atTop = y <= 0.01f;
-            }
-            break;
-        }
-    }
-
+std::optional<std::size_t> MeasuredList::keptRow(const Frame &f) const
+{
     // The focused row out of view stays in the frame: measured first, so it moves no row in view.
-    const std::optional<std::size_t> kept =
-            st.focusedRow && window.focusedId() != 0 && *st.focusedRow < n && !ex.isHidden(*st.focusedRow)
-                    ? st.focusedRow
-                    : std::nullopt;
-    AnyElement keptRow;
-    if (kept)
-        keptRow = measure(*kept);
-    // At the end: the rows that fill the view from the bottom up are measured first, so the last
-    // row ends at the bottom however wrong the estimates were.
-    if (st.atEnd) {
-        float filled = trail;
-        for (std::size_t i = n; i-- > 0 && filled < viewport;) {
-            if (ex.isHidden(i))
-                continue;
-            measure(i);
-            filled += ex.heightOf(i);
-        }
-    }
+    const ListHandle::State &st = *f.st;
+    if (!st.focusedRow || f.window->focusedId() == 0 || *st.focusedRow >= f.n || m_extents->isHidden(*st.focusedRow))
+        return std::nullopt;
+    return st.focusedRow;
+}
 
-    // Rows measured at the end can make the page shorter than the view's place in it: laid out
-    // again at the clamped y (a few passes at most — each one measures the rows it shows).
-    float y = clampedY();
-    for (int pass = 0; pass < 4; ++pass) {
-        layoutRows(y, viewport, inner, window, app);
-        const float again = clampedY();
-        if (std::abs(again - y) < 0.5f)
-            break;
-        y = again;
-    }
+void MeasuredList::prepaintRows(const Frame &f, float oldLead)
+{
+    ListHandle::State &st = *f.st;
+    RowExtents &ex = *m_extents;
+    fitAnchor(f);
+    followScroll(f, oldLead);
+    if (st.scrollTo)
+        anchorForScrollTo(f);
+    const std::optional<std::size_t> kept = keptRow(f);
+    AnyElement keptRow = kept ? measureRow(*kept, f.inner.width(), *f.window, *f.app) : AnyElement();
+    if (st.atEnd)
+        measureFromEnd(f);
+    const float y = layoutSettled(f);
     // The anchor is the row at the view's top now, measured (above the first row: the first, by a
     // negative offset into it).
-    st.anchorRow = std::min(ex.rowAt(y - lead), n - 1);
-    st.anchorInto = y - lead - ex.offsetOf(st.anchorRow);
+    st.anchorRow = std::min(ex.rowAt(y - st.leading), f.n - 1);
+    st.anchorInto = y - st.leading - ex.offsetOf(st.anchorRow);
     st.lastY = y;
     st.atTop = y <= 0.01f;
-    st.scroll.content = {inner.width(), lead + ex.total() + trail};
+    st.scroll.content = {f.inner.width(), st.leading + ex.total() + st.trailing};
     st.scroll.offset = {0, y};
-
-    window.pushContentMask(inner);
-    window.pushScrollFrame(st.scroll, inner, false, true, m_hitbox);
-    for (std::size_t k = 0; k < m_items.size(); ++k)
-        m_items[k].prepaintAt({inner.left(), inner.top() + m_tops[k] - y}, window, app);
-    if (kept && std::find(m_indices.begin(), m_indices.end(), *kept) == m_indices.end()) {
-        m_keptIndex = *kept;
-        m_kept = std::move(keptRow);
-        m_kept.prepaintAt({inner.left(), inner.top() + lead + ex.offsetOf(m_keptIndex) - y}, window, app);
-    }
-    placeEdges(y, ex.total());
-    window.popScrollFrame();
-    window.popContentMask();
-    if (pushText)
-        window.popTextStyle();
+    prepaintShown(f, y, kept, std::move(keptRow));
 }
 
 void MeasuredList::paint(Rect bounds, Window &window, App &app)

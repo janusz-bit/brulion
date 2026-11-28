@@ -609,13 +609,23 @@ private Q_SLOTS:
         f.page.undo();
         QCOMPARE(f.text(), Outline);
         QCOMPARE(f.selected(), QList<int>({5}));
-        // A parent with its children, out of nothing into a folded block: it opens.
+        // A parent with its children, out of nothing into a folded block: it opens (only that one is
+        // a change of folds), the selection counting the blocks shown again.
+        QSignalSpy folds(&f.page, &PageController::foldStateChanged);
         f.page.setFolded(3, true); // b
-        f.page.selectRange(0, 0);  // a with a1, a2
+        QCOMPARE(folds.count(), 1);
+        f.page.selectRange(0, 0); // a with a1, a2
         QVERIFY(f.page.moveSelectionTo({5, 1}));
         QCOMPARE(f.text(), u"- b\n\t- b1\n\t- a\n\t\t- a1\n\t\t- a2\n- c\n- d\n"_s);
         QVERIFY(!f.role(0, "collapsed").toBool());
+        QCOMPARE(folds.count(), 2);
         QCOMPARE(f.selected(), QList<int>({2, 3, 4}));
+        QCOMPARE(f.page.selectionCount(), 3);
+        // Into a parent that is open: no change of folds.
+        f.page.selectRange(5, 5); // c
+        QVERIFY(f.page.moveSelectionTo({2, 1}));
+        QCOMPARE(folds.count(), 2);
+        f.page.undo();
         // Picked blocks with gaps, reading mode: nothing.
         Fixture picks(Picks);
         picks.page.toggleSelected(0);
@@ -642,6 +652,18 @@ private Q_SLOTS:
         QCOMPARE(f.text(), u"- a\n\t- a2\n\t- a1\n- b\n\t- b1\n- c\n- d\n"_s);
         f.page.selectRange(0, 0);
         QVERIFY(!f.page.canMoveSelectionTo({7, 0}));
+        // The zoom's edges: not before the zoomed block (under the child before it), down to its end.
+        Fixture g(u"- a\n\t- a1\n\t\t- a1x\n\t- a2\n\t\t- a2x\n\t\t- a2y\n"_s);
+        g.page.zoomInto(3); // a2
+        g.page.selectRange(4, 4); // a2x
+        QVERIFY(!g.page.canMoveSelectionTo({3, 2}));
+        QVERIFY(g.page.canMoveSelectionTo({6, 2}));
+        QVERIFY(g.page.moveSelectionTo({6, 2}));
+        QCOMPARE(g.text(), u"- a\n\t- a1\n\t\t- a1x\n\t- a2\n\t\t- a2y\n\t\t- a2x\n"_s);
+        // The zoomed block itself never moves.
+        g.page.selectRange(3, 3);
+        QVERIFY(!g.page.canMoveSelectionTo({6, 2}));
+        QVERIFY(!g.page.canMoveSelectionTo({4, 2}));
     }
 
     void blocksInsertedFromAnotherPage()
@@ -666,6 +688,19 @@ private Q_SLOTS:
         QCOMPARE(end.first, 1);
         QCOMPARE(end.count, 2);
         QCOMPARE(g.text(), u"- środa ^sr1\n- czwartek\n- piątek\n"_s);
+        // At the page's start, in order; redone, they are selected.
+        const markdown::RowRange start = g.page.insertBlocksAt({0, 0}, u"- poniedziałek\n- wtorek\n"_s);
+        QCOMPARE(start.first, 0);
+        QCOMPARE(start.count, 2);
+        QCOMPARE(g.text(), u"- poniedziałek\n- wtorek\n- środa ^sr1\n- czwartek\n- piątek\n"_s);
+        g.page.undo();
+        g.page.redo();
+        QCOMPARE(g.page.editingRow(), -1);
+        QCOMPARE(g.page.selectedRow(), 0);
+        // A paragraph at the top level only, never as a child (not even after a list item).
+        QCOMPARE(g.page.insertBlocksAt({5, 0}, u"Akapit o łodzi.\n"_s).count, 1);
+        QCOMPARE(g.page.insertBlocksAt({5, 1}, u"Akapit.\n"_s).count, 0);
+        QCOMPARE(g.page.insertBlocksAt({5, 1}, u"Akapit.\n\n- lista\n"_s).count, 0);
         // Nothing to insert, a place it does not take, reading mode.
         QCOMPARE(g.page.insertBlocksAt({0, 0}, u"  \n"_s).count, 0);
         QCOMPARE(g.page.insertBlocksAt({0, 2}, u"- x\n"_s).count, 0);

@@ -43,8 +43,7 @@ std::optional<at::Rect> JournalView::viewport() const
 
 float JournalView::scrolledSinceFrame() const
 {
-    const std::shared_ptr<at::ListHandle::State> st = m_handle.shared();
-    return st->scroll.offset.y - st->lastY;
+    return m_handle.scrolledSinceFrame();
 }
 
 float JournalView::pointerY(at::Point p) const
@@ -84,9 +83,7 @@ int JournalView::blockUnder(int day, float y) const
     const PageView &v = p->read(*m_app);
     if (const int row = v.rowAtY(y); row >= 0)
         return row;
-    int first = c->nextVisibleRow(-1);
-    while (first >= 0 && c->blocks()->index(first, 0).data(BlockListModel::ViewRole).toString() == u"frontmatter")
-        first = c->nextVisibleRow(first);
+    const int first = v.firstBlockRow();
     const std::optional<at::Rect> top = first >= 0 ? v.rowBounds(first) : std::nullopt;
     return top && y < top->top() ? first : c->lastVisibleRow();
 }
@@ -128,21 +125,23 @@ bool JournalView::dragBlocksTo(PageController *from, at::Point p, float textX)
         showCrossDrop(-1, std::nullopt, source);
         return false;
     }
+    showCrossDrop(day, dropInto(day, *from, {p.x, y - scrolledSinceFrame()}, textX), source);
+    return true;
+}
+
+std::optional<PageView::DropTarget> JournalView::dropInto(int day, const PageController &from, at::Point p,
+                                                          float textX) const
+{
     // Where the blocks would go in that day: a place it takes them at (a paragraph, a heading…
     // only at the top level), its level nearest their text column.
     PageController *target = controller(day);
     const at::Entity<PageView> *targetPage = page(day);
-    std::optional<PageView::DropTarget> drop;
-    if (target && targetPage && target->loaded() && !target->readOnly()) {
-        const bool listItems = onlyListItems(*from);
-        drop = targetPage->read(*m_app).dropAt({p.x, y - scrolledSinceFrame()}, textX,
-                                                [target, listItems](BlockPlace place) {
-                                                    return (listItems || place.depth == 0)
-                                                           && target->canInsertBlocksAt(place);
-                                                });
-    }
-    showCrossDrop(day, drop, source);
-    return true;
+    if (!target || !targetPage || !target->loaded() || target->readOnly())
+        return std::nullopt;
+    const bool listItems = onlyListItems(from);
+    return targetPage->read(*m_app).dropAt(p, textX, [target, listItems](BlockPlace place) {
+        return (listItems || place.depth == 0) && target->canInsertBlocksAt(place);
+    });
 }
 
 void JournalView::showCrossDrop(int day, std::optional<PageView::DropTarget> drop, int source)
@@ -182,11 +181,17 @@ bool JournalView::moveAcross(PageController *from, PageController *to, BlockPlac
     return true;
 }
 
+bool JournalView::MoveAcross::stands(PageController *in, bool redo) const
+{
+    // Its days still there, `in` one of them, both still at the move (or at its undo, to redo it).
+    return from && to && (in == from || in == to) && undone == redo && from->undoToken() == fromToken
+           && to->undoToken() == toToken;
+}
+
 bool JournalView::undoMoveAcross(PageController *in, bool redo)
 {
     MoveAcross &m = m_lastMove;
-    if (!m.from || !m.to || (in != m.from && in != m.to) || m.undone != redo
-        || m.from->undoToken() != m.fromToken || m.to->undoToken() != m.toToken)
+    if (!m.stands(in, redo))
         return false;
     if (redo) {
         m.to->redo();
