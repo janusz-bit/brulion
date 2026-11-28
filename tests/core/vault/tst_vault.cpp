@@ -277,6 +277,60 @@ private Q_SLOTS:
         QVERIFY(f.folders().isEmpty()); // ".brulion" is not a vault folder
     }
 
+    // ---- the settings note (docs/NOTEBOOK-SETTINGS.md) -----------------------------------------
+    void settingsNoteOverConfigJson()
+    {
+        Fixture f;
+        f.write(u".brulion/config.json"_s, R"({"journalsFolder":"Dziennik","weekStartsOn":1})");
+        f.write(u"Ustawienia notatnika.md"_s, "---\nbrulion: settings\nweekStartsOn: 0\n---\n# Ustawienia\n");
+        QVERIFY(f.open());
+        QCOMPARE(f.vault->config().journalsFolder, u"Dziennik"_s);
+        QCOMPARE(f.vault->config().weekStartsOn, Qt::Sunday);
+        QCOMPARE(f.vault->settingsNote(), u"Ustawienia notatnika.md"_s);
+        // The note changed by another program: the settings follow.
+        QSignalSpy configSpy(f.vault.get(), &Vault::configChanged);
+        f.clock.advanceMs(1000);
+        f.write(u"Ustawienia notatnika.md"_s, "---\nbrulion: settings\nweekStartsOn: 6\n---\n# Ustawienia\n");
+        f.vault->rescan();
+        QTRY_COMPARE(f.vault->config().weekStartsOn, Qt::Saturday);
+        QVERIFY(configSpy.count() >= 1);
+        // Gone: config.json's alone.
+        QVERIFY(f.vault->remove(u"Ustawienia notatnika.md"_s));
+        QCOMPARE(f.vault->config().weekStartsOn, Qt::Monday);
+        QCOMPARE(f.vault->settingsNote(), QString());
+    }
+
+    void settingsNoteWrittenWithConfigJson()
+    {
+        Fixture f;
+        f.write(u"Notebook settings.md"_s, "---\r\nbrulion: settings\r\nweekStartsOn: 0\r\n---\r\nMine.\r\n");
+        QVERIFY(f.open());
+        VaultConfig config = f.vault->config();
+        QCOMPARE(config.weekStartsOn, Qt::Sunday);
+        config.journalsFolder = u"Dziennik"_s;
+        config.weekStartsOn = Qt::Tuesday;
+        QVERIFY(f.vault->saveConfig(config));
+        // Both written: the note's changed keys in place, config.json for older versions.
+        const QString note = f.text(u"Notebook settings.md"_s);
+        QVERIFY2(note.contains(u"weekStartsOn: 2\r\n"_s), qPrintable(note));
+        QVERIFY(note.contains(u"journalsFolder: Dziennik\r\n"_s));
+        QVERIFY(note.endsWith(u"---\r\nMine.\r\n"_s));
+        const ParsedVaultConfig json = parseVaultConfig(f.read(u".brulion/config.json"_s));
+        QCOMPARE(json.config.weekStartsOn, Qt::Tuesday);
+        QCOMPARE(json.config.journalsFolder, u"Dziennik"_s);
+        QCOMPARE(f.vault->config().weekStartsOn, Qt::Tuesday);
+        // A page of that name that is no settings note is an ordinary page.
+        Fixture g;
+        g.write(u"Notebook settings.md"_s, "---\nweekStartsOn: 0\n---\n");
+        QVERIFY(g.open());
+        QCOMPARE(g.vault->config().weekStartsOn, Qt::Monday);
+        QCOMPARE(g.vault->settingsNote(), QString());
+        VaultConfig other = g.vault->config();
+        other.weekStartsOn = Qt::Friday;
+        QVERIFY(g.vault->saveConfig(other));
+        QCOMPARE(g.text(u"Notebook settings.md"_s), u"---\nweekStartsOn: 0\n---\n"_s);
+    }
+
     // ---- reading -------------------------------------------------------------------------
     void readTextAndBinary()
     {

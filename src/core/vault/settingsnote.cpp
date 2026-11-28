@@ -1,5 +1,5 @@
 // The notebook's settings in a note (settingsnote.h).
-#include "settingsnote/settingsnote.h"
+#include "vault/settingsnote.h"
 
 #include "markdown/frontmatter.h"
 
@@ -50,26 +50,49 @@ QJsonObject noteSettings(QStringView content)
 
 ParsedVaultConfig mergedConfig(QByteArrayView configJson, QStringView noteContent)
 {
-    const ParsedVaultConfig base = parseVaultConfig(configJson);
+    return mergedOver(parseVaultConfig(configJson), noteContent);
+}
+
+QJsonObject changedSettings(const VaultConfig &before, const VaultConfig &after)
+{
+    const QJsonObject a = vaultConfigToJson(before), b = vaultConfigToJson(after);
+    QJsonObject out;
+    for (auto it = b.constBegin(); it != b.constEnd(); ++it)
+        if (a.value(it.key()) != it.value())
+            out.insert(it.key(), it.value());
+    return out;
+}
+
+ParsedVaultConfig mergedOver(const ParsedVaultConfig &base, QStringView noteContent)
+{
+    if (!isSettingsNote(noteContent))
+        return base;
+    // (The settings as they are: config.json's keys — or, without it, those taken from .obsidian/, the
+    // ones that differ from the defaults: a key left out keeps following another, as weeklyFolder
+    // follows journalsFolder — then the note's.)
     QJsonObject combined = base.raw;
+    if (combined.isEmpty()) {
+        const QJsonObject known = vaultConfigToJson(base.config), defaults = vaultConfigToJson(VaultConfig{});
+        for (auto it = known.constBegin(); it != known.constEnd(); ++it)
+            if (defaults.value(it.key()) != it.value())
+                combined.insert(it.key(), it.value());
+    }
     QStringList warnings = base.warnings;
-    QStringList known = parseVaultConfig(jsonOf(combined)).warnings;
-    if (isSettingsNote(noteContent)) {
-        const QJsonObject note = noteSettings(noteContent);
-        for (auto it = note.constBegin(); it != note.constEnd(); ++it) {
-            QJsonObject candidate = combined;
-            candidate.insert(it.key(), it.value());
-            const QStringList now = parseVaultConfig(jsonOf(candidate)).warnings;
-            // (An invalid value: config.json's — or the default — kept, never a reset by a typo.)
-            if (now.size() > known.size()) {
-                for (const QString &w : now)
-                    if (!known.contains(w))
-                        warnings << u"Notebook settings: "_s + w;
-                continue;
-            }
-            combined = candidate;
-            known = now;
+    QStringList seen = parseVaultConfig(jsonOf(combined)).warnings;
+    const QJsonObject note = noteSettings(noteContent);
+    for (auto it = note.constBegin(); it != note.constEnd(); ++it) {
+        QJsonObject candidate = combined;
+        candidate.insert(it.key(), it.value());
+        const QStringList now = parseVaultConfig(jsonOf(candidate)).warnings;
+        // (An invalid value: config.json's — or the default — kept, never a reset by a typo.)
+        if (now.size() > seen.size()) {
+            for (const QString &w : now)
+                if (!seen.contains(w))
+                    warnings << u"Notebook settings: "_s + w;
+            continue;
         }
+        combined = candidate;
+        seen = now;
     }
     ParsedVaultConfig out = parseVaultConfig(jsonOf(combined));
     out.warnings = warnings;

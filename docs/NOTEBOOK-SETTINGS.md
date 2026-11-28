@@ -105,11 +105,13 @@ item hidden where it would be by default.
 
 ## Order of work
 
-1. **(done)** Core: `settingsnote` (`src/core/settingsnote/`, `tst_settingsnote`) — the note found (names, `brulion: settings`), its frontmatter → QJsonObject
+1. **(done)** Core: `settingsnote` (`src/core/vault/settingsnote.h`, `tst_settingsnote`) — the note found (names, `brulion: settings`), its frontmatter → QJsonObject
    → `parseVaultConfig()` merged over config.json's, the migration (pure: config.json + the note's
    text → the note's new text, idempotent), the write of one key. Tests with Polish text, CRLF,
    malformed YAML, a note with only some keys.
-2. Vault / Workspace: read the note with config.json (`configChanged()` on either), write both.
+2. **(done)** Vault: the note read with config.json (`Vault::settingsNote()`; `configChanged()` when
+   either changes, the note made, renamed or deleted), `saveConfig()` writing the note's changed keys
+   in place and config.json whole (`tst_vault` settingsNote…).
 3. Settings → Notebook: "Move the settings into a note", "Open the settings note"; guide en/pl.
 4. Core `layoutspec`: the language's parser and printer (round trip), warnings.
 5. The app's layout from a `LayoutSpec` (rail, panel, more, bottom, tabs), "Edit as text", "Use the

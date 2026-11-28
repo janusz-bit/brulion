@@ -506,6 +506,10 @@ public:
     QJsonObject rawConfig;
     QStringList configWarnings;
     QStringList configFromObsidian; ///< config.json keys adopted from .obsidian/ (no config.json)
+    /// The settings note read with the config (settingsnote.h; "" none).
+    QString settingsNotePath;
+    /// The settings note's text ("" none): `parsed` with its keys over them, settingsNotePath set.
+    QString readSettingsNote(ParsedVaultConfig &parsed);
     /// Obsidian's settings files as last read by loadConfig() and the problems reading them;
     /// nullopt while config.json is there or the vault has no `.obsidian/`.
     struct ObsidianRead {

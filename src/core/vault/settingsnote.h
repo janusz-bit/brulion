@@ -36,6 +36,11 @@ QJsonObject noteSettings(QStringView content);
 /// key by key. A key of the note whose value is not valid keeps config.json's value (or the default)
 /// and is warned about ("Notebook settings: …"). `raw` is the merged object (unknown keys kept).
 ParsedVaultConfig mergedConfig(QByteArrayView configJson, QStringView noteContent);
+/// mergedConfig() over settings read already (config.json's, or those taken from an Obsidian vault).
+ParsedVaultConfig mergedOver(const ParsedVaultConfig &base, QStringView noteContent);
+/// The keys whose values differ between `before` and `after` (vaultConfigToJson()'s), with `after`'s
+/// values: what a save changes in the note.
+QJsonObject changedSettings(const VaultConfig &before, const VaultConfig &after);
 
 /// The note after a migration from config.json (`configJson`): `note` ("" none yet) with every key
 /// config.json has that differs from the defaults and the note lacks — a key both have keeps the

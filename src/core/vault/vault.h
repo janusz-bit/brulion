@@ -179,6 +179,7 @@
 #include "types.h"
 #include "vault/history.h"
 #include "vault/localstore.h"
+#include "vault/settingsnote.h"
 #include "vault/vaultconfig.h"
 
 #include <QDateTime>
@@ -307,8 +308,11 @@ public:
     /// folder ("journalsFolder", "journalFileFormat", "journalTemplate", "templatesFolder",
     /// "attachmentsFolder"); empty when .brulion/config.json exists or nothing was taken.
     QStringList configAdoptedFromObsidian() const;
-    /// Write .brulion/config.json (unknown keys already in the file are preserved).
+    /// Write .brulion/config.json (unknown keys already in the file are preserved) — and, while the
+    /// notebook has a settings note, its changed keys there too (docs/NOTEBOOK-SETTINGS.md).
     bool saveConfig(const VaultConfig &config);
+    /// The settings note config() reads over config.json (vault/settingsnote.h; "" none).
+    QString settingsNote() const;
 
     // --- queries (cached, no disk access) ------------------------------------------------
     /// Tracked, non-ignored files (conflict copies included), sorted by path.

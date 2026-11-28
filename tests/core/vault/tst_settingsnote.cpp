@@ -3,7 +3,7 @@
 // note's invalid value keeps config.json's, warned; the migration from config.json idempotent and
 // keeping the note's own values and text; one key written in place (CRLF, other lines byte for
 // byte); malformed YAML; Polish text.
-#include "settingsnote/settingsnote.h"
+#include "vault/settingsnote.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -71,6 +71,29 @@ private Q_SLOTS:
         QCOMPARE(mergedConfig(QByteArray(), QString()).config.journalsFolder, VaultConfig().journalsFolder);
         // A note that is no settings note is not read.
         QCOMPARE(mergedConfig(json, u"---\nweekStartsOn: 0\n---\n"_s).config.weekStartsOn, Qt::Monday);
+    }
+
+    // The note's journal folder: weekly and monthly notes follow it as they follow config.json's.
+    void foldersFollowTheNote()
+    {
+        const ParsedVaultConfig merged =
+                mergedConfig(R"({"journalsFolder": "journals"})", u"---\nbrulion: settings\njournalsFolder: Dziennik\n---\n"_s);
+        QCOMPARE(merged.config.journalsFolder, u"Dziennik"_s);
+        QCOMPARE(merged.config.weeklyFolder, u"Dziennik"_s);
+        QCOMPARE(merged.config.monthlyFolder, u"Dziennik"_s);
+        // Settings taken from elsewhere (no config.json): kept under the note's.
+        ParsedVaultConfig adopted;
+        adopted.config.attachmentsFolder = u"załączniki"_s;
+        const ParsedVaultConfig over = mergedOver(adopted, u"---\nbrulion: settings\nweekStartsOn: 0\n---\n"_s);
+        QCOMPARE(over.config.attachmentsFolder, u"załączniki"_s);
+        QCOMPARE(over.config.weekStartsOn, Qt::Sunday);
+        QCOMPARE(mergedOver(adopted, u"# zwykła\n"_s).config.attachmentsFolder, u"załączniki"_s);
+        // What a save changes.
+        VaultConfig after;
+        after.weekStartsOn = Qt::Friday;
+        const QJsonObject changed = changedSettings(VaultConfig{}, after);
+        QCOMPARE(changed.keys(), QStringList{u"weekStartsOn"_s});
+        QVERIFY(changedSettings(after, after).isEmpty());
     }
 
     void invalidValueOfTheNote()
