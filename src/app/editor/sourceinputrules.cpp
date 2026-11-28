@@ -9,7 +9,7 @@
 
 namespace brulion::editor {
 
-SourceInputRules::SourceInputRules(QObject *parent) : QObject(parent) {}
+SourceInputRules::SourceInputRules(QObject *parent) : QObject(parent) { }
 
 void SourceInputRules::setTextDocument(QQuickTextDocument *document)
 {

@@ -99,8 +99,8 @@ std::optional<InputRuleHit> ruleMatch(const QString &text, int cursor, int typed
     const int m = int(rule.match.size());
     if (m == 0)
         return std::nullopt;
-    const std::optional<int> end = rule.word ? wordEnd(text, cursor, typed, m)
-                                             : (typed > m ? std::nullopt : std::optional<int>(cursor));
+    const std::optional<int> end =
+            rule.word ? wordEnd(text, cursor, typed, m) : (typed > m ? std::nullopt : std::optional<int>(cursor));
     if (!end || *end < m || QStringView(text).mid(*end - m, m) != rule.match)
         return std::nullopt;
     if (rule.word && !startsWord(text, *end - m))

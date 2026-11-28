@@ -26,10 +26,9 @@ using namespace Qt::StringLiterals;
 namespace {
 
 /// A TextEdit's typing: a key's text (or an input method's commit) goes in at the cursor.
-class FakeTextEdit : public QObject
-{
+class FakeTextEdit : public QObject {
 public:
-    explicit FakeTextEdit(QTextDocument *doc) : cursor(doc) {}
+    explicit FakeTextEdit(QTextDocument *doc) : cursor(doc) { }
     /// The caret, as a TextEdit keeps it: a QTextCursor of the document, moved by others' edits.
     QTextCursor cursor;
 
@@ -79,8 +78,7 @@ struct Fixture {
 
 } // namespace
 
-class TstSourceInputRules : public QObject
-{
+class TstSourceInputRules : public QObject {
     Q_OBJECT
 
 private Q_SLOTS:
