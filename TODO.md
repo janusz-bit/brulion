@@ -383,12 +383,11 @@ done in the repository simply disappears from the list.
   browser's pick is written into its work folder — both are only exercised on the desktop (the
   browser's pick through `prepareRestoreFromBytes`, the document's copy as far as a `content://`
   URI that cannot be read).
-* **Sync and import in bounded memory: what is left** — a folder of the device
-  (`FolderDavTransport` over `FolderStorage`, the Android document provider's `TreeFolder.kt`)
-  reads and writes a file whole and does not stream (`HttpTransport::streams()`), so a sync with
-  a picked folder still holds a large file in memory; a Joplin JEX (tar) is read whole; the
-  memory of a large sync or import on a real phone is not measured yet (docs/PERFORMANCE.md "Sync
-  and import in bounded memory").
+* **Sync and import in bounded memory: what is left** — a folder picked through Android's document
+  provider (`SafFolderStorage` over `TreeFolder.kt`) still reads and writes a file whole
+  (`FolderStorage::streams()` false; a plain folder streams since 2026-11-28), so a sync with a
+  picked folder on Android holds a large file in memory; the memory of a large sync or import on a
+  real phone is not measured yet (docs/PERFORMANCE.md "Sync and import in bounded memory").
 
 ## Sharing and collaboration
 

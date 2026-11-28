@@ -81,7 +81,7 @@ ArchiveKind archiveKind(const InputFile &file)
     const QByteArrayView start = file.onDisk() ? QByteArrayView(head) : QByteArrayView(file.data);
     if (zipName && isZip(start))
         return ArchiveKind::Zip;
-    if (tarName && isTar(file.onDisk() ? QByteArrayView(bytesOf(file)) : start))
+    if (tarName && isTar(start))
         return ArchiveKind::Tar;
     return ArchiveKind::None;
 }
@@ -159,11 +159,12 @@ QList<InputFile> prepareImportFiles(const QList<InputFile> &files, QStringList *
         budget.maxTotalSize = remaining(limits.maxTotalSize, unpackedBytes);
         budget.maxEntries = int(remaining(limits.maxEntries, unpackedEntries));
         budget.expandNested = false; // nesting is decided here, level by level
-        // (A tar is read whole, also from disk; a ZIP on disk piece by piece.)
-        const QList<FileEntry> entries = kind == ArchiveKind::Zip
-                                                 ? (file.onDisk() ? readZipFile(file.file, &archiveWarnings, budget)
-                                                                  : readZip(file.data, &archiveWarnings, budget))
-                                                 : readTar(bytesOf(file), &archiveWarnings, budget);
+        // (An archive on disk is read piece by piece, its large attachments staged.)
+        const QList<FileEntry> entries =
+                kind == ArchiveKind::Zip ? (file.onDisk() ? readZipFile(file.file, &archiveWarnings, budget)
+                                                          : readZip(file.data, &archiveWarnings, budget))
+                                         : (file.onDisk() ? readTarFile(file.file, &archiveWarnings, budget)
+                                                          : readTar(file.data, &archiveWarnings, budget));
         for (const FileEntry &e : entries)
             unpackedBytes += e.size();
         unpackedEntries += entries.size();

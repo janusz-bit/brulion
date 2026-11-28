@@ -1,6 +1,7 @@
 #include "io/zip.h"
 
 #include "io/messages_p.h"
+#include "io/staging_p.h"
 #include "util/unicode.h"
 
 #include <QDir>
@@ -23,6 +24,22 @@ namespace brulion::io {
 
 using namespace Qt::StringLiterals;
 using detail::IoMessages;
+using detail::isStagedKind;
+
+namespace detail {
+
+bool isStagedKind(const QString &path)
+{
+    static const QSet<QString> extensions = {
+            u"png"_s,  u"jpg"_s, u"jpeg"_s, u"gif"_s, u"webp"_s, u"heic"_s, u"heif"_s, u"avif"_s, u"bmp"_s,  u"tif"_s,
+            u"tiff"_s, u"ico"_s, u"mp3"_s,  u"m4a"_s, u"aac"_s,  u"ogg"_s,  u"opus"_s, u"wav"_s,  u"flac"_s, u"mp4"_s,
+            u"m4v"_s,  u"mov"_s, u"webm"_s, u"mkv"_s, u"avi"_s,  u"3gp"_s,  u"pdf"_s,  u"zip"_s,
+    };
+    const qsizetype dot = path.lastIndexOf(u'.');
+    return dot >= 0 && extensions.contains(path.sliced(dot + 1).toLower());
+}
+
+} // namespace detail
 
 namespace {
 
@@ -131,19 +148,6 @@ private:
     QFile m_file;
     bool m_ok = false;
 };
-
-/// Entries unpacked to a file of the staging folder (ZipReadOptions): pictures, audio, video, PDFs
-/// and archives — what importers pass on or unpack (prepareImportFiles()) without reading it.
-bool isStagedKind(const QString &path)
-{
-    static const QSet<QString> extensions = {
-            u"png"_s,  u"jpg"_s, u"jpeg"_s, u"gif"_s, u"webp"_s, u"heic"_s, u"heif"_s, u"avif"_s, u"bmp"_s,  u"tif"_s,
-            u"tiff"_s, u"ico"_s, u"mp3"_s,  u"m4a"_s, u"aac"_s,  u"ogg"_s,  u"opus"_s, u"wav"_s,  u"flac"_s, u"mp4"_s,
-            u"m4v"_s,  u"mov"_s, u"webm"_s, u"mkv"_s, u"avi"_s,  u"3gp"_s,  u"pdf"_s,  u"zip"_s,
-    };
-    const qsizetype dot = path.lastIndexOf(u'.');
-    return dot >= 0 && extensions.contains(path.sliced(dot + 1).toLower());
-}
 
 /// Unpack entry `index` (`size` bytes) into a new file of the staging folder, piece by piece:
 /// its absolute path, or "" when it is damaged or cannot be written (nothing left behind).

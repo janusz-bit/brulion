@@ -3276,10 +3276,20 @@ analysis (`detectImporter`, `analyzeCsv`, `runImport` each prepared the input). 
 
 Notes (`isSyncTextPath()`) stay whole: they are merged line by line and kept as merge bases, and
 notebooks hold no note of hundreds of megabytes. Neither does a transport that does not stream —
-the tests' in-memory server unless `Options::streams`, the device folder's `FolderDavTransport`
-(its `FolderStorage` reads and writes a file whole, on Android through the system's document
-provider): there `WebDavClient` hands a whole body to the sink — the vault's side still goes
-through a staging file — and reads an upload whole, as before. A tar (Joplin's JEX) is still read whole. The bounds are
+the tests' in-memory server unless `Options::streams`, the device folder over Android's document
+provider (`SafFolderStorage` reads and writes a file whole through `TreeFolder.kt`): there
+`WebDavClient` hands a whole body to the sink — the vault's side still goes through a staging
+file — and reads an upload whole, as before. Since 2026-11-28 a plain folder of the device
+(`LocalFolderStorage`) streams: `FolderStorage::readInto()` / `writeFrom()` read and write a file in
+pieces of 256 KiB (`QSaveFile`: all of it or nothing), `FolderDavTransport` hands each piece over to
+the thread that owns it and waits — one piece in flight —, so the client's sink is called and an
+upload's device read where they belong (`tst_sync_folder`: a 20 MB and a 12 MB file both ways
+with no file held whole and no piece over 256 KiB; a transport destroyed while a piece waits; an
+upload that fails half-way leaves the old file). A tar on disk (Joplin's JEX) is read header by
+header since the same day (`readTarFile()`): a large picture, video, PDF or archive in it is
+copied into the import's staging folder in pieces, as from a ZIP (`tst_io_formats`,
+`tst_io_import_apps` `joplinJexOnDiskIsReadInPieces`); before, it was read whole — twice, once
+only to tell that it was a tar. The bounds are
 asserted, not sampled: `tst_sync_webdav` (a 24 MB download through `NetworkHttpTransport` in
 pieces ≤ 256 KiB, an upload from a counting device), `tst_sync_streamed` (the in-memory server's
 largest whole body under 1 MiB while 20 MB files go both ways; a dropped connection and a full

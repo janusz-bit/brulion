@@ -22,4 +22,11 @@ bool isTar(QByteArrayView data);
 /// are exceeded (archives inside are never unpacked). Never crashes on malformed input.
 QList<FileEntry> readTar(QByteArrayView tar, QStringList *warnings = nullptr, const ZipReadOptions &limits = {});
 
+/// readTar() of a tar archive on disk, read header by header — never whole: an entry larger than
+/// `limits.stageAbove` of a kind that is passed on unread (a picture, audio, video, a PDF, an
+/// archive) is copied into a new file of `limits.stagingFolder` in pieces (ZipReadOptions, as
+/// readZipFile() does) and comes back with FileEntry::file set; one too large is skipped unread.
+/// A file that cannot be opened gives a warning.
+QList<FileEntry> readTarFile(const QString &file, QStringList *warnings = nullptr, const ZipReadOptions &limits = {});
+
 } // namespace brulion::io

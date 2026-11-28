@@ -16,7 +16,7 @@ brulion_add_core_module(io
         io.h
         files.h files.cpp
         messages_p.h
-        zip.h zip.cpp
+        zip.h zip.cpp staging_p.h
         tar.h tar.cpp
         csv.h csv.cpp
         tablecsv.h tablecsv.cpp

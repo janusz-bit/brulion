@@ -396,6 +396,81 @@ private Q_SLOTS:
         QCOMPARE(iotest::entryData(read, QString::fromUtf8(longName)), QByteArray("long body"));
     }
 
+    void tarFileStagesLargeEntriesInPieces()
+    {
+        // A Joplin JEX of 24 MB on disk: read header by header, the film copied into the staging
+        // folder a piece at a time, the notes and small files in memory as from readTar().
+        QTemporaryDir work;
+        QTemporaryDir staging;
+        const QByteArray film = pattern(24LL << 20, 5);
+        const QByteArray icon = pattern(4096, 6);
+        const QByteArray tar = iotest::tarArchive({{"0123abcd.md", u"Zażółć gęślą jaźń\n"_s.toUtf8(), '0', {}},
+                                                   {"resources/łódź.mp4", film, '0', {}},
+                                                   {"resources/ikona.png", icon, '0', {}}});
+        const QString archive = saved(work, u"Eksport.jex"_s, tar);
+        ZipReadOptions options;
+        options.stagingFolder = staging.path();
+        qint64 largest = 0;
+        qint64 total = 0;
+        options.onStagedPiece = [&](qint64 bytes) {
+            largest = std::max(largest, bytes);
+            total += bytes;
+        };
+        QStringList warnings;
+        const QList<FileEntry> read = readTarFile(archive, &warnings, options);
+        QVERIFY2(warnings.isEmpty(), qPrintable(warnings.join(u'\n')));
+        QCOMPARE(iotest::entryPaths(read),
+                 QStringList({u"0123abcd.md"_s, u"resources/ikona.png"_s, u"resources/łódź.mp4"_s}));
+        const auto entry = [&](const QString &path) { return *std::ranges::find(read, path, &FileEntry::path); };
+        const FileEntry staged = entry(u"resources/łódź.mp4"_s);
+        QVERIFY(staged.onDisk());
+        QVERIFY(staged.data.isEmpty());
+        QCOMPARE(staged.size(), film.size());
+        QVERIFY(staged.file.startsWith(QDir(staging.path()).absolutePath() + u'/'));
+        QCOMPARE(bytesOf(staged), film);
+        QCOMPARE(total, film.size());
+        QVERIFY2(largest <= 256 * 1024, qPrintable(QString::number(largest)));
+        QCOMPARE(entry(u"resources/ikona.png"_s).data, icon);
+        QVERIFY(!entry(u"0123abcd.md"_s).onDisk());
+        // Without a staging folder everything comes into memory, as readTar() gives it.
+        const QList<FileEntry> whole = readTarFile(archive);
+        QCOMPARE(iotest::entryData(whole, u"resources/łódź.mp4"_s), film);
+        QCOMPARE(iotest::entryPaths(whole), iotest::entryPaths(readTar(tar)));
+    }
+
+    void tarFileKeepsTheLimitsAndWarnings()
+    {
+        QTemporaryDir work;
+        QTemporaryDir staging;
+        const QByteArray tar = iotest::tarArchive({{"a.md", "aaa", '0', {}},
+                                                   {"za-duży.mov", pattern(5LL << 20, 7), '0', {}},
+                                                   {"b.pdf", pattern(3LL << 20, 8), '0', {}}});
+        const QString archive = saved(work, u"a.tar"_s, tar);
+        ZipReadOptions options;
+        options.stagingFolder = staging.path();
+        options.maxEntrySize = 4LL << 20;
+        QStringList warnings;
+        // Too large: skipped (never read), the rest goes on.
+        QCOMPARE(iotest::entryPaths(readTarFile(archive, &warnings, options)), (QStringList{u"a.md"_s, u"b.pdf"_s}));
+        QCOMPARE(warnings.size(), 1);
+        // Damaged and cut archives: what was read so far, a warning, nothing left in the staging folder.
+        for (const QByteArray &bad : {tar.left(512 + 512 + 512 + (1 << 20)), patched(tar, "b.pdf", "X.pdf")}) {
+            QTemporaryDir staging2;
+            ZipReadOptions o;
+            o.stagingFolder = staging2.path();
+            warnings.clear();
+            const QList<FileEntry> read = readTarFile(saved(work, u"zły.tar"_s, bad), &warnings, o);
+            QCOMPARE(iotest::entryPaths(read).first(), u"a.md"_s);
+            QCOMPARE(warnings.size(), 1);
+            // (Only what was read whole stays staged: the cut film is gone.)
+            const qsizetype staged = std::ranges::count_if(read, [](const FileEntry &e) { return e.onDisk(); });
+            QCOMPARE(QDir(staging2.path()).entryList(QDir::Files).size(), staged);
+        }
+        warnings.clear();
+        QVERIFY(readTarFile(work.filePath(u"brak.tar"_s), &warnings).isEmpty());
+        QCOMPARE(warnings.size(), 1);
+    }
+
     void tarMalformed()
     {
         QVERIFY(!isTar(QByteArray()));

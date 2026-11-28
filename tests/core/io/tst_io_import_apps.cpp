@@ -9,6 +9,8 @@
 #include "testtiming.h"
 
 #include <QCryptographicHash>
+#include <QFileInfo>
+#include <QTemporaryDir>
 #include <QTest>
 
 using namespace brulion;
@@ -457,6 +459,47 @@ private Q_SLOTS:
                                u"[[assets/Joplin/raport.pdf|plik]].\n\n![[assets/Joplin/wykres.png]]\n"_s);
         QCOMPARE(iotest::textAt(r, u"Praca/Plan.md"_s), u"- [ ] Plan ⏰ 2026-10-16 09:00\n\nKroki.\n"_s);
         QCOMPARE(iotest::fileAt(r, u"assets/Joplin/wykres.png"_s)->data, QByteArray("PNG"));
+    }
+
+    void joplinJexOnDiskIsReadInPieces()
+    {
+        // A JEX picked from the disk: read header by header, a large attachment in it copied
+        // into the staging folder in pieces — never the whole archive in memory —, the notes as
+        // from the same archive in memory.
+        QTemporaryDir work;
+        QTemporaryDir staging;
+        QByteArray film(5LL << 20, Qt::Uninitialized);
+        for (qsizetype i = 0; i < film.size(); ++i)
+            film[i] = char((i * 131 + 7) & 0xff);
+        QByteArray tar = jex();
+        tar.chop(1024); // (the end blocks: one more member follows)
+        tar += iotest::tarArchive({{"resources/film.mp4", film, '0', {}}});
+        const QString archive = work.filePath(u"eksport.jex"_s);
+        {
+            QFile file(archive);
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            QCOMPARE(file.write(tar), tar.size());
+        }
+        ZipReadOptions limits;
+        limits.stagingFolder = staging.path();
+        qint64 largest = 0;
+        limits.onStagedPiece = [&largest](qint64 bytes) { largest = std::max(largest, bytes); };
+        QStringList warnings;
+        const QList<InputFile> prepared = prepareImportFiles(
+                {InputFile{u"eksport.jex"_s, {}, archive, QFileInfo(archive).size()}}, &warnings, limits);
+        QVERIFY2(warnings.isEmpty(), qPrintable(warnings.join(u'\n')));
+        const auto staged = std::ranges::find(prepared, u"resources/film.mp4"_s, &InputFile::path);
+        QVERIFY(staged != prepared.cend());
+        QVERIFY(staged->onDisk());
+        QCOMPARE(bytesOf(*staged), film);
+        QVERIFY(largest > 0 && largest <= 256 * 1024);
+        ImportOptions o = iotest::options();
+        o.inputPrepared = true;
+        const ImportResult fromDisk = importWith(u"joplin"_s, prepared, o);
+        const ImportResult fromMemory = importWith(u"joplin"_s, {bytes(u"eksport.jex"_s, jex())});
+        QCOMPARE(iotest::textAt(fromDisk, u"Praca/Projekty/Spotkanie.md"_s),
+                 iotest::textAt(fromMemory, u"Praca/Projekty/Spotkanie.md"_s));
+        QCOMPARE(iotest::fileAt(fromDisk, u"assets/Joplin/wykres.png"_s)->data, QByteArray("PNG"));
     }
 
     void joplinMarkdownExport()
