@@ -110,7 +110,10 @@ disk, untracked files too, ignored files not — made without touching the user'
 branches or stash:
 
 1. the real index is copied into a temporary folder (`rev-parse --git-path index`; a copy makes
-   the next step hash only what changed since the last `git add`; no copy when there is none);
+   the next step hash only what changed since the last `git add`; no copy when there is none) —
+   with the index's own modification time: git trusts an entry's stat only for a file older than
+   its index, so a copy made later would let a file changed in the index's second, at the same
+   size, keep its old text in the snapshot;
 2. `GIT_INDEX_FILE=<copy> git -c core.splitIndex=false add -A` — the copy now describes the
    working tree;
 3. `GIT_INDEX_FILE=<copy> git write-tree` — a tree;

@@ -22,6 +22,18 @@ using detail::inTree;
 
 namespace {
 
+/// `from` copied to `to` with `from`'s modification time (false: no copy).
+bool copyWithItsTime(const QString &from, const QString &to)
+{
+    if (!QFile::copy(from, to))
+        return false;
+    QFile copy(to);
+    const QDateTime modified = QFileInfo(from).lastModified();
+    if (!copy.open(QIODevice::ReadWrite) || !copy.setFileTime(modified, QFileDevice::FileModificationTime))
+        return false;
+    return true;
+}
+
 /// The identity of the snapshot commits (not the user's: a repository without user.name
 /// still gets checkpoints, and they are not the user's commits).
 const QList<QPair<QString, QString>> &snapshotIdentity()
@@ -125,10 +137,13 @@ void Client::snapshotTree(const QString &folder, std::function<void(const QStrin
                 done({}, GitMessages::tr("No temporary folder: %1").arg(temp->errorString()));
                 return;
             }
-            // A copy of the real index: `git add -A` then only hashes what changed since.
+            // A copy of the real index: `git add -A` then only hashes what changed since. It keeps
+            // the index's time: git trusts an entry's stat only when the file is older than its
+            // index — a copy made later would make a file changed in the index's own second (same
+            // size) look unchanged, and the snapshot keep its old text.
             const QString indexPath = QString::fromUtf8(p.out).trimmed();
             const QString tempIndex = temp->filePath(u"index"_s);
-            if (QFile::exists(indexPath) && !QFile::copy(indexPath, tempIndex))
+            if (QFile::exists(indexPath) && !copyWithItsTime(indexPath, tempIndex))
                 QFile::remove(tempIndex);
             RunOptions o;
             o.noHooks = true;

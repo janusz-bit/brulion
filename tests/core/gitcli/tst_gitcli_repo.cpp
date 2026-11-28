@@ -211,6 +211,7 @@ private Q_SLOTS:
     void restoreAfterTheTurnCommitted();
     void restoreInEmptyRepository();
     void checkpointInWorktree();
+    void checkpointOfARacilyCleanFile();
     void dropCheckpoints();
     void badCheckpointIds();
 
@@ -1063,6 +1064,30 @@ void TestGitCliRepo::restoreInEmptyRepository()
     QVERIFY2(r.ok, qPrintable(r.error));
     QCOMPARE(repo.read(u"pierwszy.txt"_s), QByteArray("1\n"));
     QVERIFY(!repo.exists(u"drugi.txt"_s));
+}
+
+// A file changed in the very second the index was written, its size the same ("racily clean": git
+// trusts its stat only when it is older than the index): the snapshot still has the new text — the
+// index's copy keeps the index's time, or git would trust the stat and keep the old one.
+void TestGitCliRepo::checkpointOfARacilyCleanFile()
+{
+    Repo repo;
+    repo.write(u"a.txt"_s, "a\n");
+    repo.commitAll(u"a"_s);
+    // (What a busy second does, made sure: the file's new text with the index's own time.)
+    const QString index = repo.path(u".git/index"_s);
+    const QDateTime written = QFileInfo(index).lastModified();
+    repo.write(u"a.txt"_s, "w\n");
+    {
+        QFile f(repo.path(u"a.txt"_s));
+        QVERIFY(f.open(QIODevice::ReadWrite));
+        QVERIFY(f.setFileTime(written, QFileDevice::FileModificationTime));
+    }
+    QTest::qWait(1100); // (the copy, made now, would be a second newer)
+    Client client;
+    const Outcome cp = await<Outcome>([&](auto done) { client.checkpoint(repo.root, u"r1"_s, done); });
+    QVERIFY2(cp.ok, qPrintable(cp.message));
+    QCOMPARE(repo.run({u"show"_s, Client::checkpointRef(u"r1"_s) + u":a.txt"_s}), QByteArray("w\n"));
 }
 
 void TestGitCliRepo::checkpointInWorktree()
