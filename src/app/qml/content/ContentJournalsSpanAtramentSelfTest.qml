@@ -299,6 +299,11 @@ Item {
         }
         if (test.at())
             test.check(test.noneSelected(), "Esc clears every day")
+        test.desktopDragSteps()
+    }
+
+    // (desktopSteps' second half: one function took qmlcachegen 47 s under load, over its 30 s.)
+    function desktopDragSteps(): void {
         // ---- A mouse drag from one day into the next, then held at the stream's bottom edge ----------
         if (test.at())
             test.stream.scrollToDay(test.rowA, false)
