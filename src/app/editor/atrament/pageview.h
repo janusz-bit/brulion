@@ -945,6 +945,7 @@ private:
     std::vector<PartText> m_partTexts;
     // A text of an embedded block or a query result recorded for the frame (partTexts()).
     PartText &partText(std::size_t row, int item);
+
     // --- Hover cues: links' previews and cells' tooltips (onLinkHover, onToolTip). A link or a cell
     // is known by its row, the text of the row it is in (`part`) and where it starts; a leave of
     // another than the one told last (the next one's coming told first) is not told.
@@ -957,6 +958,31 @@ private:
     static constexpr int kOwnText = -2;
     static constexpr int kEmbedPart = -1;
     static constexpr int cellPart(int tableRow, int column) { return (tableRow + 2) << 16 | column; }
+    // --- Links of the texts drawn (pagelinks.cpp): a block's, a table cell's, an embedded block's, a
+    // query result's — each its own hooks.
+    enum class LinkHome { Block, Cell, Embedded, Result };
+    struct LinkTarget {
+        LinkHome home = LinkHome::Block;
+        std::size_t row = 0;
+        int cellRow = 0, cellColumn = 0; // a cell's
+        int item = -1;                   // a query result's
+        QString path;                    // the file an embedded block's or a result's text is in
+        int line = 0;
+        QString raw;
+        // (Each field given: a list without them would leave some to their defaults silently.)
+        static LinkTarget make(LinkHome home, std::size_t row, int tableRow, int column, int item, const QString &path,
+                               int line, const QString &raw);
+    };
+    // Each link of `rt` a hit region of `t`: a click, its menu (a right-click, a finger held on it),
+    // its preview's cue; recorded in `record` (linkPoint()) when given.
+    void addLinks(atrament::Text &t, const LinkTarget &to, const markdown::RenderedText &rt, PartText *record = nullptr);
+    void linkClicked(const LinkTarget &to, const QString &href, atrament::Point at, atrament::App &app);
+    void linkMenu(const LinkTarget &to, const QString &href, atrament::Point at);
+    void cellLinkMenu(const LinkTarget &to, const QString &href, atrament::Point at);
+    bool hasLinkMenu(LinkHome home) const;
+    static int linkPart(const LinkTarget &to);
+    // A query result's link clicked: its host's, else the model's answer (activateQueryLink()).
+    void resultLinkClicked(const LinkTarget &to, const QString &href);
     // The hover listener of a link of `row`.
     atrament::TextLink::HoverListener linkHover(int row, int part, const RenderedLink &link, const QString &fromPath);
     void linkHovered(HoverKey key, const QString &href, const QString &fromPath, atrament::Point at);
@@ -966,6 +992,10 @@ private:
         QString shown;
     };
     void cellHovered(std::size_t row, int r, int c, std::optional<CellTip> on);
+    QString cellTip(int row, int r, int c, const CellTip &cell) const;
+    // The link previewed and the file it is written in (a day chip: its day's page; the page's own
+    // text: the page's file).
+    std::pair<QString, QString> previewedLink(int row, const QString &href, const QString &fromPath) const;
     HoverKey m_hoveredLink;
     HoverKey m_toolTipCell;
     // --- The edited text's spell marks, reminder chips and Vim keys; code blocks' line numbers

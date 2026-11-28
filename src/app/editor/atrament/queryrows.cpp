@@ -276,16 +276,6 @@ at::AnyElement PageView::queryRow(std::size_t row, const QModelIndex &index, flo
                     }
                 };
             };
-            // A link's menu (a chip's in the item's own file, a link's): QueryBlockView.resultMenu.
-            auto linkMenu = [self, row, i, path, line, raw](const QString &link) {
-                at::TextLink::MenuListener menu;
-                if (self->onQueryLinkMenu)
-                    menu = [self, row, i, path, line, raw, link](at::Point p, at::Window &, at::App &) {
-                        if (self->onQueryLinkMenu)
-                            self->onQueryLinkMenu(int(row), i, link, path, line, raw, p);
-                    };
-                return menu;
-            };
             // A text of the item (its HTML read into rendered text), with each link a hit region, at
             // most 4 lines with "…" after the fourth (QueryBlockView's maximumLineCount).
             auto itemText = [&](const markdown::RenderedText &rt, const QString &suffix) {
@@ -301,10 +291,8 @@ at::AnyElement PageView::queryRow(std::size_t row, const QModelIndex &index, flo
                 }
                 at::Text t = at::text(u16View(shown)).spans(spans).maxLines(4);
                 PartText &part = partText(row, i);
-                for (const RenderedLink &l : renderedLinks(rt)) {
-                    std::move(t).link(l.range, linkClick(l.href), linkMenu(l.href), linkHover(int(row), i, l, path));
-                    part.links.emplace_back(l.range, l.href);
-                }
+                // (A link's menu: a chip's in the item's own file, a link's — QueryBlockView.resultMenu.)
+                addLinks(t, LinkTarget::make(LinkHome::Result, row, 0, 0, i, path, line, raw), rt, &part);
                 if (!suffix.isEmpty()) {
                     // (The item's page: no menu of its own, the block's.)
                     const at::Range range{int(rt.text.size()) + 4, int(shown.size())};

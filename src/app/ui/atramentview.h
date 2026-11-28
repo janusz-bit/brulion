@@ -675,6 +675,7 @@ private:
     // its looks (styleOne: without the geometry in "journal", which is the stream's per day).
     struct PageHandle;
     void connectPageSignals(const PageHandle &page);
+    void connectHoverSignals(const PageHandle &page);
     void connectEditing(const PageHandle &page);
     void connectTablesOf(const PageHandle &page);
     void styleOne(const PageHandle &page);

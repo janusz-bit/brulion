@@ -824,6 +824,7 @@ void AtramentView::attachView()
         m_page = std::make_unique<Page>();
         m_page->entity = r.app.newEntity<brulion::editor::atr::PageView>(model);
         connectPageSignals(PageHandle{m_page->entity, model, false});
+        connectHoverSignals(PageHandle{m_page->entity, model, false});
         applyStyle();
         connectTables();
         applyExtras();
@@ -844,6 +845,28 @@ void AtramentView::attachView()
     }
 #endif
     qWarning() << "AtramentView: no view named" << m_view;
+}
+
+// The page's hover cues: a link's preview, a table cell's tooltip (hovering activates no day of the
+// journal: the link and its file come resolved).
+void AtramentView::connectHoverSignals(const PageHandle &handle)
+{
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+    QPointer<AtramentView> guard = this;
+    handle.entity.update(runtime().app, [guard](brulion::editor::atr::PageView &page,
+                                                at::Context<brulion::editor::atr::PageView> &) {
+        page.onLinkHover = [guard](int row, const QString &href, const QString &fromPath, at::Point p) {
+            if (guard)
+                Q_EMIT guard->linkHovered(row, href, fromPath, p.x, p.y);
+        };
+        page.onToolTip = [guard](const QString &text, at::Rect r) {
+            if (guard)
+                Q_EMIT guard->toolTipRequested(text, r.left(), r.top(), r.width(), r.height());
+        };
+    });
+#else
+    Q_UNUSED(handle)
+#endif
 }
 
 void AtramentView::connectPageSignals(const PageHandle &handle)
@@ -873,15 +896,6 @@ void AtramentView::connectPageSignals(const PageHandle &handle)
                         act();
                         if (guard)
                             Q_EMIT guard->linkMenuRequested(row, href, p.x, p.y);
-                    };
-                    // (Hovering activates no day of the journal: the link and its file come resolved.)
-                    page.onLinkHover = [guard](int row, const QString &href, const QString &fromPath, at::Point p) {
-                        if (guard)
-                            Q_EMIT guard->linkHovered(row, href, fromPath, p.x, p.y);
-                    };
-                    page.onToolTip = [guard](const QString &text, at::Rect r) {
-                        if (guard)
-                            Q_EMIT guard->toolTipRequested(text, r.left(), r.top(), r.width(), r.height());
                     };
                     page.onToggleTask = [guard, act](int row) {
                         act();
@@ -1261,6 +1275,7 @@ void AtramentView::attachJournal()
             day.page = page;
             const PageHandle handle{page, controller->blocks(), true};
             guard->connectPageSignals(handle);
+            guard->connectHoverSignals(handle);
             guard->connectEditing(handle);
             guard->connectTablesOf(handle);
             guard->styleOne(handle);

@@ -641,27 +641,8 @@ at::AnyElement PageView::renderRow(std::size_t row)
         std::move(body).trackLayout(m_rowText[uid]);
         m_rowTextFrame[uid] = m_frame;
     }
-    // Each link a hit region of the text.
+    addLinks(body, LinkTarget::make(LinkHome::Block, row, 0, 0, -1, {}, 0, {}), text);
     PageView *self = this;
-    for (const RenderedLink &l : renderedLinks(text)) {
-        const QString &href = l.href;
-        // (The listener lives in the frame arena, which destroys it — the href with it.)
-        at::TextLink::MenuListener menu;
-        if (onLinkMenu)
-            menu = [self, row, href](at::Point p, at::Window &, at::App &) {
-                if (self->onLinkMenu)
-                    self->onLinkMenu(int(row), href, p);
-            };
-        std::move(body).link(
-                l.range,
-                [self, row, href](const at::ClickEvent &click, at::Window &, at::App &) {
-                    if (self->onLinkAt)
-                        self->onLinkAt(int(row), href, click.up.position);
-                    else if (self->onLink)
-                        self->onLink(int(row), href);
-                },
-                std::move(menu), linkHover(int(row), kOwnText, l, QString()));
-    }
 
     // (As wide as the line: a callout's frame and a selected row's band span the text column.)
     at::Div content = at::div().flex1().minW(0).flexRow().itemsStart().pl(textX - marker);
@@ -882,33 +863,6 @@ at::AnyElement PageView::renderRow(std::size_t row)
                 });
     }
     return drawn;
-}
-
-at::TextLink::HoverListener PageView::linkHover(int row, int part, const RenderedLink &link, const QString &fromPath)
-{
-    // (Always: a hook set later is told without the page drawn again.)
-    PageView *self = this;
-    return [self, key = HoverKey{row, part, link.range.start}, href = link.href, fromPath](bool on, at::Point p, at::Window &,
-                                                                                           at::App &) {
-        self->linkHovered(key, on ? href : QString(), fromPath, p);
-    };
-}
-
-void PageView::linkHovered(HoverKey key, const QString &href, const QString &fromPath, at::Point at)
-{
-    if (href.isEmpty() && m_hoveredLink != key)
-        return; // (another link was told since)
-    m_hoveredLink = href.isEmpty() ? HoverKey{} : key;
-    if (!onLinkHover)
-        return;
-    if (href.isEmpty() || !m_controller) {
-        onLinkHover(key.row, href, href.isEmpty() ? QString() : fromPath, at);
-        return;
-    }
-    // A day chip previews its day's page (BlockText's previewLink); the page's own text is written
-    // in the page.
-    onLinkHover(key.row, href.startsWith(u"day:") ? m_controller->dateChipUrl(key.row, href) : href,
-                fromPath.isEmpty() ? m_controller->path() : fromPath, at);
 }
 
 } // namespace brulion::editor::atr

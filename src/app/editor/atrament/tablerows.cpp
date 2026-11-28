@@ -527,26 +527,7 @@ at::AnyElement PageView::renderTableCell(std::size_t row, quint64 uid, const Tab
     std::vector<at::TextSpan> spans = renderedSpans(rendered, m_palette);
     appendFindSpans(rendered.text, spans);
     at::Text text = at::text(u16View(rendered.text)).id(u"text").spans(spans).trackLayout(frame.text);
-    // Each link a hit region, as in a block's text.
-    for (const RenderedLink &l : renderedLinks(rendered)) {
-        const QString &href = l.href;
-        std::move(text).link(l.range,
-                             [selfId, row, r, c, href](const at::ClickEvent &click, at::Window &, at::App &a) {
-                                 a.updateEntity<PageView>(selfId, [&](PageView &v, at::Context<PageView> &cx) {
-                                     v.cellLinkClicked(row, r, c, href, click.up.position, cx);
-                                 });
-                             },
-                             // Its menu: a right-click, a finger held on it (a date chip's, a link's).
-                             [selfId, row, r, c, href](at::Point p, at::Window &, at::App &a) {
-                                 a.updateEntity<PageView>(selfId, [&](PageView &v, at::Context<PageView> &) {
-                                     if (v.m_touchGrips && v.onLongPressRow)
-                                         v.onLongPressRow(int(row)); // (the selection mode: the row's)
-                                     else if (v.onCellLinkMenu)
-                                         v.onCellLinkMenu(int(row), r, c, href, p);
-                                 });
-                             },
-                             linkHover(int(row), cellPart(r, c), l, QString()));
-    }
+    addLinks(text, LinkTarget::make(LinkHome::Cell, row, r, c, -1, {}, 0, {}), rendered);
     std::move(body).child(std::move(text));
     std::move(d).child(std::move(body));
     // A right-click: the block menu with the cell's Row and Column (also in reading mode: it copies).
@@ -1088,13 +1069,20 @@ void PageView::cellHovered(std::size_t row, int r, int c, std::optional<CellTip>
         }
         return;
     }
-    const atrament::TextLayoutHandle *text = cellText(int(row), r, c);
-    const bool cut = text && text->layout() && text->layout()->truncated();
-    const QString tip = !on->error.isEmpty() ? on->error : cut ? on->shown : QString();
+    const QString tip = cellTip(int(row), r, c, *on);
     const bool told = m_toolTipCell.row >= 0;
     m_toolTipCell = tip.isEmpty() ? HoverKey{} : key;
     if (!tip.isEmpty() || told)
         onToolTip(tip, cellBounds(int(row), r, c).value_or(at::Rect{}));
+}
+
+// What a cell's tooltip says: its formula's error, else its whole text when the cell cuts it short.
+QString PageView::cellTip(int row, int r, int c, const CellTip &cell) const
+{
+    if (!cell.error.isEmpty())
+        return cell.error;
+    const atrament::TextLayoutHandle *text = cellText(row, r, c);
+    return text && text->layout() && text->layout()->truncated() ? cell.shown : QString();
 }
 
 } // namespace brulion::editor::atr

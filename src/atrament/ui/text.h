@@ -194,6 +194,12 @@ private:
     struct LinkState;
     LinkState *m_linkState = nullptr;
     void tellHover(int onto, int left, Point at, Window &w, App &app) const;
+    int linkUnder(const Window &w) const;
+    void registerLinkListeners(Window &window);
+    void describeLink(std::size_t k, Rect bounds, Window &window);
+    void linkCaptured(const PlatformInput &input, int under, Window &w, App &app);
+    void linkPressed(const MouseDownEvent &down, int under, Window &w, App &app);
+    void linkReleased(const MouseUpEvent &up, int under, Window &w, App &app);
     ArenaVector<FontRun> m_runs;
     ArenaVector<TextPaintStyle> m_paint;
     ElementId m_id;

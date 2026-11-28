@@ -6,6 +6,7 @@
 qt_add_library(brulion_editor_atrament STATIC
     renderedspans.h renderedspans.cpp
     pageview.h pageview.cpp
+    pagelinks.cpp
     pageediting.cpp
     pageembed.cpp
     journalview.h journalview.cpp

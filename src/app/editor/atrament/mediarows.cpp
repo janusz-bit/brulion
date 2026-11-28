@@ -64,36 +64,52 @@ bool scalableEmbed(const QVariantMap &e)
 // preview from its image provider), a PDF's thumbnail (drawn, being drawn, failed), a chip, a
 // picture from the internet not shown yet (its placeholder: "Show", "Save to notebook"); Foreign
 // for the rest (players, bases, a drawing whose preview's provider is not registered).
-EmbedKind embedKind(const QVariantMap &e, bool dark)
+// A picture from the internet: its placeholder until it is cached, then the picture where this
+// device decodes its format.
+EmbedKind webKind(const QVariantMap &e, const QUrl &url)
+{
+    if (e.value(u"state"_s).toString() != u"ready")
+        return EmbedKind::WebPending;
+    const QString format = e.value(u"format"_s).toString().toLower();
+    return e.value(u"decodable"_s, true).toBool() && PictureCache::readable(url)
+                           && PictureCache::decodableName(u"picture."_s + format)
+                   ? EmbedKind::Picture
+                   : EmbedKind::Foreign;
+}
+
+// A picture among the attachments (one whose format the device cannot decode: its frame says so).
+EmbedKind localKind(const QVariantMap &e, const QUrl &url)
+{
+    if (!e.value(u"decodable"_s, true).toBool())
+        return EmbedKind::Picture;
+    return PictureCache::readable(url) && PictureCache::decodableName(e.value(u"name"_s).toString())
+                   ? EmbedKind::Picture
+                   : EmbedKind::Foreign;
+}
+
+// A base, a player, a drawing or a PDF; nothing: another embed.
+std::optional<EmbedKind> specialKind(const QVariantMap &e, bool dark)
 {
     if (e.value(u"base"_s).toBool() || e.value(u"media"_s).toBool())
         return EmbedKind::Foreign;
     if (e.value(u"drawing"_s).toBool())
         return PictureCache::readable(drawingUrl(e, dark)) ? EmbedKind::Picture : EmbedKind::Foreign;
+    if (!e.value(u"pdf"_s).toBool())
+        return std::nullopt;
+    // (Its thumbnail drawn, being drawn or failed: PdfEmbedTile's states.)
+    const bool shown = e.value(u"viewable"_s).toBool() && e.value(u"state"_s).toString() != u"unsupported";
+    return shown ? EmbedKind::PdfTile : EmbedKind::Chip;
+}
+
+EmbedKind embedKind(const QVariantMap &e, bool dark)
+{
+    if (const std::optional<EmbedKind> special = specialKind(e, dark))
+        return *special;
     const QUrl url = e.value(u"url"_s).toUrl();
-    if (e.value(u"pdf"_s).toBool()) {
-        // (Its thumbnail drawn, being drawn or failed: PdfEmbedTile's states.)
-        const bool shown = e.value(u"viewable"_s).toBool() && e.value(u"state"_s).toString() != u"unsupported";
-        return shown ? EmbedKind::PdfTile : EmbedKind::Chip;
-    }
     const bool web = e.value(u"web"_s).toBool();
     if (!e.value(u"image"_s).toBool() || (!web && url.isEmpty()))
         return EmbedKind::Chip;
-    const bool decodable = e.value(u"decodable"_s, true).toBool();
-    if (web && e.value(u"state"_s).toString() != u"ready")
-        return EmbedKind::WebPending;
-    if (web) {
-        const QString format = e.value(u"format"_s).toString().toLower();
-        return e.value(u"state"_s).toString() == u"ready" && decodable && PictureCache::readable(url)
-                               && PictureCache::decodableName(u"picture."_s + format)
-                       ? EmbedKind::Picture
-                       : EmbedKind::Foreign;
-    }
-    if (!decodable)
-        return EmbedKind::Picture; // (its frame names the format)
-    return PictureCache::readable(url) && PictureCache::decodableName(e.value(u"name"_s).toString())
-                   ? EmbedKind::Picture
-                   : EmbedKind::Foreign;
+    return web ? webKind(e, url) : localKind(e, url);
 }
 
 // The cache's key of an embed's picture: short (a data: URL is the whole file).
@@ -1157,29 +1173,8 @@ at::AnyElement PageView::transclusionsPart(std::size_t row, quint64 uid, const Q
             } else if (e.text) {
                 const markdown::RenderedText &rt = *e.text;
                 at::Text t = at::text(u16View(rt.text)).spans(renderedSpans(rt, m_palette));
-                const QString path = e.path;
-                const int line = e.line;
-                const QString raw = e.raw;
                 PartText &part = partText(row, -1);
-                for (const RenderedLink &l : renderedLinks(rt)) {
-                    const QString &link = l.href;
-                    // Its menu (a chip's in the block's own file, a link's): TransclusionView's.
-                    at::TextLink::MenuListener menu;
-                    if (onEmbeddedLinkMenu)
-                        menu = [self, row, link, path, line, raw](at::Point p, at::Window &, at::App &) {
-                            if (self->onEmbeddedLinkMenu)
-                                self->onEmbeddedLinkMenu(int(row), link, path, line, raw, p);
-                        };
-                    std::move(t).link(l.range,
-                                      [self, row, link, path, line, raw](const at::ClickEvent &, at::Window &, at::App &) {
-                                          if (self->onEmbeddedLink)
-                                              self->onEmbeddedLink(int(row), link, path, line, raw);
-                                          else if (self->onLink)
-                                              self->onLink(int(row), link);
-                                      },
-                                      std::move(menu), linkHover(int(row), kEmbedPart, l, path));
-                    part.links.emplace_back(l.range, link);
-                }
+                addLinks(t, LinkTarget::make(LinkHome::Embedded, row, 0, 0, -1, e.path, e.line, e.raw), rt, &part);
                 std::move(t).trackLayout(part.handle);
                 std::move(body).child(std::move(t));
             }

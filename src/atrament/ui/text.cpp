@@ -45,13 +45,12 @@ namespace {
 // A finger's press, move or release (it hovers nothing: no preview's cue).
 bool fromFinger(const PlatformInput &input)
 {
-    return std::visit(
-            [](const auto &e) {
-                if constexpr (requires { e.pointer; })
-                    return e.pointer != PointerKind::Mouse;
-                return false;
-            },
-            input);
+    if (const auto *move = std::get_if<MouseMoveEvent>(&input))
+        return move->pointer != PointerKind::Mouse;
+    if (const auto *down = std::get_if<MouseDownEvent>(&input))
+        return down->pointer != PointerKind::Mouse;
+    const auto *up = std::get_if<MouseUpEvent>(&input);
+    return up && up->pointer != PointerKind::Mouse;
 }
 
 } // namespace
@@ -297,87 +296,117 @@ void Text::paint(Rect bounds, Window &window, App &)
     if (m_links.empty() || !m_linkState)
         return;
 
-    Text *self = this; // in the frame arena, as the listeners are
-    if (window.accessibilityEnabled()) {
-        // One link node per link, named by its text, activated as a click.
-        for (std::size_t k = 0; k < m_links.size(); ++k) {
-            const Range range = m_links[k].range;
-            Rect box;
-            bool first = true;
-            for (const Rect &r : m_layout->selectionRects(range)) {
-                const Rect at{{bounds.left() + r.left(), bounds.top() + r.top()}, r.size};
-                box = first ? at : box.united(at);
-                first = false;
-            }
-            AccessibilityNode *node = window.beginAccessibilityNode(Role::Link, box, hashCombine(0x6c696e6bull, k) | 1);
-            if (!node)
-                continue;
-            const int from = std::clamp(range.start, 0, int(m_text.size()));
-            const int to = std::clamp(range.end, from, int(m_text.size()));
-            node->name = std::u16string_view(m_text.data() + from, std::size_t(to - from));
-            node->actions |= actionBit(AccessibilityAction::Click);
-            node->handler = [self, k](const AccessibilityActionRequest &r, Window &w, App &app) {
-                if (r.action != AccessibilityAction::Click)
-                    return false;
-                ClickEvent click;
-                click.fromAccessibility = true;
-                self->m_links[k].onClick(click, w, app);
-                return true;
-            };
-            window.endAccessibilityNode();
-        }
-    }
+    if (window.accessibilityEnabled())
+        for (std::size_t k = 0; k < m_links.size(); ++k)
+            describeLink(k, bounds, window);
+    registerLinkListeners(window);
+}
 
-    // A finger held on a link with a menu: its menu, before the long press of the elements around
-    // it (registered in paint, as theirs are: the later, the more on top).
+// A finger held on a link with a menu: its menu, before the long press of the elements around it
+// (registered in paint, as theirs are: the later, the more on top); the mouse's hover, press and
+// release.
+void Text::registerLinkListeners(Window &window)
+{
+    Text *self = this; // in the frame arena, as the listeners are
     for (std::size_t i = 0; i < m_linkHitboxes.size(); ++i) {
         const std::size_t k = m_hitboxLink[i];
         if (m_links[k].onMenu)
             window.onLongPress(m_linkHitboxes[i], [self, k](Point p, Window &w, App &app) { self->m_links[k].onMenu(p, w, app); });
     }
     window.onMouseEvent([self](const PlatformInput &input, DispatchPhase phase, Window &w, App &app) {
-        LinkState &st = *self->m_linkState;
-        int under = -1;
-        for (std::size_t i = 0; i < self->m_linkHitboxes.size() && under < 0; ++i)
-            if (w.isHovered(self->m_linkHitboxes[i]))
-                under = int(self->m_hitboxLink[i]);
-        if (phase == DispatchPhase::Capture) {
-            if (std::holds_alternative<KeyDownEvent>(input) || std::holds_alternative<KeyUpEvent>(input))
-                return;
-            if (under != st.hovered) {
-                st.hovered = under;
-                w.refresh();
-            }
-            if (under != st.told && !fromFinger(input)) {
-                const int left = st.told;
-                st.told = under;
-                self->tellHover(under, left, positionOf(input), w, app);
-            }
-            return;
-        }
-        if (const auto *down = std::get_if<MouseDownEvent>(&input)) {
-            st.pressed = down->button == MouseButton::Left ? under : -1;
-            if (under >= 0)
-                st.down = *down;
-            // A right-click on a link with a menu: its menu, not the row's.
-            if (down->button == MouseButton::Right && under >= 0 && self->m_links[std::size_t(under)].onMenu) {
-                self->m_links[std::size_t(under)].onMenu(down->position, w, app);
-                w.stopPropagation();
-            }
-            return;
-        }
-        if (const auto *up = std::get_if<MouseUpEvent>(&input)) {
-            const int pressed = st.pressed;
-            st.pressed = -1;
-            if (up->button != MouseButton::Left || pressed < 0 || pressed != under)
-                return;
-            ClickEvent click;
-            click.down = st.down;
-            click.up = *up;
-            self->m_links[std::size_t(pressed)].onClick(click, w, app);
-            w.stopPropagation(); // the link takes the click, not the row around it
-        }
+        const int under = self->linkUnder(w);
+        if (phase == DispatchPhase::Capture)
+            self->linkCaptured(input, under, w, app);
+        else if (const auto *down = std::get_if<MouseDownEvent>(&input))
+            self->linkPressed(*down, under, w, app);
+        else if (const auto *up = std::get_if<MouseUpEvent>(&input))
+            self->linkReleased(*up, under, w, app);
     });
+}
+
+// The link under the pointer (−1: none).
+int Text::linkUnder(const Window &w) const
+{
+    const auto hit = std::find_if(m_linkHitboxes.begin(), m_linkHitboxes.end(),
+                                  [&w](HitboxId h) { return w.isHovered(h); });
+    return hit == m_linkHitboxes.end() ? -1 : int(m_hitboxLink[std::size_t(hit - m_linkHitboxes.begin())]);
+}
+
+// Link `k`'s node for screen readers: named by its text, over its lines, activated as a click.
+void Text::describeLink(std::size_t k, Rect bounds, Window &window)
+{
+    const Range range = m_links[k].range;
+    Rect box;
+    bool first = true;
+    for (const Rect &r : m_layout->selectionRects(range)) {
+        const Rect at{{bounds.left() + r.left(), bounds.top() + r.top()}, r.size};
+        box = first ? at : box.united(at);
+        first = false;
+    }
+    AccessibilityNode *node = window.beginAccessibilityNode(Role::Link, box, hashCombine(0x6c696e6bull, k) | 1);
+    if (!node)
+        return;
+    const int from = std::clamp(range.start, 0, int(m_text.size()));
+    const int to = std::clamp(range.end, from, int(m_text.size()));
+    node->name = std::u16string_view(m_text.data() + from, std::size_t(to - from));
+    node->actions |= actionBit(AccessibilityAction::Click);
+    Text *self = this;
+    node->handler = [self, k](const AccessibilityActionRequest &r, Window &w, App &app) {
+        if (r.action != AccessibilityAction::Click)
+            return false;
+        ClickEvent click;
+        click.fromAccessibility = true;
+        self->m_links[k].onClick(click, w, app);
+        return true;
+    };
+    window.endAccessibilityNode();
+}
+
+// Before the elements see a mouse event: the hovered link underlined, the hover listeners told
+// (the mouse's: a finger hovers nothing).
+void Text::linkCaptured(const PlatformInput &input, int under, Window &w, App &app)
+{
+    if (std::holds_alternative<KeyDownEvent>(input) || std::holds_alternative<KeyUpEvent>(input))
+        return;
+    LinkState &st = *m_linkState;
+    if (under != st.hovered) {
+        st.hovered = under;
+        w.refresh();
+    }
+    if (under != st.told && !fromFinger(input)) {
+        const int left = st.told;
+        st.told = under;
+        tellHover(under, left, positionOf(input), w, app);
+    }
+}
+
+// A press on a link: remembered for the click; a right-click on a link with a menu: its menu, not
+// the row's.
+void Text::linkPressed(const MouseDownEvent &down, int under, Window &w, App &app)
+{
+    LinkState &st = *m_linkState;
+    st.pressed = down.button == MouseButton::Left ? under : -1;
+    if (under >= 0)
+        st.down = down;
+    if (down.button == MouseButton::Right && under >= 0 && m_links[std::size_t(under)].onMenu) {
+        m_links[std::size_t(under)].onMenu(down.position, w, app);
+        w.stopPropagation();
+    }
+}
+
+// A release on the link pressed: its click, taken from the row around it.
+void Text::linkReleased(const MouseUpEvent &up, int under, Window &w, App &app)
+{
+    LinkState &st = *m_linkState;
+    const int pressed = st.pressed;
+    st.pressed = -1;
+    if (up.button != MouseButton::Left || pressed < 0 || pressed != under)
+        return;
+    ClickEvent click;
+    click.down = st.down;
+    click.up = up;
+    m_links[std::size_t(pressed)].onClick(click, w, app);
+    w.stopPropagation(); // the link takes the click, not the row around it
 }
 
 // The hover listeners of the link the pointer came onto (`onto`) and of the one it left (`left`, a
