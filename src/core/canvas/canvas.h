@@ -134,6 +134,15 @@ struct ReadResult {
 /// canvas, as Obsidian makes them. Nodes without an id or with an id another node has get one of
 /// their own (deterministic: from their position and text), so edits and merges can name them; an
 /// edge to a node that does not exist is kept (and not drawn).
+/// The Advanced Canvas plugin's look of a node (its "styleAttributes", kept in the file as written
+/// and never changed here): "" for each value Brulion does not draw.
+struct NodeStyle {
+    QString shape;     ///< "pill", "circle", "diamond", "parallelogram", "predefined-process", "document", "database"
+    QString border;    ///< "dashed", "dotted", "invisible"
+    QString textAlign; ///< "center", "right"
+};
+NodeStyle nodeStyle(const Node &node);
+
 ReadResult readCanvas(QStringView text);
 /// The canvas as a file (UTF-16; the vault writes UTF-8). A canvas read from a file keeps its
 /// layout: what lies outside the `nodes` and `edges` arrays byte for byte, each node and edge that

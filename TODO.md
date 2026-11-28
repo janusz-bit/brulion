@@ -259,8 +259,9 @@ done in the repository simply disappears from the list.
   delegates") were checked in the offscreen self-test only — with a hardware keyboard on a real
   computer, a tablet and in the browser build — and touch UIs have no range selection, only the
   cell toolbar's "Next cell".
-* **Obsidian compatibility: what remains** — canvases keep the Advanced Canvas plugin's shapes,
-  borders and portals in the file but draw plain cards; Dataview's `dataviewjs` blocks and inline
+* **Obsidian compatibility: what remains** — canvases keep the Advanced Canvas plugin's portals
+  in the file but draw plain cards, and its shapes other than a pill or a circle and its dashed or
+  dotted borders are rectangles on the board (the canvas's picture, `canvas::toSvg`, draws them); Dataview's `dataviewjs` blocks and inline
   `$= …` queries stay code (JavaScript: no script engine for notes; docs/SYNTAX.md §10 "Dataview
   queries"); a Dataview `CALENDAR` was tested with the mouse and the offscreen self-test, not yet
   with a finger on a real phone.

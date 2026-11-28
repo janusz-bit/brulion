@@ -44,6 +44,8 @@ public:
         LabelRole,
         BackgroundRole,
         BackgroundStyleRole,
+        ShapeRole,  ///< nodeStyle().shape (Advanced Canvas)
+        BorderRole, ///< nodeStyle().border
         SelectedRole,
         FileKindRole,
         FilePathRole,

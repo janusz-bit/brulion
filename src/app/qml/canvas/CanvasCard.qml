@@ -29,6 +29,11 @@ Item {
     required property string cardLabel
     required property string background
     required property string backgroundStyle
+    /// The Advanced Canvas plugin's shape and border (core canvas::nodeStyle(): "" none). The board
+    /// rounds a pill and a circle and hides an invisible border; the other shapes and dashed or
+    /// dotted borders are drawn by the canvas's picture (canvas::toSvg) only.
+    required property string cardShape
+    required property string cardBorder
     required property bool selected
     required property string fileKind
     required property string filePath
@@ -143,9 +148,9 @@ Item {
         id: frame
         visible: !card.isGroup
         anchors.fill: parent
-        radius: Theme.radiusLg
+        radius: card.cardShape === "pill" || card.cardShape === "circle" ? Math.min(width, height) / 2 : Theme.radiusLg
         color: Theme.bgElevated
-        border.width: (card.selected ? 2.5 : card.tint !== "" ? 2 : 1) * card.px
+        border.width: card.selected ? 2.5 * card.px : card.cardBorder === "invisible" ? 0 : (card.tint !== "" ? 2 : 1) * card.px
         border.color: card.selected ? Theme.accent : card.frameColor
         clip: true
 

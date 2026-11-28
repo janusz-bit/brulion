@@ -714,7 +714,12 @@ the vault path of a note, a picture, a PDF, a drawing, another canvas or any fil
 address; Brulion shows the address as a card and never fetches the page), `group` (a labelled
 frame: `label`, `background` — a picture's vault path —, `backgroundStyle` `cover` | `ratio` |
 `repeat`). A node of another type (plugins: Advanced Canvas' portals) is kept as written and drawn
-as a plain card with its text. A node lies in a group when its rectangle lies inside the group's:
+as a plain card with its text. The Advanced Canvas plugin's `styleAttributes` of a node are kept as
+written and read for drawing it (`canvas::nodeStyle`): `shape` (`pill`, `circle`, `diamond`,
+`parallelogram`, `predefined-process`, `document`, `database`), `border` (`dashed`, `dotted`,
+`invisible`) and `textAlign` (`center`, `right`) — the canvas's picture (exports, an embed's
+preview) draws them all; the board rounds a pill and a circle and hides an invisible border, the
+other shapes and dashed or dotted borders are rectangles there. A node lies in a group when its rectangle lies inside the group's:
 moving a group moves them.
 
 **Edges:** `id`, `fromNode`, `toNode`, optional `fromSide` / `toSide` (`top`, `right`, `bottom`,

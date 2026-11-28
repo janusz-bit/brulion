@@ -154,7 +154,8 @@ instead of a path) is skipped with a warning, and Brulion keeps its own.
   canvas's notes and the links in its text cards count as links in Brulion too (backlinks, the
   graph), its cards are found by search, and renaming or moving a page rewrites the canvases that
   show it. Not shown: Obsidian's embedded web pages (a link card shows its address), the
-  Advanced Canvas plugin's shapes, borders and portals (kept in the file). In notes, a canvas is
+  Advanced Canvas plugin's portals (kept in the file); its shapes, borders and text alignment are
+  drawn in the canvas's picture, a pill, a circle and an invisible border on the board too. In notes, a canvas is
   linked as `[[Plan.canvas]]`, as in Obsidian.
 * Brulion keeps **favorites** (Obsidian's bookmarks from `.obsidian/bookmarks.json` are not read)
   and **folded blocks** on the device, not in the files.

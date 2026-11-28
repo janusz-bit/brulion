@@ -211,6 +211,63 @@ private Q_SLOTS:
         QVERIFY(toSvg(Canvas()).contains(u"<svg"_s));
     }
 
+    void advancedCanvasStyles_data()
+    {
+        QTest::addColumn<QString>("style");    // the node's styleAttributes as written
+        QTest::addColumn<QString>("shape");    // nodeStyle()
+        QTest::addColumn<QString>("border");
+        QTest::addColumn<QString>("align");
+        QTest::addColumn<QString>("drawn");    // in the SVG picture
+        QTest::newRow("none") << QString() << QString() << QString() << QString() << u"rx=\"10\""_s;
+        QTest::newRow("a pill") << u"{\"shape\":\"pill\"}"_s << u"pill"_s << QString() << QString() << u"<rect x=\"0\" y=\"0\" width=\"200\" height=\"80\" rx=\"40\""_s;
+        QTest::newRow("a circle") << u"{\"shape\":\"circle\"}"_s << u"circle"_s << QString() << QString() << u"<ellipse cx=\"100\" cy=\"40\" rx=\"100\" ry=\"40\""_s;
+        QTest::newRow("a diamond, dashed") << u"{\"shape\":\"diamond\",\"border\":\"dashed\"}"_s << u"diamond"_s
+                                           << u"dashed"_s << QString()
+                                           << u"<polygon points=\"100,0 200,40 100,80 0,40\" fill=\"none\" stroke=\"#cfcfcf\" stroke-width=\"2\" stroke-dasharray=\"8 6\""_s;
+        QTest::newRow("a parallelogram") << u"{\"shape\":\"parallelogram\"}"_s << u"parallelogram"_s << QString()
+                                         << QString() << u"<polygon points=\"40,0 200,0 160,80 0,80\""_s;
+        QTest::newRow("a database, dotted") << u"{\"shape\":\"database\",\"border\":\"dotted\"}"_s << u"database"_s
+                                            << u"dotted"_s << QString()
+                                            << u"rx=\"0\" fill=\"none\" stroke=\"#cfcfcf\" stroke-width=\"2\" stroke-dasharray=\"2 4\"/>\n"
+                                               "<ellipse cx=\"100\" cy=\"0\" rx=\"100\" ry=\"12\""_s;
+        QTest::newRow("a document") << u"{\"shape\":\"document\"}"_s << u"document"_s << QString() << QString()
+                                    << u"<path d=\"M0 0 H200 V66.67 Q150 53.33 100 66.67 T0 66.67 Z\""_s;
+        QTest::newRow("a predefined process") << u"{\"shape\":\"predefined-process\"}"_s << u"predefined-process"_s
+                                              << QString() << QString()
+                                              << u"<line x1=\"180\" y1=\"0\" x2=\"180\" y2=\"80\""_s;
+        QTest::newRow("no border, centred") << u"{\"border\":\"invisible\",\"textAlign\":\"center\"}"_s << QString()
+                                             << u"invisible"_s << u"center"_s
+                                             << u"<g text-anchor=\"middle\" transform=\"translate(86 0)\">"_s;
+        QTest::newRow("right") << u"{\"textAlign\":\"right\"}"_s << QString() << QString() << u"right"_s
+                               << u"<g text-anchor=\"end\" transform=\"translate(172 0)\">"_s;
+        QTest::newRow("unknown values") << u"{\"shape\":\"żółw\",\"border\":7,\"textAlign\":\"justify\"}"_s
+                                        << QString() << QString() << QString() << u"rx=\"10\""_s;
+        QTest::newRow("not an object") << u"\"pill\""_s << QString() << QString() << QString() << u"rx=\"10\""_s;
+    }
+    void advancedCanvasStyles()
+    {
+        // The Advanced Canvas plugin's look of a card (its "styleAttributes", kept as written): the
+        // shape, the border and the text's alignment, read for drawing it.
+        QFETCH(QString, style);
+        QFETCH(QString, shape);
+        QFETCH(QString, border);
+        QFETCH(QString, align);
+        QFETCH(QString, drawn);
+        const QString text = u"{\"nodes\":[{\"id\":\"n1\",\"type\":\"text\",\"text\":\"Zażółć\",\"x\":0,\"y\":0,"
+                              "\"width\":200,\"height\":80"_s
+                             + (style.isEmpty() ? QString() : u",\"styleAttributes\":"_s + style) + u"}],\"edges\":[]}"_s;
+        const Canvas c = read(text);
+        const NodeStyle got = nodeStyle(c.nodes.first());
+        QCOMPARE(got.shape, shape);
+        QCOMPARE(got.border, border);
+        QCOMPARE(got.textAlign, align);
+        const QString svg = toSvg(c);
+        QVERIFY2(svg.contains(drawn), qPrintable(svg));
+        QCOMPARE(svg.contains(u"stroke-width=\"2\""_s), border != u"invisible"_s);
+        // Written back as it was.
+        QCOMPARE(writeCanvas(c), text);
+    }
+
     void plainCardLines()
     {
         QList<int> levels;

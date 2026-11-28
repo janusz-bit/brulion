@@ -89,6 +89,8 @@ QVariant CanvasNodeModel::data(const QModelIndex &index, int role) const
     case LabelRole: return n.label;
     case BackgroundRole: return n.background;
     case BackgroundStyleRole: return n.backgroundStyle;
+    case ShapeRole: return canvas::nodeStyle(n).shape;
+    case BorderRole: return canvas::nodeStyle(n).border;
     case SelectedRole: return r.selected;
     case FileKindRole: return r.fileKind;
     case FilePathRole: return r.filePath;
@@ -115,6 +117,8 @@ QHash<int, QByteArray> CanvasNodeModel::roleNames() const
             {LabelRole, "cardLabel"},
             {BackgroundRole, "background"},
             {BackgroundStyleRole, "backgroundStyle"},
+            {ShapeRole, "cardShape"},
+            {BorderRole, "cardBorder"},
             {SelectedRole, "selected"},
             {FileKindRole, "fileKind"},
             {FilePathRole, "filePath"},

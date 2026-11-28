@@ -5,7 +5,10 @@
 #include "text/text.h"
 
 #include <QHash>
+#include <QJsonDocument>
+#include <QJsonObject>
 
+#include <algorithm>
 #include <array>
 
 using namespace Qt::StringLiterals;
@@ -684,6 +687,26 @@ QString canvasTitle(QStringView path)
     if (name.size() > 7 && name.endsWith(u".canvas", Qt::CaseInsensitive))
         name.chop(7);
     return name.toString();
+}
+
+NodeStyle nodeStyle(const Node &node)
+{
+    NodeStyle out;
+    if (!node.origin)
+        return out;
+    const auto member = std::ranges::find(node.origin->members, u"styleAttributes"_s, &detail::Member::key);
+    if (member == node.origin->members.end())
+        return out;
+    const QJsonObject style = QJsonDocument::fromJson(member->value.toUtf8()).object();
+    const auto known = [&style](const char16_t *key, std::initializer_list<QStringView> values) {
+        const QString v = style.value(QStringView(key)).toString();
+        return std::ranges::find(values, QStringView(v)) != values.end() ? v : QString();
+    };
+    out.shape = known(u"shape", {u"pill", u"circle", u"diamond", u"parallelogram", u"predefined-process", u"document",
+                                 u"database"});
+    out.border = known(u"border", {u"dashed", u"dotted", u"invisible"});
+    out.textAlign = known(u"textAlign", {u"center", u"right"});
+    return out;
 }
 
 } // namespace brulion::canvas
