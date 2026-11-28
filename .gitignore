@@ -31,3 +31,7 @@ aqtinstall.log
 /tests/web/playwright-report-publish/
 /dist-clipper/
 .claude/worktrees/
+
+# Python bytecode (scripts/, tests run with python3 -m unittest)
+__pycache__/
+*.pyc
