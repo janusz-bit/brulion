@@ -767,7 +767,8 @@ void CodeGit::readPullRequestRange(const QString &ref)
             failPullRequestQuestion(tr("The branch has no commits that %1 does not have.").arg(ref));
         } else {
             const QVariantMap q = question(codeai::pullRequest({ref, m_branch, commits, outputOf(r.at(1)), outputOf(r.at(2)),
-                                                                     codeai::pullRequestTemplateIn(m_info.topLevel)}));
+                                                                     codeai::pullRequestTemplateIn(m_info.topLevel),
+                                                                     m_conversation}));
             answerPullRequestQuestion(q.value(u"system"_s).toString(), q.value(u"prompt"_s).toString(), QString());
         }
     });
@@ -813,6 +814,14 @@ void CodeGit::openWrittenPullRequest(const QString &title, const QString &body)
         pr.body = body;
     }
     openPullRequest(u"commit"_s, waiting->root, pr, tr("Committed and pushed, but no pull request: %1"));
+}
+
+void CodeGit::setConversation(const QString &text)
+{
+    if (text == m_conversation)
+        return;
+    m_conversation = text;
+    Q_EMIT conversationChanged();
 }
 
 void CodeGit::setWritesPullRequests(bool on)

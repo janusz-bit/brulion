@@ -113,6 +113,7 @@ private Q_SLOTS:
                           u"a1b2c3d Dodaj rabat dla stałych klientów\n    Rabat 5 % od trzeciego zamówienia.\n"_s,
                           u" koszyk.py | 4 ++--\n 1 file changed, 2 insertions(+), 2 deletions(-)\n"_s,
                           u"diff --git a/koszyk.py b/koszyk.py\n+RABAT = 0.05  # zniżka\n"_s,
+                          {},
                           {}};
         const ai::Request r = pullRequest(range);
         QVERIFY(r.system.contains(u"pull request"_s));
@@ -143,6 +144,15 @@ private Q_SLOTS:
         QVERIFY2(userText(t).contains(u"Pull request template:\n## Co zmieniono\n\n## Jak sprawdzono\n"_s), qPrintable(userText(t)));
         range.pullRequestTemplate = QString(MaxTemplate * 2, u't');
         QVERIFY(userText(pullRequest(range)).contains(QString(MaxTemplate, u't') + u"\n[truncated]"_s));
+        // The coding thread's conversation (titleContext()): why the changes were made, as data.
+        range.pullRequestTemplate.clear();
+        QVERIFY(!userText(pullRequest(range)).contains(u"conversation"_s));
+        range.conversation = u"USER:\nDodaj rabat dla stałych klientów, bo odchodzą do konkurencji.\n"_s;
+        const ai::Request c = pullRequest(range);
+        QVERIFY2(c.system.contains(u"conversation"_s), qPrintable(c.system));
+        QVERIFY2(userText(c).contains(u"The coding thread's conversation:\nUSER:\nDodaj rabat"_s), qPrintable(userText(c)));
+        range.conversation = QString(MaxTitleContext * 2, u'k');
+        QVERIFY(userText(pullRequest(range)).contains(QString(MaxTitleContext, u'k') + u"\n[truncated]"_s));
     }
 
     // The repository's pull request template found where GitHub looks: .github/, the root, docs/

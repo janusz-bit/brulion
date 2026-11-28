@@ -54,6 +54,7 @@ struct BranchRange {
     QString stat;    ///< `git diff --stat base...HEAD`
     QString patch;   ///< `git diff base...HEAD`
     QString pullRequestTemplate; ///< the repository's (`.github/pull_request_template.md` …; "" none)
+    QString conversation;        ///< the coding thread's messages (titleContext(); "" none)
 };
 inline constexpr qsizetype MaxCommits = 12000;
 inline constexpr qsizetype MaxStat = 6000;

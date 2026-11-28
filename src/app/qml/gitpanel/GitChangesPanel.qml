@@ -378,11 +378,17 @@ Item {
             stashDialog.openFor()
     }
     function openCommit(): void {
+        panel.conversationWanted()
         commitDialog.openFor()
     }
     function openPullRequest(): void {
+        panel.conversationWanted()
         prDialog.openFor()
     }
+    /// The coding thread's messages for the AI's pull request question (CodeGit.conversation): the
+    /// owner sets it when asked by conversationWanted() — as a commit or pull request dialog opens.
+    property string conversation
+    signal conversationWanted()
     function openBranchMenu(): void {
         repo.branches()
         repo.stashes()
@@ -521,6 +527,7 @@ Item {
         // (What the remote has, every five minutes: ahead / behind and Pull follow it.)
         fetchInterval: panel.fetchInterval
         writesPullRequests: panel.aiAvailable
+        conversation: panel.conversation
         onDiffReady: (path, oldText, newText, binary, tooLarge) => {
             if (path !== panel.selectedPath)
                 return

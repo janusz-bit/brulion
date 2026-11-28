@@ -502,23 +502,29 @@ void TestCodeGit::questionsForTheAi()
     QTRY_COMPARE_WITH_TIMEOUT(ready.count(), 2, Wait);
     QVERIFY(ready.at(1).at(1).toString().contains(u"Base branch: main\n"_s));
     QVERIFY(ready.at(1).at(1).toString().contains(u"Pull request template:\n## Co i dlaczego"_s));
+    // (… and with the thread's conversation the owner gives.)
+    QVERIFY(!ready.at(1).at(1).toString().contains(u"conversation"_s));
+    git.setConversation(u"USER:\nStali klienci dostają rabat.\n"_s);
+    git.requestPullRequestQuestion(u"main"_s);
+    QTRY_COMPARE_WITH_TIMEOUT(ready.count(), 3, Wait);
+    QVERIFY(ready.at(2).at(1).toString().contains(u"conversation:\nUSER:\nStali klienci dostają rabat."_s));
     // A base that is none, one that looks like an option: said, nothing asked.
     git.requestPullRequestQuestion(u"nie-ma-takiej"_s);
-    QTRY_COMPARE_WITH_TIMEOUT(ready.count(), 3, Wait);
-    QCOMPARE(ready.at(2).at(1).toString(), QString());
-    QVERIFY(ready.at(2).at(2).toString().contains(u"nie-ma-takiej"_s));
-    git.requestPullRequestQuestion(u"--output=/tmp/wynik"_s);
     QTRY_COMPARE_WITH_TIMEOUT(ready.count(), 4, Wait);
     QCOMPARE(ready.at(3).at(1).toString(), QString());
-    QCOMPARE(ready.at(3).at(2).toString(), u"“--output=/tmp/wynik” cannot be the name of a branch."_s);
+    QVERIFY(ready.at(3).at(2).toString().contains(u"nie-ma-takiej"_s));
+    git.requestPullRequestQuestion(u"--output=/tmp/wynik"_s);
+    QTRY_COMPARE_WITH_TIMEOUT(ready.count(), 5, Wait);
+    QCOMPARE(ready.at(4).at(1).toString(), QString());
+    QCOMPARE(ready.at(4).at(2).toString(), u"“--output=/tmp/wynik” cannot be the name of a branch."_s);
     // The default branch itself has nothing of its own: said.
     repo.git({u"switch"_s, u"-q"_s, u"main"_s});
     git.refresh();
     QTRY_COMPARE_WITH_TIMEOUT(git.branch(), u"main"_s, Wait);
     git.requestPullRequestQuestion(QString());
-    QTRY_COMPARE_WITH_TIMEOUT(ready.count(), 5, Wait);
-    QCOMPARE(ready.at(4).at(1).toString(), QString());
-    QVERIFY(ready.at(4).at(2).toString().contains(u"main"_s));
+    QTRY_COMPARE_WITH_TIMEOUT(ready.count(), 6, Wait);
+    QCOMPARE(ready.at(5).at(1).toString(), QString());
+    QVERIFY(ready.at(5).at(2).toString().contains(u"main"_s));
 
     // The answer read.
     const QVariantMap text = git.pullRequestText(u"```\nDodaj rabat.\n\n## Summary\n- 5 %\n```"_s);

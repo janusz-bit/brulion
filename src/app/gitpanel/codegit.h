@@ -58,6 +58,9 @@ class CodeGit : public QObject {
     /// (T3 Code's): after the push pullRequestToWrite(system, prompt), the answer by
     /// pullRequestWritten(); without one in MaxPullRequestWait the message's first line titles it.
     Q_PROPERTY(bool writesPullRequests READ writesPullRequests WRITE setWritesPullRequests NOTIFY writesPullRequestsChanged FINAL)
+    /// The coding thread's messages for the AI's pull request question (WorkspaceChats.threadContext():
+    /// why the changes were made; "" none).
+    Q_PROPERTY(QString conversation READ conversation WRITE setConversation NOTIFY conversationChanged FINAL)
 
     /// The first refresh of this folder is done (before it, isRepo says nothing).
     Q_PROPERTY(bool loaded READ loaded NOTIFY stateChanged FINAL)
@@ -160,6 +163,8 @@ public:
     int pollInterval() const { return m_pollInterval; }
     int fetchInterval() const { return m_fetchInterval; }
     bool writesPullRequests() const { return m_writesPullRequests; }
+    QString conversation() const { return m_conversation; }
+    void setConversation(const QString &text);
     void setWritesPullRequests(bool on);
     static constexpr int MaxPullRequestWait = 3 * 60 * 1000;
     void setFetchInterval(int ms);
@@ -402,6 +407,7 @@ Q_SIGNALS:
     void pollIntervalChanged();
     void fetchIntervalChanged();
     void writesPullRequestsChanged();
+    void conversationChanged();
     /// A commit's pull request waits for the AI's text (writesPullRequests): ask it, then
     /// pullRequestWritten().
     void pullRequestToWrite(const QString &system, const QString &prompt);
@@ -492,6 +498,7 @@ private:
     std::optional<WaitingPullRequest> m_prToWrite;
     QTimer m_prWait;
     bool m_writesPullRequests = false;
+    QString m_conversation;
     /// True while the folder is the one of now (no setFolder() since): for answers that come later.
     std::function<bool()> stillThisFolder() const;
 

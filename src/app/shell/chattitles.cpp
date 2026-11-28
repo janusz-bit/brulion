@@ -23,14 +23,19 @@ bool WorkspaceChats::regeneratingTitle(const QString &path, int) const
     return m_titling.contains(path.toLower());
 }
 
+QString WorkspaceChats::threadContext(const QString &path) const
+{
+    bool ok = false;
+    const QString content = path.isEmpty() ? QString() : m_workspace->read(path, &ok);
+    return ok ? codeai::titleContext(chat::parse(content)) : QString();
+}
+
 bool WorkspaceChats::regenerateTitle(const QString &path)
 {
     const QString key = path.toLower();
     if (path.isEmpty() || !canRegenerateTitles() || m_titling.contains(key) || !m_workspace->ready())
         return false;
-    bool ok = false;
-    const QString content = m_workspace->read(path, &ok);
-    const QString context = ok ? codeai::titleContext(chat::parse(content)) : QString();
+    const QString context = threadContext(path);
     if (context.isEmpty())
         return false;
     const QString project = threadPlace(path).value(u"projectName"_s).toString();

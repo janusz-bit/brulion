@@ -146,6 +146,9 @@ private Q_SLOTS:
         QVERIFY(ws->writeFile(path, u"---\ntasks: ignore\n---\n- 🧑 Popraw dodawanie w calc.py\n- 🤖 Gotowe: add dodaje.\n"_s));
         brulion::shell::WorkspaceChats *chats = ws->chats();
         QVERIFY(chats->canRegenerateTitles());
+        // (Its messages as the AI's questions get them: a pull request's text too.)
+        QVERIFY2(chats->threadContext(path).contains(u"Popraw dodawanie w calc.py"_s), qPrintable(chats->threadContext(path)));
+        QCOMPARE(chats->threadContext(u"AI/nie ma.md"_s), QString());
         QSignalSpy done(chats, &brulion::shell::WorkspaceChats::titleRegenerated);
         QSignalSpy titles(chats, &brulion::shell::WorkspaceChats::titlesChanged);
         QVERIFY(chats->regenerateTitle(path));

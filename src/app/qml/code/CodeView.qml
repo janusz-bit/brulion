@@ -1055,6 +1055,8 @@ FocusScope {
                                                       : changes.noRows
                         // (While the agent works: its changes as they come.)
                         pollInterval: chat.busyHere ? 2000 : 0
+                        // (The thread's messages for the AI's pull request text: why it was done.)
+                        onConversationWanted: changes.conversation = root.path !== "" ? Workspace.chats.threadContext(root.path) : ""
                         onActionFinished: (action, ok, message, url) => {
                             if (message !== "")
                                 AppController.toast(url !== "" ? message + "\n" + url : message, ok ? "success" : "error")

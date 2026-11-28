@@ -470,6 +470,9 @@ public:
     /// gives another: titleRegenerated(). False when nothing was asked: no AI set up, no
     /// conversation with words at `path`, a regeneration of it on its way.
     Q_INVOKABLE bool regenerateTitle(const QString &path);
+    /// The thread's messages for an AI's question about it (codeai::titleContext(): bounded, its first
+    /// and newest messages; "" none) — a pull request's text says why the changes were made.
+    Q_INVOKABLE QString threadContext(const QString &path) const;
     /// A regeneration of `path`'s title is on its way (`serial`: titleSerial, for bindings).
     Q_INVOKABLE bool regeneratingTitle(const QString &path, int serial = 0) const;
     bool canRegenerateTitles() const;
