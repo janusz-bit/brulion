@@ -4,11 +4,13 @@
 // app is in front, a turn that runs there running here (ChatTurn.remoteHost, the list's state, the
 // top bar's count), the conversation shown asked for in full (its answer as it is written, tool
 // calls, plan), its question with options answered there, Stop and the next message (queued,
-// steered in; pictures refused) sent there — never this device's own turn —, the messages waiting
+// steered in; with pictures, prepared as for the model, this device's copies deleted once taken)
+// sent there — never this device's own turn —, the messages waiting
 // there shown, the turn's end with the answer read from the computer's page before the notebook's
 // sync brings it (the messages' model shows it, a notification says it, the conversation is unread),
 // a failure there, a page this device does not have yet, the app gone there (503) and an older
-// computer (404), asked again later.
+// computer (404), asked again later; the agent's options there shown and set there, the messages
+// held there after Stop shown and resumed there.
 #include "chatmodels.h"
 #include "codeprojects.h"
 #include "computerchats.h"
@@ -18,14 +20,17 @@
 
 #include "chat/chat.h"
 
+#include <QBuffer>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QImage>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
+#include <QUrl>
 #include <QUrlQuery>
 
 #include <memory>
@@ -162,6 +167,16 @@ class TestComputerChats : public QObject {
         return ws;
     }
 
+    /// A small picture outside the notebook (a photo the camera took).
+    QString pictureFile(const QString &name)
+    {
+        QImage image(8, 6, QImage::Format_RGB32);
+        image.fill(Qt::darkGreen);
+        const QString file = m_tmp.filePath(name);
+        image.save(file, "PNG");
+        return file;
+    }
+
     /// Answers the long poll waiting (its `since` checked when given).
     void poll(const QJsonObject &answer, qint64 since = -2)
     {
@@ -258,7 +273,7 @@ private Q_SLOTS:
         QCOMPARE(answered->body(), (QJsonObject{{u"path"_s, Path}, {u"option"_s, u"Allow once"_s}}));
         answered->done(FakeComputer::json(200, QJsonObject{{u"answered"_s, true}}));
 
-        // The next message while it runs: in line there; steered in; pictures refused.
+        // The next message while it runs: in line there; steered in; with a picture.
         QVERIFY(c->queue(Path, u"  A potem zrób commit  "_s));
         std::optional<FakeComputer::Pending> sent = m_computer.take(u"chats/send"_s);
         QVERIFY(sent);
@@ -272,8 +287,38 @@ private Q_SLOTS:
         sent->done(FakeComputer::error(409, u"busy"_s, u"Its turn runs"_s));
         QTRY_COMPARE(errors.count(), 1);
         QVERIFY(errors.at(0).at(0).toString().contains(u"nixos"_s));
-        QVERIFY(!c->queue(Path, u"Zdjęcie"_s, {u"attachments/zdjecie.png"_s}));
+        // (A picture: as the model gets it — JPEG, its name kept —, this device's copy deleted once
+        // the computer took it: that computer's comes with the notebook's sync.)
+        const QString picture = c->addPicture(QUrl::fromLocalFile(pictureFile(u"zdjęcie żółwia.png"_s)));
+        QVERIFY(!picture.isEmpty());
+        QVERIFY(c->queue(Path, u"Zdjęcie"_s, {picture}));
+        sent = m_computer.take(u"chats/send"_s);
+        QVERIFY(sent);
+        QCOMPARE(sent->body().value(u"mode"_s).toString(), u"queue"_s);
+        const std::optional<QList<acp::RemotePicture>> there = acp::remotePicturesFromJson(sent->body().value(u"pictures"_s));
+        QVERIFY(there && there->size() == 1);
+        QCOMPARE(there->at(0).name, u"zdjęcie żółwia.jpg"_s);
+        QVERIFY(there->at(0).data.startsWith("\xff\xd8"));
+        QVERIFY(ws->exists(picture));
+        sent->done(FakeComputer::json(200, QJsonObject{{u"path"_s, Path}}));
+        QTRY_VERIFY(!ws->exists(picture));
+        // (Stored otherwise — a script's chatSend here, not the field's —: its copy goes too.)
+        QImage small(5, 5, QImage::Format_RGB32);
+        small.fill(Qt::blue);
+        QByteArray png;
+        QBuffer buffer(&png);
+        buffer.open(QIODevice::WriteOnly);
+        small.save(&buffer, "PNG");
+        const QString imported = ws->importAttachment(u"skrypt.png"_s, png);
+        QVERIFY(c->queue(Path, u"Ze skryptu"_s, {imported}));
+        sent = m_computer.take(u"chats/send"_s);
+        QVERIFY(sent);
+        sent->done(FakeComputer::json(200, QJsonObject{{u"path"_s, Path}}));
+        QTRY_VERIFY(!ws->exists(imported));
+        // (One that cannot be prepared: said, nothing sent.)
+        QVERIFY(!c->queue(Path, u"Zdjęcie"_s, {u"attachments/nie ma.png"_s}));
         QCOMPARE(errors.count(), 2);
+        QVERIFY(errors.at(1).at(0).toString().contains(u"nie ma.png"_s));
         QVERIFY(!m_computer.waiting(u"chats/send"_s));
         // (A plain send() of a running conversation of there: in line there too.)
         QCOMPARE(c->send(Path, u"I jeszcze dokumentacja"_s), Path);
@@ -524,7 +569,7 @@ private Q_SLOTS:
         poll(chats(1, {}));
         QTRY_VERIFY(c->startsThere(u"brulion"_s));
         QSignalSpy started(c, &WorkspaceChats::threadStartedThere);
-        QCOMPARE(c->startThreadThere(u"brulion"_s, u"Zdjęcie"_s, {u"attachments/a.png"_s}), 0); // (pictures: not there yet)
+        QCOMPARE(c->startThreadThere(u"brulion"_s, u"Zdjęcie"_s, {u"attachments/a.png"_s}), 0); // (no such picture)
         const int request = c->startThreadThere(u"brulion"_s, u"  Popraw testy żółwia  "_s, {}, u"acp:claude-nixos"_s,
                                                 u"/home/ala/.brulion/worktrees/brulion/popraw"_s, u"t3/popraw"_s);
         QVERIFY(request > 0);
@@ -558,6 +603,82 @@ private Q_SLOTS:
         QCOMPARE(started.at(1).at(0).toInt(), refused);
         QCOMPARE(started.at(1).at(1).toString(), QString());
         QVERIFY(started.at(1).at(2).toString().contains(u"Not a worktree of it"_s));
+        // With a picture: it goes along; once started there, this device's copy goes.
+        const QString picture = c->addPicture(QUrl::fromLocalFile(pictureFile(u"szkic.png"_s)));
+        QVERIFY(c->startThreadThere(u"brulion"_s, u"Jak na szkicu"_s, {picture}) > 0);
+        start = m_computer.take(u"chats/start"_s);
+        QVERIFY(start);
+        QCOMPARE(acp::remotePicturesFromJson(start->body().value(u"pictures"_s))->at(0).name, u"szkic.jpg"_s);
+        start->done(FakeComputer::json(201, QJsonObject{{u"path"_s, Path}}));
+        QTRY_VERIFY(!ws->exists(picture));
+    }
+
+    void optionsAndHeldThere()
+    {
+        // A conversation the app there stopped a minute ago, a message held after it: shown here, its
+        // agent's options the computer's.
+        auto ws = open();
+        WorkspaceChats *c = ws->chats();
+        acp::RemoteChat stopped = row(u"idle"_s);
+        stopped.waiting = 1;
+        stopped.held = true;
+        poll(chats(1, {stopped}));
+        c->showing(Path, true);
+        QTRY_VERIFY(m_computer.waiting(u"chats"_s, 0));
+        acp::RemoteChatDetail detail;
+        detail.path = Path;
+        detail.state = u"idle"_s;
+        detail.waiting = {u"A potem commit"_s};
+        detail.held = true;
+        acp::RemoteChatOption model;
+        model.id = u"model"_s;
+        model.name = u"Model"_s;
+        model.current = u"opus"_s;
+        model.currentName = u"Opus 5.5"_s;
+        model.choices = {{u"opus"_s, u"Opus 5.5"_s, QString()}, {u"sonnet"_s, u"Sonnet 5.5"_s, QString()}};
+        detail.options = {model};
+        QSignalSpy agentsChanged(c, &WorkspaceChats::agentsChanged);
+        m_computer.take(u"chats"_s, 0)->done(FakeComputer::json(200, chats(2, {stopped}, detail)));
+        QTRY_VERIFY(c->queueHeld(Path));
+        QVERIFY(agentsChanged.count() > 0);
+        const QVariantList waiting = c->queued(Path);
+        QCOMPARE(waiting.size(), 1);
+        QCOMPARE(waiting.at(0).toMap().value(u"text"_s).toString(), u"A potem commit"_s);
+        QCOMPARE(waiting.at(0).toMap().value(u"remote"_s).toBool(), true);
+        QCOMPARE(waiting.at(0).toMap().value(u"host"_s).toString(), u"nixos"_s);
+        QVERIFY(!c->heldForWake(Path)); // (held after a stop there: no sub-conversation's wake)
+        // The options: the computer's (whatever partner asked about), chosen there.
+        const QVariantList options = c->agentOptions(Path, u"acp:claude-nixos"_s);
+        QCOMPARE(options.size(), 1);
+        QCOMPARE(options.at(0).toMap().value(u"currentName"_s).toString(), u"Opus 5.5"_s);
+        QCOMPARE(c->agentChoices(Path, u"acp:claude-nixos"_s, u"model"_s).size(), 2);
+        c->setAgentOption(Path, u"acp:claude-nixos"_s, u"model"_s, u"sonnet"_s);
+        std::optional<FakeComputer::Pending> set = m_computer.take(u"chats/option"_s);
+        QVERIFY(set);
+        QCOMPARE(set->body(), (QJsonObject{{u"path"_s, Path}, {u"option"_s, u"model"_s}, {u"value"_s, u"sonnet"_s}}));
+        QSignalSpy errors(ws.get(), &Workspace::errorOccurred);
+        set->done(FakeComputer::error(400, u"bad_option"_s, u"sonnet is no value"_s));
+        QTRY_COMPARE(errors.count(), 1);
+        QVERIFY(errors.at(0).at(0).toString().contains(u"sonnet is no value"_s));
+        // Resume: there.
+        QVERIFY(c->resumeQueue(Path));
+        std::optional<FakeComputer::Pending> resumed = m_computer.take(u"chats/resume"_s);
+        QVERIFY(resumed);
+        QCOMPARE(resumed->body(), (QJsonObject{{u"path"_s, Path}}));
+        resumed->done(FakeComputer::error(409, u"not_held"_s, u"Nothing held"_s));
+        QTRY_COMPARE(errors.count(), 2);
+        QVERIFY(errors.at(1).at(0).toString().contains(u"nixos"_s));
+        // (Nothing of this device's own queue was touched.)
+        QVERIFY(!ws->exists(Path) || !ws->read(Path).contains(u"A potem commit"_s));
+        // No longer held there: not here either.
+        acp::RemoteChatDetail gone = detail;
+        gone.waiting.clear();
+        gone.held = false;
+        QTRY_VERIFY(m_computer.waiting(u"chats"_s));
+        while (std::optional<FakeComputer::Pending> p = m_computer.take(u"chats"_s))
+            p->done(FakeComputer::json(200, chats(3, {row(u"running"_s)}, gone)));
+        QTRY_VERIFY(!c->queueHeld(Path));
+        c->showing(Path, false);
     }
 
     void endedThereContinuesThere()

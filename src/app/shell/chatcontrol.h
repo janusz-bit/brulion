@@ -2,14 +2,15 @@
 // ChatControl — the AI chat for AI agents and scripts (docs/CLI.md "Conversations"): the remote
 // control's chat methods (ipc/controlprotocol.h: chats, chatRead, chatStart, chatSend, chatWait,
 // chatStop, chatPartners, chatSchedules, chatScheduleAdd / Set / Remove / Run, chatRequestSecret,
-// chatNotify, chatLive, chatAnswer)
+// chatNotify, chatLive, chatAnswer, chatOption, chatResume)
 // answered over WorkspaceChats — `brulion-cli app chat …` and the MCP tools brulion_app_chat_* are
 // its clients, and the agent sharing's `acp serve` (its grant: the user's phone, as the user).
 //
 // chatLive is the conversations the app runs, as they go (core acp/appchats.h: RemoteChats' JSON,
 // for the phone): those whose turn runs, waits in line or asks, and those that ended within
-// acp::RecentChatMinutes (Workspace::now()), newest activity first, one of them in full (`path`:
-// its answer being written, its tools, plan, question, the messages waiting). Its `revision` changes
+// acp::RecentChatMinutes (Workspace::now(); WorkspaceChats::endedSince(): also before the app shared
+// them, or started again), newest activity first, one of them in full (`path`: its answer being
+// written, its tools, plan, question, the messages waiting — held or not —, its agent's options). Its `revision` changes
 // with anything of them — WorkspaceChats' state, questions, queue, agents, a message written, a
 // running turn's state, answer, thoughts, tools — at most ten times a second, and never goes back,
 // not even over a restart of the app (it is at least the time in ms since the epoch); a long poll
@@ -18,7 +19,10 @@
 // chatSend's `mode` "steer" sends the message now, ahead of the waiting ones, the running turn
 // stopped first (WorkspaceChats::steer); chatStart with `project` takes the thread's `worktree` (a
 // git worktree of the project's — under its worktrees root or one `git worktree list` lists; another
-// computer's project checks its own) and `branch`.
+// computer's project checks its own) and `branch`. Both take `pictures` ({name, data}: the phone's,
+// stored in the notebook as a picked picture is, then sent with the text; a message of pictures alone
+// is one too). chatOption sets one of the agent's options of a conversation (a choice of its, "true" /
+// "false" for one on or off); chatResume lets the messages held after a stopped or failed turn go on.
 //
 // Who asks decides what may be done (Caller): a client of the open remote control (the user's
 // own script) any of it; an AI agent the app started reaches it with its conversation's chat
@@ -52,8 +56,11 @@
 #include <QString>
 #include <QTimer>
 
+#include "acp/appchats.h"
+
 #include <functional>
 #include <memory>
+#include <optional>
 
 namespace brulion::shell {
 
@@ -122,17 +129,38 @@ private:
     void notify(const QJsonObject &params, const Caller &caller, const Reply &reply);
     void live(const QJsonObject &params, const Reply &reply);
     void answerQuestion(const QJsonObject &params, const Caller &caller, const Reply &reply);
+    /// chatOption: one of the conversation's agent's options set (WorkspaceChats::setAgentOption).
+    void setOption(const QJsonObject &params, const Caller &caller, const Reply &reply);
+    /// chatResume: the messages held after its turn stopped or failed go on.
+    void resume(const QJsonObject &params, const Caller &caller, const Reply &reply);
+    /// chatSend's and chatStart's `pictures` (acp::remotePicturesFromJson()) stored in the notebook:
+    /// their vault paths; nullopt when refused (the reply failed: bad_pictures).
+    std::optional<QStringList> storePictures(const QJsonObject &params, const Reply &reply);
+    /// Pictures stored for a message that was not sent: deleted again.
+    void dropPictures(const QStringList &pictures);
     /// chatStart's thread once its worktree is known to be the project's.
-    void startThreadNow(const QString &project, const QString &text, const QString &partner, const QString &worktree,
-                        const QString &branch, const Reply &reply);
+    void startThreadNow(const QString &project, const QString &text, const QJsonObject &params,
+                        const QString &partner, const QString &worktree, const QString &branch, const Reply &reply);
+    /// chatSend's message to a turn that runs: steered in, else queued after it.
+    void sendWhileRunning(const QString &path, const QString &text, const QStringList &pictures, bool steer,
+                          const Reply &reply);
 
     // ---- chatLive
     /// acp::RemoteChats' JSON now: the conversations, `path`'s in full ("" none).
     QJsonObject liveAnswer(const QString &path);
+    /// The conversations chatLive lists, newest activity first (at most acp::MaxRemoteChats).
+    QStringList livePaths();
+    /// One of them as chatLive lists it, and in full (its running turn's, its question's, its agent's
+    /// options' parts).
+    acp::RemoteChat liveRow(const QString &path);
+    acp::RemoteChatDetail liveDetail(const QString &path);
+    void addRunning(acp::RemoteChatDetail &detail, const QString &path) const;
+    void addQuestion(acp::RemoteChatDetail &detail, const QString &path) const;
+    void addOptions(acp::RemoteChatDetail &detail, const QString &path) const;
     /// Something of a turn changed: the revision goes up within LiveIntervalMs.
     void liveChanged();
     void bumpRevision();
-    /// The running turns watched, those that ended noted (Workspace::now()).
+    /// The running turns watched (those that ended: WorkspaceChats::endedSince()).
     void noteTurns();
     void finishLive(const std::shared_ptr<LiveWait> &wait);
     /// What chatLive tells of a conversation's page (read again when its size or time changed).
@@ -147,8 +175,8 @@ private:
         QString branch;
     };
     const Facts &factsOf(const QString &path);
-    /// Drops the conversations that ended longer than acp::RecentChatMinutes ago (true: some went).
-    bool pruneEnded();
+    /// The conversations whose turn ended within acp::RecentChatMinutes, with when (newest first).
+    QList<std::pair<QString, QDateTime>> recentlyEnded() const;
     /// A conversation's row: {path, name, partner, partnerName, state, failure?, question?,
     /// parent?, side?, wakes?, page?, messages, changed}.
     QJsonObject row(const QString &path, qint64 modified = -1) const;
@@ -171,14 +199,10 @@ private:
     QTimer m_liveTimer;            // the revision's next change (at most every LiveIntervalMs)
     QElapsedTimer m_sinceRevision; // since it last changed
     QTimer m_pruneTimer;           // conversations that ended lately leave the list
+    int m_recentEnded = 0;         // how many were listed at its last tick
     QList<std::shared_ptr<LiveWait>> m_liveWaits;
     QSet<ChatTurn *> m_watched; // the turns whose changes are followed
     QSet<ChatTurn *> m_active;  // those that run, wait or ask
-    struct Ended {
-        QString path;
-        QDateTime at;
-    };
-    QHash<QString, Ended> m_ended;     // lower-case path: turns that ended lately
     QHash<QString, qint64> m_activity; // lower-case path → the order of its last change
     qint64 m_activitySerial = 0;
     QHash<QString, Facts> m_facts; // lower-case path

@@ -509,18 +509,23 @@ QString ComputerChats::errorText(const QString &host, const acp::RemoteError &er
         return tr("Its turn on %1 is still running.").arg(host);
     if (error.code == u"not_found")
         return tr("%1 does not know this conversation (its notebook may not be this one).").arg(host);
+    if (error.code == u"not_held")
+        return tr("No messages wait on %1 any more.").arg(host);
     return tr("%1 refused it: %2").arg(host, error.detail.isEmpty() ? error.code : error.detail);
 }
 
-void ComputerChats::send(const QString &path, const QString &text, acp::SendMode mode, Done done)
+void ComputerChats::send(const QString &path, const QString &text, const QList<acp::RemotePicture> &pictures,
+                         acp::SendMode mode, Done done)
 {
     const Poll *p = pollListing(path);
     if (!p)
         return done(tr("This conversation does not run on another computer now."));
-    sendTo(p->computer.url, path, text, mode, [done](const acp::RemoteError &, const QString &words) { done(words); });
+    sendTo(p->computer.url, path, text, pictures, mode,
+           [done](const acp::RemoteError &, const QString &words) { done(words); });
 }
 
-void ComputerChats::sendTo(const QString &url, const QString &path, const QString &text, acp::SendMode mode,
+void ComputerChats::sendTo(const QString &url, const QString &path, const QString &text,
+                           const QList<acp::RemotePicture> &pictures, acp::SendMode mode,
                            std::function<void(const acp::RemoteError &, const QString &)> done)
 {
     Poll *p = pollOf(url);
@@ -532,7 +537,7 @@ void ComputerChats::sendTo(const QString &url, const QString &path, const QStrin
     const QString base = p->computer.url;
     const QString host = hostOf(p);
     std::weak_ptr<bool> alive = m_alive;
-    acp::sendRemoteChat(t, QUrl(base), p->computer.token, path, text, mode,
+    acp::sendRemoteChat(t, QUrl(base), p->computer.token, path, text, mode, pictures,
                         [this, alive, base, host, done](const acp::RemoteError &error) {
                             if (alive.expired())
                                 return;
@@ -542,7 +547,7 @@ void ComputerChats::sendTo(const QString &url, const QString &path, const QStrin
                         });
 }
 
-void ComputerChats::stop(const QString &path, Done done)
+void ComputerChats::act(const QString &path, const QString &endpoint, const QJsonObject &body, Done done)
 {
     Poll *p = pollListing(path);
     sync::HttpTransport *t = transport();
@@ -551,36 +556,38 @@ void ComputerChats::stop(const QString &path, Done done)
     const QString url = p->computer.url;
     const QString host = hostOf(p);
     std::weak_ptr<bool> alive = m_alive;
-    acp::stopRemoteChat(t, QUrl(url), p->computer.token, path, [this, alive, url, host, done](const acp::RemoteError &error) {
-        if (alive.expired())
-            return;
-        done(errorText(host, error));
-        if (Poll *poll = pollOf(url))
-            askNow(poll);
-    });
+    acp::postRemoteChat(t, QUrl(url), p->computer.token, endpoint, body,
+                        [this, alive, url, host, done](const acp::RemoteError &error) {
+                            if (alive.expired())
+                                return;
+                            done(errorText(host, error));
+                            if (Poll *poll = pollOf(url))
+                                askNow(poll);
+                        });
+}
+
+void ComputerChats::stop(const QString &path, Done done)
+{
+    act(path, u"chats/stop"_s, {{u"path"_s, path}}, std::move(done));
 }
 
 void ComputerChats::answer(const QString &path, const QString &option, Done done)
 {
-    Poll *p = pollListing(path);
-    sync::HttpTransport *t = transport();
-    if (!p || !t)
-        return done(tr("This conversation does not run on another computer now."));
-    const QString url = p->computer.url;
-    const QString host = hostOf(p);
-    std::weak_ptr<bool> alive = m_alive;
-    acp::answerRemoteChat(t, QUrl(url), p->computer.token, path, option,
-                          [this, alive, url, host, done](const acp::RemoteError &error) {
-                              if (alive.expired())
-                                  return;
-                              done(errorText(host, error));
-                              if (Poll *poll = pollOf(url))
-                                  askNow(poll);
-                          });
+    act(path, u"chats/answer"_s, {{u"path"_s, path}, {u"option"_s, option}}, std::move(done));
+}
+
+void ComputerChats::setOption(const QString &path, const QString &option, const QString &value, Done done)
+{
+    act(path, u"chats/option"_s, {{u"path"_s, path}, {u"option"_s, option}, {u"value"_s, value}}, std::move(done));
+}
+
+void ComputerChats::resume(const QString &path, Done done)
+{
+    act(path, u"chats/resume"_s, {{u"path"_s, path}}, std::move(done));
 }
 
 void ComputerChats::start(const QString &url, const QString &project, const QString &text, const QString &partner,
-                          const QString &worktree, const QString &branch,
+                          const QString &worktree, const QString &branch, const QList<acp::RemotePicture> &pictures,
                           std::function<void(const QString &path, const QString &error)> done)
 {
     Poll *p = pollOf(url);
@@ -590,7 +597,7 @@ void ComputerChats::start(const QString &url, const QString &project, const QStr
     const QString base = p->computer.url;
     const QString host = hostOf(p);
     std::weak_ptr<bool> alive = m_alive;
-    acp::startRemoteThread(t, QUrl(base), p->computer.token, project, text, partner, worktree, branch,
+    acp::startRemoteThread(t, QUrl(base), p->computer.token, project, text, partner, worktree, branch, pictures,
                            [this, alive, base, host, done](const QString &path, const acp::RemoteError &error) {
                                if (alive.expired())
                                    return;

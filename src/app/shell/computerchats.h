@@ -108,18 +108,24 @@ public:
     void setLocalMessages(std::function<int(const QString &path)> count) { m_localMessages = std::move(count); }
 
     using Done = std::function<void(const QString &error)>;
-    /// The next message of `path` (its computer's: the one that lists it), now, queued or steered in.
-    void send(const QString &path, const QString &text, acp::SendMode mode, Done done);
+    /// The next message of `path` (its computer's: the one that lists it) with its pictures (as
+    /// prepared for the model), now, queued or steered in.
+    void send(const QString &path, const QString &text, const QList<acp::RemotePicture> &pictures,
+              acp::SendMode mode, Done done);
     /// … to the computer at `url` (a conversation it does not list now: an idle thread of its project).
-    void sendTo(const QString &url, const QString &path, const QString &text, acp::SendMode mode,
-                std::function<void(const acp::RemoteError &error, const QString &words)> done);
+    void sendTo(const QString &url, const QString &path, const QString &text, const QList<acp::RemotePicture> &pictures,
+                acp::SendMode mode, std::function<void(const acp::RemoteError &error, const QString &words)> done);
     /// Stops its turn there.
     void stop(const QString &path, Done done);
     /// Answers its question with `option` (one of its detail's options).
     void answer(const QString &path, const QString &option, Done done);
+    /// Sets its agent's option `option` (one of its detail's `options`) to `value` there.
+    void setOption(const QString &path, const QString &option, const QString &value, Done done);
+    /// Its messages held there (its detail's `held`) go on.
+    void resume(const QString &path, Done done);
     /// A new thread of `project` started by the app at `url` (its path, or the error in words).
     void start(const QString &url, const QString &project, const QString &text, const QString &partner,
-               const QString &worktree, const QString &branch,
+               const QString &worktree, const QString &branch, const QList<acp::RemotePicture> &pictures,
                std::function<void(const QString &path, const QString &error)> done);
 
     /// `error` in the user's words for the computer `host`.
@@ -135,6 +141,9 @@ Q_SIGNALS:
 
 private:
     struct Poll;
+    /// POST `endpoint` with `body` to the computer that lists `path` (`done` gets its error in words;
+    /// the computer asked again at once).
+    void act(const QString &path, const QString &endpoint, const QJsonObject &body, Done done);
     Poll *pollOf(const QString &url) const;
     Poll *pollListing(const QString &path) const;
     void ask(Poll *p);

@@ -443,8 +443,32 @@ QString WorkspaceChats::toolSummary(const QVariantList &tools) const
     return shell::toolSummary(tools);
 }
 
+namespace {
+
+/// A computer's agent option as WorkspaceAgents::options() gives one of this device's.
+QVariantMap optionRow(const acp::RemoteChatOption &o)
+{
+    QVariantList choices;
+    for (const acp::RemoteChatChoice &c : o.choices)
+        choices.append(QVariantMap{
+                {u"value"_s, c.value}, {u"name"_s, c.name}, {u"description"_s, QString()}, {u"group"_s, c.group}});
+    return {{u"id"_s, o.id},           {u"name"_s, o.name},
+            {u"description"_s, o.description}, {u"boolean"_s, o.boolean},
+            {u"current"_s, o.current}, {u"currentName"_s, o.currentName.isEmpty() ? o.current : o.currentName},
+            {u"choices"_s, choices}};
+}
+
+} // namespace
+
 QVariantList WorkspaceChats::agentOptions(const QString &path, const QString &partner, int) const
 {
+    // (A conversation the computer's app runs: its agent's options there.)
+    if (const acp::RemoteChatDetail *d = computerDetail(path)) {
+        QVariantList out;
+        for (const acp::RemoteChatOption &o : d->options)
+            out.append(optionRow(o));
+        return out;
+    }
     return isAgent(partner) ? m_agents->options(path, partner) : QVariantList();
 }
 
@@ -461,6 +485,14 @@ QVariantList WorkspaceChats::agentChoices(const QString &path, const QString &pa
 void WorkspaceChats::setAgentOption(const QString &path, const QString &partner, const QString &option,
                                     const QString &value)
 {
+    if (computerDetail(path)) {
+        const QPointer<WorkspaceChats> self(this);
+        m_agents->computerChats()->setOption(path, option, value, [self](const QString &error) {
+            if (self && !error.isEmpty())
+                Q_EMIT self->m_workspace->errorOccurred(error);
+        });
+        return;
+    }
     if (isAgent(partner))
         m_agents->setOption(path, partner, option, value);
 }
@@ -825,7 +857,7 @@ QString WorkspaceChats::send(const QString &path, const QString &text, const QSt
 }
 
 QString WorkspaceChats::startThreadFrom(const QString &project, const QString &text, const QString &partner,
-                                        const QString &parent, const QString &wakes)
+                                        const QString &parent, const QString &wakes, const QStringList &pictures)
 {
     if (!m_workspace->projects()->contains(project)) {
         setFailure(turn(QString()), tr("No such project on this device: add its folder in Code mode."));
@@ -838,7 +870,7 @@ QString WorkspaceChats::startThreadFrom(const QString &project, const QString &t
         return {};
     }
     const ThreadPlace place{project, QString(), QString()};
-    return sendMessage(QString(), text, QString(), {}, who, parent, wakes, &place);
+    return sendMessage(QString(), text, QString(), pictures, who, parent, wakes, &place);
 }
 
 QString WorkspaceChats::startThread(const QString &project, const QString &text, const QStringList &pictures,
@@ -1275,31 +1307,37 @@ QString WorkspaceChats::sendMessage(const QString &path, const QString &text, co
     // app runs its turn — one agent, one session, seen on both screens — and this device follows it.
     // Refused there (its copy of the notebook lacks the page yet, the app quit meanwhile): the turn
     // runs from here through that computer's shared agent, as without it.
-    if (const QString url = sent.isEmpty() && !m_sendHere ? computerFor(path) : QString(); !url.isEmpty()) {
+    if (const QString url = m_sendHere ? QString() : computerFor(path); !url.isEmpty()) {
+        const std::optional<QList<acp::RemotePicture>> there = picturesForComputer(sent, QUrl(url).host());
+        if (!there)
+            return {};
         m_routing.insert(path.toLower(), url);
         const QPointer<WorkspaceChats> self(this);
         m_agents->computerChats()->sendTo(
-                url, path, message, acp::SendMode::Now,
-                [self, url, path, message, page, partner, parent, wakes](const acp::RemoteError &error,
-                                                                          const QString &words) {
+                url, path, message, *there, acp::SendMode::Now,
+                [self, url, path, message, sent, there, page, partner, parent,
+                 wakes](const acp::RemoteError &error, const QString &words) {
                     if (!self)
                         return;
                     self->m_routing.remove(path.toLower());
                     if (!error.failed())
-                        return;
+                        return self->sentThere(sent);
                     // (Its turn runs there after all: the message waits for it there.)
                     if (error.code == u"busy") {
-                        self->m_agents->computerChats()->sendTo(url, path, message, acp::SendMode::Queue,
-                                                                [self](const acp::RemoteError &, const QString &w) {
-                                                                    if (self && !w.isEmpty())
-                                                                        Q_EMIT self->m_workspace->errorOccurred(w);
-                                                                });
+                        self->m_agents->computerChats()->sendTo(
+                                url, path, message, *there, acp::SendMode::Queue,
+                                [self, sent](const acp::RemoteError &e, const QString &w) {
+                                    if (self && !e.failed())
+                                        self->sentThere(sent);
+                                    if (self && !w.isEmpty())
+                                        Q_EMIT self->m_workspace->errorOccurred(w);
+                                });
                         return;
                     }
                     qCInfo(logging::lcApp).noquote()
                             << u"The app there did not take %1 (%2): its turn runs from here"_s.arg(path, words);
                     self->m_sendHere = true;
-                    self->sendMessage(path, message, page, {}, partner, parent, wakes, nullptr);
+                    self->sendMessage(path, message, page, sent, partner, parent, wakes, nullptr);
                     self->m_sendHere = false;
                 });
         return path;
@@ -1612,6 +1650,7 @@ void WorkspaceChats::reset()
         Q_EMIT t->stateChanged();
     }
     m_remoteEnded.clear();
+    m_computerExtras.clear();
     // (Pictures a draft keeps stay with it, for when the notebook opens again.)
     const QSet<QString> drafted = draftedPictures();
     for (const QString &picture : std::exchange(m_added, {})) {
@@ -1641,6 +1680,8 @@ void WorkspaceChats::endTurn(ChatTurn *t)
     if (!t->m_key.isEmpty() && m_byKey.value(t->m_key) == t)
         m_byKey.remove(t->m_key);
     t->m_key.clear();
+    if (t->m_running && t->m_remoteHost.isEmpty())
+        noteEnded(t->m_path);
     t->m_running = false;
     t->m_queued = false;
     t->m_place = 0;
@@ -1659,6 +1700,54 @@ void WorkspaceChats::endTurn(ChatTurn *t)
         startWaiting();
     else
         updatePlaces();
+}
+
+namespace {
+
+const QString EndedKey = u"chat/ended"_s;
+/// How long, and how many, endedSince() remembers.
+constexpr qint64 EndedKeptSecs = 24 * 3600;
+constexpr qsizetype EndedKept = 100;
+
+} // namespace
+
+void WorkspaceChats::noteEnded(const QString &path)
+{
+    LocalStore *local = m_workspace->vault() ? m_workspace->vault()->store() : nullptr;
+    if (!local || path.isEmpty())
+        return;
+    const QDateTime now = m_workspace->now();
+    const QJsonObject before = local->get(EndedKey).toObject();
+    QJsonObject kept{{path.toLower(), QJsonObject{{u"path"_s, path}, {u"at"_s, now.toMSecsSinceEpoch()}}}};
+    QList<std::pair<qint64, QString>> rest;
+    for (auto it = before.constBegin(); it != before.constEnd(); ++it) {
+        const qint64 at = it.value().toObject().value(u"at"_s).toInteger();
+        if (it.key() != path.toLower() && at > now.addSecs(-EndedKeptSecs).toMSecsSinceEpoch())
+            rest.append({at, it.key()});
+    }
+    std::ranges::sort(rest, std::greater<>());
+    for (qsizetype i = 0; i < std::min(rest.size(), EndedKept - 1); ++i)
+        kept.insert(rest.at(i).second, before.value(rest.at(i).second));
+    local->set(EndedKey, kept);
+}
+
+QList<std::pair<QString, QDateTime>> WorkspaceChats::endedSince(const QDateTime &since) const
+{
+    QList<std::pair<QString, QDateTime>> out;
+    LocalStore *local = m_workspace->vault() ? m_workspace->vault()->store() : nullptr;
+    if (!local)
+        return out;
+    const QJsonObject all = local->get(EndedKey).toObject();
+    for (auto it = all.constBegin(); it != all.constEnd(); ++it) {
+        const QJsonObject o = it.value().toObject();
+        const QDateTime at = QDateTime::fromMSecsSinceEpoch(o.value(u"at"_s).toInteger());
+        const QString path = o.value(u"path"_s).toString();
+        // (One that runs again is no ended one.)
+        if (at > since && !path.isEmpty() && !isRunning(path))
+            out.append({path, at});
+    }
+    std::ranges::sort(out, [](const auto &a, const auto &b) { return a.second > b.second; });
+    return out;
 }
 
 void WorkspaceChats::setFailure(ChatTurn *t, const QString &failure)
@@ -2336,7 +2425,21 @@ QVariantList WorkspaceChats::queued(const QString &path, int) const
                                    {u"text"_s, text},
                                    {u"pictures"_s, QStringList()},
                                    {u"from"_s, QString()},
-                                   {u"remote"_s, true}});
+                                   {u"remote"_s, true},
+                                   {u"host"_s, t->m_remoteHost}});
+        return out;
+    }
+    if (const acp::RemoteChatDetail *d = computerDetail(path)) {
+        // (Held there after its turn stopped: shown here, resumed from here — resumeQueue().)
+        const std::optional<ComputerChats::Chat> chat = m_agents->computerChats()->find(path);
+        int id = -1;
+        for (const QString &text : d->waiting)
+            out.append(QVariantMap{{u"id"_s, id--},
+                                   {u"text"_s, text},
+                                   {u"pictures"_s, QStringList()},
+                                   {u"from"_s, QString()},
+                                   {u"remote"_s, true},
+                                   {u"host"_s, chat ? chat->host : QString()}});
         return out;
     }
     const_cast<WorkspaceChats *>(this)->loadQueue();
@@ -2352,7 +2455,8 @@ QVariantList WorkspaceChats::queued(const QString &path, int) const
 
 bool WorkspaceChats::heldForWake(const QString &path, int) const
 {
-    if (!queueHeld(path))
+    // (Held on a computer after its turn stopped there: no sub-conversation's wake.)
+    if (!queueHeld(path) || computerDetail(path))
         return false;
     const QList<Waiting> list = m_queued.value(path.toLower());
     return std::ranges::all_of(list, [](const Waiting &w) { return !chat::wakeSource(w.text).isEmpty(); });
@@ -2362,6 +2466,8 @@ bool WorkspaceChats::queueHeld(const QString &path, int) const
 {
     if (remote(path))
         return false;
+    if (const acp::RemoteChatDetail *d = computerDetail(path))
+        return d->held;
     const_cast<WorkspaceChats *>(this)->loadQueue();
     const QString key = path.toLower();
     return m_held.contains(key) && !m_queued.value(key).isEmpty();
@@ -2471,6 +2577,14 @@ bool WorkspaceChats::steer(const QString &path, const QString &text, const QStri
 
 bool WorkspaceChats::resumeQueue(const QString &path)
 {
+    if (const acp::RemoteChatDetail *d = computerDetail(path); d && d->held) {
+        const QPointer<WorkspaceChats> self(this);
+        m_agents->computerChats()->resume(path, [self](const QString &error) {
+            if (self && !error.isEmpty())
+                Q_EMIT self->m_workspace->errorOccurred(error);
+        });
+        return true;
+    }
     loadQueue();
     const QString key = path.toLower();
     if (m_queued.value(key).isEmpty())
@@ -3060,19 +3174,55 @@ bool WorkspaceChats::sendToComputer(const QString &path, const QString &text, co
             url = c->url;
     const ChatTurn *t = find(path);
     const QString host = t && !t->m_remoteHost.isEmpty() ? t->m_remoteHost : QUrl(url).host();
-    if (!pictures.isEmpty()) {
-        Q_EMIT m_workspace->errorOccurred(
-                tr("Pictures do not go to a conversation running on %1 yet: send the text alone.").arg(host));
+    if ((text.isEmpty() && pictures.isEmpty()) || url.isEmpty())
         return false;
-    }
-    if (text.isEmpty() || url.isEmpty())
+    const std::optional<QList<acp::RemotePicture>> there = picturesForComputer(pictures, host);
+    if (!there)
         return false;
     const QPointer<WorkspaceChats> self(this);
-    computers->sendTo(url, path, text, mode, [self](const acp::RemoteError &, const QString &words) {
-        if (self && !words.isEmpty())
-            Q_EMIT self->m_workspace->errorOccurred(words);
-    });
+    computers->sendTo(url, path, text, *there, mode,
+                      [self, pictures](const acp::RemoteError &error, const QString &words) {
+                          if (self && !error.failed())
+                              self->sentThere(pictures);
+                          if (self && !words.isEmpty())
+                              Q_EMIT self->m_workspace->errorOccurred(words);
+                      });
     return true;
+}
+
+std::optional<QList<acp::RemotePicture>> WorkspaceChats::picturesForComputer(const QStringList &pictures,
+                                                                            const QString &host) const
+{
+    QList<acp::RemotePicture> out;
+    qsizetype total = 0;
+    for (const QString &picture : pictures) {
+        QString why;
+        const std::optional<ai::Image> image = m_workspace->aiPicture(picture, &why);
+        const qsizetype size = image ? image->data.size() : 0;
+        if (!image || size > acp::MaxRemotePictureBytes || total + size > acp::MaxRemotePicturesBytes
+            || out.size() >= acp::MaxRemotePictures) {
+            //: %1: a picture's file name, %2: a computer's name, %3: why (English)
+            Q_EMIT m_workspace->errorOccurred(
+                    tr("%1 cannot go to %2: %3").arg(QFileInfo(picture).fileName(), host,
+                                                      image ? tr("too many or too large pictures") : why));
+            return std::nullopt;
+        }
+        total += size;
+        // (As the model gets it: JPEG, or PNG in a build without Qt's JPEG plugin.)
+        const QString ext = image->mediaType == u"image/png" ? u".png"_s : u".jpg"_s;
+        out.append({QFileInfo(picture).completeBaseName() + ext, image->data});
+    }
+    return out;
+}
+
+void WorkspaceChats::sentThere(const QStringList &pictures)
+{
+    // (The computer stored its own copies: they come with the notebook's sync.)
+    // (Only a copy stored for a message goes — a file of the notebook itself stays: discardImport().)
+    for (const QString &picture : pictures) {
+        m_added.removeAll(picture);
+        m_workspace->discardImport(picture);
+    }
 }
 
 bool WorkspaceChats::startsThere(const QString &project) const
@@ -3090,11 +3240,9 @@ int WorkspaceChats::startThreadThere(const QString &project, const QString &text
     const QString message = text.trimmed();
     if (!p || message.isEmpty())
         return 0;
-    if (!pictures.isEmpty()) {
-        Q_EMIT m_workspace->errorOccurred(
-                tr("Pictures do not go to a conversation running on %1 yet: send the text alone.").arg(p->host));
+    const std::optional<QList<acp::RemotePicture>> sent = picturesForComputer(pictures, p->host);
+    if (!sent)
         return 0;
-    }
     // (This device's agent of that computer: its id there.)
     QString there;
     const QString id = partner.trimmed().startsWith(u"acp:"_s) ? partner.trimmed().mid(4) : QString();
@@ -3104,12 +3252,14 @@ int WorkspaceChats::startThreadThere(const QString &project, const QString &text
     }
     const int request = m_nextStart++;
     const QPointer<WorkspaceChats> self(this);
-    m_agents->computerChats()->start(p->url, project, message, there, worktree, branch,
-                                     [self, request](const QString &path, const QString &error) {
+    m_agents->computerChats()->start(p->url, project, message, there, worktree, branch, *sent,
+                                     [self, request, pictures](const QString &path, const QString &error) {
                                          if (!self)
                                              return;
-                                         if (!path.isEmpty())
+                                         if (!path.isEmpty()) {
+                                             self->sentThere(pictures);
                                              self->m_agents->computerChats()->watch(path);
+                                         }
                                          Q_EMIT self->threadStartedThere(request, path, error);
                                      });
     return request;
@@ -3132,8 +3282,43 @@ QString WorkspaceChats::computerFor(const QString &path) const
     return project && m_agents->computerChats()->attached(project->url) ? project->url : QString();
 }
 
+const acp::RemoteChatDetail *WorkspaceChats::computerDetail(const QString &path) const
+{
+    if (path.isEmpty())
+        return nullptr;
+    // (This device's own turn runs: not the computer's.)
+    if (const ChatTurn *t = find(path); t && t->m_running && t->m_remoteHost.isEmpty())
+        return nullptr;
+    ComputerChats *computers = m_agents->computerChats();
+    const std::optional<ComputerChats::Computer> c = computers->computerOf(path);
+    return c && computers->attached(c->url) ? computers->detail(path) : nullptr;
+}
+
+void WorkspaceChats::mirrorExtras(const QString &path)
+{
+    // The computer's held messages and agent's options of `path`: what shows them asks again.
+    const acp::RemoteChatDetail *d = computerDetail(path);
+    QString seen;
+    if (d) {
+        seen = d->waiting.join(u'\x1f') + (d->held ? u"\x1eheld"_s : QString());
+        for (const acp::RemoteChatOption &o : d->options)
+            seen += u'\x1e' + o.id + u'=' + o.current + u'/' + QString::number(o.choices.size());
+    }
+    const QString key = path.toLower();
+    if (m_computerExtras.value(key) == seen)
+        return;
+    if (seen.isEmpty())
+        m_computerExtras.remove(key);
+    else
+        m_computerExtras.insert(key, seen);
+    queueMoved();
+    ++m_agentSerial;
+    Q_EMIT agentsChanged();
+}
+
 void WorkspaceChats::mirror(const QString &path)
 {
+    mirrorExtras(path);
     ComputerChats *computers = m_agents->computerChats();
     const std::optional<ComputerChats::Chat> chat = computers->find(path);
     ChatTurn *t = find(chat ? chat->row.path : path);

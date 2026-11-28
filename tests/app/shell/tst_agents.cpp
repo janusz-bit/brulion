@@ -77,6 +77,8 @@
 #include "controlserver.h"
 #endif
 
+#include <QBuffer>
+#include <QImage>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -2758,6 +2760,134 @@ private Q_SLOTS:
         a = ask(control, u"chatStop"_s, {{u"path"_s, longer}});
         QVERIFY(a->ok);
         QVERIFY(a->result.value(u"stopped"_s).toBool());
+    }
+
+    /// What else the phone does with the app's conversations (acp/appchats.h): the agent's options
+    /// of a conversation (chatLive's detail, chatOption), the messages held after Stop (held,
+    /// chatResume), pictures sent with a message (stored in the notebook, given to the agent), and the
+    /// turns that ended before the app shared its conversations — or before it started again.
+    void liveOptionsHeldPictures()
+    {
+        auto ws = open({fake(false, u"--config"_s)});
+        QDateTime now(QDate(2026, 11, 20), QTime(9, 15));
+        ws->setClock([&now] { return now; });
+        WorkspaceChats *chats = ws->chats();
+        const auto live = [](const std::shared_ptr<Answer> &a) {
+            return acp::RemoteChats::fromJson(a->result).value_or(acp::RemoteChats{});
+        };
+        const auto rowOf = [](const acp::RemoteChats &c, const QString &path) {
+            for (const acp::RemoteChat &row : c.chats) {
+                if (row.path == path)
+                    return std::optional<acp::RemoteChat>(row);
+            }
+            return std::optional<acp::RemoteChat>();
+        };
+        // A turn that ends before anything shares the app's conversations (no ChatControl yet) …
+        const QString path = chats->send(QString(), u"Jaki model?"_s, QString(), {}, u"acp:fake"_s);
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->isRunning(path), 20000);
+        auto control = std::make_unique<ChatControl>(ws.get());
+        // … is listed once it does: ended, when.
+        std::optional<acp::RemoteChat> row = rowOf(live(ask(*control, u"chatLive"_s, {})), path);
+        QVERIFY(row);
+        QCOMPARE(row->state, u"idle"_s);
+        QVERIFY2(row->ended.startsWith(u"2026-11-20T09:15:00"_s), qPrintable(row->ended));
+        // (The app started again: still.)
+        control = std::make_unique<ChatControl>(ws.get());
+        QVERIFY(rowOf(live(ask(*control, u"chatLive"_s, {})), path));
+        // (Its time over: gone.)
+        now = now.addSecs(60LL * acp::RecentChatMinutes + 1);
+        QVERIFY(!rowOf(live(ask(*control, u"chatLive"_s, {})), path));
+        now = now.addSecs(-60LL * acp::RecentChatMinutes - 1);
+
+        // Its agent's options, as the app has them.
+        acp::RemoteChats seen = live(ask(*control, u"chatLive"_s, {{u"path"_s, path}}));
+        QVERIFY(seen.detail);
+        QCOMPARE(seen.detail->options.size(), 3);
+        const acp::RemoteChatOption &model = seen.detail->options.at(0);
+        QCOMPARE(model.id, u"model"_s);
+        QCOMPARE(model.current, u"sonnet"_s);
+        QCOMPARE(model.currentName, u"Sonnet"_s);
+        QCOMPARE(model.choices.size(), 2);
+        QVERIFY(seen.detail->options.at(1).boolean);
+        // Set from the phone: a choice of its, or on/off; anything else refused, with what it takes.
+        auto a = ask(*control, u"chatOption"_s, {{u"path"_s, path}, {u"option"_s, u"kolor"_s}, {u"value"_s, u"x"_s}});
+        QCOMPARE(a->code, u"bad_option"_s);
+        QCOMPARE(a->details.value(u"options"_s).toArray().size(), 3);
+        a = ask(*control, u"chatOption"_s, {{u"path"_s, path}, {u"option"_s, u"model"_s}, {u"value"_s, u"gpt"_s}});
+        QCOMPARE(a->code, u"bad_option"_s);
+        QCOMPARE(a->details.value(u"values"_s).toArray().size(), 2);
+        a = ask(*control, u"chatOption"_s, {{u"path"_s, path}, {u"option"_s, u"fast"_s}, {u"value"_s, u"tak"_s}});
+        QCOMPARE(a->code, u"bad_option"_s);
+        a = ask(*control, u"chatOption"_s, {{u"path"_s, path}, {u"option"_s, u"model"_s}, {u"value"_s, u"opus"_s}});
+        QVERIFY2(a->ok, qPrintable(a->message));
+        QCOMPARE(a->result.value(u"value"_s).toString(), u"opus"_s);
+        QTRY_COMPARE(live(ask(*control, u"chatLive"_s, {{u"path"_s, path}})).detail->options.at(0).current, u"opus"_s);
+        // (An agent the app started changes only its own sub-conversations' options.)
+        a = ask(*control, u"chatOption"_s, {{u"path"_s, path}, {u"option"_s, u"model"_s}, {u"value"_s, u"sonnet"_s}},
+                ChatControl::Caller{true, u"AI/Inna.md"_s, u"Fałszywy"_s});
+        QCOMPARE(a->code, u"refused"_s);
+        QVERIFY(ask(*control, u"chatSend"_s, {{u"path"_s, path}, {u"text"_s, u"A teraz jaki model?"_s}})->ok);
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->isRunning(path), 20000);
+        QVERIFY2(ws->read(path).contains(u"- 🤖 Model: opus"_s), qPrintable(ws->read(path)));
+
+        // A message written meanwhile, held when the turn is stopped: listed held, resumed from here.
+        QVERIFY(ask(*control, u"chatSend"_s, {{u"path"_s, path}, {u"text"_s, u"Proszę czekaj"_s}})->ok);
+        QTRY_VERIFY_WITH_TIMEOUT(chats->isRunning(path), 20000);
+        QVERIFY(ask(*control, u"chatSend"_s, {{u"path"_s, path}, {u"text"_s, u"Potem jaki model?"_s}, {u"mode"_s, u"queue"_s}})
+                        ->ok);
+        a = ask(*control, u"chatResume"_s, {{u"path"_s, path}});
+        QCOMPARE(a->code, u"not_held"_s); // (it waits, not held)
+        QVERIFY(ask(*control, u"chatStop"_s, {{u"path"_s, path}})->ok);
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->isRunning(path), 20000);
+        QTRY_VERIFY((row = rowOf(live(ask(*control, u"chatLive"_s, {})), path)) && row->held);
+        QCOMPARE(row->waiting, 1);
+        seen = live(ask(*control, u"chatLive"_s, {{u"path"_s, path}}));
+        QVERIFY(seen.detail->held);
+        QCOMPARE(seen.detail->waiting, QStringList{u"Potem jaki model?"_s});
+        a = ask(*control, u"chatResume"_s, {{u"path"_s, path}});
+        QVERIFY2(a->ok, qPrintable(a->message));
+        QVERIFY(a->result.value(u"resumed"_s).toBool());
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->isRunning(path) && chats->queued(path).isEmpty(), 20000);
+        QVERIFY(ws->read(path).contains(u"- 🤖 Model: opus"_s));
+        QVERIFY(!live(ask(*control, u"chatLive"_s, {{u"path"_s, path}})).detail->held);
+
+        // Pictures with a message: stored in the notebook, named by the page, given to the agent; a
+        // message of pictures alone is one too; odd ones refused, nothing stored.
+        QImage image(4, 3, QImage::Format_RGB32);
+        image.fill(Qt::red);
+        QByteArray png;
+        QBuffer buffer(&png);
+        buffer.open(QIODevice::WriteOnly);
+        QVERIFY(image.save(&buffer, "PNG"));
+        const QJsonArray pictures = acp::toJson(QList<acp::RemotePicture>{{u"paragon.png"_s, png}});
+        a = ask(*control, u"chatSend"_s, {{u"path"_s, path}, {u"text"_s, u"Co widać? obrazy"_s}, {u"pictures"_s, pictures}});
+        QVERIFY2(a->ok, qPrintable(a->message));
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->isRunning(path), 20000);
+        QString page = ws->read(path);
+        QVERIFY2(page.contains(u"paragon.png"_s) && page.contains(u"- 🤖 Obrazy: paragon.png"_s), qPrintable(page));
+        const QString stored = chats->picturePath(u"paragon.png"_s, path);
+        QVERIFY(!stored.isEmpty());
+        QCOMPARE(QFile(ws->absoluteFilePath(stored)).size(), png.size());
+        a = ask(*control, u"chatSend"_s, {{u"path"_s, path}, {u"text"_s, QString()}, {u"pictures"_s, pictures}});
+        QVERIFY2(a->ok, qPrintable(a->message));
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->isRunning(path), 20000);
+        a = ask(*control, u"chatSend"_s, {{u"path"_s, path}, {u"text"_s, QString()}});
+        QCOMPARE(a->code, u"bad_params"_s);
+        a = ask(*control, u"chatSend"_s,
+                {{u"path"_s, path},
+                 {u"text"_s, u"x"_s},
+                 {u"pictures"_s, QJsonArray{QJsonObject{{u"name"_s, u"skrypt.sh"_s}, {u"data"_s, u"eA=="_s}}}}});
+        QCOMPARE(a->code, u"bad_pictures"_s);
+        a = ask(*control, u"chatStart"_s, {{u"text"_s, u"x"_s}, {u"partner"_s, u"acp:fake"_s}, {u"pictures"_s, u"a.png"_s}});
+        QCOMPARE(a->code, u"bad_pictures"_s);
+        // A new conversation with a picture.
+        a = ask(*control, u"chatStart"_s,
+                {{u"text"_s, u"Policz obrazy"_s}, {u"partner"_s, u"acp:fake"_s}, {u"pictures"_s, pictures}});
+        QVERIFY2(a->ok, qPrintable(a->message));
+        const QString started = a->result.value(u"path"_s).toString();
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->isRunning(started), 20000);
+        page = ws->read(started);
+        QVERIFY2(page.contains(u"- 🤖 Obrazy: paragon.png"_s), qPrintable(page));
     }
 
     /// chatStart of a thread in a worktree of its project: one under the worktrees root, one `git

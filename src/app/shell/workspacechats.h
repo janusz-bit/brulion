@@ -328,7 +328,13 @@ public:
     /// startThread() as a sub-conversation of `parent` whose end wakes `wakes` ("" none): an AI
     /// agent's or a script's task in a project (ChatControl's chatStart with `project`).
     QString startThreadFrom(const QString &project, const QString &text, const QString &partner, const QString &parent,
-                            const QString &wakes);
+                            const QString &wakes, const QStringList &pictures = {});
+
+    /// The conversations whose turn of this device ended after `since`, newest first, with when —
+    /// kept in the notebook's device state ("chat/ended", a day at most), so a turn that ended before
+    /// the app shared its conversations, or before it started again, is still known (ChatControl's
+    /// chatLive lists those of the last minutes). Turns of another computer followed here are not.
+    QList<std::pair<QString, QDateTime>> endedSince(const QDateTime &since) const;
     /// Where the thread `path` works: {project, projectName, worktree, branch, folder (the
     /// worktree's, else the project's), known (the project is on this device), exists (the folder
     /// is there)}; {} for a conversation of the notebook. A project of another computer (it runs
@@ -894,21 +900,35 @@ private:
     void mirror(const QString &path);
     /// Another computer's turn runs for `path` (mirror()).
     bool remote(const QString &path) const;
+    /// The detail of `path` as the computer whose app lists it said last (its agent's options, its
+    /// messages waiting or held there), nullptr none — or this device's own turn of it runs.
+    const acp::RemoteChatDetail *computerDetail(const QString &path) const;
+    /// mirror()'s part for computerDetail(): a change of its held messages or options signalled.
+    void mirrorExtras(const QString &path);
     /// The computers are asked while the app is in front, or while a turn of theirs runs here.
     void updateFollowing();
     /// How many messages this device's copy of `path` has.
     int localMessages(const QString &path) const;
     /// The page of a turn that ended there came (computerPage()): its notification, its view.
     void computerPageCame(const QString &path);
-    /// `text` to another computer's turn of `path` (queued there, or steered in); false (said in a
-    /// toast) for pictures, which do not go there yet.
+    /// `text` and `pictures` to another computer's turn of `path` (queued there, or steered in); false
+    /// when nothing went (a picture that cannot be prepared: said in a toast).
     bool sendToComputer(const QString &path, const QString &text, const QStringList &pictures, acp::SendMode mode);
     /// The address of the computer whose app runs the next turn of `path` — a conversation that app
     /// runs or ended lately, or a thread of a project of that computer, while its app shares its
     /// conversations —, "" none (this device runs it: a thread through that computer's shared agent).
     QString computerFor(const QString &path) const;
+    /// `pictures` (vault paths) as a computer's app takes them: prepared for the model
+    /// (Workspace::aiPicture, as this device's turn would send them) within acp's limits; nullopt
+    /// when one cannot be (said in a toast naming `host`).
+    std::optional<QList<acp::RemotePicture>> picturesForComputer(const QStringList &pictures, const QString &host) const;
+    /// The pictures of a message the computer took: this device's copies deleted (that computer
+    /// stored its own, which come with the notebook's sync).
+    void sentThere(const QStringList &pictures);
     void setFailure(ChatTurn *turn, const QString &failure);
     void endTurn(ChatTurn *turn);
+    /// endedSince()'s record of `path`'s turn ended now.
+    void noteEnded(const QString &path);
     void updateRunningShown();
     bool setMark(const QString &path, int mark, bool on);
     void setUnread(const QString &path, bool unread);
@@ -931,6 +951,8 @@ private:
     /// Turns that ended on another computer whose answer is not here yet (its notification waits for
     /// the page), by path in lower case.
     QSet<QString> m_remoteEnded;
+    /// mirrorExtras(): what was seen of each conversation's computerDetail() (lower-case path).
+    QHash<QString, QString> m_computerExtras;
     int m_draftSerial = 0;
     int m_agentSerial = 0;
     bool m_agentPairing = false;

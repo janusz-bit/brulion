@@ -2650,6 +2650,8 @@ FocusScope {
                                     readonly property int pictureCount: waiting.pictures.length
                                     /// It waits on the computer running the turn: shown, not handled from here.
                                     readonly property bool there: AppController.routeFlag(waiting.modelData, "remote")
+                                    /// … that computer's name.
+                                    readonly property string host: AppController.routeText(waiting.modelData, "host")
                                     objectName: "chatWaiting"
                                     Layout.fillWidth: true
                                     implicitHeight: waitingBubble.height
@@ -2690,7 +2692,7 @@ FocusScope {
                                                     color: Theme.fgFaint
                                                 }
                                                 BText {
-                                                    text: waiting.there ? qsTr("waits on %1").arg(root.remoteHere)
+                                                    text: waiting.there ? qsTr("waits on %1").arg(waiting.host)
                                                                         : root.heldHere ? qsTr("held") : qsTr("waits")
                                                     variant: "caption"
                                                     color: Theme.fgFaint

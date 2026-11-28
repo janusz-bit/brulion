@@ -27,6 +27,7 @@
 //                     "Zmieniono Dom.md."
 //   "… narzędzia …"   a tool call and no words
 //   "… model …"       "Model: <the model option now>"
+//   "… obrazy …"      "Obrazy: <the prompt's pictures: the file names of its image and resource_link blocks>"
 //   "… sesja …"       "Sesja: <the session's id>"
 //   "… katalog …"     "Katalog: <its cwd>"
 //   "… pwd …"         runs `pwd` in a terminal of the client without a folder, then with the folder
@@ -359,6 +360,19 @@ int main(int argc, char **argv)
                                  {u"kind"_s, u"other"_s},
                                  {u"status"_s, u"in_progress"_s}});
                 end(callTools(servers.value(session), text.mid(10)));
+                continue;
+            }
+            if (text.contains(u"obrazy"_s)) {
+                QStringList names;
+                for (const QJsonValue &b : prompt) {
+                    const QJsonObject block = b.toObject();
+                    // (It takes no images: a picture comes as a link to its file.)
+                    const QString type = block.value(u"type"_s).toString();
+                    if (type == u"image" || type == u"resource_link")
+                        names << (block.value(u"uri"_s).toString().isEmpty() ? u"?"_s
+                                                                             : block.value(u"uri"_s).toString().section(u'/', -1));
+                }
+                end(u"Obrazy: "_s + (names.isEmpty() ? u"brak"_s : names.join(u", "_s)));
                 continue;
             }
             if (text.contains(u"koniec"_s)) {
