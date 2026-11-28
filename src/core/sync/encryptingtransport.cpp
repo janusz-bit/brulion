@@ -6,6 +6,8 @@
 #include <QIODevice>
 #include <QUrl>
 
+#include <algorithm>
+#include <cstring>
 #include <memory>
 
 using namespace Qt::StringLiterals;
@@ -104,7 +106,7 @@ private:
 bool handOver(const std::function<bool(QByteArrayView)> &sink, QByteArrayView plain)
 {
     for (qsizetype at = 0; at < plain.size(); at += HttpRequest::StreamPieceBytes) {
-        if (!sink(plain.sliced(at, std::min(HttpRequest::StreamPieceBytes, plain.size() - at))))
+        if (!sink(plain.sliced(at, std::min<qsizetype>(HttpRequest::StreamPieceBytes, plain.size() - at))))
             return false;
     }
     return true;

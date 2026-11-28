@@ -7,6 +7,7 @@
 
 #include <QStringList>
 
+#include <algorithm>
 #include <cstring>
 
 using namespace Qt::StringLiterals;

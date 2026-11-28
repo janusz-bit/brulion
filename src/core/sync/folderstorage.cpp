@@ -9,6 +9,8 @@
 #include <QSaveFile>
 #include <QTimeZone>
 
+#include <algorithm>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::sync {

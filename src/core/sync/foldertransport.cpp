@@ -4,11 +4,14 @@
 #include "sync/url.h"
 
 #include <QCryptographicHash>
+#include <QDeadlineTimer>
+#include <QIODevice>
 #include <QMetaObject>
 #include <QMutex>
 #include <QWaitCondition>
 #include <QUrl>
 
+#include <algorithm>
 #include <atomic>
 #include <utility>
 
