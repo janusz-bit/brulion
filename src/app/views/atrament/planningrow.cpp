@@ -36,18 +36,18 @@ at::AnyElement EntryRows::row(int index, const AgendaEntry &e, bool past) const
                            .py(5)
                            .minH(look.rowHeight)
                            .rounded(look.radius)
-                           .hover([look = look.hover](at::Style &s) { s.background = at::Background::solid(look); })
+                           .hover([hover = look.hover](at::Style &s) { s.background = at::Background::solid(hover); })
                            .cursorPointer()
                            .role(at::Role::ListItem)
                            .ariaLabel(u16View(name))
-                           .onClick([act = act, entry](const at::ClickEvent &, at::Window &, at::App &) {
-                               act(u"open"_s, {{u"entry"_s, entry}});
+                           .onClick([onAct = act, entry](const at::ClickEvent &, at::Window &, at::App &) {
+                               onAct(u"open"_s, {{u"entry"_s, entry}});
                            })
                            .child(marker(index, e));
     if (e.hasTokenMenu())
         std::move(line).onMouseDown(at::MouseButton::Right,
-                                    [act = act, e](const at::MouseDownEvent &m, at::Window &, at::App &) {
-                                        menuAt(act, u"menu"_s, e, m.position);
+                                    [onAct = act, e](const at::MouseDownEvent &m, at::Window &, at::App &) {
+                                        menuAt(onAct, u"menu"_s, e, m.position);
                                     });
     if (!e.time.isEmpty())
         std::move(line).child(at::div()
@@ -72,13 +72,13 @@ at::AnyElement EntryRows::marker(int index, const AgendaEntry &e) const
         return std::move(column).child(
                 taskBoxShape(e.taskStatus(), {look.box, look.accent, look.background})
                         .ariaLabel(u16View(entryWords("Done: %1").arg(e.title)))
-                        .onClick([act = act, e](const at::ClickEvent &, at::Window &w, at::App &) {
-                            act(u"toggle"_s, {{u"entry"_s, e.map}});
+                        .onClick([onAct = act, e](const at::ClickEvent &, at::Window &w, at::App &) {
+                            onAct(u"toggle"_s, {{u"entry"_s, e.map}});
                             w.stopPropagation();
                         })
                         .onMouseDown(at::MouseButton::Right,
-                                     [act = act, e](const at::MouseDownEvent &m, at::Window &w, at::App &) {
-                                         menuAt(act, u"statusMenu"_s, e, m.position);
+                                     [onAct = act, e](const at::MouseDownEvent &m, at::Window &w, at::App &) {
+                                         menuAt(onAct, u"statusMenu"_s, e, m.position);
                                          w.stopPropagation();
                                      })
                         .child(track(true, index)));
