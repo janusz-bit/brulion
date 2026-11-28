@@ -959,6 +959,96 @@ private Q_SLOTS:
         QVERIFY2(denied.error.contains(u"b.app.replaceView"_s), qPrintable(denied.error));
     }
 
+    void viewReplacementsAreChecked_data()
+    {
+        QTest::addColumn<QString>("builtin");
+        QTest::addColumn<QString>("view");
+        QTest::addColumn<int>("paramsBytes"); // the params' size as compact JSON ({"x":"…"}), 0 none
+        QTest::addColumn<QString>("error");
+        // {"x":"…"} is 8 bytes and the text.
+        QTest::newRow("tasks") << u"tasks"_s << u"tablica"_s << 0 << QString();
+        QTest::newRow("journals, params") << u"journals"_s << u"dziennik"_s << 40 << QString();
+        QTest::newRow("a view's longest name") << u"search"_s << QString(100, u'w') << 0 << QString();
+        QTest::newRow("the largest params") << u"tags"_s << u"v"_s << MaxViewReplacementParams << QString();
+        QTest::newRow("params too large") << u"tags"_s << u"v"_s << MaxViewReplacementParams + 1
+                                          << u"params are at most 16384 bytes"_s;
+        QTest::newRow("no view") << u"tasks"_s << QString() << 0 << u"argument 2 is the name"_s;
+        QTest::newRow("a view's name too long") << u"tasks"_s << QString(101, u'w') << 0 << u"argument 2 is the name"_s;
+        QTest::newRow("the settings") << u"settings"_s << u"v"_s << 0 << u"“settings” cannot be replaced"_s;
+        QTest::newRow("a page") << u"page"_s << u"v"_s << 0 << u"“page” cannot be replaced"_s;
+        QTest::newRow("case matters") << u"Tasks"_s << u"v"_s << 0 << u"“Tasks” cannot be replaced"_s;
+    }
+    void viewReplacementsAreChecked()
+    {
+        QFETCH(QString, builtin);
+        QFETCH(QString, view);
+        QFETCH(int, paramsBytes);
+        QFETCH(QString, error);
+        const QVariantMap params =
+                paramsBytes > 0 ? QVariantMap{{u"x"_s, QString(paramsBytes - 8, u'a')}} : QVariantMap();
+        ViewReplacement r;
+        QString why;
+        const bool ok = viewReplacementFrom(builtin, view, params, &r, &why);
+        QCOMPARE(ok, error.isEmpty());
+        if (!ok) {
+            QVERIFY2(why.contains(error), qPrintable(why));
+            return;
+        }
+        QCOMPARE(r.builtin, builtin);
+        QCOMPARE(r.view, view);
+        QCOMPARE(r.params, params);
+        QVERIFY(r.extension.isEmpty());
+    }
+    void viewReplacementsNameAtMost100OfAnUnknownView()
+    {
+        // A hostile name is not echoed whole.
+        ViewReplacement r;
+        QString why;
+        QVERIFY(!viewReplacementFrom(QString(1000, u'x'), u"v"_s, {}, &r, &why));
+        QVERIFY(why.contains(QString(100, u'x')));
+        QVERIFY(!why.contains(QString(101, u'x')));
+    }
+
+    void viewReplacementsTellTheApp()
+    {
+        // A declaration tells the app; the same one again changes nothing and gives nothing back.
+        QVERIFY(m_engine.load(ext(u"t"_s, u"b.view(\"v\", function() return b.ui.text(\"v\") end)"_s)).ok());
+        m_host.changed.clear();
+        const Result first = eval(u"return b.app.replaceView(\"tasks\", \"v\", { a = 1 })"_s, u"t"_s);
+        QVERIFY2(first.ok(), qPrintable(first.error));
+        QVERIFY(!first.value.isValid() || first.value.isNull());
+        QCOMPARE(m_host.changed, QStringList{u"t"_s});
+        const int revision = m_engine.appRevision();
+        const Result again = eval(u"return b.app.replaceView(\"tasks\", \"v\", { a = 1 })"_s, u"t"_s);
+        QVERIFY2(again.ok(), qPrintable(again.error));
+        QVERIFY(!again.value.isValid() || again.value.isNull());
+        QCOMPARE(m_engine.appRevision(), revision);
+        QCOMPARE(m_host.changed.size(), 1);
+        // An item and a replaced view: the extension's unloading drops both and tells the app.
+        QVERIFY(eval(u"b.app.contribute(\"statusbar\", { id = \"s\", label = \"S\" })"_s, u"t"_s).ok());
+        const int before = m_engine.appRevision();
+        m_engine.unload(u"t"_s);
+        QVERIFY(m_engine.appRevision() > before);
+        QVERIFY(m_engine.viewReplacements().isEmpty());
+    }
+
+    void atMost64ViewsReplaced()
+    {
+        // Eight extensions replace the eight views: 64; one more is refused, the 64 stay.
+        for (int i = 0; i < 9; ++i) {
+            const Result r = m_engine.load(ext(u"z%1"_s.arg(i), uR"lua(
+                b.view("v", function() return b.ui.text("v") end)
+                for _, name in { "journals", "tasks", "calendar", "habits", "graph", "allPages", "tags", "search" } do
+                    b.app.replaceView(name, "v")
+                end
+            )lua"_s));
+            QCOMPARE(r.ok(), i < 8);
+            if (!r.ok())
+                QVERIFY2(r.error.contains(u"at most 64 views replaced"_s), qPrintable(r.error));
+        }
+        QCOMPARE(m_engine.viewReplacements().size(), 64);
+    }
+
     void replacedRoutes()
     {
         const ViewReplacement r{u"zadania"_s,
@@ -980,6 +1070,29 @@ private Q_SLOTS:
         QCOMPARE(replacedRoute(builtin, r), builtin);
         const QVariantMap calendar{{u"view"_s, u"calendar"_s}};
         QCOMPARE(replacedRoute(calendar, r), calendar);
+    }
+
+    void stopTellsTheAppOnlyWhatItHad_data()
+    {
+        QTest::addColumn<QString>("code");
+        QTest::newRow("an item") << u"b.app.contribute(\"statusbar\", { id = \"a\", label = \"A\" })"_s;
+        QTest::newRow("a theme") << u"b.app.theme({ radius = 9 })"_s;
+        QTest::newRow("an input rule") << u"b.app.inputRule({ match = \"->\", replace = \"→\" })"_s;
+        QTest::newRow("a tag style") << u"b.app.tagStyle({ tag = \"pilne\", tint = \"danger\" })"_s;
+        QTest::newRow("a replaced view")
+                << u"b.view(\"v\", function() return b.ui.text(\"v\") end)\nb.app.replaceView(\"tasks\", \"v\")"_s;
+    }
+    void stopTellsTheAppOnlyWhatItHad()
+    {
+        // Stopped, the engine's app state goes: a new revision when there was some, none when not.
+        QFETCH(QString, code);
+        QVERIFY(m_engine.load(ext(u"s"_s, code)).ok());
+        const int before = m_engine.appRevision();
+        m_engine.stop();
+        QCOMPARE_GT(m_engine.appRevision(), before);
+        const int empty = m_engine.appRevision();
+        m_engine.stop();
+        QCOMPARE(m_engine.appRevision(), empty);
     }
 
     // ---- the app's operations ------------------------------------------------------------------------
