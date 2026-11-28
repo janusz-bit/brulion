@@ -1556,7 +1556,9 @@ docs/CODE-TERMINAL.md "Drawn by Atrament"); shown where agents run).
   (`codeRemoteDiffPane`, `BDiffView`: beside the list when wide, in its place with Back when narrow) —
   what that computer's git says (`RemoteProjects.requestChanges` / `requestDiff`), refreshed when the
   thread's page changes. Local / New worktree work as for this device's projects: the worktree is made
-  there.
+  there, from the base picked in `codeBaseBranch` among that computer's branches (`CodeBranchPicker`
+  opened on its folder there: `CodeProjects.listBranches` asks `RemoteProjects.listBranches`, GET
+  projects/<id>/branches).
 * **What the desktop app there is doing** (docs/CODE.md "The computer's own turns on the phone";
   `ChatComputerList`, `qml/views/ChatComputerList.qml`, `chatComputers`): "On your computers" above the
   projects (and above ChatView's list of conversations) while a computer's app runs, waits on or asks

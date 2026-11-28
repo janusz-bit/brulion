@@ -593,10 +593,8 @@ thread's files opening the viewer at their line (`CodeView.openFileInViewer(path
 * The rest of docs/CODE-GIT.md "Not done (yet)".
 * Threads on the phone: the branch picker, "Revert to before turn N" and the terminal of a project
   of another computer (the phone commits, pushes, opens pull requests and reverts the last turn there),
-  the commit message and pull request written by AI there; pictures
-  for a turn the computer's app runs, its agent's options (model, mode) changed from the phone, a
-  waiting message taken back there; a new
-  worktree there from another base than its HEAD in the UI; projects of two computers with the same id
+  the commit message and pull request written by AI there; a waiting message of a turn the
+  computer's app runs taken back there; projects of two computers with the same id
   (the first computer's is listed).
 * Multi-repository projects and custom worktree layouts (t3.json's ignoreRepositories, worktreeLayout); T3 Code's branch naming
   modes (a semantic prefix the AI picks, the user's own instructions for it); worktrees cleaned up by

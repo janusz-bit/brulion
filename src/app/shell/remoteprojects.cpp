@@ -3,6 +3,7 @@
 #include "log/categories.h"
 #include "sync/http.h"
 
+#include <QDir>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -227,7 +228,7 @@ QString RemoteProjects::errorText(const Computer &computer, const acp::RemoteErr
     }
 }
 
-bool RemoteProjects::createWorktree(const QString &id, const QString &title)
+bool RemoteProjects::createWorktree(const QString &id, const QString &title, const QString &base)
 {
     const std::optional<Computer> computer = computerOf(id);
     sync::HttpTransport *transport = m_transport ? m_transport() : nullptr;
@@ -235,7 +236,7 @@ bool RemoteProjects::createWorktree(const QString &id, const QString &title)
         return false;
     const std::weak_ptr<bool> alive = m_alive;
     const Computer c = *computer;
-    acp::createRemoteWorktree(transport, QUrl(c.url), c.token, id, title, QString(),
+    acp::createRemoteWorktree(transport, QUrl(c.url), c.token, id, title, base.trimmed(),
                               [this, alive, id, c](const acp::RemoteWorktree &w, const acp::RemoteError &error) {
                                   if (alive.expired())
                                       return;
@@ -244,6 +245,43 @@ bool RemoteProjects::createWorktree(const QString &id, const QString &title)
                                   else
                                       Q_EMIT worktreeCreated(id, w.folder, w.branch, QString());
                               });
+    return true;
+}
+
+QString RemoteProjects::projectAt(const QString &folder) const
+{
+    const QString clean = QDir::cleanPath(folder);
+    for (const Project &p : projects()) {
+        if (!clean.isEmpty() && QDir::cleanPath(p.path) == clean)
+            return p.id;
+    }
+    return {};
+}
+
+bool RemoteProjects::listBranches(const QString &id, const QString &folder)
+{
+    const std::optional<Computer> computer = computerOf(id);
+    sync::HttpTransport *transport = m_transport ? m_transport() : nullptr;
+    if (!computer || !transport)
+        return false;
+    const std::weak_ptr<bool> alive = m_alive;
+    const Computer c = *computer;
+    acp::fetchRemoteBranches(transport, QUrl(c.url), c.token, id,
+                             [this, alive, folder, c](const QList<acp::RemoteBranch> &list, const acp::RemoteError &e) {
+                                 if (alive.expired())
+                                     return;
+                                 QVariantList rows;
+                                 for (const acp::RemoteBranch &b : list)
+                                     rows << QVariantMap{{u"name"_s, b.name},
+                                                         {u"remote"_s, b.remote},
+                                                         {u"current"_s, b.current},
+                                                         {u"isDefault"_s, b.isDefault},
+                                                         {u"worktree"_s, QString()},
+                                                         {u"upstream"_s, QString()},
+                                                         {u"ahead"_s, 0},
+                                                         {u"behind"_s, 0}};
+                                 Q_EMIT branchesListed(folder, rows, e.failed() ? errorText(c, e) : QString());
+                             });
     return true;
 }
 

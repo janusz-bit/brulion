@@ -14,7 +14,7 @@ done in the repository simply disappears from the list.
   tst_shell_codeprojects configInProject skips it there); a terminal on Windows before 10 1809;
   staging hunks of the Changes panel's other sources than Uncommitted (they are reverted alone; single lines are staged or thrown away),
   the thread's conversation in the AI's question for a pull request (docs/CODE-GIT.md "Not done (yet)"); for a thread of another computer's project (continued from
-  the phone through `acp serve --projects`): the terminal from the phone, a worktree from another base, projects of two computers with the same
+  the phone through `acp serve --projects`): the terminal from the phone, projects of two computers with the same
   id; T3 Code's in-app browser for `previewUrl` (the
   system's opens it),
   multi-repository projects and custom worktree layouts; T3 Code's branch naming modes (the AI names

@@ -96,10 +96,15 @@ public:
 
     /// Asks every computer for its projects again.
     Q_INVOKABLE void refresh();
-    /// Makes a worktree of project `id` there for a new thread `title` (from its HEAD): false when
-    /// it is no project of a computer; else worktreeCreated() says how it went (CodeProjects's
-    /// signal is emitted with it, as for a worktree of this device).
-    bool createWorktree(const QString &id, const QString &title);
+    /// Makes a worktree of project `id` there for a new thread `title` (a new branch from `base`, ""
+    /// its HEAD): false when it is no project of a computer; else worktreeCreated() says how it went
+    /// (CodeProjects's signal is emitted with it, as for a worktree of this device).
+    bool createWorktree(const QString &id, const QString &title, const QString &base = QString());
+    /// The project there whose folder there is `folder` ("" none).
+    QString projectAt(const QString &folder) const;
+    /// Its branches there (acp GET projects/<id>/branches): branchesListed(folder, rows as
+    /// CodeProjects::branchRow() gives them, error in words); false when it is no project of a computer.
+    bool listBranches(const QString &id, const QString &folder);
     /// The files of project `id` (its folder there, or its worktree `worktree`) changed since the
     /// checkpoint `since` ("" against its last commit): changesReady() with the request's number —
     /// [{path, oldPath, change, letter, additions, deletions, binary}] — or its error in words.
@@ -125,6 +130,7 @@ public:
     static QString subjectOf(const QString &message);
 
 Q_SIGNALS:
+    void branchesListed(const QString &folder, const QVariantList &branches, const QString &error);
     void changed();
     /// A git request ended: `action` "commit" | "push" | "pr" | "revert", what happened (or why
     /// not) in words, a pull request's address ("" none).

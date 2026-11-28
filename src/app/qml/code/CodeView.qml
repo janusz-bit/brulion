@@ -62,6 +62,8 @@ FocusScope {
     /// The project is another computer's: its name, the thread's worktree there.
     readonly property bool remote: root.path !== "" ? AppController.routeFlag(root.place, "remote")
                                                     : Workspace.projects.isRemote(root.project)
+    /// … its folder there (a new worktree's base is picked among its branches there).
+    readonly property string remotePath: AppController.routeText(Workspace.projects.project(root.project), "remotePath")
     readonly property string host: root.path !== "" ? AppController.routeText(root.place, "host")
                                                     : AppController.routeText(Workspace.projects.project(root.project), "host")
     /// Narrow (a phone): the other computer's changes under the thread — or this device's right
@@ -485,6 +487,11 @@ FocusScope {
         return ""
     }
     function openBranches(): void {
+        // (Another computer's project: a new worktree's base among its branches there.)
+        if (root.remote && root.path === "" && root.envMode === "worktree") {
+            branchPicker.openFor(root.remotePath, "base", "")
+            return
+        }
         if (root.folder === "")
             return
         if (root.path === "" && root.envMode === "worktree")
@@ -802,7 +809,7 @@ FocusScope {
                 id: baseChip
                 objectName: "codeBaseBranch"
                 visible: root.path === "" && root.project !== "" && root.envMode !== "existing" && root.madeWorktree === ""
-                         && !root.remote && !Workspace.projects.isScratch(root.project)
+                         && (!root.remote || root.envMode === "worktree") && !Workspace.projects.isScratch(root.project)
                 iconName: "git-branch"
                 text: root.envMode === "worktree"
                       ? qsTr("From %1").arg(root.baseBranch !== "" ? root.baseBranch : root.currentBranch !== "" ? root.currentBranch : "HEAD")

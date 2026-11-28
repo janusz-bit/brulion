@@ -4145,6 +4145,42 @@ private Q_SLOTS:
         QTRY_COMPARE_WITH_TIMEOUT(git.size(), 6, 20000);
         QCOMPARE(git.last().at(3).toString(), u"No computer of yours has this project."_s);
 
+        // Its branches there, for a new worktree's base (the picker asks for its folder there).
+        QCOMPARE(QProcess::execute(u"git"_s, {u"-C"_s, repo, u"branch"_s, u"rozwój"_s}), 0);
+        QSignalSpy listed(projects, &shell::CodeProjects::branchesListed);
+        QVERIFY(projects->listBranches(QDir::cleanPath(repo)));
+        QTRY_COMPARE_WITH_TIMEOUT(listed.size(), 1, 20000);
+        QCOMPARE(listed.first().at(0).toString(), QDir::cleanPath(repo));
+        QCOMPARE(listed.first().at(2).toString(), QString());
+        QStringList names;
+        for (const QVariant &row : listed.first().at(1).toList())
+            names << row.toMap().value(u"name"_s).toString();
+        QVERIFY2(names.contains(u"rozwój"_s), qPrintable(names.join(u", "_s)));
+        QVERIFY(!projects->listBranches(m_tmp.filePath(u"nie-ma-tu-nic"_s))); // (no folder here nor there)
+        // A worktree there from that base: its branch starts at the base's commit.
+        {
+            QFile side(repo + u"/Na boku.md"_s);
+            QVERIFY(side.open(QIODevice::WriteOnly));
+            side.write("- w main\n");
+        }
+        QCOMPARE(QProcess::execute(u"git"_s, {u"-C"_s, repo, u"add"_s, u"-A"_s}), 0);
+        QCOMPARE(QProcess::execute(u"git"_s,
+                                   {u"-C"_s, repo, u"-c"_s, u"user.name=Ala"_s, u"-c"_s, u"user.email=a@b.c"_s, u"-c"_s,
+                                    u"commit.gpgsign=false"_s, u"commit"_s, u"-q"_s, u"-m"_s, u"Na boku"_s}),
+                 0);
+        QSignalSpy fromBase(projects, &shell::CodeProjects::worktreeCreated);
+        QVERIFY(projects->createWorktree(u"sklep"_s, u"Z rozwoju"_s, u"rozwój"_s));
+        QTRY_COMPARE_WITH_TIMEOUT(fromBase.size(), 1, 30000);
+        QCOMPARE(fromBase.first().at(3).toString(), QString());
+        const QString based = fromBase.first().at(1).toString();
+        QVERIFY(!QFileInfo::exists(based + u"/Na boku.md"_s)); // (rozwój has not got main's newest)
+        QProcess head;
+        head.start(u"git"_s, {u"-C"_s, repo, u"rev-parse"_s, u"rozwój"_s, fromBase.first().at(2).toString()});
+        QVERIFY(head.waitForFinished(20000));
+        const QList<QByteArray> heads = head.readAllStandardOutput().trimmed().split('\n');
+        QCOMPARE(heads.size(), 2);
+        QCOMPARE(heads.at(0), heads.at(1));
+
         // A worktree made there for the next thread, and its turns in it.
         QSignalSpy created(projects, &shell::CodeProjects::worktreeCreated);
         QVERIFY(projects->createWorktree(u"sklep"_s, u"Dodaj rabat 10%"_s));
