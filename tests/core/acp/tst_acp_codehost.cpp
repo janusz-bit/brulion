@@ -323,6 +323,9 @@ private Q_SLOTS:
         QJsonArray many;
         for (int i = 0; i <= MaxRemoteChanges; ++i)
             many.append(u"plik-%1.md"_s.arg(i));
+        many.removeLast();
+        QTest::newRow("as many files as taken") << k(Kind::Commit) << with(u"files"_s, many) << QString();
+        many.append(u"jeszcze.md"_s);
         QTest::newRow("too many files") << k(Kind::Commit) << with(u"files"_s, many) << u"bad_files"_s;
         QTest::newRow("no title") << k(Kind::PullRequest) << QJsonObject() << u"bad_title"_s;
         QTest::newRow("blank title") << k(Kind::PullRequest) << QJsonObject{{u"title"_s, u"   "_s}} << u"bad_title"_s;
@@ -391,6 +394,12 @@ private Q_SLOTS:
         const RemoteGitResult read = RemoteGitResult::fromJson(QJsonObject{{u"restored"_s, many}});
         QCOMPARE(read.restored.size(), MaxRemoteChanges);
         QCOMPARE(read.restored.first(), u"a"_s);
+        // (Texts of the host cut to their sizes.)
+        const RemoteGitResult cut = RemoteGitResult::fromJson(
+                QJsonObject{{u"commit"_s, QString(150, u'a')}, {u"message"_s, QString(2500, u'ż')}, {u"number"_s, -3}});
+        QCOMPARE(cut.commit.size(), 100);
+        QCOMPARE(cut.message.size(), 2000);
+        QCOMPARE(cut.number, 0);
     }
 
     void pullRequestNumbers_data()
