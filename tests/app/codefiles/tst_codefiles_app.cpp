@@ -71,6 +71,35 @@ private Q_SLOTS:
 
     // ---- The index ------------------------------------------------------------------------------
 
+    // The index follows the disk: a file made in a subfolder, a folder deleted — found without a
+    // refresh, a moment later (the folders are watched).
+    void indexFollowsTheDisk()
+    {
+#ifdef Q_OS_WIN
+        QSKIP("no folders are watched on Windows (a watched folder cannot be deleted there)");
+#endif
+        QTemporaryDir dir;
+        QVERIFY(writeFile(dir.filePath(u"src/main.cpp"_s), "int main() {}\n"));
+        QVERIFY(writeFile(dir.filePath(u"docs/a.md"_s), "a\n"));
+        FileIndexCache *cache = FileIndexCache::instance();
+        cache->setGitProgram(QString()); // (a walk: the folder is no repository anyway)
+        auto restore = qScopeGuard([cache] { cache->setGitProgram(u"git"_s); });
+        const QString folder = dir.path();
+        QVERIFY(!cache->index(folder));
+        QTRY_VERIFY(cache->index(folder) && cache->index(folder)->contains(u"src/main.cpp"));
+        QTRY_COMPARE(cache->watchedCount(folder), 3); // (the folder, docs, src)
+        QVERIFY(writeFile(dir.filePath(u"src/żółw.cpp"_s), "\n"));
+        QTRY_VERIFY_WITH_TIMEOUT(cache->index(folder)->contains(u"src/żółw.cpp"), 10000);
+        QVERIFY(QDir(dir.filePath(u"docs"_s)).removeRecursively());
+        QTRY_VERIFY_WITH_TIMEOUT(!cache->index(folder)->contains(u"docs/a.md"), 10000);
+        QTRY_COMPARE(cache->watchedCount(folder), 2);
+        // A new folder is watched too.
+        QVERIFY(writeFile(dir.filePath(u"lib/x.h"_s), "\n"));
+        QTRY_VERIFY_WITH_TIMEOUT(cache->index(folder)->contains(u"lib/x.h"), 10000);
+        QVERIFY(writeFile(dir.filePath(u"lib/y.h"_s), "\n"));
+        QTRY_VERIFY_WITH_TIMEOUT(cache->index(folder)->contains(u"lib/y.h"), 10000);
+    }
+
     void indexOfARepository()
     {
         if (!hasGit())

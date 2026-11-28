@@ -11,7 +11,10 @@
 // the folder on a pool thread (FileIndex::walk). At most 200 000 entries. While a build runs the
 // last index answers. refresh() builds again (a build already running is followed by one more);
 // a `live` view refreshes every 15 s; the Code view refreshes at each turn's end. At most 8
-// folders are kept (the least recently asked for goes).
+// folders are kept (the least recently asked for goes). Each index follows the disk by itself: a
+// QFileSystemWatcher on the folder and its indexed folders (shallow first, at most MaxWatched)
+// builds it again WatchDelayMs after a file is made, deleted or renamed in one of them (not on
+// Windows: a watched folder cannot be deleted there).
 //
 // Queries: over up to 20 000 entries at once, on the GUI thread (well under a millisecond a
 // thousand entries); bigger indexes on a pool thread, the newest query's result kept (rows change
@@ -21,6 +24,7 @@
 #include "codefiles/fileindex.h"
 
 #include <QColor>
+#include <QFileSystemWatcher>
 #include <QHash>
 #include <QObject>
 #include <QPointer>
@@ -54,6 +58,12 @@ public:
     void refresh(const QString &folder);
     /// The folders kept at most.
     static constexpr int MaxFolders = 8;
+    /// The folders of one index watched at most (inotify's watches are the system's) and the wait
+    /// after a change before the index is built again.
+    static constexpr int MaxWatched = 2000;
+    static constexpr int WatchDelayMs = 400;
+    /// How many folders of `folder`'s index are watched (tests).
+    int watchedCount(const QString &folder) const;
     /// git's output read at most (64 MiB).
     static constexpr qsizetype MaxGitOutput = 64 * 1024 * 1024;
     /// Tests: git as this program ("" none: every folder is walked).
@@ -71,7 +81,13 @@ private:
         bool again = false;
         quint64 used = 0;
         int generation = 0;
+        /// Its folders watched (owned by the cache; null until the first build).
+        QFileSystemWatcher *watcher = nullptr;
     };
+    /// `folder`'s watcher set to the index's folders.
+    void watch(const QString &folder, Slot &slot);
+    void changedOnDisk(const QString &folder);
+    void forget(Slot &slot);
     void build(const QString &folder);
     void finish(const QString &folder, int generation, std::shared_ptr<const FileIndex> index, const QString &source);
     void trim();
@@ -79,6 +95,9 @@ private:
     QHash<QString, Slot> m_slots;
     quint64 m_clock = 0;
     gitcli::Client *m_git = nullptr;
+    /// Folders changed on disk, built again when m_watchTimer fires.
+    QStringList m_changed;
+    QTimer m_watchTimer;
 };
 
 class CodeFileIndex : public QObject {

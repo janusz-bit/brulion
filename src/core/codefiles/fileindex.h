@@ -78,6 +78,8 @@ public:
     bool contains(QStringView path) const { return find(path) >= 0; }
     /// Every file's path, in order.
     QStringList files() const;
+    /// The folders' paths, shallow first (the order of an empty query), at most `max`.
+    QStringList folders(int max) const;
 
     QList<Hit> search(QStringView query, int limit, Kinds kinds = Kinds::All) const;
 

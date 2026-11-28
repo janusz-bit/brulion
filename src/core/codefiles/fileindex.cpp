@@ -241,6 +241,18 @@ int FileIndex::find(QStringView p) const
     return lo < int(m_entries.size()) && path(lo) == p ? lo : -1;
 }
 
+QStringList FileIndex::folders(int max) const
+{
+    QStringList out;
+    for (const int i : m_shallow) {
+        if (out.size() >= max)
+            break;
+        if (m_entries.at(i).folder)
+            out.append(path(i).toString());
+    }
+    return out;
+}
+
 QStringList FileIndex::files() const
 {
     QStringList out;

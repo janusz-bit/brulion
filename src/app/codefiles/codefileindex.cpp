@@ -6,6 +6,7 @@
 #include "gitcli/client.h"
 
 #include <QDir>
+#include <QSet>
 #include <QStandardPaths>
 
 #include <algorithm>
@@ -120,6 +121,64 @@ FileIndexCache *FileIndexCache::instance()
 FileIndexCache::FileIndexCache(QObject *parent) : QObject(parent), m_git(new gitcli::Client(this))
 {
     stopFlag()->store(false);
+    m_watchTimer.setSingleShot(true);
+    m_watchTimer.setInterval(WatchDelayMs);
+    connect(&m_watchTimer, &QTimer::timeout, this, [this] {
+        for (const QString &folder : std::exchange(m_changed, {}))
+            if (m_slots.contains(folder))
+                refresh(folder);
+    });
+}
+
+void FileIndexCache::watch(const QString &folder, Slot &slot)
+{
+#ifdef Q_OS_WIN
+    // (A watched folder cannot be deleted there while its change handle is open: a worktree removed,
+    // a folder deleted by the agent would fail. The 15 s refresh and each turn's end follow the disk.)
+    Q_UNUSED(folder);
+    Q_UNUSED(slot);
+#else
+    QStringList wanted{QDir::cleanPath(folder)};
+    if (slot.index)
+        for (const QString &sub : slot.index->folders(MaxWatched - 1))
+            wanted << QDir::cleanPath(folder + u'/' + sub);
+    if (!slot.watcher) {
+        slot.watcher = new QFileSystemWatcher(this);
+        connect(slot.watcher, &QFileSystemWatcher::directoryChanged, this,
+                [this, folder](const QString &) { changedOnDisk(folder); });
+    }
+    const QStringList now = slot.watcher->directories();
+    const QSet<QString> wantedSet(wanted.cbegin(), wanted.cend()), nowSet(now.cbegin(), now.cend());
+    QStringList gone, added;
+    for (const QString &d : now)
+        if (!wantedSet.contains(d))
+            gone << d;
+    for (const QString &d : std::as_const(wanted))
+        if (!nowSet.contains(d))
+            added << d;
+    if (!gone.isEmpty())
+        slot.watcher->removePaths(gone);
+    if (!added.isEmpty())
+        slot.watcher->addPaths(added);
+#endif
+}
+
+void FileIndexCache::changedOnDisk(const QString &folder)
+{
+    if (!m_changed.contains(folder))
+        m_changed << folder;
+    m_watchTimer.start();
+}
+
+void FileIndexCache::forget(Slot &slot)
+{
+    delete std::exchange(slot.watcher, nullptr);
+}
+
+int FileIndexCache::watchedCount(const QString &folder) const
+{
+    const auto it = m_slots.constFind(cleanFolder(folder));
+    return it != m_slots.cend() && it->watcher ? int(it->watcher->directories().size()) : 0;
 }
 
 FileIndexCache::~FileIndexCache()
@@ -236,6 +295,7 @@ void FileIndexCache::finish(const QString &folder, int generation, std::shared_p
     it->index = std::move(index);
     it->source = source;
     it->building = false;
+    watch(folder, *it);
     if (it->again)
         build(folder);
     Q_EMIT updated(folder);
@@ -251,6 +311,7 @@ void FileIndexCache::trim()
         }
         if (oldest == m_slots.end())
             return;
+        forget(*oldest);
         m_slots.erase(oldest);
     }
 }

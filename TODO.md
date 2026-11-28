@@ -27,7 +27,8 @@ done in the repository simply disappears from the list.
   docs/CODE.md "Settling and snoozing"); a new thread's title written
   by the AI by itself ("Regenerate title" is there), scratch threads
   without a project; in the file
-  viewer (docs/CODE-FILES.md): editing files, rendered Markdown / HTML / CSV / PDF / ZIP files, the index following the disk through a file watcher; in a thread's composer:
+  viewer (docs/CODE-FILES.md): editing files, rendered Markdown / HTML / CSV / PDF / ZIP files, the index following the disk on Windows (Linux and macOS watch the folders);
+  in a thread's composer:
   mentions of threads, models and pull requests (`#`), review comments as chips instead of text.
 
 * **AI: what is still missing** — extensions can ask a model (`b.ai` with tools and pictures,

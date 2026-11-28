@@ -44,7 +44,13 @@ Where the files come from (`FileIndexCache::build()`):
 `FileIndexCache` (one for the app) keeps one index per folder (at most 8 folders, the least
 recently asked for goes) and shares it between every view of it; while a build runs the last
 index answers. It builds again when asked: each turn's end (CodeView, when a thread's answer is
-written), every 15 s while the picker is open (`CodeFileIndex.live`), Reload. `CodeFileIndex` (QML)
+written), every 15 s while the picker is open (`CodeFileIndex.live`), Reload — and by itself when the
+disk changes: a `QFileSystemWatcher` on the folder and its indexed folders (`FileIndex::folders()`,
+shallow first, at most `MaxWatched` = 2 000 — the system's inotify watches are shared) builds it again
+`WatchDelayMs` (400 ms, coalesced) after a file is made, deleted or renamed in one of them; the
+watched set follows each build (a new folder watched, a deleted one dropped). Not on Windows, where a
+watched folder cannot be deleted while its change handle is open (a worktree removed, a folder the
+agent deletes): there the refreshes above follow the disk. `CodeFileIndex` (QML)
 is one view of a folder's index: `query`, `kinds` ("all", "files", "folders"), `limit`, `recent`
 (paths listed first while nothing is typed), `active` (false: nothing computed — a thread's
 composer while no "@" is being written); its `rows` carry `path`, `name`, `folder`, `isFolder`,
@@ -244,5 +250,5 @@ pages of the notebook.)
   CSV, PDF and ZIP files (here: their text; PDFs as binary files).
 * T3 Code's mentions of threads and models, and `#` for pull requests.
 * Review comments as chips in the composer: here they are text.
-* The index notices changes on disk only when it is refreshed (a turn's end, every 15 s while the
-  picker is open), not through a file watcher.
+* The index following the disk on Windows (only the refreshes there: a watched folder cannot be
+  deleted).

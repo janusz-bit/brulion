@@ -224,6 +224,17 @@ private Q_SLOTS:
         QCOMPARE(index.path(hits.at(0).entry).toString(), u"README.md"_s);
     }
 
+    // The folders a file watcher follows: shallow first, at most `max`.
+    void foldersToWatch()
+    {
+        const FileIndex index = FileIndex::fromPaths({u"src/app/main.cpp"_s, u"src/app/qml/Main.qml"_s,
+                                                      u"README.md"_s, u"docs/Żółw.md"_s});
+        QCOMPARE(index.folders(10), (QStringList{u"docs"_s, u"src"_s, u"src/app"_s, u"src/app/qml"_s}));
+        QCOMPARE(index.folders(2), (QStringList{u"docs"_s, u"src"_s}));
+        QCOMPARE(index.folders(0), QStringList());
+        QCOMPARE(FileIndex().folders(5), QStringList());
+    }
+
     void bounded()
     {
         QStringList files;
