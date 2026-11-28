@@ -1091,6 +1091,7 @@ Item {
             Image {
                 anchors.fill: parent
                 visible: card.cover !== ""
+                autoTransform: true // a photo stored sideways, upright by its EXIF orientation
                 source: card.cover
                 fillMode: Image.PreserveAspectCrop
                 asynchronous: true

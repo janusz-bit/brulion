@@ -3673,6 +3673,20 @@ void checkPictureView(QQuickWindow *window, AppController *app, const Check &che
               "a picture smaller than the view is shown at its own size, without a size toggle");
     }
 
+    // A phone's photo stored on its side (1000 × 700 pixels, EXIF orientation 6) is shown upright:
+    // the frame from its header and the pixels loaded both tall (tests/data/attachments).
+    if (const QString data = qEnvironmentVariable("BRULION_SELFTEST_PDF_DIR"); !data.isEmpty()) {
+        QFile sideways(QDir(data).filePath(u"../attachments/obrocone.jpg"_s));
+        check(sideways.open(QIODevice::ReadOnly), "the sideways photo of the test data is there");
+        const QString photo = workspace->createAttachment(u"assets/obrócone zdjęcie.jpg"_s, sideways.readAll());
+        app->openPage(photo);
+        check(waitFor([&] { return opened(photo) && pictureShown(); }), "the sideways photo opens");
+        QQuickItem *image = child(pictureView(), "pictureImage");
+        check(image && image->height() > image->width()
+                      && image->implicitHeight() > image->implicitWidth(),
+              "a photo stored on its side is shown upright, by its EXIF orientation");
+    }
+
     // A file name that looks like markup is shown as written (one line, not a line break). Windows
     // allows no "<" or ">" in file names: there entities stand for the markup.
     {

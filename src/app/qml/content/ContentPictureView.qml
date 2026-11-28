@@ -423,6 +423,7 @@ Item {
                             : Math.max(0, (flick.height - height) / 2)
             width: root.actualSize ? root.shownSize.width : root.fittedSize.width
             height: root.actualSize ? root.shownSize.height : root.fittedSize.height
+            autoTransform: true // a photo stored sideways, upright by its EXIF orientation
             source: root.asText ? "" : root.heldSource
             sourceSize: root.decodeSize
             // A drawing's other theme or version, the picture decoded for another size: the shown

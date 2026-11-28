@@ -242,6 +242,7 @@ ColumnLayout {
                             Layout.fillWidth: true
                             Layout.preferredHeight: status === Image.Ready ? Math.min(180, implicitHeight) : 0
                             visible: side.picture && status === Image.Ready
+                            autoTransform: true // a photo stored sideways, upright by its EXIF orientation
                             source: side.picture && side.path !== "" ? Workspace.assetUrl(side.path) : ""
                             sourceSize.height: 360
                             fillMode: Image.PreserveAspectFit

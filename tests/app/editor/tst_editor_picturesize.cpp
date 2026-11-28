@@ -11,6 +11,8 @@
 
 #include "testtiming.h"
 
+#include "exifjpeg.h"
+
 #include <QBuffer>
 #include <QElapsedTimer>
 #include <QFile>
@@ -104,6 +106,15 @@ QByteArray png(QSize size)
     buffer.open(QIODevice::WriteOnly);
     image.save(&buffer, "PNG");
     return buffer.data();
+}
+
+/// A white JPEG of `size` stored pixels with the EXIF orientation `orientation` (a phone's photo
+/// taken sideways).
+QByteArray orientedJpeg(QSize size, quint16 orientation)
+{
+    QImage image(size, QImage::Format_RGB32);
+    image.fill(Qt::white);
+    return brulion::test::exifOrientedJpeg(image, orientation);
 }
 
 } // namespace
@@ -252,6 +263,12 @@ private Q_SLOTS:
         QTest::newRow("truncated png") << png(QSize(640, 480)).left(64) << u"ucięty.png"_s << QSize(640, 480);
         QTest::newRow("not a picture") << QByteArray("tekst") << u"plik.png"_s << QSize();
         QTest::newRow("empty") << QByteArray() << u"pusty.png"_s << QSize();
+        // A photo stored sideways with its EXIF orientation: the size it is shown at, upright.
+        QTest::newRow("jpeg upright") << orientedJpeg(QSize(40, 30), 1) << u"łąka.jpg"_s << QSize(40, 30);
+        QTest::newRow("jpeg turned 180°") << orientedJpeg(QSize(40, 30), 3) << u"łąka.jpg"_s << QSize(40, 30);
+        QTest::newRow("jpeg turned 90°") << orientedJpeg(QSize(40, 30), 6) << u"łąka.jpg"_s << QSize(30, 40);
+        QTest::newRow("jpeg turned 270°") << orientedJpeg(QSize(40, 30), 8) << u"łąka.jpg"_s << QSize(30, 40);
+        QTest::newRow("jpeg transposed") << orientedJpeg(QSize(40, 30), 5) << u"łąka.jpg"_s << QSize(30, 40);
     }
 
     void raster()

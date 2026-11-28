@@ -100,6 +100,7 @@ Item {
         Image {
             visible: card.isGroup && card.background !== ""
             anchors.fill: parent
+            autoTransform: true // a photo stored sideways, upright by its EXIF orientation
             source: visible && card.cards ? card.cards.pictureUrl(card.background) : ""
             asynchronous: true
             fillMode: card.backgroundStyle === "repeat" ? Image.Tile
@@ -272,6 +273,7 @@ Item {
             anchors.fill: parent
             anchors.margins: card.fileKind === "pdf" ? Theme.space3 : 0
             anchors.bottomMargin: card.fileKind === "pdf" ? 28 : 0
+            autoTransform: true // a photo stored sideways, upright by its EXIF orientation
             source: visible ? content.pictureUrl : ""
             asynchronous: true
             fillMode: card.fileKind === "picture" ? Image.PreserveAspectCrop : Image.PreserveAspectFit

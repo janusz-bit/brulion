@@ -112,6 +112,7 @@ BDialog {
                     border.color: tile.visualFocus ? Theme.focusRing : tile.hovered ? Theme.accent : Theme.border
                 }
                 contentItem: Image {
+                    autoTransform: true // a photo stored sideways, upright by its EXIF orientation
                     source: tile.url
                     asynchronous: true
                     fillMode: Image.PreserveAspectCrop

@@ -378,6 +378,7 @@ Item {
                 width: coverBand.width
                 height: Math.max(coverBand.height, naturalHeight)
                 y: -(height - coverBand.height) * header.coverPosition
+                autoTransform: true // a photo stored sideways, upright by its EXIF orientation
                 source: coverBand.coverState === "ready" ? AppController.routeText(header.cover, "url") : ""
                 asynchronous: true
                 fillMode: Image.PreserveAspectCrop

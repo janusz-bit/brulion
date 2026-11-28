@@ -352,6 +352,7 @@ Column {
                     objectName: "embedImage"
                     anchors.fill: parent
                     anchors.margins: 1
+                    autoTransform: true // a photo stored sideways, upright by its EXIF orientation
                     source: picture.heldUrl
                     // (Logical pixels for a drawing: Qt renders image providers at the screen's ratio.)
                     sourceSize: embed.drawing && embed.sizeKnown

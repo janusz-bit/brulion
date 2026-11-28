@@ -235,6 +235,7 @@ T.Popup {
                                          : Math.max(1, Math.round(viewer.shownSize.width * viewer.fitScale))
                 height: viewer.actualSize ? viewer.shownSize.height
                                           : Math.max(1, Math.round(viewer.shownSize.height * viewer.fitScale))
+                autoTransform: true // a photo stored sideways, upright by its EXIF orientation
                 source: viewer.visible ? viewer.source : ""
                 sourceSize: viewer.decodeSize
                 fillMode: viewer.scalable ? Image.PreserveAspectFit : Image.Stretch

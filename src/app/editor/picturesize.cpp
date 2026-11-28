@@ -62,6 +62,14 @@ QSize readerSize(QImageReader &reader)
     return size.isValid() && !size.isEmpty() ? size : QSize();
 }
 
+/// readerSize() as the picture is shown: a photo stored sideways (its EXIF orientation a quarter
+/// turn) upright, as the editor's and the picture view's `Image.autoTransform` draw it.
+QSize shownSize(QImageReader &reader)
+{
+    const QSize size = readerSize(reader);
+    return reader.transformation().testFlag(QImageIOHandler::TransformationRotate90) ? size.transposed() : size;
+}
+
 QSize svgSize(QIODevice *device)
 {
     const qint64 start = device->pos();
@@ -133,7 +141,7 @@ QSize pictureSize(QIODevice *device, const QString &fileName)
     }
     // No format: the reader recognises the content (with a QFile, its name's suffix as a hint).
     QImageReader reader(device);
-    return readerSize(reader);
+    return shownSize(reader);
 }
 
 QSize localPictureSize(const QString &file)

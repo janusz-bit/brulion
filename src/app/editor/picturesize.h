@@ -3,7 +3,8 @@
 // gives an embedded picture its size from the start, so its block keeps its height when the
 // picture has loaded (docs/UI.md "Scrolling performance"). On the GUI thread, while blocks are
 // created during scrolling, so it must stay cheap for any file:
-//  * raster pictures: their header (QImageReader::size()), tens of microseconds;
+//  * raster pictures: their header (QImageReader::size()), tens of microseconds — a photo stored
+//    sideways with an EXIF orientation as shown, upright (the QML Images have autoTransform);
 //  * SVG: only the root <svg> element — its width, height and viewBox, given to Qt's SVG reader
 //    as a document of their own (Qt's own rules for units, percentages and the viewBox). Qt's
 //    reader would parse the whole document for its size (a 2.4 MB drawing: 0.6 s on a phone-
