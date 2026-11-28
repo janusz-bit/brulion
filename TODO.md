@@ -345,8 +345,8 @@ done in the repository simply disappears from the list.
     laptop — time, memory, the cache's size;
   * OCR on the phone (decided against for now: +25 MB per ABI, docs/ANDROID.md) — reconsider with an
     on-demand download of the engine and models;
-  * the text of other attachments: spreadsheets (XLSX, ODS), presentations in ODP, speaker notes of
-    PPTX, documents' headers and comments; a document's text shown in its read-only view instead of
+  * the text of other attachments: an ODS's sheets and an ODP's slides as pages of their own (read
+    as one text in parts today), documents' headers and comments; a document's text shown in its read-only view instead of
     its bytes (a hit now opens the file with "Open in another app"); DOC, PPT and RTF; the pictures
     inside documents (OCR);
   * the recognized text written into a scanned PDF as its text layer ("Make searchable…"),

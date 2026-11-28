@@ -118,9 +118,9 @@ ColumnLayout {
                 Layout.fillWidth: true
                 text: qsTr("Search in attachments")
                 description: section.attachments.pdfTextAvailable
-                             ? qsTr("The text of PDFs, page by page, and of documents (DOCX, PPTX, ODT, EPUB); a result opens the PDF at its page with the words highlighted.")
+                             ? qsTr("The text of PDFs, page by page, and of documents (DOCX, PPTX, ODT, EPUB, XLSX, ODS, ODP); a result opens the PDF at its page with the words highlighted.")
                              : section.attachments.documentTextAvailable
-                               ? qsTr("The text of documents (DOCX, PPTX, ODT, EPUB). PDFs are not read in this version of Brulion; pictures are found by their names (and with text recognition by their words).")
+                               ? qsTr("The text of documents (DOCX, PPTX, ODT, EPUB, XLSX, ODS, ODP). PDFs are not read in this version of Brulion; pictures are found by their names (and with text recognition by their words).")
                                : qsTr("PDFs are not read in this version of Brulion; pictures are found by their names (and with text recognition by their words).")
                 checked: AppSettings.attachmentSearch
                 onToggled: AppSettings.attachmentSearch = checked

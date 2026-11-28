@@ -3969,7 +3969,7 @@ Tests: `tst_text_find`, `tst_notebook_replace`, `tst_markdown_render`, `tst_edit
 ## Searching attachments (`src/app/attachments`, core `attachments`)
 
 The whole-notebook search (route `search`, `SearchView`) finds words in the notebook's **PDFs**,
-**documents** (DOCX, PPTX, ODT, EPUB) and **pictures** too, page by page, in the background and
+**documents** (DOCX, PPTX with its speaker notes, ODT, EPUB, spreadsheets in XLSX and ODS — a sheet a page, a row a line —, presentations in ODP) and **pictures** too, page by page, in the background and
 offline. User guide: the documentation's page
 "Search" ("Szukanie").
 

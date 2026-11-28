@@ -121,6 +121,13 @@ struct Header {
     qsizetype size = 0; ///< the header's bytes (with its checksum)
 };
 
+/// A kind this version knows, at most MaxPages pages stored, no more than the file has.
+bool plausibleHeader(quint8 kind, quint32 pageCount, quint32 stored)
+{
+    const bool known = kind >= quint8(Kind::Pdf) && kind <= quint8(Kind::Odp);
+    return known && stored <= quint32(MaxPages) && pageCount <= 100'000'000u && stored <= pageCount;
+}
+
 /// The fixed part's fields; nullopt when they cannot be a record's.
 std::optional<Header> decodeFixed(QByteArrayView bytes)
 {
@@ -136,8 +143,7 @@ std::optional<Header> decodeFixed(QByteArrayView bytes)
     r.u16();
     const quint32 pageCount = r.u32();
     const quint32 stored = r.u32();
-    if (!r.ok() || (kind < quint8(Kind::Pdf) || kind > quint8(Kind::Epub)) || stored > quint32(MaxPages)
-        || pageCount > 100'000'000u || stored > pageCount)
+    if (!r.ok() || !plausibleHeader(kind, pageCount, stored))
         return std::nullopt;
     h.info.kind = Kind(kind);
     h.info.locked = flags & FlagLocked;

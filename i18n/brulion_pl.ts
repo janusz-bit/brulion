@@ -743,6 +743,16 @@
         <translation>Szukaj w załącznikach</translation>
     </message>
     <message>
+        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="121"/>
+        <source>The text of PDFs, page by page, and of documents (DOCX, PPTX, ODT, EPUB, XLSX, ODS, ODP); a result opens the PDF at its page with the words highlighted.</source>
+        <translation>Tekst PDF-ów, strona po stronie, i dokumentów (DOCX, PPTX, ODT, EPUB, XLSX, ODS, ODP); wynik otwiera PDF na swojej stronie z podświetlonymi słowami.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="123"/>
+        <source>The text of documents (DOCX, PPTX, ODT, EPUB, XLSX, ODS, ODP). PDFs are not read in this version of Brulion; pictures are found by their names (and with text recognition by their words).</source>
+        <translation>Tekst dokumentów (DOCX, PPTX, ODT, EPUB, XLSX, ODS, ODP). PDF-y nie są czytane w tej wersji Brulionu; obrazy są znajdowane po nazwach (a z rozpoznawaniem tekstu — po słowach).</translation>
+    </message>
+    <message>
         <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="124"/>
         <source>PDFs are not read in this version of Brulion; pictures are found by their names (and with text recognition by their words).</source>
         <translation>Ta wersja Brulionu nie czyta PDF-ów; obrazy znajdziesz po nazwach (a z rozpoznawaniem tekstu — po ich słowach).</translation>
@@ -751,16 +761,6 @@
         <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="133"/>
         <source>Recognize text in pictures and scans (OCR)</source>
         <translation>Rozpoznawaj tekst na obrazach i skanach (OCR)</translation>
-    </message>
-    <message>
-        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="121"/>
-        <source>The text of PDFs, page by page, and of documents (DOCX, PPTX, ODT, EPUB); a result opens the PDF at its page with the words highlighted.</source>
-        <translation>Tekst PDF-ów, strona po stronie, i dokumentów (DOCX, PPTX, ODT, EPUB); wynik otwiera PDF na jego stronie ze słowami podświetlonymi.</translation>
-    </message>
-    <message>
-        <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="123"/>
-        <source>The text of documents (DOCX, PPTX, ODT, EPUB). PDFs are not read in this version of Brulion; pictures are found by their names (and with text recognition by their words).</source>
-        <translation>Tekst dokumentów (DOCX, PPTX, ODT, EPUB). W tej wersji Brulionu PDF-y nie są czytane; obrazy są znajdowane po nazwach (a z rozpoznawaniem tekstu — po słowach).</translation>
     </message>
     <message>
         <location filename="../src/app/qml/attachments/AttachmentSettings.qml" line="135"/>

@@ -8,11 +8,16 @@
 //         text of tracked changes and the fallback copies of mc:AlternateContent are left out;
 //         cut into parts of about `partChars` characters at paragraph ends
 //   PPTX  ppt/slides/slideN.xml in the order of ppt/presentation.xml's slide list (the slide files'
-//         numbers when there is none) — one page per slide, its a:p / a:t paragraphs (no speaker
-//         notes)
+//         numbers when there is none) — one page per slide, its a:p / a:t paragraphs, then (after a
+//         blank line) its speaker notes (the slide's notesSlide relationship)
 //   ODT   content.xml — text:p and text:h with spaces, tabs, line breaks, footnotes and notes in
 //         the margin (not the tracked changes' deleted text, not the authors and dates of
 //         comments); cut into parts like DOCX
+//   ODS, ODP  content.xml as ODT's: a spreadsheet's cells and a presentation's text boxes are
+//         text:p paragraphs (cut into parts like DOCX; not per sheet or slide yet)
+//   XLSX  xl/workbook.xml's sheets in their order (xl/worksheets/sheetN.xml by number when the list
+//         is unreadable) — one page per sheet: each row a line, its cells by tabs — shared strings,
+//         inline strings, numbers and formulas' cached values (not the formulas)
 //   EPUB  META-INF/container.xml → the package's spine → the XHTML files in that order — one page
 //         per file (one over `epubUnitChars` is cut at paragraph ends), the body's text with
 //         paragraphs at block elements, without scripts, styles, the head and SVG
@@ -45,10 +50,10 @@ QT_END_NAMESPACE
 
 namespace brulion::attachments {
 
-enum class DocumentFormat : quint8 { Docx, Pptx, Odt, Epub };
+enum class DocumentFormat : quint8 { Docx, Pptx, Odt, Epub, Xlsx, Ods, Odp };
 
-/// The format a file's name says (".docx", ".pptx", ".odt", ".epub", any case); nullopt for any
-/// other name.
+/// The format a file's name says (".docx", ".pptx", ".odt", ".epub", ".xlsx", ".ods", ".odp", any
+/// case); nullopt for any other name.
 std::optional<DocumentFormat> documentFormatOf(QStringView path);
 /// The record kind of a format's files, and back.
 Kind kindOf(DocumentFormat format);

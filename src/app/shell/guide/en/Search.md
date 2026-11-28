@@ -35,7 +35,7 @@ Brulion reads attachments **in the background, on this device, offline** — not
 
 What was read is kept on this device (not in the notebook, so it doesn't go through sync): an unchanged file is never read again, and a renamed or moved one keeps its text. A changed file is read again.
 
-**Documents** (DOCX, PPTX, ODT, EPUB) are ZIP files of XML, so their text is read straight from them, in reading order: paragraphs, text boxes, footnotes, slides' text (not speaker notes), an e-book's chapters in order; no macros, pictures or anything else inside is ever run or opened. A password-protected or damaged document — and one that is far larger than a real one — is found by its file name only. No text recognition is needed.
+**Documents** (DOCX, PPTX, ODT, EPUB), **spreadsheets** (XLSX, ODS) and **presentations in ODP** are ZIP files of XML, so their text is read straight from them, in reading order: paragraphs, text boxes, footnotes, slides' text with their speaker notes, a spreadsheet's cells sheet by sheet (values, not formulas), an e-book's chapters in order; no macros, pictures or anything else inside is ever run or opened. A password-protected or damaged document — and one that is far larger than a real one — is found by its file name only. No text recognition is needed.
 
 ## Text recognition (OCR)
 A scanned PDF page or a picture has no text of its own — **text recognition** reads it from the picture. It is **off by default**, because it takes about a second of one processor core per page (at the lowest priority, so the computer stays responsive). Turn it on in **Settings → Search → Recognize text in pictures and scans (OCR)**. Then:

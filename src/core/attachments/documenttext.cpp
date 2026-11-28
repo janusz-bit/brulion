@@ -24,6 +24,8 @@ namespace {
 constexpr quint64 MaxDeflateRatio = 1100;
 /// The most of the central directory read into memory (10,000 entries with long names fit).
 constexpr qint64 MaxDirectoryBytes = qint64(16) << 20;
+/// The shared strings of a workbook kept (a hostile file listing millions: the rest are none).
+constexpr qsizetype MaxSharedStrings = 1'000'000;
 /// The tail searched for the end-of-central-directory record (its comment is at most 65,535 bytes).
 constexpr qint64 EndRecordSearch = 65'557;
 /// The most spaces one ODF `text:s` stands for.
@@ -294,6 +296,24 @@ bool declaresEntities(const QXmlStreamReader &xml)
 
 /// What an entity of HTML 4 that XML does not know stands for (an EPUB 2's XHTML names them without
 /// declaring them: the reader cannot resolve them).
+enum class Token : quint8 { Start, End, Text, Other };
+
+/// The next token of `xml`: an element's start or end, text, or anything else; nullopt at the
+/// end, on an error, or at a DOCTYPE declaring entities.
+std::optional<Token> nextToken(QXmlStreamReader &xml)
+{
+    if (xml.atEnd())
+        return std::nullopt;
+    switch (xml.readNext()) {
+    case QXmlStreamReader::StartElement: return Token::Start;
+    case QXmlStreamReader::EndElement: return Token::End;
+    case QXmlStreamReader::Characters: return Token::Text;
+    case QXmlStreamReader::DTD: return declaresEntities(xml) ? std::nullopt : std::optional(Token::Other);
+    case QXmlStreamReader::Invalid: return std::nullopt;
+    default: return Token::Other;
+    }
+}
+
 QString htmlEntity(QStringView name)
 {
     static const QHash<QString, QString> known = {
@@ -521,62 +541,240 @@ DocumentText readWord(Context &c)
     return result;
 }
 
+/// The speaker notes of `slide` (its relationship of type …/notesSlide), "" none.
+QString speakerNotes(Context &c, const QString &slide)
+{
+    QByteArray rels;
+    if (c.archive.read(relationshipsOf(slide), rels) != Part::Ok)
+        return {};
+    for (const Relationship &r : readRelationships(rels)) {
+        if (!r.type.endsWith(u"/notesSlide"_s))
+            continue;
+        Paragraphs notes;
+        notes.budget = &c.budget;
+        readPart(c, resolveTarget(slide, r.target), Dialect::Slide, notes);
+        return notes.list.join(u'\n');
+    }
+    return {};
+}
+
+/// The relationships of `part` by id: their targets resolved (nullopt: unreadable).
+std::optional<QHash<QString, QString>> relationshipTargets(Context &c, const QString &part)
+{
+    QByteArray rels;
+    if (c.archive.read(relationshipsOf(part), rels) != Part::Ok)
+        return std::nullopt;
+    QHash<QString, QString> targets;
+    for (const Relationship &r : readRelationships(rels))
+        targets.insert(r.id, resolveTarget(part, r.target));
+    return targets;
+}
+
+/// The parts `list` names in its order: its `element`s' relationship ids through the list's own
+/// relationships (empty: the list or its relationships unreadable).
+QStringList listedParts(Context &c, const QString &list, QStringView element)
+{
+    QStringList parts;
+    QByteArray data;
+    const auto targets = relationshipTargets(c, list);
+    if (c.archive.read(list, data) != Part::Ok || !targets)
+        return parts;
+    QXmlStreamReader xml(data);
+    configure(xml);
+    while (parts.size() < MaxPages) {
+        const auto token = nextToken(xml);
+        if (!token)
+            break;
+        if (*token != Token::Start || xml.name() != element)
+            continue;
+        const QString target = targets->value(attributeIn(xml, u"id", "relationships"_L1));
+        if (!target.isEmpty() && !parts.contains(target))
+            parts.append(target);
+    }
+    return parts;
+}
+
+/// The archive's parts whose names match `pattern` (its first group a number), by that number.
+QStringList partsByNumber(Context &c, const QRegularExpression &pattern)
+{
+    QList<std::pair<int, QString>> numbered;
+    for (const QString &name : c.archive.names()) {
+        if (const QRegularExpressionMatch m = pattern.match(name); m.hasMatch())
+            numbered.append({m.captured(1).toInt(), name});
+    }
+    std::ranges::sort(numbered);
+    QStringList out;
+    for (const auto &entry : std::as_const(numbered))
+        out.append(entry.second);
+    return out;
+}
+
+/// The office document `_rels/.rels` names (its officeDocument relationship), else `fallback`.
+QString officeDocument(Context &c, const QString &fallback)
+{
+    QByteArray rels;
+    if (c.archive.read(u"_rels/.rels"_s, rels) != Part::Ok)
+        return fallback;
+    for (const Relationship &r : readRelationships(rels)) {
+        if (r.type.endsWith(u"/officeDocument"_s) && !r.target.isEmpty())
+            return resolveTarget(QString(), r.target);
+    }
+    return fallback;
+}
+
+/// A slide's page: its paragraphs, then (after a blank line) its speaker notes.
+QString slidePage(Context &c, const QString &slide)
+{
+    Paragraphs paragraphs;
+    paragraphs.budget = &c.budget;
+    if (readPart(c, slide, Dialect::Slide, paragraphs) == Part::Locked)
+        c.locked = true;
+    QString page = paragraphs.list.join(u'\n');
+    if (const QString notes = speakerNotes(c, slide); !notes.isEmpty())
+        page += u"\n\n"_s + notes;
+    return page;
+}
+
 DocumentText readSlides(Context &c)
 {
     DocumentText result;
-    QString presentation = u"ppt/presentation.xml"_s;
-    QByteArray rels;
-    if (c.archive.read(u"_rels/.rels"_s, rels) == Part::Ok) {
-        for (const Relationship &r : readRelationships(rels)) {
-            if (r.type.endsWith(u"/officeDocument"_s) && !r.target.isEmpty()) {
-                presentation = resolveTarget(QString(), r.target);
-                break;
-            }
-        }
-    }
-    QStringList slides;
-    QByteArray list;
-    if (c.archive.read(presentation, list) == Part::Ok && c.archive.read(relationshipsOf(presentation), rels) == Part::Ok) {
-        QHash<QString, QString> targets;
-        for (const Relationship &r : readRelationships(rels))
-            targets.insert(r.id, resolveTarget(presentation, r.target));
-        QXmlStreamReader xml(list);
-        configure(xml);
-        while (!xml.atEnd() && slides.size() < MaxPages) {
-            if (xml.readNext() == QXmlStreamReader::DTD && declaresEntities(xml))
-                break;
-            if (xml.isStartElement() && xml.name() == u"sldId") {
-                const QString target = targets.value(attributeIn(xml, u"id", "relationships"_L1));
-                if (!target.isEmpty() && !slides.contains(target))
-                    slides.append(target);
-            }
-        }
-    }
-    if (slides.isEmpty()) {
-        // No (readable) list: the slide files in the order of their numbers.
-        static const QRegularExpression slide(u"^ppt/slides/slide(\\d+)\\.xml$"_s);
-        QList<std::pair<int, QString>> numbered;
-        for (const QString &name : c.archive.names()) {
-            const QRegularExpressionMatch m = slide.match(name);
-            if (m.hasMatch())
-                numbered.append({m.captured(1).toInt(), name});
-        }
-        std::ranges::sort(numbered);
-        for (const auto &entry : std::as_const(numbered))
-            slides.append(entry.second);
-    }
+    const QString presentation = officeDocument(c, u"ppt/presentation.xml"_s);
+    QStringList slides = listedParts(c, presentation, u"sldId");
+    // No (readable) list: the slide files in the order of their numbers.
+    static const QRegularExpression slide(u"^ppt/slides/slide(\\d+)\\.xml$"_s);
+    if (slides.isEmpty())
+        slides = partsByNumber(c, slide);
     if (slides.isEmpty() && !c.archive.contains(presentation))
         return result; // (no presentation at all)
     result.status = DocumentText::Status::Ok;
-    for (const QString &slide : std::as_const(slides)) {
+    for (const QString &part : std::as_const(slides)) {
         if (c.cancelledNow || result.pages.size() >= MaxPages)
             break;
-        Paragraphs paragraphs;
-        paragraphs.budget = &c.budget;
-        const Part status = readPart(c, slide, Dialect::Slide, paragraphs);
-        if (status == Part::Locked)
-            c.locked = true;
-        result.pages.append(paragraphs.list.join(u'\n'));
+        result.pages.append(slidePage(c, part));
+    }
+    return result;
+}
+
+/// The shared strings of a workbook as they are read: each si's text — its t elements, not those
+/// of its phonetic runs (rPh).
+struct SharedStrings {
+    QStringList list;
+    QString current;
+    int phonetic = 0;
+    bool inText = false;
+
+    void element(QStringView name, bool start)
+    {
+        if (name == u"si")
+            start ? current.clear() : list.append(current);
+        else if (name == u"rPh")
+            phonetic += start ? 1 : -1;
+        else if (name == u"t")
+            inText = start;
+    }
+    void text(QStringView t)
+    {
+        if (inText && phonetic == 0)
+            current += t;
+    }
+};
+
+QStringList sharedStrings(Context &c)
+{
+    QByteArray data;
+    SharedStrings out;
+    if (c.archive.read(u"xl/sharedStrings.xml"_s, data) != Part::Ok)
+        return {};
+    QXmlStreamReader xml(data);
+    configure(xml);
+    while (out.list.size() < MaxSharedStrings) {
+        const auto token = nextToken(xml);
+        if (!token)
+            break;
+        if (*token == Token::Text)
+            out.text(xml.text());
+        else if (*token != Token::Other)
+            out.element(xml.name(), *token == Token::Start);
+    }
+    return out.list;
+}
+
+/// The sheet parts of a workbook in its order, else xl/worksheets/sheetN.xml by number.
+QStringList sheetParts(Context &c)
+{
+    const QStringList sheets = listedParts(c, u"xl/workbook.xml"_s, u"sheet");
+    static const QRegularExpression sheet(u"^xl/worksheets/sheet(\\d+)\\.xml$"_s);
+    return sheets.isEmpty() ? partsByNumber(c, sheet) : sheets;
+}
+
+/// A sheet's cells as they are read: a line per row, its cells' texts by tabs — a shared string
+/// (t="s"), an inline string (t="inlineStr"), else the value as written (a number, a formula's
+/// cached result, a boolean, an error).
+struct SheetRows {
+    const QStringList &shared;
+    Paragraphs &out;
+    QStringList cells;
+    QString type;
+    QString value;
+    bool inValue = false;
+
+    void element(QStringView name, bool start, const QXmlStreamReader &xml)
+    {
+        if (name == u"row" && !start) {
+            out.add(cells.join(u'\t'));
+            cells.clear();
+        } else if (name == u"c") {
+            start ? cellStarts(attribute(xml, u"t")) : cellEnds();
+        } else if (name == u"v" || (name == u"t" && type == u"inlineStr")) {
+            inValue = start;
+        }
+    }
+    void cellStarts(const QString &t)
+    {
+        type = t;
+        value.clear();
+    }
+    void cellEnds()
+    {
+        const QString text = (type == u"s" ? shared.value(value.trimmed().toInt()) : value).trimmed();
+        if (!text.isEmpty())
+            cells.append(text);
+    }
+};
+
+void readSheet(QByteArrayView data, const QStringList &shared, Paragraphs &out)
+{
+    QXmlStreamReader xml(data.toByteArray());
+    configure(xml);
+    SheetRows rows{shared, out, {}, {}, {}, false};
+    while (!out.full()) {
+        const auto token = nextToken(xml);
+        if (!token)
+            break;
+        if (*token == Token::Text && rows.inValue)
+            rows.value += xml.text();
+        else if (*token == Token::Start || *token == Token::End)
+            rows.element(xml.name(), *token == Token::Start, xml);
+    }
+}
+
+DocumentText readWorkbook(Context &c)
+{
+    DocumentText result;
+    const QStringList sheets = sheetParts(c);
+    if (sheets.isEmpty())
+        return result;
+    const QStringList shared = sharedStrings(c);
+    result.status = DocumentText::Status::Ok;
+    for (const QString &sheet : sheets) {
+        if (c.cancelledNow || result.pages.size() >= MaxPages || (c.cancelled && c.cancelled()))
+            break;
+        QByteArray data;
+        Paragraphs rows;
+        rows.budget = &c.budget;
+        if (c.archive.read(sheet, data) == Part::Ok)
+            readSheet(data, shared, rows);
+        result.pages.append(rows.list.join(u'\n'));
     }
     return result;
 }
@@ -747,45 +945,65 @@ DocumentText readEpub(Context &c)
 
 } // namespace
 
+namespace {
+
+/// Each format: its kind, its file name's suffix, its reader.
+struct FormatInfo {
+    DocumentFormat format;
+    Kind kind;
+    QStringView suffix;
+    DocumentText (*read)(Context &);
+};
+
+constexpr FormatInfo Formats[] = {
+        {DocumentFormat::Docx, Kind::Docx, u".docx", readWord},
+        {DocumentFormat::Pptx, Kind::Pptx, u".pptx", readSlides},
+        {DocumentFormat::Odt, Kind::Odt, u".odt", readOpenDocument},
+        {DocumentFormat::Epub, Kind::Epub, u".epub", readEpub},
+        {DocumentFormat::Xlsx, Kind::Xlsx, u".xlsx", readWorkbook},
+        {DocumentFormat::Ods, Kind::Ods, u".ods", readOpenDocument},
+        {DocumentFormat::Odp, Kind::Odp, u".odp", readOpenDocument},
+};
+
+/// `result` as its reading ended: locked when a part was (an ODT's encrypted parts) and nothing was
+/// read, truncated when the text or the archive's budget ran out.
+void finish(DocumentText &result, bool locked, bool truncated)
+{
+    if (locked && result.status != DocumentText::Status::Ok)
+        result.status = DocumentText::Status::Locked;
+    result.truncated = truncated;
+}
+
+/// A device a document can be read from: open, readable, seekable.
+bool readableDevice(const QIODevice &device)
+{
+    return device.isOpen() && device.isReadable() && !device.isSequential();
+}
+
+const FormatInfo &infoOf(DocumentFormat format)
+{
+    return *std::ranges::find(Formats, format, &FormatInfo::format);
+}
+
+} // namespace
+
 std::optional<DocumentFormat> documentFormatOf(QStringView path)
 {
-    struct Extension {
-        QStringView suffix;
-        DocumentFormat format;
-    };
-    static constexpr Extension extensions[] = {{u".docx", DocumentFormat::Docx},
-                                               {u".pptx", DocumentFormat::Pptx},
-                                               {u".odt", DocumentFormat::Odt},
-                                               {u".epub", DocumentFormat::Epub}};
-    for (const Extension &e : extensions) {
-        if (path.endsWith(e.suffix, Qt::CaseInsensitive) && path.size() > e.suffix.size())
-            return e.format;
-    }
-    return std::nullopt;
+    const auto it = std::ranges::find_if(Formats, [path](const FormatInfo &f) {
+        return path.size() > f.suffix.size() && path.endsWith(f.suffix, Qt::CaseInsensitive);
+    });
+    return it == std::end(Formats) ? std::nullopt : std::optional(it->format);
 }
 
 Kind kindOf(DocumentFormat format)
 {
-    switch (format) {
-    case DocumentFormat::Docx: return Kind::Docx;
-    case DocumentFormat::Pptx: return Kind::Pptx;
-    case DocumentFormat::Odt: return Kind::Odt;
-    case DocumentFormat::Epub: return Kind::Epub;
-    }
-    return Kind::Docx;
+    return infoOf(format).kind;
 }
 
 std::optional<DocumentFormat> documentFormatOf(Kind kind)
 {
-    switch (kind) {
-    case Kind::Docx: return DocumentFormat::Docx;
-    case Kind::Pptx: return DocumentFormat::Pptx;
-    case Kind::Odt: return DocumentFormat::Odt;
-    case Kind::Epub: return DocumentFormat::Epub;
-    case Kind::Pdf:
-    case Kind::Picture: return std::nullopt;
-    }
-    return std::nullopt;
+    const auto it = std::ranges::find(Formats, kind, &FormatInfo::kind);
+    return it == std::end(Formats) ? std::nullopt : std::optional(it->format);
 }
 
 bool isDocumentKind(Kind kind)
@@ -795,22 +1013,19 @@ bool isDocumentKind(Kind kind)
 
 QString kindName(Kind kind)
 {
-    switch (kind) {
-    case Kind::Pdf: return u"pdf"_s;
-    case Kind::Picture: return u"picture"_s;
-    case Kind::Pptx: return u"presentation"_s;
-    case Kind::Docx:
-    case Kind::Odt:
-    case Kind::Epub: return u"document"_s;
-    }
-    return u"document"_s;
+    // (An ODP's pages are no slides yet: parts of its text, as a document's.)
+    if (kind == Kind::Pdf)
+        return u"pdf"_s;
+    if (kind == Kind::Picture)
+        return u"picture"_s;
+    return kind == Kind::Pptx ? u"presentation"_s : u"document"_s;
 }
 
 std::optional<DocumentText> extractDocumentText(QIODevice &device, DocumentFormat format, const DocumentLimits &limits,
                                                 const std::function<bool()> &cancelled)
 {
     DocumentText result;
-    if (!device.isOpen() || !device.isReadable() || device.isSequential())
+    if (!readableDevice(device))
         return result;
     if (device.size() > limits.maxFileBytes) {
         result.status = DocumentText::Status::TooLarge;
@@ -820,17 +1035,10 @@ std::optional<DocumentText> extractDocumentText(QIODevice &device, DocumentForma
     if (!archive.open())
         return result;
     Context context{archive, limits, cancelled, TextBudget{limits.maxTextChars}};
-    switch (format) {
-    case DocumentFormat::Docx: result = readWord(context); break;
-    case DocumentFormat::Pptx: result = readSlides(context); break;
-    case DocumentFormat::Odt: result = readOpenDocument(context); break;
-    case DocumentFormat::Epub: result = readEpub(context); break;
-    }
+    result = infoOf(format).read(context);
     if (context.cancelledNow || (cancelled && cancelled()))
         return std::nullopt;
-    if (context.locked && result.status != DocumentText::Status::Ok)
-        result.status = DocumentText::Status::Locked;
-    result.truncated = context.budget.truncated || archive.budgetSpent();
+    finish(result, context.locked, context.budget.truncated || archive.budgetSpent());
     return result;
 }
 

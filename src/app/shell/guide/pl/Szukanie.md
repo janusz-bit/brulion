@@ -35,7 +35,7 @@ Brulion czyta załączniki **w tle, na tym urządzeniu, bez internetu** — nic 
 
 To, co przeczytano, zostaje na tym urządzeniu (nie w notatniku, więc nie idzie przez synchronizację): niezmieniony plik nie jest czytany drugi raz, a przemianowany lub przeniesiony zachowuje swój tekst. Zmieniony plik jest czytany od nowa.
 
-**Dokumenty** (DOCX, PPTX, ODT, EPUB) to pliki ZIP z XML-em, więc ich tekst jest czytany wprost z nich, w kolejności czytania: akapity, ramki tekstowe, przypisy, tekst slajdów (bez notatek prelegenta), rozdziały e-booka po kolei; nic, co jest w środku — makra, obrazy — nie jest uruchamiane ani otwierane. Dokument chroniony hasłem albo uszkodzony — i taki, który jest znacznie większy niż prawdziwy — jest znajdowany tylko po nazwie pliku. Rozpoznawanie tekstu nie jest potrzebne.
+**Dokumenty** (DOCX, PPTX, ODT, EPUB), **arkusze** (XLSX, ODS) i **prezentacje ODP** to pliki ZIP z XML-em, więc ich tekst jest czytany wprost z nich, w kolejności czytania: akapity, ramki tekstowe, przypisy, tekst slajdów z notatkami prelegenta, komórki arkusza po kolei (wartości, nie formuły), rozdziały e-booka po kolei; nic, co jest w środku — makra, obrazy — nie jest uruchamiane ani otwierane. Dokument chroniony hasłem albo uszkodzony — i taki, który jest znacznie większy niż prawdziwy — jest znajdowany tylko po nazwie pliku. Rozpoznawanie tekstu nie jest potrzebne.
 
 ## Rozpoznawanie tekstu (OCR)
 Zeskanowana strona PDF-a albo obraz nie ma własnego tekstu — **rozpoznawanie tekstu** odczytuje go z obrazu. Jest **domyślnie wyłączone**, bo zajmuje około sekundy jednego rdzenia procesora na stronę (z najniższym priorytetem, więc komputer nie zwalnia). Włączysz je w **Ustawienia → Szukaj → Rozpoznawaj tekst na obrazach i skanach (OCR)**. Wtedy:

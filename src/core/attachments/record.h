@@ -45,7 +45,7 @@ inline constexpr qint64 MaxRecordBytes = 1'000'000'000;
 
 /// What a file is: a PDF, a picture, or a document read from its XML (documenttext.h: DOCX and PPTX —
 /// Office Open XML —, ODT, EPUB).
-enum class Kind : quint8 { Pdf = 1, Picture = 2, Docx = 3, Pptx = 4, Odt = 5, Epub = 6 };
+enum class Kind : quint8 { Pdf = 1, Picture = 2, Docx = 3, Pptx = 4, Odt = 5, Epub = 6, Xlsx = 7, Ods = 8, Odp = 9 };
 
 /// Where a page's text came from.
 enum class PageSource : quint8 {

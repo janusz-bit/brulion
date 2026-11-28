@@ -5,7 +5,7 @@ import QtQuick.Templates as T
 import Brulion
 
 // SearchView — route "search" ({query?, folder?}): full-text search over every note and the
-// notebook's PDFs, documents (DOCX, PPTX, ODT, EPUB) and pictures (SearchResultModel: folded words — "zolw" finds "Żółw" —, prefix of
+// notebook's PDFs, documents (DOCX, PPTX, ODT, EPUB, XLSX, ODS, ODP) and pictures (SearchResultModel: folded words — "zolw" finds "Żółw" —, prefix of
 // the last word, fuzzy, titles first; attachments by their text layer, their XML and OCR, docs/UI.md
 // "Searching attachments") with the matched words highlighted in titles and excerpts, filters (All /
 // Pages / Journals / Attachments, the query's own in:pdf, in:pictures…, a folder: the route's — the

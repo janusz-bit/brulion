@@ -193,7 +193,10 @@ private Q_SLOTS:
         QTest::newRow("only a suffix") << u".docx"_s << -1;
         QTest::newRow("doc") << u"stare.doc"_s << -1;
         QTest::newRow("macro docm") << u"makro.docm"_s << -1;
-        QTest::newRow("xlsx") << u"arkusz.xlsx"_s << -1;
+        QTest::newRow("xlsx") << u"arkusz.xlsx"_s << int(DocumentFormat::Xlsx);
+        QTest::newRow("ods") << u"Budżet.ODS"_s << int(DocumentFormat::Ods);
+        QTest::newRow("odp") << u"slajdy/Wykład.odp"_s << int(DocumentFormat::Odp);
+        QTest::newRow("macro xlsm") << u"makro.xlsm"_s << -1;
         QTest::newRow("a note") << u"Notatka.md"_s << -1;
         QTest::newRow("a docx folder") << u"docx/Notatka.md"_s << -1;
         QTest::newRow("empty") << QString() << -1;
@@ -312,6 +315,40 @@ private Q_SLOTS:
         QCOMPARE(text.pages.size(), 3);
         QCOMPARE(text.pages.at(2), QString());
     }
+    void pptxSpeakerNotes()
+    {
+        // The speaker notes of a slide (its notesSlide relationship) after the slide's own text.
+        QList<io::FileEntry> entries = slideEntries();
+        entries.append(entry(u"ppt/slides/_rels/slide2.xml.rels"_s,
+                             u"<Relationships "_s + Rels
+                                     + u"><Relationship Id='rId1' Type='http://x/relationships/notesSlide' "
+                                       "Target='../notesSlides/notesSlide7.xml'/></Relationships>"_s));
+        entries.append(entry(u"ppt/notesSlides/notesSlide7.xml"_s,
+                             u"<p:notes "_s + A + u"><p:cSld><p:spTree><p:sp><p:txBody><a:p><a:r><a:t>Powiedzieć o żółwiu"
+                                                  "</a:t></a:r></a:p></p:txBody></p:sp></p:spTree></p:cSld></p:notes>"_s));
+        const DocumentText text = mustRead(zip(entries), DocumentFormat::Pptx);
+        QCOMPARE(text.pages.first(), u"Drugi slajd\nZażółć gęślą jaźń\n\nPowiedzieć o żółwiu"_s);
+        QCOMPARE(text.pages.at(2), u"Pierwszy slajd\nŻółć i gęślą"_s); // (no notes)
+    }
+    void pptxPresentationFromRelationships()
+    {
+        // The presentation where _rels/.rels says (not ppt/presentation.xml), a slide listed twice
+        // read once.
+        QList<io::FileEntry> entries = slideEntries();
+        entries[0] = entry(u"deck/main.xml"_s,
+                           u"<p:presentation "_s + A
+                                   + u"><p:sldIdLst><p:sldId id='256' r:id='rId5'/><p:sldId id='257' r:id='rId5'/>"
+                                     "</p:sldIdLst></p:presentation>"_s);
+        entries[1] = entry(u"deck/_rels/main.xml.rels"_s,
+                           u"<Relationships "_s + Rels
+                                   + u"><Relationship Id='rId5' Type='x/slide' Target='../ppt/slides/slide2.xml'/></Relationships>"_s);
+        entries.append(entry(u"_rels/.rels"_s,
+                             u"<Relationships "_s + Rels
+                                     + u"><Relationship Id='rId0' Type='x/metadata/core-properties' Target='docProps/core.xml'/>"
+                                       "<Relationship Id='rId1' Type='http://x/relationships/officeDocument' "
+                                       "Target='/deck/main.xml'/></Relationships>"_s));
+        QCOMPARE(mustRead(zip(entries), DocumentFormat::Pptx).pages, QStringList{u"Drugi slajd\nZażółć gęślą jaźń"_s});
+    }
     void pptxNotAPresentation()
     {
         QCOMPARE(mustRead(zip({entry(u"x.xml"_s, u"<x/>"_s)}), DocumentFormat::Pptx).status, Status::Unreadable);
@@ -336,6 +373,86 @@ private Q_SLOTS:
                  QStringList{u"Rozdział pierwszy\nZażółć   gęślą\tjaźń\nnowa linia koniec\nTreść przypisu o łące\n"
                              "Przypis dalej\nUwaga recenzenta\nPo uwadze\nPunkt listy"_s});
     }
+    void odsAndOdp()
+    {
+        // A spreadsheet's and a presentation's content.xml: the same paragraphs as a text's.
+        const QString cells = u"<office:spreadsheet><table:table table:name='Budżet'><table:table-row>"
+                               "<table:table-cell><text:p>Czynsz</text:p></table:table-cell>"
+                               "<table:table-cell office:value-type='float' office:value='1200'><text:p>1200</text:p></table:table-cell>"
+                               "</table:table-row></table:table></office:spreadsheet>"_s;
+        QList<io::FileEntry> ods = {
+                {u"mimetype"_s, "application/vnd.oasis.opendocument.spreadsheet"},
+                entry(u"content.xml"_s,
+                      u"<office:document-content "_s + Odf
+                              + u" xmlns:table='urn:oasis:names:tc:opendocument:xmlns:table:1.0'><office:body>"_s + cells
+                              + u"</office:body></office:document-content>"_s),
+                entry(u"META-INF/manifest.xml"_s, u"<manifest/>"_s)};
+        QCOMPARE(mustRead(zip(ods), DocumentFormat::Ods).pages, QStringList{u"Czynsz\n1200"_s});
+        QList<io::FileEntry> odp = {
+                {u"mimetype"_s, "application/vnd.oasis.opendocument.presentation"},
+                entry(u"content.xml"_s,
+                      u"<office:document-content "_s + Odf
+                              + u" xmlns:draw='urn:oasis:names:tc:opendocument:xmlns:drawing:1.0'><office:body>"
+                                "<office:presentation><draw:page><draw:frame><draw:text-box><text:p>Slajd o łące</text:p>"
+                                "</draw:text-box></draw:frame></draw:page></office:presentation></office:body>"
+                                "</office:document-content>"_s),
+                entry(u"META-INF/manifest.xml"_s, u"<manifest/>"_s)};
+        QCOMPARE(mustRead(zip(odp), DocumentFormat::Odp).pages, QStringList{u"Slajd o łące"_s});
+        QCOMPARE(kindName(kindOf(DocumentFormat::Odp)), u"document"_s);
+        QCOMPARE(kindName(kindOf(DocumentFormat::Xlsx)), u"document"_s);
+    }
+
+    // ---- XLSX ----
+    void xlsxSheets()
+    {
+        // One page per sheet in the workbook's order: shared strings, inline strings, numbers and
+        // formulas' results, a row's cells joined by tabs; a hidden part's text is no cell's.
+        const QString ns = u"xmlns='http://schemas.openxmlformats.org/spreadsheetml/2006/main' "
+                            "xmlns:r='http://schemas.openxmlformats.org/officeDocument/2006/relationships'"_s;
+        const QList<io::FileEntry> entries = {
+                entry(u"xl/workbook.xml"_s,
+                      u"<workbook "_s + ns
+                              + u"><sheets><sheet name='Druga' sheetId='2' r:id='rId2'/><sheet name='Pierwsza' sheetId='1' "
+                                "r:id='rId1'/></sheets></workbook>"_s),
+                entry(u"xl/_rels/workbook.xml.rels"_s,
+                      u"<Relationships "_s + Rels
+                              + u"><Relationship Id='rId1' Type='x/worksheet' Target='worksheets/sheet1.xml'/>"
+                                "<Relationship Id='rId2' Type='x/worksheet' Target='worksheets/sheet2.xml'/></Relationships>"_s),
+                entry(u"xl/sharedStrings.xml"_s,
+                      u"<sst "_s + ns
+                              + u"><si><t>Zażółć</t></si><si><r><t>gęślą </t></r><r><t>jaźń</t></r></si>"
+                                "<si><t>Łąka</t><rPh><t>fonetyka</t></rPh></si></sst>"_s),
+                entry(u"xl/worksheets/sheet1.xml"_s,
+                      u"<worksheet "_s + ns
+                              + u"><sheetData><row r='1'><c r='A1' t='s'><v>0</v></c><c r='B1' t='s'><v>1</v></c></row>"
+                                "<row r='2'><c r='A2'><v>42.5</v></c><c r='B2' t='inlineStr'><is><t>w linii</t></is></c>"
+                                "<c r='C2'><f>A2*2</f><v>85</v></c><c r='D2' t='s'><v>99</v></c></row></sheetData></worksheet>"_s),
+                entry(u"xl/worksheets/sheet2.xml"_s,
+                      u"<worksheet "_s + ns + u"><sheetData><row r='1'><c r='A1' t='s'><v>2</v></c></row></sheetData></worksheet>"_s),
+        };
+        const DocumentText text = mustRead(zip(entries), DocumentFormat::Xlsx);
+        QCOMPARE(text.status, Status::Ok);
+        QCOMPARE(text.pages, (QStringList{u"Łąka"_s, u"Zażółć\tgęślą jaźń\n42.5\tw linii\t85"_s}));
+        QCOMPARE(mustRead(zip({entry(u"x.xml"_s, u"<x/>"_s)}), DocumentFormat::Xlsx).status, Status::Unreadable);
+        // Shared strings with a DOCTYPE of their own entities ("billion laughs"): none of them; a
+        // sheet with one: no rows. The workbook still reads.
+        QList<io::FileEntry> hostile = entries;
+        hostile[2] = entry(u"xl/sharedStrings.xml"_s,
+                           u"<!DOCTYPE sst [<!ENTITY a 'ha'><!ENTITY b '&a;&a;&a;&a;'>]><sst "_s + ns
+                                   + u"><si><t>&b;</t></si></sst>"_s);
+        hostile[4] = entry(u"xl/worksheets/sheet2.xml"_s,
+                           u"<!DOCTYPE worksheet [<!ENTITY x 'y'>]><worksheet "_s + ns
+                                   + u"><sheetData><row><c t='inlineStr'><is><t>&x;</t></is></c></row></sheetData></worksheet>"_s);
+        const DocumentText guarded = mustRead(zip(hostile), DocumentFormat::Xlsx);
+        QCOMPARE(guarded.status, Status::Ok);
+        QCOMPARE(guarded.pages, (QStringList{QString(), u"42.5\tw linii\t85"_s}));
+        // A record of these kinds survives the cache.
+        for (const DocumentFormat f : {DocumentFormat::Xlsx, DocumentFormat::Ods, DocumentFormat::Odp}) {
+            const Record r = documentRecord(f, text, 3);
+            QCOMPARE(decodeRecord(encodeRecord(r))->kind, kindOf(f));
+        }
+    }
+
     void odtEncrypted()
     {
         QList<io::FileEntry> entries = {
