@@ -237,15 +237,21 @@ void CodeGit::setTurnCheckpoint(const QString &id)
 
 void CodeGit::setFetchInterval(int ms)
 {
+    if (setTimer(m_fetchInterval, m_fetchTimer, ms))
+        Q_EMIT fetchIntervalChanged();
+}
+
+bool CodeGit::setTimer(int &interval, QTimer &timer, int ms)
+{
     ms = qMax(0, ms);
-    if (ms == m_fetchInterval)
-        return;
-    m_fetchInterval = ms;
+    if (ms == interval)
+        return false;
+    interval = ms;
     if (ms > 0)
-        m_fetchTimer.start(ms);
+        timer.start(ms);
     else
-        m_fetchTimer.stop();
-    Q_EMIT fetchIntervalChanged();
+        timer.stop();
+    return true;
 }
 
 void CodeGit::fetchQuietly()
@@ -267,15 +273,8 @@ void CodeGit::fetchQuietly()
 
 void CodeGit::setPollInterval(int ms)
 {
-    ms = qMax(0, ms);
-    if (ms == m_pollInterval)
-        return;
-    m_pollInterval = ms;
-    if (ms > 0)
-        m_poll.start(ms);
-    else
-        m_poll.stop();
-    Q_EMIT pollIntervalChanged();
+    if (setTimer(m_pollInterval, m_poll, ms))
+        Q_EMIT pollIntervalChanged();
 }
 
 // ---- Refresh -----------------------------------------------------------------------------------
@@ -1457,17 +1456,18 @@ void CodeGit::resolve(const QString &path, const QString &how)
 
 void CodeGit::stageLines(const QString &path, const QVariantList &rows, int from, int to)
 {
-    const LineRanges r = selectedRanges(rows, from, to);
-    simpleAction(u"stageLines"_s, [this, path, r](const QString &root, auto done) {
-        m_client.applyLines(root, path, gitcli::HunkAction::Stage, r.oldFirst, r.oldLast, r.newFirst, r.newLast, done);
-    });
+    applyRows(u"stageLines"_s, gitcli::HunkAction::Stage, path, selectedRanges(rows, from, to));
 }
 
 void CodeGit::discardLines(const QString &path, const QVariantList &rows, int from, int to)
 {
-    const LineRanges r = selectedRanges(rows, from, to);
-    simpleAction(u"discardLines"_s, [this, path, r](const QString &root, auto done) {
-        m_client.applyLines(root, path, gitcli::HunkAction::Discard, r.oldFirst, r.oldLast, r.newFirst, r.newLast, done);
+    applyRows(u"discardLines"_s, gitcli::HunkAction::Discard, path, selectedRanges(rows, from, to));
+}
+
+void CodeGit::applyRows(const QString &name, gitcli::HunkAction action, const QString &path, const LineRanges &r)
+{
+    simpleAction(name, [this, action, path, r](const QString &root, auto done) {
+        m_client.applyLines(root, path, action, r.oldFirst, r.oldLast, r.newFirst, r.newLast, done);
     });
 }
 

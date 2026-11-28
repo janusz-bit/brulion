@@ -24,6 +24,8 @@
 // another in the order asked (`busy`, `busyAction`), so a restore never meets a checkpoint.
 #pragma once
 
+#include "gitdiffrows.h"
+
 #include "gitcli/client.h"
 
 #include <QFileSystemWatcher>
@@ -471,6 +473,10 @@ private:
     QString m_turnCheckpoint;
     int m_pollInterval = 0;
     int m_fetchInterval = 0;
+    /// `interval` set to `ms` (at least 0), `timer` started or stopped with it: false when unchanged.
+    static bool setTimer(int &interval, QTimer &timer, int ms);
+    /// A line action (stageLines(), discardLines()) on the ranges of rows.
+    void applyRows(const QString &name, gitcli::HunkAction action, const QString &path, const LineRanges &r);
     QTimer m_fetchTimer;
     bool m_fetching = false;
     QString m_lastFetchError;

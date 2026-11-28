@@ -32,24 +32,30 @@ QString cleanLine(const QString &text)
     return out.simplified();
 }
 
+/// One of `allowed` for t3.json's `key` into `field`; anything else left out with `warning`.
+void readChoice(const QJsonObject &o, const QString &key, const QStringList &allowed, QString &field,
+                const QString &warning, QStringList &warnings)
+{
+    const QString value = o.value(key).toString();
+    if (allowed.contains(value))
+        field = value;
+    else if (o.contains(key))
+        warnings << warning;
+}
+
 /// t3.json's defaultThreadEnvMode: "local" or "worktree", anything else left out with a warning.
 void readEnvMode(const QJsonObject &o, CodeProjects::Config &config)
 {
-    const QString mode = o.value(u"defaultThreadEnvMode"_s).toString();
-    if (mode == u"local" || mode == u"worktree")
-        config.defaultThreadEnvMode = mode;
-    else if (o.contains(u"defaultThreadEnvMode"_s))
-        config.warnings << CodeProjects::tr("defaultThreadEnvMode is neither “local” nor “worktree”: left out.");
+    readChoice(o, u"defaultThreadEnvMode"_s, {u"local"_s, u"worktree"_s}, config.defaultThreadEnvMode,
+               CodeProjects::tr("defaultThreadEnvMode is neither “local” nor “worktree”: left out."), config.warnings);
 }
 
 /// t3.json's worktreeSubmodules: "recursive", "top-level" or "none", anything else left out with a warning.
 void readSubmodules(const QJsonObject &o, CodeProjects::Config &config)
 {
-    const QString mode = o.value(u"worktreeSubmodules"_s).toString();
-    if (mode == u"recursive" || mode == u"top-level" || mode == u"none")
-        config.worktreeSubmodules = mode;
-    else if (o.contains(u"worktreeSubmodules"_s))
-        config.warnings << CodeProjects::tr("worktreeSubmodules is neither “recursive”, “top-level” nor “none”: left out.");
+    readChoice(o, u"worktreeSubmodules"_s, {u"recursive"_s, u"top-level"_s, u"none"_s}, config.worktreeSubmodules,
+               CodeProjects::tr("worktreeSubmodules is neither “recursive”, “top-level” nor “none”: left out."),
+               config.warnings);
 }
 
 /// t3.json's worktreeSparsePatternsPath: the patterns of a file inside the project (at most 64 KB; its
