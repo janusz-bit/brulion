@@ -11,6 +11,7 @@
 #include "blocklistmodel.h"
 #include "fakeeditorhost.h"
 #include "pagecontroller.h"
+#include "mediarows_p.h"
 #include "pageview.h"
 #include "picturecache.h"
 #include "queryresultmodel.h"
@@ -154,6 +155,10 @@ private Q_SLOTS:
     void foreignKindsStayTheDelegates();
     void fileChipsAndPdfThumbnails();
     void pdfBeingDrawnOrFailed();
+    void pdfTileShapes_data();
+    void pdfTileShapes();
+    void pdfCaption_data();
+    void pdfCaption();
     void editedRowKeepsItsPictures();
     void transclusionDrawnWithLinksAndTasks();
     void queryResultsDrawn();
@@ -442,6 +447,63 @@ void TestAtramentMedia::pdfBeingDrawnOrFailed()
     h.tw.settle();
     QVERIFY(h.view().drawsRow(0));
     QVERIFY(h.waitDecoded(0));
+    // The page 3 px inside its frame (PdfEmbedTile's margins), the frame at the tile's top.
+    const at::Rect frame = h.frames(0)[0].bounds;
+    QCOMPARE(frame.top(), h.node(at::Role::Button, u"wykład.pdf")->bounds.top());
+    bool drawn = false;
+    for (const at::Primitive &p : h.tw.lastScene()->primitives())
+        if (const auto *thumbPicture = std::get_if<at::Picture>(&p); thumbPicture && frame.contains(thumbPicture->bounds.center())) {
+            // (Fitted into it: the thumbnail's shape is the page's within a px.)
+            QVERIFY2(std::abs(thumbPicture->bounds.left() - (frame.left() + 3)) < 0.01f
+                             && thumbPicture->bounds.top() >= frame.top() + 3 - 0.01f && thumbPicture->bounds.top() <= frame.top() + 5,
+                     qPrintable(u"%1,%2 in %3,%4"_s.arg(thumbPicture->bounds.left()).arg(thumbPicture->bounds.top()).arg(frame.left()).arg(frame.top())));
+            drawn = true;
+        }
+    QVERIFY(drawn);
+}
+
+// The tile's shape: the page's size (A4 upright at 297 px, a slide at 480), else its thumbnail's,
+// else A4's; never over 420 px high; a page's shape kept between 1/32 and 32.
+void TestAtramentMedia::pdfTileShapes_data()
+{
+    QTest::addColumn<QVariantMap>("embed");
+    QTest::addColumn<float>("width");
+    QTest::newRow("A4") << QVariantMap{{u"pageWidth"_s, 595.0}, {u"pageHeight"_s, 842.0}} << 297.0f;
+    QTest::newRow("slide") << QVariantMap{{u"pageWidth"_s, 1920.0}, {u"pageHeight"_s, 1080.0}} << 480.0f;
+    QTest::newRow("thumbnail only") << QVariantMap{{u"width"_s, 300}, {u"height"_s, 212}} << 480.0f;
+    QTest::newRow("nothing known") << QVariantMap{} << 297.0f;
+    QTest::newRow("tall: 420 px high") << QVariantMap{{u"pageWidth"_s, 595.0}, {u"pageHeight"_s, 1000.0}} << 249.0f;
+    QTest::newRow("a strip: 1/32 at most") << QVariantMap{{u"pageWidth"_s, 10.0}, {u"pageHeight"_s, 5000.0}} << 13.0f;
+}
+
+void TestAtramentMedia::pdfTileShapes()
+{
+    QFETCH(QVariantMap, embed);
+    QFETCH(float, width);
+    QCOMPARE(pdfWidth(pdfAspect(embed)), width);
+}
+
+// The caption after the name: the page count when known, the page shown when it is not the first
+// (and within the count).
+void TestAtramentMedia::pdfCaption_data()
+{
+    QTest::addColumn<int>("pages");
+    QTest::addColumn<int>("page");
+    QTest::addColumn<QString>("caption");
+    QTest::newRow("nothing known") << 0 << 1 << QString();
+    QTest::newRow("its pages") << 12 << 1 << u"· 12 page(s)"_s;
+    QTest::newRow("and the page") << 12 << 3 << u"· 12 page(s) · p. 3"_s;
+    QTest::newRow("the last page") << 12 << 12 << u"· 12 page(s) · p. 12"_s;
+    QTest::newRow("a page past the end") << 12 << 13 << u"· 12 page(s)"_s;
+    QTest::newRow("a page, no count") << 0 << 3 << u"· p. 3"_s;
+}
+
+void TestAtramentMedia::pdfCaption()
+{
+    QFETCH(int, pages);
+    QFETCH(int, page);
+    QFETCH(QString, caption);
+    QCOMPARE(pdfDetails(pages, page), caption);
 }
 
 void TestAtramentMedia::editedRowKeepsItsPictures()
@@ -501,6 +563,11 @@ void TestAtramentMedia::transclusionDrawnWithLinksAndTasks()
     QVERIFY2(link.contains(u"Seler"_s), qPrintable(link));
     QCOMPARE(linkPath, u"Przepisy.md"_s);
     QCOMPARE(linkLine, 1);
+    // Without the embedded blocks' own hook: the page's (onLink).
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &) { v.onEmbeddedLink = nullptr; });
+    opened.clear();
+    h.tw.simulateClick(seler->bounds.center());
+    QVERIFY2(opened.contains(u"Seler"_s), qPrintable(opened));
     // Its task's box changes the task in its own file.
     const at::AccessibilityNode *box = h.node(at::Role::CheckBox, u"Ugotuj ziemniaki");
     QVERIFY2(box, qPrintable(tree));
@@ -548,6 +615,10 @@ void TestAtramentMedia::queryResultsDrawn()
     h.tw.simulateClick(bakery->bounds.center());
     QVERIFY2(link.contains(u"Piekarnia"_s), qPrintable(link));
     QVERIFY(linkItem >= 0);
+    // Without the host's hook: the model's answer to the click (QueryResultModel::activateLink).
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &) { v.onQueryLink = nullptr; });
+    h.tw.simulateClick(bakery->bounds.center());
+    QCOMPARE(answeredRow, 1);
     // A task box: the task changes in its own file.
     const at::AccessibilityNode *milk = h.node(at::Role::CheckBox, u"Kupić mleko");
     QVERIFY2(milk, qPrintable(tree));

@@ -34,6 +34,13 @@ inline QString translated(const char *context, const char *text, int n = -1)
     return QCoreApplication::translate(context, text, nullptr, n);
 }
 
+// A PDF's tile (PdfEmbedTile): its page's shape (height over width: the page's size, else its
+// thumbnail's, else A4's; between 1/32 and 32), its width (297 px upright, 480 wide, at most 420
+// high) and the caption after the file's name ("· 12 pages · p. 3").
+double pdfAspect(const QVariantMap &e);
+float pdfWidth(double aspect);
+QString pdfDetails(int pages, int page);
+
 // An icon of Atrament's own until it draws BIcon's: a page (with lines for "file-text"), a
 // picture (a frame with a hill), a link (two rings) — outlines in `color`, centred in `b`.
 enum class Glyph { File, FileText, Picture, Heading, Link, Filter, Info };

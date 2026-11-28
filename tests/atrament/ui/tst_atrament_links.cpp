@@ -156,6 +156,7 @@ private Q_SLOTS:
     void linkAcrossALineBreak();
     void linkMenuBeforeTheRows();
     void hoverComesAndGoes();
+    void keysAndOtherActionsLeaveLinksAlone();
 };
 
 void TestAtramentLinks::clickHoverAndAccessibility()
@@ -306,6 +307,40 @@ void TestAtramentLinks::hoverComesAndGoes()
     h.tw.simulateTap(onOther);
     h.tw.settle();
     QCOMPARE(log().size(), before);
+}
+
+// A key pressed while the pointer rests on a link tells its hover nothing more; a screen reader's
+// action other than a click on a link does nothing; a link in a part hidden from screen readers is
+// no node.
+void TestAtramentLinks::keysAndOtherActionsLeaveLinksAlone()
+{
+    Harness h({500, 120});
+    Entity<Hovers> hovers = h.app.newEntity<Hovers>();
+    Window &w = h.app.openWindow(h.tw, hovers);
+    w.setAccessibilityEnabled(true);
+    h.tw.settle();
+    const AccessibilityNode *main = linkNode(w.accessibilityTree(), u"Główna");
+    QVERIFY(main);
+    h.tw.simulateMouseMove(centre(main->bounds));
+    QCOMPARE(hovers.read(h.app).log.size(), 1);
+    h.tw.simulateKeystrokes(u"a");
+    h.tw.settle();
+    QCOMPARE(hovers.read(h.app).log.size(), 1);
+    QVERIFY(!w.performAccessibilityAction(linkNode(w.accessibilityTree(), u"Główna")->id, AccessibilityAction::Focus));
+
+    Harness hidden({500, 120});
+    struct Hidden {
+        AnyElement render(Window &, Context<Hidden> &)
+        {
+            return div().sizeFull().p(10).child(div().ariaHidden().w(400).textSize(16).fontFamily(u"Brulion Inter").child(
+                    text(kText).link({14, 20}, [](const ClickEvent &, Window &, App &) {})));
+        }
+    };
+    Entity<Hidden> part = hidden.app.newEntity<Hidden>();
+    Window &hw = hidden.app.openWindow(hidden.tw, part);
+    hw.setAccessibilityEnabled(true);
+    hidden.tw.settle();
+    QVERIFY(!linkNode(hw.accessibilityTree(), u"Główna"));
 }
 
 QTEST_GUILESS_MAIN(TestAtramentLinks)

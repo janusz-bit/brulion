@@ -36,9 +36,9 @@ int PageView::linkPart(const LinkTarget &to)
     case LinkHome::Block: return kOwnText;
     case LinkHome::Cell: return cellPart(to.cellRow, to.cellColumn);
     case LinkHome::Embedded: return kEmbedPart;
-    case LinkHome::Result: return to.item;
+    case LinkHome::Result: break;
     }
-    return 0;
+    return to.item;
 }
 
 void PageView::addLinks(at::Text &t, const LinkTarget &to, const markdown::RenderedText &rt, PartText *record)
@@ -68,9 +68,9 @@ bool PageView::hasLinkMenu(LinkHome home) const
     case LinkHome::Block: return bool(onLinkMenu);
     case LinkHome::Cell: return true; // (on a phone in the selection mode: the row's long press)
     case LinkHome::Embedded: return bool(onEmbeddedLinkMenu);
-    case LinkHome::Result: return bool(onQueryLinkMenu);
+    case LinkHome::Result: break;
     }
-    return false;
+    return bool(onQueryLinkMenu);
 }
 
 void PageView::linkClicked(const LinkTarget &to, const QString &href, at::Point at, at::App &app)

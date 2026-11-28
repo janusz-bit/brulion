@@ -766,35 +766,6 @@ namespace {
 // The grey of a PDF tile's spinner and failure, on its white page in both themes.
 constexpr at::Color kPdfInk = at::rgb(0x5f6368);
 
-// A page's shape (its height over its width): the page's size, else its thumbnail's, else A4's.
-double pdfAspect(const QVariantMap &e)
-{
-    const double pageW = e.value(u"pageWidth"_s).toDouble();
-    const double pageH = e.value(u"pageHeight"_s).toDouble();
-    if (pageW > 0 && pageH > 0)
-        return std::clamp(pageH / pageW, 1.0 / 32, 32.0);
-    const QSize thumb(e.value(u"width"_s).toInt(), e.value(u"height"_s).toInt());
-    return thumb.isEmpty() ? 1.414 : double(thumb.height()) / thumb.width();
-}
-
-// The tile's width: 297 px for an upright page, 480 for a wide one, at most 420 px high.
-float pdfWidth(double aspect)
-{
-    const float width = aspect >= 1 ? 297 : 480;
-    return std::round(width * aspect) > 420 ? float(std::floor(420 / aspect)) : width;
-}
-
-// The caption after the name: "· 12 pages · p. 3".
-QString pdfDetails(int pages, int page)
-{
-    QString details;
-    if (pages > 0)
-        details = translated("PdfEmbedTile", "%n page(s)", pages);
-    if (page > 1 && (pages == 0 || page <= pages))
-        details += (details.isEmpty() ? QString() : u" · "_s) + translated("PdfEmbedTile", "p. %1").arg(page);
-    return details.isEmpty() ? details : u"· "_s + details;
-}
-
 // The tile for screen readers: the page shown, or why the PDF cannot be shown.
 QString pdfLabel(const QVariantMap &e, const QString &name, int page, int pages)
 {
@@ -834,6 +805,32 @@ at::AnyElement pdfFailure(const QVariantMap &e, const PageView::MediaLook &look)
 }
 
 } // namespace
+
+double pdfAspect(const QVariantMap &e)
+{
+    const double pageW = e.value(u"pageWidth"_s).toDouble();
+    const double pageH = e.value(u"pageHeight"_s).toDouble();
+    if (pageW > 0 && pageH > 0)
+        return std::clamp(pageH / pageW, 1.0 / 32, 32.0);
+    const QSize thumb(e.value(u"width"_s).toInt(), e.value(u"height"_s).toInt());
+    return thumb.isEmpty() ? 1.414 : double(thumb.height()) / thumb.width();
+}
+
+float pdfWidth(double aspect)
+{
+    const float width = aspect >= 1 ? 297 : 480;
+    return std::round(width * aspect) > 420 ? float(std::floor(420 / aspect)) : width;
+}
+
+QString pdfDetails(int pages, int page)
+{
+    QString details;
+    if (pages > 0)
+        details = translated("PdfEmbedTile", "%n page(s)", pages);
+    if (page > 1 && (pages == 0 || page <= pages))
+        details += (details.isEmpty() ? QString() : u" · "_s) + translated("PdfEmbedTile", "p. %1").arg(page);
+    return details.isEmpty() ? details : u"· "_s + details;
+}
 
 void PageView::paintPdfPage(at::Rect b, at::Window &w, const PdfPage &page)
 {

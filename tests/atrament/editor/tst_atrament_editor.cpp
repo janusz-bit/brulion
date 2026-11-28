@@ -99,6 +99,7 @@ private Q_SLOTS:
     void taskForScreenReaders();
     void linksAndTaskBoxesClick();
     void linkHovered();
+    void linkClickAndMenuAtTheirPlace();
     void longPageLaysOutWhatIsShown();
     void foldAboveKeepsTheScreen();
     void narrowerWindowReflows();
@@ -328,6 +329,44 @@ void TestAtramentEditor::linkHovered()
     h.tw.simulateMouseMove({page->bounds.left() - 30, page->bounds.center().y + 200});
     QCOMPARE(hovers.last(), u"0 |"_s);
     QCOMPARE(hovers.count(u"0 |"_s), 1);
+}
+
+// A link's click with the click's place (onLinkAt, used instead of onLink: a date chip's menu opens
+// there), a right-click its menu at the click's place (onLinkMenu), not the row's.
+void TestAtramentEditor::linkClickAndMenuAtTheirPlace()
+{
+    Harness h(u"Zobacz [[Strona główna]] dziś\n"_s);
+    QString clicked, menu, plain;
+    at::Point clickAt, menuAt;
+    int blockMenus = 0;
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &) {
+        v.onLink = [&](int, const QString &href) { plain = href; };
+        v.onLinkAt = [&](int, const QString &href, at::Point p) {
+            clicked = href;
+            clickAt = p;
+        };
+        v.onLinkMenu = [&](int, const QString &href, at::Point p) {
+            menu = href;
+            menuAt = p;
+        };
+        v.onBlockMenu = [&](int, at::Point) { ++blockMenus; };
+    });
+    h.window->setAccessibilityEnabled(true);
+    h.tw.settle();
+    const at::AccessibilityNode *page = nullptr;
+    for (const at::AccessibilityNode *n : h.window->accessibilityTree().nodes())
+        if (n->role == at::Role::Link && n->name.find(u"Strona") != std::u16string_view::npos)
+            page = n;
+    QVERIFY(page);
+    const at::Point on{std::floor(page->bounds.center().x), std::floor(page->bounds.center().y)};
+    h.tw.simulateClick(on);
+    QVERIFY2(clicked.contains(u"Strona"_s), qPrintable(clicked));
+    QCOMPARE(clickAt, on);
+    QVERIFY(plain.isEmpty());
+    h.tw.simulateClick(on, at::MouseButton::Right);
+    QVERIFY2(menu.contains(u"Strona"_s), qPrintable(menu));
+    QCOMPARE(menuAt, on);
+    QCOMPARE(blockMenus, 0);
 }
 
 void TestAtramentEditor::longPageLaysOutWhatIsShown()

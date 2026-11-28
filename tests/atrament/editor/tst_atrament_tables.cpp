@@ -204,6 +204,7 @@ private Q_SLOTS:
     void linkInACellClicked();
     void cellToolTips();
     void linkInACellHovered();
+    void cellLinkMenuOrTheRowsSelection();
     void clickEditsTheCellAtTheCharacter();
     void typingWritesTheFile();
     void tabAndEnterBetweenCells();
@@ -445,6 +446,30 @@ void TestAtramentTables::linkInACellClicked()
 // The pointer resting on a cell whose formula failed: its tooltip, the error; on a cell cut short
 // ("…"): its whole text; on a cell shown whole: none (TableBlockView's BToolTip). Over the cell;
 // gone when the pointer leaves it, the next cell's coming first or not.
+// A right-click on a link of a cell: the link's menu (onCellLinkMenu), not the row's long press; on a
+// phone in the selection mode (its grips shown): the row's (onLongPressRow), the selection's.
+void TestAtramentTables::cellLinkMenuOrTheRowsSelection()
+{
+    Harness h;
+    QString menuLink;
+    QList<int> held;
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &) {
+        v.onCellLinkMenu = [&](int, int, int, const QString &href, at::Point) { menuLink = href; };
+        v.onLongPressRow = [&](int row) { held.append(row); };
+    });
+    const int k = int(h.shown(0, 0).indexOf(u"Castorama"_s));
+    const at::Point onLink = h.pointOf(0, 0, k + 3);
+    h.tw.simulateClick(onLink, at::MouseButton::Right);
+    QVERIFY2(menuLink.contains(u"Castorama"_s), qPrintable(menuLink));
+    QVERIFY(held.isEmpty());
+    menuLink.clear();
+    h.page.update(h.app, [](PageView &v, at::Context<PageView> &cx) { v.setTouchSelection(true, false, cx); });
+    h.tw.settle();
+    h.tw.simulateClick(h.pointOf(0, 0, k + 3), at::MouseButton::Right);
+    QCOMPARE(held, QList<int>{TableRow});
+    QVERIFY(menuLink.isEmpty());
+}
+
 void TestAtramentTables::cellToolTips()
 {
     const QString longText = u"Bardzo długi opis pozycji, który na pewno nie zmieści się w jednej linii kolumny tabeli"_s;
