@@ -112,7 +112,9 @@ item hidden where it would be by default.
 2. **(done)** Vault: the note read with config.json (`Vault::settingsNote()`; `configChanged()` when
    either changes, the note made, renamed or deleted), `saveConfig()` writing the note's changed keys
    in place and config.json whole (`tst_vault` settingsNote…).
-3. Settings → Notebook: "Move the settings into a note", "Open the settings note"; guide en/pl.
+3. **(done)** Settings → Notebook → "Settings in a note": "Move into a note" (`Workspace.moveSettingsToNote()`:
+   named in the app's language, an ordinary page of that name never taken over — the other name, else
+   an error) and "Open the note" (`Workspace.settingsNote`); guide en/pl.
 4. Core `layoutspec`: the language's parser and printer (round trip), warnings.
 5. The app's layout from a `LayoutSpec` (rail, panel, more, bottom, tabs), "Edit as text", "Use the
    notebook's layout".

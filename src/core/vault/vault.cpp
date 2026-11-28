@@ -1473,6 +1473,11 @@ QString Vault::settingsNote() const
     return d->settingsNotePath;
 }
 
+QByteArray Vault::configJson() const
+{
+    return serializeVaultConfig(d->config, d->rawConfig);
+}
+
 QList<FileStat> Vault::files() const
 {
     if (!d->sortedFilesValid) {

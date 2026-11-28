@@ -1026,6 +1026,40 @@ private Q_SLOTS:
         QCOMPARE(changed.size(), 1);
     }
 
+    // "Move the settings into a note" (docs/NOTEBOOK-SETTINGS.md): the note made from config.json, in
+    // the notebook's language; the same settings; a second move changes nothing; a setting changed
+    // afterwards lands in both.
+    void settingsMovedIntoANote()
+    {
+        auto ws = open({{u".brulion/config.json"_s, uR"({"journalsFolder":"Dziennik","weekStartsOn":0,"agentHosts":[]})"_s},
+                        {u"Dziennik/2026-10-14.md"_s, u"- środa"_s}});
+        QCOMPARE(ws->settingsNote(), QString());
+        QSignalSpy changed(ws.get(), &Workspace::configChanged);
+        const QString path = ws->moveSettingsToNote();
+        QCOMPARE(path, u"Ustawienia notatnika.md"_s); // (the app's language: Polish here)
+        QCOMPARE(ws->settingsNote(), path);
+        const QString note = ws->readFile(path);
+        QVERIFY(note.startsWith(u"---\nbrulion: settings\n"_s));
+        QVERIFY(note.contains(u"journalsFolder: Dziennik\n"_s));
+        QVERIFY(note.contains(u"weekStartsOn: 0\n"_s));
+        QCOMPARE(ws->vaultConfig().value(u"journalsFolder"_s).toString(), u"Dziennik"_s);
+        QVERIFY(!changed.isEmpty());
+        QCOMPARE(ws->moveSettingsToNote(), path);
+        QCOMPARE(ws->readFile(path), note);
+        QVERIFY(ws->setConfig({{u"weekStartsOn"_s, 3}}));
+        QVERIFY(ws->readFile(path).contains(u"weekStartsOn: 3\n"_s));
+        QVERIFY(ws->readFile(u".brulion/config.json"_s).contains(u"\"weekStartsOn\": 3"_s));
+        QVERIFY(ws->readFile(path).contains(u"\n# Ustawienia notatnika\n"_s));
+        // An ordinary page of the name: left alone, the other name taken.
+        auto other = open({{u"Ustawienia notatnika.md"_s, u"Moje zwykłe notatki.\n"_s}});
+        QCOMPARE(other->moveSettingsToNote(), u"Notebook settings.md"_s);
+        QCOMPARE(other->readFile(u"Ustawienia notatnika.md"_s), u"Moje zwykłe notatki.\n"_s);
+        auto both = open({{u"Ustawienia notatnika.md"_s, u"a\n"_s}, {u"Notebook settings.md"_s, u"b\n"_s}});
+        QSignalSpy error(both.get(), &Workspace::errorOccurred);
+        QCOMPARE(both->moveSettingsToNote(), QString());
+        QCOMPARE(error.size(), 1);
+    }
+
     void favoritesAndRecentPages()
     {
         auto ws = open({ { u"a.md"_s, QString() }, { u"b.md"_s, QString() }, { u"Folder/c.md"_s, QString() } });

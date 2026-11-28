@@ -1423,6 +1423,25 @@ Item {
                     onActivated: (value) => Workspace.setConfig({ journalMode: value })
                 }
             }
+            // The settings in a note (docs/NOTEBOOK-SETTINGS.md): made from these, or opened.
+            ShellSettingRow {
+                objectName: "settingsNoteRow"
+                title: qsTr("Settings in a note")
+                description: Workspace.settingsNote !== ""
+                             ? qsTr("These settings are kept in the note “%1” too: edit them there, with your own comments, or here.").arg(Workspace.settingsNote)
+                             : qsTr("Keep these settings in a note of the notebook — edited like any page, in its history, synced with it. Older versions of Brulion keep reading them.")
+                BButton {
+                    objectName: "settingsNoteButton"
+                    text: Workspace.settingsNote !== "" ? qsTr("Open the note") : qsTr("Move into a note")
+                    iconName: Workspace.settingsNote !== "" ? "file-text" : "file-input"
+                    size: "small"
+                    onClicked: {
+                        const path = Workspace.settingsNote !== "" ? Workspace.settingsNote : Workspace.moveSettingsToNote()
+                        if (path !== "")
+                            AppController.navigate({ view: "page", path: path })
+                    }
+                }
+            }
             // An Obsidian vault without .brulion/config.json: the settings below come from its
             // .obsidian/ folder (in memory) until a setting here is changed or they are saved.
             ShellSettingRow {

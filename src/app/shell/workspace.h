@@ -190,6 +190,8 @@ class Workspace : public EditorHost, public QueryHost {
     Q_PROPERTY(int pagesWithoutJournals READ pagesWithoutJournals NOTIFY indexChanged FINAL)
     /// Vault configuration (see vaultConfig()).
     Q_PROPERTY(QVariantMap config READ vaultConfig NOTIFY configChanged FINAL)
+    /// The settings note (docs/NOTEBOOK-SETTINGS.md; "" none).
+    Q_PROPERTY(QString settingsNote READ settingsNote NOTIFY configChanged FINAL)
     /// [{ path, title }] pinned pages, in the user's order.
     Q_PROPERTY(QVariantList favorites READ favorites NOTIFY favoritesChanged FINAL)
     /// [{ path, title }] recently opened pages, newest first (at most 20).
@@ -774,6 +776,12 @@ public:
     /// Write the settings in use (also those taken from `.obsidian/`) to .brulion/config.json,
     /// for devices that do not see `.obsidian/` (the browser with Nextcloud).
     Q_INVOKABLE bool saveAdoptedConfig();
+    /// The notebook's settings note (docs/NOTEBOOK-SETTINGS.md; "" none): its settings over
+    /// config.json's.
+    QString settingsNote() const;
+    /// "Move the settings into a note": the note made from the settings in use (or completed:
+    /// idempotent), named in the app's language; its path ("" failed, said by errorOccurred()).
+    Q_INVOKABLE QString moveSettingsToNote();
 
     // ---- Lists for the shell ---------------------------------------------------------------
     /// Items for the quick switcher: [{ title, subtitle (folder / alias), icon, path }].

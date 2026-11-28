@@ -1,5 +1,7 @@
 #include "workspace.h"
 
+#include "vault/settingsnote.h"
+
 #include "indexworkers.h"
 #include "picturesize.h"
 #include "util/unicode.h"
@@ -1663,6 +1665,36 @@ QStringList Workspace::configWarnings() const
 QStringList Workspace::configFromObsidian() const
 {
     return m_vault ? m_vault->configAdoptedFromObsidian() : QStringList();
+}
+
+QString Workspace::settingsNote() const
+{
+    return m_vault ? m_vault->settingsNote() : QString();
+}
+
+QString Workspace::moveSettingsToNote()
+{
+    if (!m_vault)
+        return {};
+    // (An ordinary page of that name is never taken over: the other name, else none.)
+    QString path = m_vault->settingsNote();
+    QStringList names = settingsnote::noteNames();
+    names.move(names.indexOf(settingsnote::noteName(m_language)), 0);
+    for (int i = 0; path.isEmpty() && i < names.size(); ++i)
+        if (!exists(names.at(i)))
+            path = names.at(i);
+    if (path.isEmpty()) {
+        Q_EMIT errorOccurred(tr("Pages named “%1” are there already: rename one to move the settings into a note.")
+                                     .arg(names.join(u"”, “"_s)));
+        return {};
+    }
+    const QString before = exists(path) ? read(path) : QString();
+    const QString note = settingsnote::migratedNote(m_vault->configJson(), before, m_language);
+    if (note != before && !write(path, note)) {
+        Q_EMIT errorOccurred(tr("Could not save the notebook settings: %1").arg(m_vault->errorString()));
+        return {};
+    }
+    return path;
 }
 
 bool Workspace::saveAdoptedConfig()

@@ -313,6 +313,8 @@ public:
     bool saveConfig(const VaultConfig &config);
     /// The settings note config() reads over config.json (vault/settingsnote.h; "" none).
     QString settingsNote() const;
+    /// The settings in use as config.json's JSON (unknown keys kept): what a migration starts from.
+    QByteArray configJson() const;
 
     // --- queries (cached, no disk access) ------------------------------------------------
     /// Tracked, non-ignored files (conflict copies included), sorted by path.

@@ -132,10 +132,7 @@ done in the repository simply disappears from the list.
   what order (icons, labels, groups). Today this is set only in Settings → Appearance → Layout
   (hidden items, order of the panel's sections, bottom navigation buttons). Designed in
   docs/NOTEBOOK-SETTINGS.md "The layout language".
-* **Notebook settings in notes** — the notebook settings stored as a note (a page in the notebook,
-  editable like any other and synced together with it) instead of `.brulion/config.json`; to be
-  decided — the format, moving the existing settings, what stays a device setting: designed in
-  docs/NOTEBOOK-SETTINGS.md (its "Order of work" says what is built).
+
 * **Pictures from the internet — check on a real phone.** The Android emulator
   (`scripts/android-emulator-test.sh --web-pictures`) and the Chromium and Firefox browsers
   (`tests/web`, GitHub Actions) check this automatically; a real phone remains
