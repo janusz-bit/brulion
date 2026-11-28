@@ -3517,7 +3517,7 @@
     </message>
     <message numerus="yes">
         <location filename="../src/app/shell/workspacesyncencryption.cpp" line="135"/>
-        <location filename="../src/app/shell/workspacesyncencryption.cpp" line="187"/>
+        <location filename="../src/app/shell/workspacesyncencryption.cpp" line="188"/>
         <source>The notebook&apos;s password needs at least %n character(s).</source>
         <translation>
             <numerusform>The notebook&apos;s password needs at least %n character.</numerusform>

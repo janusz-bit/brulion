@@ -12346,7 +12346,7 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
 <context>
     <name>ExtensionRouteView</name>
     <message>
-        <location filename="../src/app/qml/views/ExtensionRouteView.qml" line="77"/>
+        <location filename="../src/app/qml/views/ExtensionRouteView.qml" line="82"/>
         <source>Extension: %1</source>
         <translation>Rozszerzenie: %1</translation>
     </message>
@@ -12356,17 +12356,17 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <translation>Wbudowany widok</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/ExtensionRouteView.qml" line="82"/>
+        <location filename="../src/app/qml/views/ExtensionRouteView.qml" line="95"/>
         <source>The view could not be drawn: %1</source>
         <translation>Nie udało się narysować widoku: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/ExtensionRouteView.qml" line="95"/>
+        <location filename="../src/app/qml/views/ExtensionRouteView.qml" line="108"/>
         <source>Nothing to show</source>
         <translation>Nie ma nic do pokazania</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/ExtensionRouteView.qml" line="96"/>
+        <location filename="../src/app/qml/views/ExtensionRouteView.qml" line="109"/>
         <source>This view of the extension is not loaded: its page may wait for approval or have an error (Settings → Extensions).</source>
         <translation>Ten widok rozszerzenia nie jest wczytany: jego strona może czekać na zatwierdzenie albo mieć błąd (Ustawienia → Rozszerzenia).</translation>
     </message>
@@ -17090,47 +17090,47 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <translation>Wyeksportowano z Brulionu</translation>
     </message>
     <message>
-        <location filename="../src/core/io/export_html.cpp" line="341"/>
+        <location filename="../src/core/io/export_html.cpp" line="342"/>
         <source>Linked references</source>
         <translation>Odnośniki</translation>
     </message>
     <message>
-        <location filename="../src/core/io/export_html.cpp" line="457"/>
+        <location filename="../src/core/io/export_html.cpp" line="458"/>
         <source>No pages found.</source>
         <translation>Nie znaleziono stron.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/export_html.cpp" line="464"/>
+        <location filename="../src/core/io/export_html.cpp" line="465"/>
         <source>Search</source>
         <translation>Szukaj</translation>
     </message>
     <message>
-        <location filename="../src/core/io/export_html.cpp" line="590"/>
+        <location filename="../src/core/io/export_html.cpp" line="591"/>
         <source>HTML website (ZIP)</source>
         <translation>Witryna HTML (ZIP)</translation>
     </message>
     <message>
-        <location filename="../src/core/io/export_html.cpp" line="621"/>
+        <location filename="../src/core/io/export_html.cpp" line="622"/>
         <source>Journals</source>
         <translation>Dziennik</translation>
     </message>
     <message>
-        <location filename="../src/core/io/export_html.cpp" line="623"/>
+        <location filename="../src/core/io/export_html.cpp" line="624"/>
         <source>Pages</source>
         <translation>Strony</translation>
     </message>
     <message>
-        <location filename="../src/core/io/export_html.cpp" line="629"/>
+        <location filename="../src/core/io/export_html.cpp" line="630"/>
         <source>Tags</source>
         <translation>Tagi</translation>
     </message>
     <message>
-        <location filename="../src/core/io/export_html.cpp" line="639"/>
+        <location filename="../src/core/io/export_html.cpp" line="640"/>
         <source>HTML document</source>
         <translation>Dokument HTML</translation>
     </message>
     <message>
-        <location filename="../src/core/io/export_html.cpp" line="689"/>
+        <location filename="../src/core/io/export_html.cpp" line="690"/>
         <source>Contents</source>
         <translation>Spis treści</translation>
     </message>
@@ -17234,91 +17234,91 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
     </message>
     <message>
         <location filename="../src/core/io/pandocrender.cpp" line="156"/>
-        <location filename="../src/core/io/paperdoc.cpp" line="227"/>
+        <location filename="../src/core/io/paperdoc.cpp" line="228"/>
         <source>highest</source>
         <translation>najwyższy</translation>
     </message>
     <message>
         <location filename="../src/core/io/pandocrender.cpp" line="157"/>
-        <location filename="../src/core/io/paperdoc.cpp" line="228"/>
+        <location filename="../src/core/io/paperdoc.cpp" line="229"/>
         <source>high</source>
         <translation>wysoki</translation>
     </message>
     <message>
         <location filename="../src/core/io/pandocrender.cpp" line="158"/>
-        <location filename="../src/core/io/paperdoc.cpp" line="229"/>
+        <location filename="../src/core/io/paperdoc.cpp" line="230"/>
         <source>medium</source>
         <translation>średni</translation>
     </message>
     <message>
         <location filename="../src/core/io/pandocrender.cpp" line="159"/>
-        <location filename="../src/core/io/paperdoc.cpp" line="230"/>
+        <location filename="../src/core/io/paperdoc.cpp" line="231"/>
         <source>low</source>
         <translation>niski</translation>
     </message>
     <message>
         <location filename="../src/core/io/pandocrender.cpp" line="160"/>
-        <location filename="../src/core/io/paperdoc.cpp" line="231"/>
+        <location filename="../src/core/io/paperdoc.cpp" line="232"/>
         <source>lowest</source>
         <translation>najniższy</translation>
     </message>
     <message>
         <location filename="../src/core/io/pandocrender.cpp" line="177"/>
         <location filename="../src/core/io/pandocrender.cpp" line="183"/>
-        <location filename="../src/core/io/paperdoc.cpp" line="246"/>
+        <location filename="../src/core/io/paperdoc.cpp" line="247"/>
         <source>due: %1</source>
         <translation>termin: %1</translation>
     </message>
     <message>
         <location filename="../src/core/io/pandocrender.cpp" line="178"/>
         <location filename="../src/core/io/pandocrender.cpp" line="184"/>
-        <location filename="../src/core/io/paperdoc.cpp" line="248"/>
+        <location filename="../src/core/io/paperdoc.cpp" line="249"/>
         <source>scheduled: %1</source>
         <translation>zaplanowane: %1</translation>
     </message>
     <message>
         <location filename="../src/core/io/pandocrender.cpp" line="179"/>
-        <location filename="../src/core/io/paperdoc.cpp" line="250"/>
+        <location filename="../src/core/io/paperdoc.cpp" line="251"/>
         <source>starts: %1</source>
         <translation>początek: %1</translation>
     </message>
     <message>
         <location filename="../src/core/io/pandocrender.cpp" line="180"/>
-        <location filename="../src/core/io/paperdoc.cpp" line="252"/>
+        <location filename="../src/core/io/paperdoc.cpp" line="253"/>
         <source>done: %1</source>
         <translation>zrobione: %1</translation>
     </message>
     <message>
         <location filename="../src/core/io/pandocrender.cpp" line="181"/>
-        <location filename="../src/core/io/paperdoc.cpp" line="254"/>
+        <location filename="../src/core/io/paperdoc.cpp" line="255"/>
         <source>cancelled: %1</source>
         <translation>anulowane: %1</translation>
     </message>
     <message>
         <location filename="../src/core/io/pandocrender.cpp" line="187"/>
         <location filename="../src/core/io/pandocrender.cpp" line="463"/>
-        <location filename="../src/core/io/paperdoc.cpp" line="241"/>
-        <location filename="../src/core/io/paperdoc.cpp" line="256"/>
+        <location filename="../src/core/io/paperdoc.cpp" line="242"/>
+        <location filename="../src/core/io/paperdoc.cpp" line="257"/>
         <source>repeats: %1</source>
         <translation>powtarzanie: %1</translation>
     </message>
     <message>
         <location filename="../src/core/io/pandocrender.cpp" line="193"/>
-        <location filename="../src/core/io/paperdoc.cpp" line="233"/>
+        <location filename="../src/core/io/paperdoc.cpp" line="234"/>
         <source>priority: %1</source>
         <translation>priorytet: %1</translation>
     </message>
     <message>
         <location filename="../src/core/io/pandocrender.cpp" line="196"/>
         <location filename="../src/core/io/pandocrender.cpp" line="465"/>
-        <location filename="../src/core/io/paperdoc.cpp" line="258"/>
+        <location filename="../src/core/io/paperdoc.cpp" line="259"/>
         <source>alarm: %1</source>
         <translation>alarm: %1</translation>
     </message>
     <message>
         <location filename="../src/core/io/pandocrender.cpp" line="197"/>
         <location filename="../src/core/io/pandocrender.cpp" line="466"/>
-        <location filename="../src/core/io/paperdoc.cpp" line="260"/>
+        <location filename="../src/core/io/paperdoc.cpp" line="261"/>
         <source>reminder: %1</source>
         <translation>przypomnienie: %1</translation>
     </message>
@@ -17338,69 +17338,69 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <translation>Pandoc Markdown (ZIP)</translation>
     </message>
     <message>
-        <location filename="../src/core/io/htmlrender.cpp" line="170"/>
-        <location filename="../src/core/io/paperdoc.cpp" line="440"/>
+        <location filename="../src/core/io/htmlrender.cpp" line="173"/>
+        <location filename="../src/core/io/paperdoc.cpp" line="441"/>
         <source>Diagram</source>
         <translation>Diagram</translation>
     </message>
     <message>
-        <location filename="../src/core/io/htmlrender.cpp" line="171"/>
+        <location filename="../src/core/io/htmlrender.cpp" line="174"/>
         <source>Diagram source</source>
         <translation>Źródło diagramu</translation>
     </message>
     <message>
-        <location filename="../src/core/io/htmlrender.cpp" line="606"/>
+        <location filename="../src/core/io/htmlrender.cpp" line="625"/>
         <source>Chart data and source</source>
         <translation>Dane i źródło wykresu</translation>
     </message>
     <message>
-        <location filename="../src/core/io/paperdoc.cpp" line="396"/>
+        <location filename="../src/core/io/paperdoc.cpp" line="397"/>
         <source>The picture “%1” could not be shown in the document.</source>
         <translation>Obrazu „%1” nie udało się pokazać w dokumencie.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/paperdoc.cpp" line="397"/>
-        <location filename="../src/core/io/paperdoc.cpp" line="400"/>
+        <location filename="../src/core/io/paperdoc.cpp" line="398"/>
+        <location filename="../src/core/io/paperdoc.cpp" line="401"/>
         <source>Picture: %1</source>
         <translation>Obraz: %1</translation>
     </message>
     <message>
-        <location filename="../src/core/io/paperdoc.cpp" line="444"/>
+        <location filename="../src/core/io/paperdoc.cpp" line="445"/>
         <source>A diagram could not be drawn in the document – its source is shown instead.</source>
         <translation>Diagramu nie udało się narysować w dokumencie – zamiast niego jest jego kod.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/paperdoc.cpp" line="451"/>
+        <location filename="../src/core/io/paperdoc.cpp" line="452"/>
         <source>Picture</source>
         <translation>Obraz</translation>
     </message>
     <message>
-        <location filename="../src/core/io/paperdoc.cpp" line="453"/>
+        <location filename="../src/core/io/paperdoc.cpp" line="454"/>
         <source>A picture could not be shown in the document.</source>
         <translation>Obrazu nie udało się pokazać w dokumencie.</translation>
     </message>
     <message>
-        <location filename="../src/core/io/paperdoc.cpp" line="461"/>
+        <location filename="../src/core/io/paperdoc.cpp" line="462"/>
         <source>[Audio recording]</source>
         <translation>[Nagranie dźwiękowe]</translation>
     </message>
     <message>
-        <location filename="../src/core/io/paperdoc.cpp" line="461"/>
+        <location filename="../src/core/io/paperdoc.cpp" line="462"/>
         <source>[Video]</source>
         <translation>[Film]</translation>
     </message>
     <message>
-        <location filename="../src/core/io/paperdoc.cpp" line="498"/>
+        <location filename="../src/core/io/paperdoc.cpp" line="499"/>
         <source>(%1 more rows are left out)</source>
         <translation>(pominięte wiersze: %1)</translation>
     </message>
     <message>
-        <location filename="../src/core/io/paperdoc.cpp" line="500"/>
+        <location filename="../src/core/io/paperdoc.cpp" line="501"/>
         <source>A table is too large for paper: only its first %1 rows are shown.</source>
         <translation>Tabela jest za duża na papier: pokazane są tylko jej pierwsze wiersze (%1).</translation>
     </message>
     <message>
-        <location filename="../src/core/io/docx.cpp" line="150"/>
+        <location filename="../src/core/io/docx.cpp" line="155"/>
         <source>A table has more columns than Word allows: only its first %1 are in the document.</source>
         <translation>Tabela ma więcej kolumn, niż pozwala Word: w dokumencie są tylko pierwsze kolumny (%1).</translation>
     </message>
@@ -29962,72 +29962,102 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
     </message>
     <message>
         <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="127"/>
+        <source>Turn encryption off…</source>
+        <translation>Wyłącz szyfrowanie…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="136"/>
+        <source>Turn encryption off?</source>
+        <translation>Wyłączyć szyfrowanie?</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="138"/>
+        <source>Turn off</source>
+        <translation>Wyłącz</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="145"/>
+        <source>The notebook then syncs unencrypted into a new folder; the encrypted one stays on the server as it is, and this device forgets its key. Other devices keep syncing with the encrypted folder until you change them too.</source>
+        <translation>Notatnik będzie wtedy synchronizowany bez szyfrowania do nowego folderu; zaszyfrowany zostaje na serwerze bez zmian, a to urządzenie zapomina jego klucz. Inne urządzenia synchronizują z zaszyfrowanym folderem, dopóki ich też nie zmienisz.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="150"/>
+        <source>%1 (unencrypted)</source>
+        <translation>%1 (niezaszyfrowany)</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="151"/>
+        <source>New unencrypted folder on the server</source>
+        <translation>Nowy niezaszyfrowany folder na serwerze</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="159"/>
         <source>A new password for the notebook</source>
         <translation>Nowe hasło notatnika</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="129"/>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="161"/>
         <source>Change the password</source>
         <translation>Zmień hasło</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="140"/>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="172"/>
         <source>Every device then opens the notebook with the new password; the ones that already hold its key go on syncing. The recovery key stays the same.</source>
         <translation>Każde urządzenie otworzy potem notatnik nowym hasłem; te, które mają już jego klucz, synchronizują dalej. Klucz odzyskiwania pozostaje ten sam.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="146"/>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="178"/>
         <source>New password (at least 12 characters)</source>
         <translation>Nowe hasło (co najmniej 12 znaków)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="147"/>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="179"/>
         <source>New password</source>
         <translation>Nowe hasło</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="154"/>
-        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="155"/>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="186"/>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="187"/>
         <source>The new password again</source>
         <translation>Nowe hasło jeszcze raz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="157"/>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="189"/>
         <source>The two passwords differ.</source>
         <translation>Hasła się różnią.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="164"/>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="196"/>
         <source>Your recovery key</source>
         <translation>Twój klucz odzyskiwania</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="166"/>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="198"/>
         <source>I have written it down</source>
         <translation>Mam go zapisanego</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="167"/>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="199"/>
         <source>Close</source>
         <translation>Zamknij</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="171"/>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="203"/>
         <source>It opens the encrypted notebook when the password is forgotten. It is shown only now: write it down or print it, and keep it away from this device.</source>
         <translation>Otwiera zaszyfrowany notatnik, gdy zapomnisz hasła. Widać go tylko teraz: zapisz go albo wydrukuj i przechowuj z dala od tego urządzenia.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="184"/>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="216"/>
         <source>Recovery key</source>
         <translation>Klucz odzyskiwania</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="187"/>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="219"/>
         <source>Copy</source>
         <translation>Kopiuj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="194"/>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="226"/>
         <source>Copied. Clear the clipboard once you have kept it.</source>
         <translation>Skopiowano. Wyczyść schowek, gdy już go zachowasz.</translation>
     </message>
@@ -40517,13 +40547,13 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Rysunek</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/editorhost.h" line="313"/>
+        <location filename="../src/app/editor/editorhost.h" line="308"/>
         <source>%1 p. %2</source>
         <extracomment>A drawing on page %2 of the PDF %1 (&quot;Lecture 3 p. 4&quot;); a file name, without the extension</extracomment>
         <translation>%1 s. %2</translation>
     </message>
     <message>
-        <location filename="../src/app/editor/editorhost.h" line="316"/>
+        <location filename="../src/app/editor/editorhost.h" line="311"/>
         <source>%1 (drawing)</source>
         <extracomment>A drawing on the picture %1; a file name, without the extension</extracomment>
         <translation>%1 (rysunek)</translation>
@@ -41266,56 +41296,56 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Pobieranie obrazów z internetu (%1 z %2)…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="715"/>
-        <location filename="../src/app/io/exportcontroller.cpp" line="738"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="717"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="740"/>
         <source>This format is not available.</source>
         <translation>Ten format jest niedostępny.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="742"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="744"/>
         <source>Creating “%1”…</source>
         <translation>Tworzenie „%1”…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="727"/>
-        <location filename="../src/app/io/exportcontroller.cpp" line="771"/>
-        <location filename="../src/app/io/exportcontroller.cpp" line="833"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="729"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="773"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="835"/>
         <source>Nothing was exported.</source>
         <translation>Nic nie wyeksportowano.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="882"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="884"/>
         <source>The file could not be saved: %1</source>
         <translation>Nie udało się zapisać pliku: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="890"/>
-        <location filename="../src/app/io/exportcontroller.cpp" line="923"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="892"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="925"/>
         <source>“%1” could not be saved: %2</source>
         <translation>Nie udało się zapisać „%1”: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="895"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="897"/>
         <source>Saved “%1”.</source>
         <translation>Zapisano „%1”.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="915"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="917"/>
         <source>The file could not be saved in Downloads: %1</source>
         <translation>Nie udało się zapisać pliku w Pobranych: %1</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="925"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="927"/>
         <source>Downloads/%1</source>
         <translation>Pobrane/%1</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="927"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="929"/>
         <source>Saved “%1” in Downloads.</source>
         <translation>Zapisano „%1” w Pobranych.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="951"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="953"/>
         <source>“%1” is being downloaded.</source>
         <translation>Trwa pobieranie „%1”.</translation>
     </message>
@@ -41336,42 +41366,42 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
     </message>
     <message>
         <location filename="../src/app/io/exportcontroller.cpp" line="478"/>
-        <location filename="../src/app/io/exportcontroller.cpp" line="853"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="855"/>
         <source>Printing is not available here.</source>
         <translation>Drukowanie nie jest tu dostępne.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="794"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="796"/>
         <source>Choose a printer…</source>
         <translation>Wybierz drukarkę…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="796"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="798"/>
         <source>Print “%1”</source>
         <translation>Drukuj „%1”</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="811"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="813"/>
         <source>Printing “%1”…</source>
         <translation>Drukowanie „%1”…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="815"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="817"/>
         <source>The printer could not be used.</source>
         <translation>Nie udało się użyć drukarki.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="824"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="826"/>
         <source>Preparing to print…</source>
         <translation>Przygotowywanie wydruku…</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="843"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="845"/>
         <source>The system&apos;s printing could not be opened.</source>
         <translation>Nie udało się otworzyć drukowania systemu.</translation>
     </message>
     <message>
-        <location filename="../src/app/io/exportcontroller.cpp" line="868"/>
+        <location filename="../src/app/io/exportcontroller.cpp" line="870"/>
         <source>“%1” went to the printer.</source>
         <translation>„%1” wysłano do drukarki.</translation>
     </message>
@@ -47931,27 +47961,27 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>zmienna szablonu zwraca tekst</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspaceapp.cpp" line="171"/>
+        <location filename="../src/app/shell/workspaceapp.cpp" line="192"/>
         <source>%1 sent live code that failed: %2</source>
         <translation>Kod na żywo od: %1 się nie powiódł: %2</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspaceapp.cpp" line="212"/>
+        <location filename="../src/app/shell/workspaceapp.cpp" line="239"/>
         <source>%1 loaded new live code.</source>
         <translation>%1: wczytano nowy kod na żywo.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspaceapp.cpp" line="213"/>
+        <location filename="../src/app/shell/workspaceapp.cpp" line="240"/>
         <source>%1 loaded live code.</source>
         <translation>%1: wczytano kod na żywo.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspaceapp.cpp" line="229"/>
+        <location filename="../src/app/shell/workspaceapp.cpp" line="256"/>
         <source>Live code taken out.</source>
         <translation>Usunięto kod na żywo.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspaceapp.cpp" line="273"/>
+        <location filename="../src/app/shell/workspaceapp.cpp" line="300"/>
         <source>live</source>
         <translation>na żywo</translation>
     </message>
@@ -49575,7 +49605,7 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
     </message>
     <message numerus="yes">
         <location filename="../src/app/shell/workspacesyncencryption.cpp" line="135"/>
-        <location filename="../src/app/shell/workspacesyncencryption.cpp" line="187"/>
+        <location filename="../src/app/shell/workspacesyncencryption.cpp" line="188"/>
         <source>The notebook&apos;s password needs at least %n character(s).</source>
         <translation>
             <numerusform>Hasło notatnika musi mieć co najmniej %n znak.</numerusform>
@@ -49589,12 +49619,12 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>Nie udało się utworzyć klucza notatnika.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesyncencryption.cpp" line="183"/>
+        <location filename="../src/app/shell/workspacesyncencryption.cpp" line="184"/>
         <source>This device holds no key of an encrypted folder.</source>
         <translation>To urządzenie nie ma klucza zaszyfrowanego folderu.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesyncencryption.cpp" line="206"/>
+        <location filename="../src/app/shell/workspacesyncencryption.cpp" line="207"/>
         <source>This device&apos;s key does not belong to the folder&apos;s key file.</source>
         <translation>Klucz tego urządzenia nie pasuje do pliku kluczy folderu.</translation>
     </message>

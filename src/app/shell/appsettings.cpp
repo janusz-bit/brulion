@@ -2512,6 +2512,13 @@ bool AppSettings::setNextcloudNotebookKey(const QByteArray &key)
     return ok;
 }
 
+void AppSettings::turnOffNextcloudEncryption(const QString &plainFolder)
+{
+    setNextcloudFolder(plainFolder);
+    setNextcloudNotebookKey({});
+    setNextcloudEncrypted(false);
+}
+
 bool AppSettings::hasNextcloudPassword() const
 {
     return QFileInfo(passwordFile()).size() > 0;

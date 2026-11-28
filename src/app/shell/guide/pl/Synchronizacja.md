@@ -45,6 +45,7 @@ Pod kontem Nextcloud karta **Szyfrowanie end-to-end** sprawia, że serwer nie od
 
 - Wszystko działa jak wcześniej: scalanie, konflikty, przenoszenie folderów, duże załączniki.
 - **Zmień hasło…** w karcie pieczętuje klucz notatnika nowym hasłem; nic nie jest szyfrowane od nowa, urządzenia, które mają już klucz, synchronizują dalej, a klucz odzyskiwania się nie zmienia.
+- **Wyłącz szyfrowanie…** przenosi notatnik do nowego, niezaszyfrowanego folderu; zaszyfrowany zostaje na serwerze, a to urządzenie zapomina jego klucz.
 - Stary, niezaszyfrowany folder zostaje na serwerze bez zmian, z jedną dodaną notatką — „Brulion — this notebook moved to an encrypted folder” (po angielsku i po polsku) — żeby inne urządzenie, które wciąż z nim synchronizuje, pokazało, co zrobić; usuń go w Nextcloud, gdy wszystkie urządzenia korzystają z zaszyfrowanego. Każde urządzenie potrzebuje Brulionu 0.33 lub nowszego.
 - Serwer nadal widzi, ile jest plików, jakie mają rozmiary i kiedy się zmieniają.
 - Bez hasła i klucza odzyskiwania kopii na serwerze nie da się otworzyć — notatki na Twoich urządzeniach to nie dotyczy.

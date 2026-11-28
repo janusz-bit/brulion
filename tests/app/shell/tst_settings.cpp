@@ -872,6 +872,39 @@ private Q_SLOTS:
         QVERIFY(!s.nextcloudEnabled());
     }
 
+    void encryptedSyncBelongsToNotebook()
+    {
+        // The encrypted flag and the notebook key are the notebook's: another notebook has neither;
+        // the key lives in its own owner-only file, never in the settings file; turning encryption
+        // off forgets it.
+        const QString file = nextFile();
+        AppSettings s(file, m_tmp.path());
+        s.setCurrentVault(u"/notes/szyfrowany"_s);
+        QVERIFY(!s.nextcloudEncrypted());
+        QVERIFY(!s.hasNextcloudNotebookKey());
+        const QByteArray key(32, '\x5a');
+        QSignalSpy changed(&s, &AppSettings::nextcloudChanged);
+        QVERIFY(s.setNextcloudNotebookKey(key));
+        s.setNextcloudEncrypted(true);
+        QCOMPARE(changed.size(), 2);
+        QVERIFY(s.nextcloudEncrypted());
+        QCOMPARE(s.nextcloudNotebookKey(), key);
+        s.sync();
+        QFile settingsFile(file);
+        QVERIFY(settingsFile.open(QIODevice::ReadOnly));
+        QVERIFY(!settingsFile.readAll().contains(key.toBase64()));
+        s.setCurrentVault(u"/notes/inny"_s);
+        QVERIFY(!s.nextcloudEncrypted());
+        QVERIFY(s.nextcloudNotebookKey().isEmpty());
+        s.setCurrentVault(u"/notes/szyfrowany"_s);
+        QCOMPARE(s.nextcloudNotebookKey(), key);
+        // Off, into a plain folder: the key forgotten.
+        s.turnOffNextcloudEncryption(u"Notatki jawne"_s);
+        QVERIFY(!s.nextcloudEncrypted());
+        QVERIFY(!s.hasNextcloudNotebookKey());
+        QCOMPARE(s.nextcloudFolder(), u"Notatki jawne"_s);
+    }
+
     void deviceFolderBelongsToNotebook()
     {
         // A notebook in the app's storage and the folder of the phone it syncs with (Android: the

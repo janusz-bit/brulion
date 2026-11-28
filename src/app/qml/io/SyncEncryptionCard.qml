@@ -122,6 +122,38 @@ IoCard {
         onClicked: passwordDialog.open()
     }
 
+    BButton {
+        visible: card.encrypted && card.hasKey
+        text: qsTr("Turn encryption off…")
+        iconName: "lock-open"
+        size: "small"
+        variant: "ghost"
+        onClicked: offDialog.open()
+    }
+
+    BDialog {
+        id: offDialog
+        title: qsTr("Turn encryption off?")
+        iconName: "lock-open"
+        acceptText: qsTr("Turn off")
+        acceptEnabled: Js.trim(plainFolder.text) !== "" && Js.trim(plainFolder.text) !== AppSettings.nextcloudFolder
+        initialFocusItem: plainFolder
+        onAccepted: AppSettings.turnOffNextcloudEncryption(Js.trim(plainFolder.text))
+        BText {
+            Layout.fillWidth: true
+            wrapMode: Text.Wrap
+            text: qsTr("The notebook then syncs unencrypted into a new folder; the encrypted one stays on the server as it is, and this device forgets its key. Other devices keep syncing with the encrypted folder until you change them too.")
+        }
+        BTextField {
+            id: plainFolder
+            Layout.fillWidth: true
+            text: qsTr("%1 (unencrypted)").arg(AppSettings.nextcloudFolder)
+            accessibleName: qsTr("New unencrypted folder on the server")
+            leadingIcon: "folder"
+            inputMethodHints: Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText
+        }
+    }
+
     BDialog {
         id: passwordDialog
         title: qsTr("A new password for the notebook")

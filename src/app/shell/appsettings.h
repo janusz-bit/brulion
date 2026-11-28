@@ -725,6 +725,9 @@ public:
     QByteArray nextcloudNotebookKey() const;
     /// Store it ("" deletes it). Returns false on I/O errors.
     bool setNextcloudNotebookKey(const QByteArray &key);
+    /// End-to-end encryption off for the current notebook: it syncs with `plainFolder` (a new,
+    /// plain one: the encrypted folder stays locked to a plain setting), the key is forgotten.
+    Q_INVOKABLE void turnOffNextcloudEncryption(const QString &plainFolder);
 
     /// A notebook's folder of this device.
     struct DeviceFolderLink {
