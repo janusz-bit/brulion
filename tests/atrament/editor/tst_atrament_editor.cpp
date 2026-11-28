@@ -351,6 +351,8 @@ void TestAtramentEditor::linkClickAndMenuAtTheirPlace()
         };
         v.onBlockMenu = [&](int, at::Point) { ++blockMenus; };
     });
+    // (The page drawn again with its hooks: a link has its menu where the page has onLinkMenu.)
+    h.page.update(h.app, [](PageView &, at::Context<PageView> &cx) { cx.notify(); });
     h.window->setAccessibilityEnabled(true);
     h.tw.settle();
     const at::AccessibilityNode *page = nullptr;

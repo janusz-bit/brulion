@@ -695,6 +695,8 @@ QtObject {
     }
     function dateDialogOpen(): bool { return test.dateDialog() !== null && test.dateDialog().opened }
     property point spot: Qt.point(-1, -1)
+    /// A px of jitter for the hover's moves (each a move the window delivers).
+    property int hoverJitter: 0
     /// Finds the link of `row` whose href has `hrefPart` (spot), false when it is not drawn.
     function findLink(row: int, hrefPart: string): bool {
         const at = row
@@ -758,12 +760,16 @@ QtObject {
         if (window.at()) window.waitStep(!test.linkMenuOpen(), "the link menu closes")
         // The mouse pointer resting on the [[link]]: its preview (LinkPreviews), closed when it leaves.
         if (!window.touchRun) {
+            // (The move sent again while it waits: one that came while a menu was closing went to the
+            // menu's overlay.)
             if (window.at()) {
                 test.findLink(1, "page:")
-                window.taskEvents.mouseMove(test.view(), test.spot.x, test.spot.y, -1, Qt.NoButton, Qt.NoModifier)
+                test.hoverJitter = 1 - test.hoverJitter
+                if (!LinkPreviews.shown)
+                    window.taskEvents.mouseMove(test.view(), test.spot.x + test.hoverJitter, test.spot.y, -1, Qt.NoButton, Qt.NoModifier)
+                window.waitStep(LinkPreviews.shown && Js.indexOf(LinkPreviews.href, "Inna") >= 0,
+                                "the mouse pointer resting on a [[link]] opens its preview: " + LinkPreviews.href)
             }
-            if (window.at()) window.waitStep(LinkPreviews.shown && Js.indexOf(LinkPreviews.href, "Inna") >= 0,
-                                             "the mouse pointer resting on a [[link]] opens its preview: " + LinkPreviews.href)
             if (window.at()) window.taskEvents.mouseMove(test.view(), test.spot.x, test.spot.y + 160, -1, Qt.NoButton, Qt.NoModifier)
             if (window.at()) window.waitStep(!LinkPreviews.shown, "and the preview closes when the pointer leaves the link")
         }
