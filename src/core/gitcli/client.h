@@ -461,6 +461,11 @@ public:
     /// file (index → work tree, or HEAD → index) through `git apply`.
     void applyHunk(const QString &folder, const QString &path, HunkAction action, int first, int last,
                    std::function<void(const Outcome &)> done);
+    /// Single lines of `path` staged, unstaged or thrown away: the deletions of its old lines
+    /// [oldFirst, oldLast] and the insertions of its new lines [newFirst, newLast] (0, 0: none of
+    /// that side) of git's diff, the rest of the file's changes left (linesOnly()).
+    void applyLines(const QString &folder, const QString &path, HunkAction action, int oldFirst, int oldLast,
+                    int newFirst, int newLast, std::function<void(const Outcome &)> done);
     /// The files of `paths` (relative) that hold conflict markers (hasConflictMarkers(); files
     /// over MaxTextBytes, binary or missing ones not), read a few at a time from the event loop.
     void conflictMarkers(const QString &folder, const QStringList &paths, std::function<void(const QStringList &)> done);
@@ -496,6 +501,14 @@ public:
     void stashDrop(const QString &folder, const QString &oid, std::function<void(const Outcome &)> done);
 
 private:
+    /// What applyPart() applies: a patch ("" nothing of it chosen) and the words said once done.
+    struct PatchPart {
+        QByteArray patch;
+        QString message;
+    };
+    /// The part `part` chooses of git's diff of `path` applied as `action` does (applyHunk(), applyLines()).
+    void applyPart(const QString &folder, const QString &path, HunkAction action,
+                   std::function<PatchPart(const FilePatch &)> part, std::function<void(const Outcome &)> done);
     struct Run;
     void start(const QString &program, const QString &folder, const QStringList &arguments, const RunOptions &options,
                bool isGh, Done done);

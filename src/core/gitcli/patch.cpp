@@ -168,39 +168,84 @@ QList<int> hunksTouching(const FilePatch &patch, int first, int last, bool newSi
 
 namespace {
 
+/// A line of a hunk being cut: as written, chosen or not ("\\ No newline" markers ride with theirs).
+struct CutLine {
+    QByteArray line;
+    bool chosen = false;
+    QList<QByteArray> markers;
+};
+
+/// One block of changes (its deletions and insertions) written to `out`, pair by pair — the k-th
+/// deletion, then the k-th insertion — so a change not chosen keeps its place beside the chosen ones:
+/// forward a deletion not chosen is context and an insertion not chosen goes, reversed the other way.
+void flushBlock(QList<CutLine> &dels, QList<CutLine> &ins, bool reverse, QList<QByteArray> &out, bool *changed)
+{
+    const auto put = [&out](const CutLine &l, const QByteArray &line) {
+        out << line;
+        out += l.markers;
+    };
+    for (qsizetype k = 0; k < std::max(dels.size(), ins.size()); ++k) {
+        if (k < dels.size()) {
+            const CutLine &d = dels.at(k);
+            if (d.chosen)
+                put(d, d.line);
+            else if (!reverse)
+                put(d, ' ' + d.line.mid(1));
+            *changed = *changed || d.chosen;
+        }
+        if (k < ins.size()) {
+            const CutLine &i = ins.at(k);
+            if (i.chosen)
+                put(i, i.line);
+            else if (reverse)
+                put(i, ' ' + i.line.mid(1));
+            *changed = *changed || i.chosen;
+        }
+    }
+    dels.clear();
+    ins.clear();
+}
+
 /// One hunk cut to its chosen changes (linesOnly()); `changed` false when none is left.
 Hunk cutHunk(const Hunk &hunk, int oldFirst, int oldLast, int newFirst, int newLast, bool reverse, bool *changed)
 {
     Hunk out = hunk;
     out.lines.clear();
     int oldNo = hunk.oldStart, newNo = hunk.newStart;
-    bool kept = true; // (the line before a "\ No newline" was kept)
+    QList<CutLine> dels, ins;
+    QList<CutLine> *last = nullptr; // (the list whose last line a "\\ No newline" belongs to)
     *changed = false;
     for (const QByteArray &line : hunk.lines) {
         const char kind = line.isEmpty() ? ' ' : line.at(0);
         if (kind == '\\') {
-            if (kept)
+            if (last && !last->isEmpty())
+                last->last().markers << line;
+            else
                 out.lines << line;
             continue;
         }
-        const bool chosen = kind == '-'   ? oldNo >= oldFirst && oldNo <= oldLast && oldFirst > 0
-                            : kind == '+' ? newNo >= newFirst && newNo <= newLast && newFirst > 0
-                                          : false;
-        kept = true;
-        if (kind == ' ' || chosen) {
-            out.lines << line;
-            *changed = *changed || chosen;
-        } else if ((kind == '-') != reverse) {
-            // (A change not chosen that the target keeps: context.)
-            out.lines << QByteArray(' ' + line.mid(1));
+        if (kind == '-') {
+            dels.append({line, oldFirst > 0 && oldNo >= oldFirst && oldNo <= oldLast, {}});
+            last = &dels;
+        } else if (kind == '+') {
+            ins.append({line, newFirst > 0 && newNo >= newFirst && newNo <= newLast, {}});
+            last = &ins;
         } else {
-            kept = false;
+            flushBlock(dels, ins, reverse, out.lines, changed);
+            out.lines << line;
+            last = nullptr;
         }
         oldNo += kind != '+';
         newNo += kind != '-';
     }
-    out.oldLines = int(std::ranges::count_if(out.lines, [](const QByteArray &l) { return l.startsWith(' ') || l.startsWith('-') || l.isEmpty(); }));
-    out.newLines = int(std::ranges::count_if(out.lines, [](const QByteArray &l) { return l.startsWith(' ') || l.startsWith('+') || l.isEmpty(); }));
+    flushBlock(dels, ins, reverse, out.lines, changed);
+    const auto counts = [&out](char side) {
+        return int(std::ranges::count_if(out.lines, [side](const QByteArray &l) {
+            return l.isEmpty() || l.startsWith(' ') || l.startsWith(side);
+        }));
+    };
+    out.oldLines = counts('-');
+    out.newLines = counts('+');
     return out;
 }
 

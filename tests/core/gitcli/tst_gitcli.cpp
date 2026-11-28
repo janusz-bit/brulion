@@ -1414,6 +1414,13 @@ void TestGitCli::patchOfSomeLines()
     QCOMPARE(deleted.hunks.at(0).lines, (QList<QByteArray>{" a", " b", "-c", " d"}));
     QCOMPARE(deleted.hunks.at(0).oldLines, 4);
     QCOMPARE(deleted.hunks.at(0).newLines, 3);
+    // git's grouping of one block (-b -c +B +C): each deletion beside its insertion, so a line not
+    // chosen keeps its place — forward and reversed, either line chosen.
+    const FilePatch grouped = parsePatch("diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1,4 +1,4 @@\n a\n-b\n-c\n+B\n+C\n d\n");
+    QCOMPARE(linesOnly(grouped, 2, 2, 2, 2, false).hunks.at(0).lines, (QList<QByteArray>{" a", "-b", "+B", " c", " d"}));
+    QCOMPARE(linesOnly(grouped, 3, 3, 3, 3, false).hunks.at(0).lines, (QList<QByteArray>{" a", " b", "-c", "+C", " d"}));
+    QCOMPARE(linesOnly(grouped, 3, 3, 3, 3, true).hunks.at(0).lines, (QList<QByteArray>{" a", " B", "-c", "+C", " d"}));
+    QCOMPARE(linesOnly(grouped, 2, 2, 2, 2, true).hunks.at(0).lines, (QList<QByteArray>{" a", "-b", "+B", " C", " d"}));
     // Nothing chosen: nothing.
     QVERIFY(linesOnly(p, 5, 6, 5, 6, false).hunks.isEmpty());
     QVERIFY(linesOnly(p, 0, 0, 0, 0, true).hunks.isEmpty());

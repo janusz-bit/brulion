@@ -1455,6 +1455,22 @@ void CodeGit::resolve(const QString &path, const QString &how)
     simpleAction(u"resolve"_s, [this, path, r](const QString &root, auto done) { m_client.resolve(root, path, r, done); });
 }
 
+void CodeGit::stageLines(const QString &path, const QVariantList &rows, int from, int to)
+{
+    const LineRanges r = selectedRanges(rows, from, to);
+    simpleAction(u"stageLines"_s, [this, path, r](const QString &root, auto done) {
+        m_client.applyLines(root, path, gitcli::HunkAction::Stage, r.oldFirst, r.oldLast, r.newFirst, r.newLast, done);
+    });
+}
+
+void CodeGit::discardLines(const QString &path, const QVariantList &rows, int from, int to)
+{
+    const LineRanges r = selectedRanges(rows, from, to);
+    simpleAction(u"discardLines"_s, [this, path, r](const QString &root, auto done) {
+        m_client.applyLines(root, path, gitcli::HunkAction::Discard, r.oldFirst, r.oldLast, r.newFirst, r.newLast, done);
+    });
+}
+
 void CodeGit::stageHunk(const QString &path, int first, int last)
 {
     simpleAction(u"stageHunk"_s, [this, path, first, last](const QString &root, auto done) {

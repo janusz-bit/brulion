@@ -301,7 +301,43 @@ void Client::resolve(const QString &folder, const QString &path, Resolution how,
 void Client::applyHunk(const QString &folder, const QString &path, HunkAction action, int first, int last,
                        std::function<void(const Outcome &)> done)
 {
-    if (!isSafeRelativePath(path) || first <= 0 || last <= 0) {
+    if (first <= 0 || last <= 0) {
+        later([done = std::move(done), path] {
+            done(failedWith(GitMessages::tr("Not a path inside the repository: %1").arg(path)));
+        });
+        return;
+    }
+    applyPart(folder, path, action, [action, first, last](const FilePatch &patch) -> PatchPart {
+        const QList<int> hunks = hunksTouching(patch, first, last, action != HunkAction::Unstage);
+        const int n = int(hunks.size());
+        return {hunks.isEmpty() ? QByteArray() : patchOf(patch, hunks, action != HunkAction::Stage),
+                action == HunkAction::Stage     ? GitMessages::tr("Staged %n hunk(s)", "", n)
+                : action == HunkAction::Unstage ? GitMessages::tr("Unstaged %n hunk(s)", "", n)
+                                                : GitMessages::tr("Threw away %n hunk(s)", "", n)};
+    }, std::move(done));
+}
+
+void Client::applyLines(const QString &folder, const QString &path, HunkAction action, int oldFirst, int oldLast,
+                        int newFirst, int newLast, std::function<void(const Outcome &)> done)
+{
+    applyPart(folder, path, action, [action, oldFirst, oldLast, newFirst, newLast](const FilePatch &patch) -> PatchPart {
+        const bool reverse = action != HunkAction::Stage;
+        const FilePatch lines = linesOnly(patch, std::min(oldFirst, oldLast), std::max(oldFirst, oldLast),
+                                          std::min(newFirst, newLast), std::max(newFirst, newLast), reverse);
+        QList<int> all;
+        for (int i = 0; i < lines.hunks.size(); ++i)
+            all << i;
+        return {all.isEmpty() ? QByteArray() : patchOf(lines, all, reverse),
+                action == HunkAction::Stage     ? GitMessages::tr("Staged the lines")
+                : action == HunkAction::Unstage ? GitMessages::tr("Unstaged the lines")
+                                                : GitMessages::tr("Threw the lines away")};
+    }, std::move(done));
+}
+
+void Client::applyPart(const QString &folder, const QString &path, HunkAction action,
+                       std::function<PatchPart(const FilePatch &)> part, std::function<void(const Outcome &)> done)
+{
+    if (!isSafeRelativePath(path)) {
         later([done = std::move(done), path] {
             done(failedWith(GitMessages::tr("Not a path inside the repository: %1").arg(path)));
         });
@@ -315,7 +351,7 @@ void Client::applyHunk(const QString &folder, const QString &path, HunkAction ac
     diff << u"--"_s << u":(literal)"_s + path;
     RunOptions ro;
     ro.readOnly = true;
-    git(folder, diff, ro, [this, folder, path, action, first, last, done = std::move(done)](const RunResult &d) {
+    git(folder, diff, ro, [this, folder, path, action, part = std::move(part), done = std::move(done)](const RunResult &d) {
         if (!d.ok()) {
             done(failedWith(d.message()));
             return;
@@ -325,30 +361,23 @@ void Client::applyHunk(const QString &folder, const QString &path, HunkAction ac
             done(failedWith(GitMessages::tr("%1 is binary: stage or discard the whole file").arg(path)));
             return;
         }
-        const QList<int> hunks = hunksTouching(patch, first, last, action != HunkAction::Unstage);
-        if (hunks.isEmpty()) {
+        const PatchPart chosen = part(patch);
+        if (chosen.patch.isEmpty()) {
             done(failedWith(action == HunkAction::Unstage ? GitMessages::tr("Nothing of these lines is staged")
                                                           : GitMessages::tr("These lines have no unstaged changes")));
             return;
         }
-        const bool reverse = action != HunkAction::Stage;
         RunOptions a;
         a.noHooks = true;
-        a.input = patchOf(patch, hunks, reverse);
+        a.input = chosen.patch;
         QStringList args{u"apply"_s, u"--whitespace=nowarn"_s};
         if (action != HunkAction::Discard)
             args << u"--cached"_s;
-        if (reverse)
+        if (action != HunkAction::Stage)
             args << u"-R"_s;
         args << u"-"_s;
-        git(folder, args, a, [done, action, n = int(hunks.size())](const RunResult &r) {
-            if (!r.ok()) {
-                done(failedWith(r.message()));
-                return;
-            }
-            done(succeededWith(action == HunkAction::Stage     ? GitMessages::tr("Staged %n hunk(s)", "", n)
-                               : action == HunkAction::Unstage ? GitMessages::tr("Unstaged %n hunk(s)", "", n)
-                                                               : GitMessages::tr("Threw away %n hunk(s)", "", n)));
+        git(folder, args, a, [done, message = chosen.message](const RunResult &r) {
+            done(r.ok() ? succeededWith(message) : failedWith(r.message()));
         });
     });
 }

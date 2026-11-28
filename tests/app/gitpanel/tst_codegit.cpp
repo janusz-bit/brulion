@@ -150,6 +150,7 @@ private Q_SLOTS:
     void initAndPublish();
     void mergeInProgress();
     void stashes();
+    void linesOfTheDiff();
     void revertAnOlderTurn();
 
 private:
@@ -1427,6 +1428,50 @@ void TestCodeGit::mergeInProgress()
     QVERIFY2(finished(actions, u"skip"_s).at(1).toBool(), qPrintable(finished(actions, u"skip"_s).at(2).toString()));
     QTRY_COMPARE_WITH_TIMEOUT(git.operation(), QString(), Wait);
     QCOMPARE(repo.read(u"wspólny.txt"_s), QByteArray("jeden\nDWA z innej\n"));
+}
+
+// The diff's selected rows staged alone, then the other row's change thrown away.
+void TestCodeGit::linesOfTheDiff()
+{
+    Repo repo;
+    repo.write(u"w.txt"_s, "a\nb\nc\nd\n");
+    repo.commitAll(u"a"_s);
+    repo.write(u"w.txt"_s, "a\nB żółw\nC\nd\n");
+    CodeGit git;
+    git.setFolder(repo.root);
+    QTRY_VERIFY_WITH_TIMEOUT(git.changeCount() == 1, Wait);
+    // (Side by side: b and "B żółw" one row, c and C the next — what a user selects there.)
+    const QVariantList rows = git.diffRows(u"a\nb\nc\nd\n"_s, u"a\nB żółw\nC\nd\n"_s, true, false, -1);
+    int bRow = -1, bigBRow = -1;
+    for (int i = 0; i < rows.size(); ++i) {
+        const QVariantMap r = rows.at(i).toMap();
+        if (r.value(u"oldNo"_s).toInt() == 2 && r.value(u"newNo"_s).toInt() == 0)
+            bRow = i;
+        if (r.value(u"newNo"_s).toInt() == 2 && r.value(u"oldNo"_s).toInt() == 0)
+            bigBRow = i;
+        if (r.value(u"oldNo"_s).toInt() == 2 && r.value(u"newNo"_s).toInt() == 2)
+            bRow = bigBRow = i; // (one "change" row)
+    }
+    QVERIFY(bRow >= 0 && bigBRow >= 0);
+    QSignalSpy actions(&git, &CodeGit::actionFinished);
+    git.stageLines(u"w.txt"_s, rows, std::min(bRow, bigBRow), std::max(bRow, bigBRow));
+    QTRY_VERIFY_WITH_TIMEOUT(!finished(actions, u"stageLines"_s).isEmpty(), Wait);
+    QVERIFY2(finished(actions, u"stageLines"_s).at(1).toBool(), qPrintable(finished(actions, u"stageLines"_s).at(2).toString()));
+    QCOMPARE(repo.text({u"show"_s, u":w.txt"_s}), u"a\nB żółw\nc\nd"_s);
+    // Line 3's change thrown away (the rows of it).
+    int cFirst = -1, cLast = -1;
+    for (int i = 0; i < rows.size(); ++i) {
+        const QVariantMap r = rows.at(i).toMap();
+        if (r.value(u"oldNo"_s).toInt() == 3 || r.value(u"newNo"_s).toInt() == 3) {
+            if (cFirst < 0)
+                cFirst = i;
+            cLast = i;
+        }
+    }
+    git.discardLines(u"w.txt"_s, rows, cFirst, cLast);
+    QTRY_VERIFY_WITH_TIMEOUT(!finished(actions, u"discardLines"_s).isEmpty(), Wait);
+    QVERIFY(finished(actions, u"discardLines"_s).at(1).toBool());
+    QCOMPARE(repo.read(u"w.txt"_s), QByteArray("a\nB żółw\nc\nd\n"));
 }
 
 void TestCodeGit::stashes()

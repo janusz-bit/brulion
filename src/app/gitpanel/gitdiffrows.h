@@ -66,5 +66,11 @@ QString languageOf(const QString &path);
 /// fenced block (the file's language; "diff" with + / − when the lines are not all of one side)
 /// and the comment.
 QString reviewComment(const QString &path, const QVariantList &rows, int from, int to, const QString &comment);
+/// The old and the new lines rows [from, to] show (either order; hunk and skip rows left out): their
+/// first and last numbers on each side (0, 0 none of that side).
+struct LineRanges {
+    int oldFirst = 0, oldLast = 0, newFirst = 0, newLast = 0;
+};
+LineRanges selectedRanges(const QVariantList &rows, int from, int to);
 
 } // namespace brulion::gitpanel

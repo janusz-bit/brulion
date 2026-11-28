@@ -489,6 +489,28 @@ QString languageOf(const QString &path)
     return bySuffix.value(QFileInfo(path).suffix().toLower());
 }
 
+LineRanges selectedRanges(const QVariantList &rows, int from, int to)
+{
+    if (from > to)
+        std::swap(from, to);
+    LineRanges r;
+    const auto mark = [](int n, int *first, int *last) {
+        *first = *first == 0 ? n : std::min(*first, n);
+        *last = std::max(*last, n);
+    };
+    for (int i = std::max(0, from); i <= std::min(int(rows.size()) - 1, to); ++i) {
+        const QVariantMap row = rows.at(i).toMap();
+        const QString kind = row.value(u"kind"_s).toString();
+        if (kind == u"hunk"_s || kind == u"skip"_s)
+            continue;
+        if (const int o = row.value(u"oldNo"_s).toInt(); o > 0)
+            mark(o, &r.oldFirst, &r.oldLast);
+        if (const int n = row.value(u"newNo"_s).toInt(); n > 0)
+            mark(n, &r.newFirst, &r.newLast);
+    }
+    return r;
+}
+
 QString reviewComment(const QString &path, const QVariantList &rows, int from, int to, const QString &comment)
 {
     if (from > to)

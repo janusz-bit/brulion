@@ -114,6 +114,8 @@ Item {
     /// A hunk waiting for its "Discard" to be confirmed.
     property int discardFirst: 0
     property int discardLast: 0
+    /// The discard asked for is of rows' lines (discardFirst … discardLast rows), not a hunk's.
+    property bool discardLines: false
     /// A commit or a push waiting for the default branch's question: "commit" | "push" ("" none).
     property string pendingAction
     property string pendingMessage
@@ -264,7 +266,19 @@ Item {
         panel.readSelected()
         panel.requestDiff()
     }
+    function onLines(action: string, from: int, to: int): void {
+        if (action === "stage") {
+            repo.stageLines(panel.selectedPath, diffView.rows, from, to)
+            diffView.clearSelection()
+            return
+        }
+        panel.discardFirst = from
+        panel.discardLast = to
+        panel.discardLines = true
+        discardDialog.openFor(panel.selectedPath, true)
+    }
     function onHunk(action: string, first: int, last: int): void {
+        panel.discardLines = false
         if (action === "stage") {
             repo.stageHunk(panel.selectedPath, first, last)
         } else if (action === "unstage") {
@@ -1030,7 +1044,11 @@ Item {
                             canStage: diffView.hunks && panel.selectedUnstaged
                             canUnstage: diffView.hunks && panel.selectedStaged
                             canDiscard: diffView.hunks && panel.selectedUnstaged
+                            // (Lines by their numbers: only while nothing of the file is staged.)
+                            canStageLines: diffView.hunks && panel.selectedUnstaged && !panel.selectedStaged
+                            canDiscardLines: diffView.hunks && panel.selectedUnstaged && !panel.selectedStaged
                             onHunkRequested: (action, first, last) => panel.onHunk(action, first, last)
+                            onLinesRequested: (action, from, to) => panel.onLines(action, from, to)
                             onCommented: (text) => panel.addToChat(text)
                         }
                         BSpinner {
@@ -1571,7 +1589,9 @@ Item {
         confirmText: qsTr("Discard")
         destructive: true
         onAccepted: {
-            if (discardDialog.hunk)
+            if (discardDialog.hunk && panel.discardLines)
+                repo.discardLines(discardDialog.path, diffView.rows, panel.discardFirst, panel.discardLast)
+            else if (discardDialog.hunk)
                 repo.discardHunk(discardDialog.path, panel.discardFirst, panel.discardLast)
             else
                 repo.discard(discardDialog.path, discardDialog.path === panel.menuPath ? panel.menuOldPath : "")

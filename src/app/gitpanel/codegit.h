@@ -316,6 +316,11 @@ public:
     Q_INVOKABLE void stageHunk(const QString &path, int first, int last);
     Q_INVOKABLE void unstageHunk(const QString &path, int first, int last);
     Q_INVOKABLE void discardHunk(const QString &path, int first, int last);
+    /// The changed lines among the diff's rows [from, to] (`rows`: diffRows()) staged / thrown away
+    /// alone (gitcli::Client::applyLines(); the numbers are the work tree's and HEAD's: offered while
+    /// nothing of the file is staged): actionFinished("stageLines" / "discardLines", …).
+    Q_INVOKABLE void stageLines(const QString &path, const QVariantList &rows, int from, int to);
+    Q_INVOKABLE void discardLines(const QString &path, const QVariantList &rows, int from, int to);
 
     // ---- Commits, pull requests, publishing ---------------------------------------------------------
 

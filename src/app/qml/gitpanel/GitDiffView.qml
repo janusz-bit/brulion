@@ -34,6 +34,9 @@ FocusScope {
     /// The hunks' actions (the Uncommitted source): what the file allows.
     property bool canStage: false
     property bool canUnstage: false
+    /// The selected lines alone can be staged / thrown away (linesRequested()).
+    property bool canStageLines: false
+    property bool canDiscardLines: false
     property bool canDiscard: false
 
     /// Find in the diff.
@@ -72,6 +75,8 @@ FocusScope {
     /// A hunk's action: "stage" | "unstage" | "discard", with the lines it changes — the work
     /// tree's (stage, discard) or HEAD's (unstage).
     signal hunkRequested(string action, int first, int last)
+    /// The selected rows' changed lines: "stage" | "discard", rows [from, to] of `rows`.
+    signal linesRequested(string action, int from, int to)
     /// A comment on the selected lines, for the chat.
     signal commented(string text)
 
@@ -296,6 +301,22 @@ FocusScope {
                 placeholderText: qsTr("A comment for the agent (optional)…")
                 onAccepted: view.addComment()
                 Keys.onEscapePressed: view.clearSelection()
+            }
+            BButton {
+                objectName: "gitDiffStageLines"
+                visible: view.canStageLines
+                text: qsTr("Stage lines")
+                size: "small"
+                variant: "ghost"
+                onClicked: view.linesRequested("stage", view.selectedFirst, view.selectedLast)
+            }
+            BButton {
+                objectName: "gitDiffDiscardLines"
+                visible: view.canDiscardLines
+                text: qsTr("Discard lines…")
+                size: "small"
+                variant: "ghost"
+                onClicked: view.linesRequested("discard", view.selectedFirst, view.selectedLast)
             }
             BButton {
                 objectName: "gitDiffCommentAdd"

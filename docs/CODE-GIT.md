@@ -311,6 +311,12 @@ entry chosen on a touch screen says why this way too), `openFile(absolutePath, l
   --skip` without an editor — the commit that stopped it left out, the operation going on) and
   `gitContinue` ("Commit the merge" / "Continue", once no file is conflicted). The quick action is
   hidden meanwhile.
+* **Single lines** (Uncommitted, a file nothing of which is staged yet): selected rows of the diff
+  (as for a comment) — `gitDiffStageLines` "Stage lines", `gitDiffDiscardLines` "Discard lines…"
+  (confirmed) on the selection's bar — go alone: `CodeGit.stageLines()` / `discardLines()` with the
+  rows' old and new line ranges (`selectedRanges()`) → `gitcli::Client::applyLines()` → git's own diff
+  of the file cut by `linesOnly()` (a deletion of a chosen old line, an insertion of a chosen new
+  one; the block's other changes kept where they are, pair by pair) and `git apply [--cached] [-R]`.
 * The list `gitChangeList` of `GitChangeRow`s — flat (`gitChange_<i>`: `gitChangeLetter` in the
   status's colour, `gitChangeName`, `gitChangeDir` dimmed — or "from <old path>" for a rename —, a dot
   when something is staged (`gitChangeStaged`, amber when only partly), `gitChangeBinary`,
@@ -454,8 +460,9 @@ too), the stashes (`gitStashList`: `gitStash_<i>` with `gitStashApply`, `gitStas
   (T3 Code sends them).
 * A turn's changes exclude what the user changed between turns in T3 Code; here they count to the
   turn before them (the snapshots are of the whole working tree).
-* Hunks of untracked, conflicted or binary files; lines (not whole hunks) staged; the hunks of the
-  other sources (a turn, the branch) staged or thrown away.
+* Hunks of untracked, conflicted or binary files; the hunks of the other sources (a turn, the branch)
+  staged or thrown away; single lines of a file that has staged changes (their numbers would be the
+  index's: offered while nothing of it is staged).
 * Editing the message of a merge.
 * Watching the whole working tree for changes git does not see (the panel relies on
   `pollInterval`, actions and explicit refreshes).

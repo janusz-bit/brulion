@@ -243,6 +243,7 @@ private Q_SLOTS:
     void discardFiles();
     void discardRefused();
     void hunks();
+    void singleLines();
     void commitChosenFiles();
     void commitStagedOnly();
     void commitOnNewBranch();
@@ -1839,6 +1840,39 @@ void TestGitCliRepo::discardRefused()
     o = await<Outcome>([&](auto done) { client.discard(conflicted.root, u"wspólny.txt"_s, QString(), done); });
     QVERIFY(!o.ok);
     QVERIFY(conflicted.read(u"wspólny.txt"_s).contains("<<<<<<<"));
+}
+
+// Single lines of one hunk: one change staged, the other left; then one thrown away, the other kept.
+void TestGitCliRepo::singleLines()
+{
+    Repo repo;
+    repo.write(u"wiersze.txt"_s, "a\nb\nc\nd\n");
+    repo.run({u"add"_s, u"-A"_s});
+    repo.run({u"commit"_s, u"-qm"_s, u"a"_s});
+    repo.write(u"wiersze.txt"_s, "a\nB żółw\nC\nd\n");
+    Client client;
+    // Line 2's change only: b → "B żółw".
+    Outcome o = await<Outcome>([&](auto done) {
+        client.applyLines(repo.root, u"wiersze.txt"_s, HunkAction::Stage, 2, 2, 2, 2, done);
+    });
+    QVERIFY2(o.ok, qPrintable(o.message));
+    QCOMPARE(repo.text({u"show"_s, u":wiersze.txt"_s}), u"a\nB żółw\nc\nd"_s);
+    // Line 3's change thrown away from the work tree: C back to c, line 2 kept.
+    o = await<Outcome>([&](auto done) {
+        client.applyLines(repo.root, u"wiersze.txt"_s, HunkAction::Discard, 3, 3, 3, 3, done);
+    });
+    QVERIFY2(o.ok, qPrintable(o.message));
+    QCOMPARE(repo.read(u"wiersze.txt"_s), QByteArray("a\nB żółw\nc\nd\n"));
+    // The staged line unstaged.
+    o = await<Outcome>([&](auto done) {
+        client.applyLines(repo.root, u"wiersze.txt"_s, HunkAction::Unstage, 2, 2, 2, 2, done);
+    });
+    QVERIFY2(o.ok, qPrintable(o.message));
+    QCOMPARE(repo.text({u"diff"_s, u"--cached"_s, u"--name-only"_s}), QString());
+    // Lines without a change: nothing to do, said.
+    QVERIFY(!await<Outcome>([&](auto done) {
+        client.applyLines(repo.root, u"wiersze.txt"_s, HunkAction::Stage, 4, 4, 4, 4, done);
+    }).ok);
 }
 
 void TestGitCliRepo::hunks()
