@@ -702,10 +702,12 @@ private Q_SLOTS:
         QCOMPARE(app({u"wait"_s, u"--type"_s, u"BTextField"_s}).code, 0);
         Run r = app({u"find"_s, u"--type"_s, u"BTextField"_s, u"--include-hidden"_s, u"--limit"_s, u"200"_s});
         QCOMPARE(r.code, 0);
+        // The first one shown (the page has hidden ones too: dialogs, the encryption card).
         QString handle;
         for (const QJsonValue &item : r.result().value(u"items"_s).toArray()) {
-            if (item.toObject().value(u"secret"_s).toBool())
-                handle = item.toObject().value(u"handle"_s).toString();
+            const QJsonObject o = item.toObject();
+            if (o.value(u"secret"_s).toBool() && o.value(u"visible"_s).toBool() && handle.isEmpty())
+                handle = o.value(u"handle"_s).toString();
         }
         QVERIFY2(!handle.isEmpty(), qPrintable(r.describe()));
         r = app({u"click"_s, handle});
