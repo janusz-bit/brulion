@@ -171,6 +171,8 @@ QVariantList CodeProjects::list() const
                 out << project(r.id);
         }
     }
+    // (Last: the threads without a project.)
+    out << scratchProject();
     return out;
 }
 
@@ -205,6 +207,8 @@ bool CodeProjects::isRemote(const QString &id) const
 
 QVariantMap CodeProjects::project(const QString &id) const
 {
+    if (isScratch(id))
+        return scratchProject();
     const int i = indexOf(id);
     if (i < 0 && m_remote) {
         if (const std::optional<RemoteProjects::Project> r = m_remote->find(id))
@@ -233,12 +237,16 @@ QVariantMap CodeProjects::project(const QString &id) const
 
 QString CodeProjects::folderOf(const QString &id) const
 {
+    if (isScratch(id))
+        return scratchRoot();
     const int i = indexOf(id);
     return i < 0 ? QString() : m_projects.at(i).path;
 }
 
 QString CodeProjects::nameOf(const QString &id) const
 {
+    if (isScratch(id))
+        return tr("No project");
     const int i = indexOf(id);
     if (i < 0 && m_remote) {
         if (const std::optional<RemoteProjects::Project> r = m_remote->find(id))
@@ -249,7 +257,7 @@ QString CodeProjects::nameOf(const QString &id) const
 
 bool CodeProjects::contains(const QString &id) const
 {
-    return indexOf(id) >= 0 || isRemote(id);
+    return indexOf(id) >= 0 || isRemote(id) || isScratch(id);
 }
 
 QString CodeProjects::projectOfFolder(const QString &folder) const
@@ -293,7 +301,7 @@ QString CodeProjects::add(const QString &folder)
         p.name = path;
     const QString base = slug(p.name);
     p.id = base;
-    for (int n = 2; indexOf(p.id) >= 0; ++n)
+    for (int n = 2; indexOf(p.id) >= 0 || isScratch(p.id); ++n)
         p.id = base + u'-' + QString::number(n);
     p.path = path;
     m_projects.append(p);
@@ -380,6 +388,9 @@ void CodeProjects::setDefaults(const QString &id, const QString &agent, const QS
 
 QString CodeProjects::newThreadEnv(const QString &id) const
 {
+    // (A scratch thread always gets a folder of its own.)
+    if (isScratch(id))
+        return u"worktree"_s;
     const int i = indexOf(id);
     if (i >= 0 && !m_projects.at(i).env.isEmpty())
         return m_projects.at(i).env;

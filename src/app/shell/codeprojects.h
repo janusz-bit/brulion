@@ -179,6 +179,13 @@ public:
     /// How many projects a device keeps at most, and scripts a project (T3 Code's limit).
     static constexpr int MaxProjects = 100;
     static constexpr int MaxScripts = 50;
+    /// The project of threads without one (T3 Code's scratch threads, docs/CODE.md "Threads without a
+    /// project"): never kept, last in list(); each new thread a folder of its own under scratchRoot().
+    static constexpr QStringView ScratchId = u"scratch";
+    Q_INVOKABLE bool isScratch(const QString &id) const { return id == ScratchId; }
+    /// Where scratch threads' folders go (default ~/.brulion/scratch).
+    QString scratchRoot() const;
+    void setScratchRoot(const QString &root) { m_scratchRoot = root; }
     /// The largest t3.json read.
     static constexpr qsizetype MaxConfigBytes = 256 * 1024;
 
@@ -513,6 +520,12 @@ private:
     /// dropOnThread()'s files not taken yet, by thread: {pictures, text}.
     QHash<QString, std::pair<QList<QUrl>, QString>> m_drops;
     mutable gitcli::Client *m_git = nullptr;
+    QString m_scratchRoot;
+    /// The scratch project as list() shows it.
+    QVariantMap scratchProject() const;
+    /// A new scratch thread's folder made (worktreeCreated() from the event loop): false when it
+    /// could not be made.
+    bool makeScratchFolder(const QString &title);
     /// The editors found: {id, program}.
     mutable QList<std::pair<QString, QString>> m_found;
     mutable bool m_scanned = false;

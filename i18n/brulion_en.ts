@@ -590,7 +590,7 @@
 <context>
     <name>CodeProjectSection</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/code/CodeProjectSection.qml" line="68"/>
+        <location filename="../src/app/qml/code/CodeProjectSection.qml" line="70"/>
         <source>%n settled</source>
         <translation>
             <numerusform>%n settled</numerusform>
@@ -598,7 +598,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/code/CodeProjectSection.qml" line="69"/>
+        <location filename="../src/app/qml/code/CodeProjectSection.qml" line="71"/>
         <source>%n snoozed</source>
         <translation>
             <numerusform>%n snoozed</numerusform>
@@ -636,7 +636,7 @@
 <context>
     <name>CodeSidebar</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/code/CodeSidebar.qml" line="700"/>
+        <location filename="../src/app/qml/code/CodeSidebar.qml" line="701"/>
         <source>The worktree has uncommitted changes in %n file(s): deleting it loses them.</source>
         <translation>
             <numerusform>The worktree has uncommitted changes in %n file: deleting it loses them.</numerusform>
@@ -2757,7 +2757,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/gitpanel/codegit.cpp" line="1108"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="1107"/>
         <source>Reverted %n file(s)</source>
         <translation>
             <numerusform>Reverted %n file</numerusform>
@@ -2765,7 +2765,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/gitpanel/codegit.cpp" line="1253"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="1252"/>
         <source>The remote has %n new commit(s): pull first</source>
         <translation>
             <numerusform>The remote has %n new commit: pull first</numerusform>

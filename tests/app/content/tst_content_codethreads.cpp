@@ -375,6 +375,29 @@ private Q_SLOTS:
         return path;
     }
 
+    // A scratch thread made a project of its own: its folder added, its page naming it.
+    void scratchIntoProject()
+    {
+        auto ws = open(threads());
+        const QString folder = m_tmp.filePath(u"brudnopis/2026-11-28-szkic"_s);
+        QDir().mkpath(folder);
+        const QString path = u"AI/2026-11-28 Szkic.md"_s;
+        QVERIFY(ws->write(path, u"---\nproject: scratch\nworktree: \"%1\"\n---\n- 🧑 Szkic\n"_s.arg(folder)));
+        CodeThreads *threads = ws->codeThreads();
+        QCOMPARE(threads->turnIntoProject(Rabat), QString()); // (no scratch thread)
+        const QString id = threads->turnIntoProject(path);
+        QVERIFY(!id.isEmpty());
+        QCOMPARE(ws->projects()->folderOf(id), QDir::cleanPath(folder));
+        const chat::Conversation c = chat::parse(ws->read(path));
+        QCOMPARE(c.project, id);
+        QCOMPARE(c.worktree, QString());
+        QCOMPARE(ws->chats()->threadPlace(path).value(u"folder"_s).toString(), ws->projects()->folderOf(id));
+        // Its folder gone: nothing.
+        const QString gone = u"AI/2026-11-28 Zgubiony.md"_s;
+        QVERIFY(ws->write(gone, u"---\nproject: scratch\nworktree: \"/nie/ma/takiego\"\n---\n- 🧑 x\n"_s));
+        QCOMPARE(threads->turnIntoProject(gone), QString());
+    }
+
     // Its pull request merged: the thread settles, and its worktree (clean) goes — its branch stays;
     // a worktree with an uncommitted file stays.
     void mergedPullRequestTidies()

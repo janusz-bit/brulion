@@ -167,7 +167,8 @@ Rectangle {
 
     // ---- deleting a thread: its worktree too? ---------------------------------------------------------
     function deleteThread(path: string, title: string, worktree: string, branch: string, project: string): void {
-        if (worktree === "") {
+        // (A scratch thread's folder stays on disk, as in T3 Code; no git worktree to take away.)
+        if (worktree === "" || Workspace.projects.isScratch(project)) {
             sidebar.trashThread(path, project, "", "", false, false)
             return
         }

@@ -359,6 +359,48 @@ private Q_SLOTS:
         }
     }
 
+    // Threads without a project (T3 Code's scratch threads): a project "scratch" of its own, last in
+    // the list, never kept or written; a new thread of it gets a folder of its own under the scratch
+    // root (no git) — named by the date and its first words, a number when taken.
+    void scratchProject()
+    {
+        CodeProjects projects;
+        projects.setScratchRoot(fresh(u"brudnopis"_s));
+        const QString scratch = CodeProjects::ScratchId.toString();
+        QVERIFY(projects.contains(scratch));
+        QVERIFY(projects.isScratch(scratch));
+        QCOMPARE(projects.folderOf(scratch), projects.scratchRoot());
+        QVERIFY(!projects.nameOf(scratch).isEmpty());
+        QCOMPARE(projects.newThreadEnv(scratch), u"worktree"_s);
+        QCOMPARE(projects.list().last().toMap().value(u"id"_s).toString(), scratch);
+        QVERIFY(projects.list().last().toMap().value(u"scratch"_s).toBool());
+        QCOMPARE(projects.count(), 0);
+        // A folder named so is another project.
+        const QString folder = fresh(u"x"_s) + u"/scratch"_s;
+        QDir().mkpath(folder);
+        const QString named = projects.add(folder);
+        QVERIFY(!named.isEmpty() && named != scratch);
+        QVERIFY(!projects.isScratch(named));
+        // A new thread's folder.
+        QSignalSpy created(&projects, &CodeProjects::worktreeCreated);
+        QVERIFY(projects.createWorktree(scratch, u"Szkic żółwia!"_s));
+        QTRY_COMPARE(created.size(), 1);
+        const QString first = created.at(0).at(1).toString();
+        QCOMPARE(created.at(0).at(0).toString(), scratch);
+        QCOMPARE(created.at(0).at(2).toString(), QString());
+        QCOMPARE(created.at(0).at(3).toString(), QString());
+        QVERIFY(QFileInfo(first).isDir());
+        QCOMPARE(QFileInfo(first).absolutePath(), QFileInfo(projects.scratchRoot()).absoluteFilePath());
+        QVERIFY(QFileInfo(first).fileName().endsWith(u"-szkic-zolwia"_s));
+        QVERIFY(QFileInfo(first).fileName().startsWith(QDate::currentDate().toString(u"yyyy-MM-dd"_s)));
+        QVERIFY(projects.createWorktree(scratch, u"Szkic żółwia!"_s));
+        QTRY_COMPARE(created.size(), 2);
+        QVERIFY(created.at(1).at(1).toString().endsWith(u"-szkic-zolwia-2"_s));
+        QVERIFY(projects.createWorktree(scratch, u"!!!"_s));
+        QTRY_COMPARE(created.size(), 3);
+        QVERIFY(QFileInfo(created.at(2).at(1).toString()).isDir());
+    }
+
     void previewUrlOf_data()
     {
         QTest::addColumn<QString>("text");
@@ -636,7 +678,8 @@ private Q_SLOTS:
             const auto order = [&projects] {
                 QStringList out;
                 for (const QVariant &v : projects.list())
-                    out << v.toMap().value(u"name"_s).toString().section(u'-', 1);
+                    if (!v.toMap().value(u"scratch"_s).toBool()) // (the threads without a project: last)
+                        out << v.toMap().value(u"name"_s).toString().section(u'-', 1);
                 return out;
             };
             QCOMPARE(order(), (QStringList{u"Ala"_s, u"Bolek"_s, u"Celina"_s, u"Darek"_s}));

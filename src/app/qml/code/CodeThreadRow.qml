@@ -297,6 +297,20 @@ Item {
             onTriggered: thread.copyRequested(AppController.pageAutomationLink(thread.path, "", ""), qsTr("Link copied"))
         }
         BMenuSeparator {}
+        // A thread without a project: its folder made one (T3 Code's "Turn into project").
+        BMenuItem {
+            objectName: "codeThreadIntoProject"
+            visible: Workspace.projects.isScratch(thread.projectId)
+            text: qsTr("Turn into project")
+            iconName: "folder"
+            onTriggered: {
+                const id = Workspace.codeThreads.turnIntoProject(thread.path)
+                if (id === "")
+                    AppController.toast(qsTr("Its folder is gone: the thread stays without a project."), "error")
+                else
+                    AppController.toast(qsTr("Now a project: %1").arg(Workspace.projects.nameOf(id)), "success")
+            }
+        }
         BMenuItem {
             objectName: "codeThreadSettle"
             text: thread.settled !== "" ? qsTr("Unsettle") : qsTr("Settle")

@@ -789,7 +789,8 @@ FocusScope {
             BChip {
                 id: envChip
                 objectName: "codeEnvironment"
-                visible: root.path === "" && root.project !== ""
+                // (A thread without a project: always a folder of its own.)
+                visible: root.path === "" && root.project !== "" && !Workspace.projects.isScratch(root.project)
                 iconName: root.envMode === "local" ? "hard-drive" : "folder-tree"
                 text: root.envLabel()
                 interactive: !root.makingWorktree && root.settingUp === ""
@@ -801,7 +802,7 @@ FocusScope {
                 id: baseChip
                 objectName: "codeBaseBranch"
                 visible: root.path === "" && root.project !== "" && root.envMode !== "existing" && root.madeWorktree === ""
-                         && !root.remote
+                         && !root.remote && !Workspace.projects.isScratch(root.project)
                 iconName: "git-branch"
                 text: root.envMode === "worktree"
                       ? qsTr("From %1").arg(root.baseBranch !== "" ? root.baseBranch : root.currentBranch !== "" ? root.currentBranch : "HEAD")

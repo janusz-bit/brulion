@@ -11,6 +11,7 @@
 #include "gitcli/client.h"
 #include "remoteprojects.h"
 
+#include <QDate>
 #include <QDir>
 #include <QFileInfo>
 #include <QJsonDocument>
@@ -142,11 +143,43 @@ void CodeProjects::freeName(const QString &folder, const QString &dir, const QSt
                });
 }
 
+QString CodeProjects::scratchRoot() const
+{
+    return m_scratchRoot.isEmpty() ? QDir::home().filePath(u".brulion/scratch"_s) : m_scratchRoot;
+}
+
+QVariantMap CodeProjects::scratchProject() const
+{
+    return {{u"id"_s, ScratchId.toString()}, {u"name"_s, nameOf(ScratchId.toString())}, {u"path"_s, scratchRoot()},
+            {u"exists"_s, true}, {u"scratch"_s, true}, {u"newThreadEnv"_s, u"worktree"_s},
+            {u"scripts"_s, QVariantList()}};
+}
+
+bool CodeProjects::makeScratchFolder(const QString &title)
+{
+    // <root>/<yyyy-MM-dd>-<its first words>, -2, -3 … while taken (T3 Code's ~/.t3/scratch/<date>-<slug>).
+    const QString words = slugOrEmpty(title).left(40);
+    const QString base = QDate::currentDate().toString(u"yyyy-MM-dd"_s) + (words.isEmpty() ? u"-thread"_s : u'-' + words);
+    QDir root(scratchRoot());
+    QString name = base;
+    for (int n = 2; root.exists(name); ++n)
+        name = base + u'-' + QString::number(n);
+    const QString folder = root.filePath(name);
+    if (!QDir().mkpath(folder))
+        return false;
+    QMetaObject::invokeMethod(
+            this, [this, folder] { Q_EMIT worktreeCreated(ScratchId.toString(), folder, QString(), QString()); },
+            Qt::QueuedConnection);
+    return true;
+}
+
 bool CodeProjects::createWorktree(const QString &id, const QString &title, const QString &base)
 {
     // (Another computer's project: its worktree is made there, worktreeCreated() when it is.)
     if (isRemote(id))
         return m_remote->createWorktree(id, title);
+    if (isScratch(id))
+        return makeScratchFolder(title);
     const QString repo = folderOf(id);
     if (repo.isEmpty() || !gitAvailable())
         return false;

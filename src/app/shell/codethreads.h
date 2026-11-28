@@ -58,6 +58,10 @@ public:
     Q_INVOKABLE QString snooze(const QString &path, const QString &preset);
     Q_INVOKABLE bool wake(const QString &path);
     Q_INVOKABLE bool setNeverAutoSettle(const QString &path, bool never);
+    /// A scratch thread's folder made a project of its own (T3 Code's "Turn into project"): the
+    /// project added, the page naming it, its own folder no worktree any more. The project's id
+    /// ("" for a thread that is no scratch thread, or a folder that is gone).
+    Q_INVOKABLE QString turnIntoProject(const QString &path);
     /// {settled ("yyyy-MM-dd HH:mm" | ""), snoozedUntil (the same), snoozed (still ahead), never}.
     Q_INVOKABLE QVariantMap state(const QString &path) const;
     /// When a snooze preset would end, in words for the menu ("" none): "18:00", "jutro 9:00" …

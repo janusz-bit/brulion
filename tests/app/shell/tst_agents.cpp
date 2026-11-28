@@ -4032,7 +4032,7 @@ private Q_SLOTS:
         QCOMPARE(entry.value(u"remotePath"_s).toString(), QDir::cleanPath(repo));
         QCOMPARE(projects->nameOf(u"sklep"_s), u"Sklep żółwia"_s);
         QVERIFY(projects->folderOf(u"sklep"_s).isEmpty());
-        QCOMPARE(projects->list().size(), 1);
+        QCOMPARE(projects->list().size(), 2); // (and "No project", last)
         // A new thread there: answered by that computer's agent (another one asked for: the agent
         // that computer has), in the project's folder there.
         const QString path = chats->startThread(u"sklep"_s, u"katalog"_s, {}, u"acp:claude"_s);

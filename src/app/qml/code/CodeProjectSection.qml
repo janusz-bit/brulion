@@ -24,6 +24,8 @@ ColumnLayout {
     /// Another computer's project (CodeProjects' remote ones): its name there, nothing of it on this
     /// device — the computer's name after it, no menu but its threads'.
     readonly property bool remote: AppController.routeFlag(section.modelData, "remote")
+    /// The threads without a project (CodeProjects.ScratchId): no menu, no drag, its own icon.
+    readonly property bool scratch: AppController.routeFlag(section.modelData, "scratch")
     readonly property string host: AppController.routeText(section.modelData, "host")
     /// Shown unfolded; the sidebar's filter words and order.
     property bool open: true
@@ -102,13 +104,13 @@ ColumnLayout {
         TapHandler {
             acceptedButtons: Qt.LeftButton
             onTapped: section.toggleRequested()
-            onLongPressed: if (!section.remote) section.menuRequested(projectRow, projectRow.width / 2, projectRow.height)
+            onLongPressed: if (!section.remote && !section.scratch) section.menuRequested(projectRow, projectRow.width / 2, projectRow.height)
         }
         TapHandler {
             acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
             acceptedButtons: Qt.RightButton
             onTapped: (point) => {
-                if (!section.remote)
+                if (!section.remote && !section.scratch)
                     section.menuRequested(projectRow, point.position.x, point.position.y)
             }
         }
@@ -116,7 +118,7 @@ ColumnLayout {
         DragHandler {
             id: drag
             objectName: "codeProjectDrag"
-            enabled: !section.remote
+            enabled: !section.remote && !section.scratch
             target: null
             acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
             xAxis.enabled: false
@@ -165,7 +167,7 @@ ColumnLayout {
                 BIcon {
                     anchors.centerIn: parent
                     visible: section.projectIcon === "" && !picture.visible
-                    name: section.remote ? "laptop" : "folder"
+                    name: section.remote ? "laptop" : section.scratch ? "notebook-pen" : "folder"
                     size: Theme.iconSize
                     color: Theme.fgMuted
                 }
@@ -203,8 +205,8 @@ ColumnLayout {
             BIconButton {
                 id: projectMore
                 objectName: "codeProjectMore_" + section.projectId
-                // (Another computer's project: nothing but a new thread, the "+" before it.)
-                visible: !section.remote
+                // (Another computer's project, the threads without one: nothing but a new thread, the "+" before it.)
+                visible: !section.remote && !section.scratch
                 size: "small"
                 iconName: "ellipsis"
                 label: qsTr("More: %1").arg(section.projectName)

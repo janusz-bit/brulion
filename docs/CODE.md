@@ -308,6 +308,20 @@ sub-conversations, scheduled conversations, notifications, unread marks, search.
   `<computer>-claude`, finds `claude`), else the first one —, a thread of another computer's project by
   that computer's agents the same way (below).
 
+## Threads without a project
+
+T3 Code's scratch threads: a thread that needs no project. The projects' list ends with **No project**
+(`CodeProjects::ScratchId`, `scratch`; `isScratch()`; never kept with the device's projects, not counted
+in `count`, its `list()` entry `{id: "scratch", name, path: scratchRoot(), scratch: true}` — a folder
+named so becomes `scratch-2`). A new thread of it always works in a folder of its own
+(`newThreadEnv()` "worktree", no environment or base-branch chip): `createWorktree("scratch", title)`
+makes `<scratchRoot>/<yyyy-MM-dd>-<its first words>` (`-2`, `-3` … while taken; `scratchRoot()` default
+`~/.brulion/scratch`), no git, and the thread's page names it as its `worktree:` — the agent, the
+terminal and the files work there as in any thread. Deleting such a thread leaves its folder (no
+worktree to take away). **Turn into project** (its menu; `CodeThreads::turnIntoProject(path)`) adds the
+folder as a project and makes the page name it (`project:` the new id, no `worktree:`); "Initialize
+git" in its Changes panel then makes it a repository.
+
 ## Settling and snoozing
 
 T3 Code's sidebar sections: **Settle** ("the task is done for now"), **Snooze** ("defer until later").
@@ -584,7 +598,7 @@ thread's files opening the viewer at their line (`CodeView.openFileInViewer(path
   its agents from the phone.
 * A title
   the AI gives a new thread by itself (its first message's words name it; "Regenerate title" asks),
-  scratch threads without a project; T3 Code's in-app browser for
+  T3 Code's in-app browser for
   `previewUrl` (the system's opens it).
-* Editing a project's files in the viewer, rendered Markdown, HTML and PDF files there, find within
-  the file shown, mentions of threads and pull requests (docs/CODE-FILES.md "Not done").
+* Rendered Markdown, HTML, PDF and ZIP files in the viewer, mentions of threads and pull requests
+  (docs/CODE-FILES.md "Not done").

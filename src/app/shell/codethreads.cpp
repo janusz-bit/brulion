@@ -96,6 +96,21 @@ bool CodeThreads::setNeverAutoSettle(const QString &path, bool never)
     return edit(path, [never](const QString &c) { return codethreads::setNeverAutoSettle(c, never); });
 }
 
+QString CodeThreads::turnIntoProject(const QString &path)
+{
+    bool ok = false;
+    const QString content = threadContent(path, &ok);
+    const chat::Conversation c = ok ? chat::parse(content) : chat::Conversation();
+    if (!ok || !m_workspace->projects()->isScratch(c.project) || !QFileInfo(c.worktree).isDir())
+        return {};
+    const QString id = m_workspace->projects()->add(c.worktree);
+    if (id.isEmpty())
+        return {};
+    QString changed = chat::setField(content, u"project", id);
+    changed = chat::setField(chat::setField(changed, u"worktree", {}), u"branch", {});
+    return m_workspace->write(path, changed) ? id : QString();
+}
+
 QVariantMap CodeThreads::state(const QString &path) const
 {
     bool ok = false;
