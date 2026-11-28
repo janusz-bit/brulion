@@ -413,9 +413,12 @@ other devices" → "The app's own conversations").
   `GET chats` in a long poll — while the app is in front, or while a turn of a computer runs here
   (`setActive`; a question that comes while the phone is in a pocket is a notification): the
   conversations whose turn runs, waits or asks there and those that ended there in the last 10
-  minutes (`acp::RemoteChat`), and the one shown here in full (`watch()`, the conversation a chat
+  minutes (`acp::RemoteChat` — also a turn that ended before the app shared its conversations or
+  started again: `WorkspaceChats::endedSince()`, the notebook's device state `chat/ended`), and the
+  one shown here in full (`watch()`, the conversation a chat
   view showed last: its answer as it is written, tool calls, plan, the question with its options, its
-  plan to approve, the file change it asks for, the messages waiting — `acp::RemoteChatDetail`).
+  plan to approve, the file change it asks for, the messages waiting and whether they are held, its
+  agent's options — `acp::RemoteChatDetail`).
   A computer whose app does not run answers 503 (asked again every 20 s), an older computer has no
   such endpoint (every 10 minutes), a network gone keeps the last state for two minutes, a device
   unpaired there asks no more.
@@ -428,9 +431,21 @@ other devices" → "The app's own conversations").
   `answer()` goes there (POST chats/answer); Stop goes there (chats/stop); a message written while it
   runs waits **there** (chats/send `mode: queue`; `steer()` sends it ahead, `mode: steer`) — the
   waiting messages are the computer's (`queued()` gives them with `remote: true`: shown, not taken
-  back nor sent ahead from here); pictures do not go there yet (a toast says so). `stopAll()` and a
+  back nor sent ahead from here). **Pictures** go along: each prepared as this device's own turn
+  would send it to the model (`Workspace::aiPicture`: JPEG, 1568 pixels a side at most;
+  `picturesForComputer()`), sent with the text (`pictures` of chats/send and chats/start), stored in
+  the computer's notebook there and named by its page; once that computer took them this device's
+  copies are deleted (`sentThere()`: the computer's come with the notebook's sync) — refused there,
+  the turn runs from here with them as before. `stopAll()` and a
   page deleted here stop none of the computer's turns. A turn of this device's own is never taken
   over by a computer that lists the same conversation.
+* **Its agent's options and held messages** (`computerDetail()`, `mirrorExtras()`): for a
+  conversation that computer's app runs or ended lately, the options picker above the field shows
+  that app's agent's options (`agentOptions()`: its model, mode, effort … as they are there) and a
+  choice goes there (`setAgentOption()` → POST chats/option, for its next turn); the messages it
+  holds after its turn was stopped or failed there are the conversation's held queue here
+  (`queued()` with `remote: true`, `queueHeld()`), and Resume lets them go on there
+  (`resumeQueue()` → POST chats/resume).
 * **Its end**: the turn here ends with it; the answer is in the computer's page, which the phone reads
   (GET chats/page) whenever the computer's copy has more messages than this device's — the
   notebook's sync is slower — and shows until its own copy catches up (`computerPage()`,

@@ -1562,7 +1562,9 @@ docs/CODE-TERMINAL.md "Drawn by Atrament"); shown where agents run).
   Its view follows that turn (`ChatTurn.remoteHost`): "Running on nixos — answer, stop or write from
   here: your messages wait there." above the field (`chatOnComputer`, `chatOnComputerText`), its
   question's buttons, Stop and the field go there, and its waiting messages are that computer's
-  ("waits on nixos", without Send now / Edit / Remove). A new thread of such a project starts in the
+  ("waits on nixos", without Send now / Edit / Remove) — also those held there after its turn was
+  stopped or failed, with Resume going there; pictures go with a message (prepared as for the model);
+  the options picker above the field shows that app's agent's options and a choice goes there. A new thread of such a project starts in the
   app there: "Starting the thread on nixos…" (a spinner in `chatOnComputer`) until it is made; refused,
   its text goes back into the field and a toast says why.
 

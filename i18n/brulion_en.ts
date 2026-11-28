@@ -495,7 +495,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/ChatView.qml" line="2677"/>
+        <location filename="../src/app/qml/views/ChatView.qml" line="2679"/>
         <source>[%n picture(s)]</source>
         <translation>
             <numerusform>[%n picture]</numerusform>
@@ -3128,7 +3128,7 @@
 <context>
     <name>brulion::shell::WorkspaceChats</name>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacechats.cpp" line="630"/>
+        <location filename="../src/app/shell/workspacechats.cpp" line="665"/>
         <source>%n file(s) put back as they were</source>
         <translation>
             <numerusform>%n file put back as it was</numerusform>
@@ -3136,7 +3136,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacechats.cpp" line="631"/>
+        <location filename="../src/app/shell/workspacechats.cpp" line="666"/>
         <source>%n file(s) put back</source>
         <translation>
             <numerusform>%n file put back</numerusform>
@@ -3144,7 +3144,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacechats.cpp" line="632"/>
+        <location filename="../src/app/shell/workspacechats.cpp" line="667"/>
         <source>%n changed since or not known before: left as they are (their history has them)</source>
         <translation>
             <numerusform>%n changed since or not known before: left as it is (its history has it)</numerusform>
@@ -3152,7 +3152,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacechats.cpp" line="1108"/>
+        <location filename="../src/app/shell/workspacechats.cpp" line="1143"/>
         <source>The files are back as they were before that message (%n file(s) changed).</source>
         <translation>
             <numerusform>The files are back as they were before that message (%n file changed).</numerusform>
@@ -3160,7 +3160,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacechats.cpp" line="2536"/>
+        <location filename="../src/app/shell/workspacechats.cpp" line="2656"/>
         <source>%n message(s) taken out of the conversation</source>
         <translation>
             <numerusform>%n message taken out of the conversation</numerusform>
