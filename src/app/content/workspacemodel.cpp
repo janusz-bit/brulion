@@ -110,7 +110,7 @@ bool WorkspaceListModel::unaffectedByIndexChanges()
         return false;
     // (The same version: no changed notes — whether that is nothing is the subclass's call.)
     const IndexChanges changes = idx->changesSince(m_indexVersion);
-    if (!changes.complete || changes.names || affectedBy(changes))
+    if (!changes.complete || (changes.names && affectedByNames()) || affectedBy(changes))
         return false;
     m_indexVersion = idx->version(); // nothing the rows show changed up to here
     return true;

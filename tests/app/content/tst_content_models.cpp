@@ -187,6 +187,31 @@ private Q_SLOTS:
         QCOMPARE(value(model, 0, "exists").toBool(), true);
     }
 
+    /// The journal's days follow the daily notes only: pages coming and going — the notebook's
+    /// loading, a new page, a rename of one — compute no days again (docs/PERFORMANCE.md L1b: the
+    /// days were computed again after every index notification while a notebook loaded).
+    void journalsSkipChangesOfOtherNotes()
+    {
+        auto ws = open({{u"journals/2026-10-13.md"_s, u"- wtorek\n"_s}, {u"Strona.md"_s, u"- strona\n"_s}});
+        JournalListModel model;
+        model.setWorkspace(ws.get());
+        model.setActive(true);
+        model.refreshNow();
+        QSignalSpy refreshed(&model, &WorkspaceListModel::refreshed);
+        QVERIFY(ws->writeFile(u"Nowa strona.md"_s, u"- [[2026-10-13]] żółw\n"_s)); // a new name
+        QVERIFY(ws->writeFile(u"Strona.md"_s, u"- strona, zmieniona\n"_s));
+        QVERIFY(ws->vault()->rename(u"Strona.md"_s, u"Łódź.md"_s));
+        QTest::qWait(400); // past the refresh delay (120 ms)
+        QCOMPARE(refreshed.size(), 0);
+        // A new day: listed.
+        QVERIFY(ws->writeFile(u"journals/2026-10-12.md"_s, u"- poniedziałek\n"_s));
+        QTRY_COMPARE(refreshed.size(), 1);
+        QCOMPARE(column(model, "date"), (QStringList{u"2026-10-14"_s, u"2026-10-13"_s, u"2026-10-12"_s}));
+        // A day written (it may stop being blank) or renamed away: computed again.
+        QVERIFY(ws->vault()->rename(u"journals/2026-10-12.md"_s, u"Poniedziałek.md"_s));
+        QTRY_COMPARE(column(model, "date"), (QStringList{u"2026-10-14"_s, u"2026-10-13"_s}));
+    }
+
     void journalsMidnightRollover()
     {
         // The app runs over midnight (JournalsView binds today: DatesHelper.today, which changes

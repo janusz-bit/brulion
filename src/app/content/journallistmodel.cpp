@@ -2,6 +2,7 @@
 
 #include "contentutil.h"
 #include "index/vaultindex.h"
+#include "markdown/journal.h"
 #include "workspace.h"
 
 #include <QHash>
@@ -117,6 +118,17 @@ void JournalListModel::refresh()
         m_lastTodayExists = exists;
         Q_EMIT todayPathChanged();
     }
+}
+
+bool JournalListModel::affectedBy(const IndexChanges &changes) const
+{
+    const VaultIndex *idx = vaultIndex();
+    if (!idx)
+        return true;
+    const VaultConfig &config = idx->config();
+    return std::ranges::any_of(changes.notes, [&](const VaultPath &path) {
+        return markdown::journalDateFromPath(path, config).has_value();
+    });
 }
 
 QVariant JournalListModel::data(const QModelIndex &index, int role) const

@@ -66,6 +66,10 @@ protected:
     void refresh() override;
     int rows() const override { return int(m_rows.size()); }
     void workspaceReset() override;
+    /// Only a daily note's change (added, removed, renamed, written: it may stop being blank)
+    /// changes the days; the config's change makes the index's log incomplete.
+    bool affectedBy(const IndexChanges &changes) const override;
+    bool affectedByNames() const override { return false; }
 
 private:
     struct Day {

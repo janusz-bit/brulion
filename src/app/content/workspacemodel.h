@@ -91,9 +91,15 @@ protected:
     /// Called when the workspace changes or a vault opens/closes (before the refresh).
     virtual void workspaceReset() { }
     /// Whether the rows can differ after `changes` of the index since the last refresh (only
-    /// asked for a complete log without changed names: anything can differ otherwise). Default:
+    /// asked for a complete log, without changed names unless affectedByNames() says they do not
+    /// matter: anything can differ otherwise). Default:
     /// always — the rows are computed again after every change.
     virtual bool affectedBy(const IndexChanges &changes) const;
+    /// Whether names coming and going (a note or attachment added, removed or renamed, aliases
+    /// changed: IndexChanges::names) can change the rows by themselves. Default: yes — anything
+    /// can differ. A list whose rows come from a kind of note it can tell by path alone (the
+    /// journal's days) answers no, and its affectedBy() sees the added and removed notes.
+    virtual bool affectedByNames() const { return true; }
     /// Every role of row `row` by name ({} for a bad row): the subclasses' get().
     QVariantMap rowMap(int row) const;
     /// Something else the rows come from changed (the attachments' text): as a change of the files
