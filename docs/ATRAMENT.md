@@ -626,7 +626,7 @@ Each milestone ends with something running and measured; the gates decide whethe
 | **M0 Foundation** | base, scene, CPU raster, text (fonts, shaping, glyph raster, atlas, paragraph layout, hit tests), flex layout, ui (App, entities, window, div/text/canvas, events, hover, click, scroll, focus), test platform, Qt Quick host, gallery | The gallery runs in Brulion's Qt; every area has tests; a frame of the gallery in < 4 ms of CPU raster at 1280×800 (-O2). |
 | **M1 Editing** | text input element with selection, clipboard, undo hooks, the `InputHandler` through Qt (desktop + Android IME), virtualized lists (uniform and measured), images, keymaps, accessibility bridge | Polish text typed with Gboard (composition, autocorrect, gesture typing) and with a Linux IME into an Atrament field, TalkBack reads it. First check (2026-11-26, on the Android 16 emulator with Gboard — the phone was not connected): typing, gesture typing, a suggestion replacing the word (`replaceText`), Backspace, Enter in the multiline field, autocapitalisation, a long press selecting a word with Android's handles and Cut / Copy / Select all, the clipboard both ways (a Polish word cut and pasted from Gboard's clipboard), the caret kept above the keyboard, TalkBack's tree (tabs, buttons, a toggle, both fields with label and placeholder) and its focus following the field; three bugs found and fixed on the way (below). Gboard committed every letter there (no composition, so no autocorrect on space) — Qt Quick's own text fields alike: composition and Polish autocorrect still need the phone. Since then: scrolling with a finger and the fling ("Touch" above; tested on the test platform and through Qt's touch events), the tabs' selected state for TalkBack (a checked tab on Android), the focused row of a `uniformList` kept while scrolled away. Left, on the phone: composition and Polish autocorrect with Gboard, the fling's feel against native lists, TalkBack's speech. |
 | **M2 First Brulion view** | the journal / page block editor in Atrament inside the QML shell, behind a setting (design: "The block editor in Atrament" below); the QRhi GPU renderer (in place: every primitive kind, within 2 levels of the CPU renderer) | Memory per block < 2 KB (today 100–200 KB), scrolling a 1 000-block page at 120 fps on the desktop, the editor's existing behaviour tests pass against it. Measured 2026-11-27 (`tests/bench/bench_atrament_page`, docs/PERFORMANCE.md "Atrament's block editor against M2's gate"): the view keeps nothing per block shown (the model's rendered-text caches 5.2 kB), a scroll step of a 1 000-block page 1.2 ms of scene and 2.8 ms with the CPU renderer at 1280 × 800 (median; p95 3.5 ms), a keystroke 1.3 ms. After step 5 (every kind of block Atrament's), a 1 000-row page of every kind has no foreign row and scrolls at 1.9 ms a step with the CPU renderer (median; p95 4.9 ms, the machine under load). The behaviour tests' counterparts: `tst_editor_qml_atrament` (130 checks a run, desktop and phone, "Tests" below) and the C++ suites of each step; left: the journal stream, the tables' and the media's **Not yet** items. |
-| **M3 Views** | calendar, tasks, search, settings, Code mode (editor, terminal), the chat; the shell. First (2026-11-26, behind a setting): Code mode's terminal drawn by Atrament — `TerminalScreen` paints the grid, cursor, selection and matches from the shared glyph atlas while `TerminalView` keeps its Qt input (docs/CODE-TERMINAL.md "Drawn by Atrament"): a view's drawing can move before its input | No QML in the default journey. |
+| **M3 Views** | calendar, tasks, search, settings, Code mode (editor, terminal), the chat; the shell (design and order: "The views in Atrament (M3)" below). First (2026-11-26, behind a setting): Code mode's terminal drawn by Atrament — `TerminalScreen` paints the grid, cursor, selection and matches from the shared glyph atlas while `TerminalView` keeps its Qt input (docs/CODE-TERMINAL.md "Drawn by Atrament"): a view's drawing can move before its input | No QML in the default journey. |
 | **M4 Own platforms** | Wayland (xdg-shell, layer-shell, text-input-v3, fractional scale), X11, Win32, Android (GameActivity + our own `InputConnection` in Kotlin), web (canvas + WebGPU / WebGL2, hidden textarea for the IME); the WebGPU renderer (Dawn) | The app runs with no QtGui/QtQuick loaded on Linux and Android. |
 | **M5 Qt Quick out** | QtGui, Qt Quick, QML, Controls, Svg, Pdf leave the build (PDF through PDFium/poppler into a picture) | APK < 20 MB, start-up memory < 60 MB, first browser visit < 6 MB. |
 
@@ -1446,6 +1446,110 @@ scrolling, `tst_atrament_editor`) before the next:
   (and of the edited text), built.
 * ~~Spell marks~~ as wavy underlines mapped through the display ↔ source map: built (step 2's
   entry, `pagespell.cpp`).
+
+## The views in Atrament (M3)
+
+The design of M3's first part: the Tasks, Search and Calendar views drawn by Atrament inside the
+QML shell, behind a setting, the way M2 moved the editor. Their models are C++ already and stay; what
+moves is the drawing of their rows (the bulk of a view's items, memory and frame time) first, then
+the chrome around them, until the view's route shows no QML item ("No QML in the default journey").
+
+### What stays
+
+* The models and their tests: `TaskListModel` (src/app/planning/tasklistmodel.h: sections, filters
+  through the query engine, subtasks, incremental updates), `SearchResultModel`
+  (src/app/content/searchmodel.h) and `CalendarModel` (src/app/planning/calendarmodel.h), with
+  `tests/app/planning` and `tests/app/content` over them.
+* The views' actions in QML until their chrome moves: TasksView's toggle with its undo toast, the
+  token menus (PlanningTokenMenu), the dialogs (date, query, time), opening a page at a line, the
+  route and its parameters, the shell's keys. The Atrament list asks for them; the QML view does them
+  — the same functions its QML delegates call today.
+
+### Hosting and the setting
+
+* `AppSettings.viewsAtrament` ("Draw the Tasks, Search and Calendar views with Atrament
+  (experimental)", Settings → Advanced, next to the editor's), off by default;
+  `--atrament-views` (`DevTools.atramentViews`) turns it on for one run without writing the
+  device's setting, as `--atrament-editor` does.
+* `AtramentView { view: "tasks"; viewModel: taskModel }` (likewise `"search"`, `"calendar"`): the
+  same QML element as the editor's, with one QObject property for the view's model and one signal,
+  `viewAction(action: string, args: var)`, for everything a row asks of its view (`"toggle"`,
+  `"open"`, `"tokenMenu"`, `"link"`, `"status"`, `"fold"` …) — one decision in one place, and the
+  editor's 101 properties not grown further. Points the QML needs (a menu's anchor, a self-test's
+  click) come from `viewPoint(part, key)`.
+* Each view reads its model through a typed C++ interface, not roles: `TaskListModel::rowData(i)`
+  returns the row as a struct (the one the roles are made from), so drawing a row converts no
+  QVariant. Model signals (rows inserted, moved, removed, data changed) update a measured `list()`
+  whose rows are keyed by the task's `key` (path:line), so the anchor row stays put when rows above
+  it change (as the journal stream's days do).
+
+### Rows
+
+* **Tasks** (step 1): a section header (label, count, the fold chevron) and a task row — the
+  checkbox (the editor's task box: status shapes, a click toggles, a right click or long press its
+  status menu), the text as the editor's rendered spans (`renderedspans.h`: links and tags
+  clickable, a link's menu, the 4-line "…"), the chips (`pagechips.cpp`'s date, reminder,
+  recurrence and priority chips, their menus), where it is written, the subtasks' fold and
+  progress, "Waits for …", the clock. Keys: Up/Down, Space, Enter, the Menu key in the view's focus
+  handle; the filter bar, the quick-add field and the empty state stay QML around the list at
+  first.
+* **Search** (step 2): a result row — the kind's icon, the title and the excerpt with the matched
+  words highlighted (ranges from the model, spans with a background, as the find highlight), the
+  folder or the PDF's page / the document's part, "Close in meaning"; the recent searches when the
+  field is empty. The field is an Atrament `TextInput` from the start (its IME path is M1's), Up/Down
+  and Enter move and open in the list, Escape clears.
+* **Calendar** (step 3): the agenda first (day headers and entries: the tasks' rows' parts again),
+  then the month grid (7 × 6 cells: the day's number, its entries as chips, today and the selected
+  day marked, a week number column) and the week grid (hour rows, events placed by their times), the
+  day panel's list last.
+
+### Tests
+
+* `tests/atrament/views/tst_atrament_tasks` (QtTest, the test platform, a `VaultIndex` over a temp
+  notebook as `tests/app/planning` builds it): sections and counts drawn, a click on the checkbox
+  asking for "toggle" with the task's path and line, Enter and a click opening, a section folded,
+  rows moving when the model changes with the anchor kept, the chips' menus, the accessibility tree
+  (a list, its items, checkboxes with their state). Likewise `tst_atrament_search` and
+  `tst_atrament_calendar` as their steps land.
+* The in-app self-test `atramentviewstest` (qml/dev/AtramentViewsSelfTest.qml, ctest
+  `tst_views_qml_atrament[_touch]`): TasksView, SearchView and CalendarView with
+  `--atrament-views`, real clicks and keys on the rows (`viewPoint`), the toggle's toast and undo,
+  a token menu, a query typed and a result opened — the QML around the view and the view together.
+* A gate measured as M2's: a 1 000-task view's memory per row, a scroll step's scene and CPU-renderer
+  time at 1280 × 800, the time from the route to its first frame, against the QML view
+  (`tests/bench/bench_atrament_views`).
+
+### After the three views
+
+The order after Tasks, Search and Calendar, each behind `viewsAtrament` until it passes its own
+self-test, by how much of the default journey it covers and how much it reuses:
+
+1. **Code mode's file view and diff** (`CodeFileView.qml`, `GitDiffView.qml`): read-only code with
+   line numbers and the highlighter's colours — the editor's code rows (`pagecode.cpp`,
+   `EditStyler`) over a measured list of lines, so a file of 50 000 lines lays out what is shown;
+   a diff's hunks as rows (added / removed tints, the gutter's two line numbers, word-level marks);
+   find in the file as the editor's find spans. The terminal is drawn already ("M3" in the roadmap).
+2. **The chat** (`ChatView.qml` and its segments): the messages as a measured list in reverse
+   (anchored at the end while a reply streams in, the anchor kept when one scrolls up), a message's
+   Markdown as the editor's rendered text and its blocks as the page's row kinds (code, tables,
+   math), tool calls and their results as cards with a fold, the composer an Atrament `TextInput`
+   (multiline, its chips for @-mentions and attachments). Streaming appends to the last row only:
+   one row measured again per token batch, not the list.
+3. **Settings** (`SettingsView.qml`): a form of sections — rows with a label, a description and a
+   control: Atrament's own switch, segmented choice and slider (new elements: `switchControl`,
+   `segmented`, `slider`, each with its accessibility role and keys), text fields as `TextInput`,
+   the pickers (a folder, a colour, a font) still QML dialogs opened from a row. The search over
+   settings filters the rows.
+4. **The shell** (sidebar, bottom bar, route header, toasts, the command palette): last, once no
+   view in the default journey is QML, so the window's root becomes an Atrament view hosting the
+   QML views that remain (the reverse of today's hosting: `QQuickItem`s placed by Atrament, as
+   `ForeignRowHost` does for rows).
+
+M4 then replaces the Qt host under that root view, platform by platform: Wayland first (the
+desktop the project is built on: xdg-shell, text-input-v3, fractional scale, the cursor shape and
+clipboard protocols), then Android (GameActivity, our `InputConnection` in Kotlin, AccessibilityNodeProvider
+from the tree), X11 and Win32, the web last (a canvas with WebGPU / WebGL2, a hidden textarea for
+the IME) — each starting with the gallery and the test suite's golden frames on that platform.
 
 ## Risks
 
