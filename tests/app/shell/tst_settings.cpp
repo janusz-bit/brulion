@@ -177,7 +177,13 @@ private Q_SLOTS:
             QCOMPARE(s.flashcardsRetention(), 99);
             QCOMPARE(s.flashcardsSettings(), (QVariantMap{{u"tags"_s, u"fiszki, słówka"_s},
                                                           {u"newPerDay"_s, 50},
-                                                          {u"retention"_s, 0.99}}));
+                                                          {u"retention"_s, 0.99},
+                                                          {u"typeAnswer"_s, false}}));
+            // Typing the answer before it is shown: off until switched on.
+            QVERIFY(!s.flashcardsTypeAnswer());
+            s.setFlashcardsTypeAnswer(true);
+            QCOMPARE(changed.count(), 4);
+            QVERIFY(s.flashcardsSettings().value(u"typeAnswer"_s).toBool());
             s.setFlashcardsTags(u"   "_s); // nothing: the defaults
             QCOMPARE(s.flashcardsTags(), u"flashcards, fiszki"_s);
             s.setFlashcardsEnabled(false);

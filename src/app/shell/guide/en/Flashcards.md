@@ -42,7 +42,7 @@ To study only the cards of the page you are reading, run **Review this page's ca
 ## A session
 The card shows its question, large, with the page and the headings it comes from above it. Think of the answer, then:
 
-- **Show answer** (Space) — the answer appears under a line;
+- **Show answer** (Space) — the answer appears under a line; with **Type the answer** on (*Settings → Extensions → Flashcards*) you type it first and **Check** says whether you had it right;
 - grade how well you knew it: **Again** (1) — you forgot, **Hard** (2), **Good** (3), **Easy** (4). Each button shows when you would see the card again: a new card comes back in 1 or 10 minutes until you know it, a known one in days, weeks, months;
 - **Undo** (U) takes the last grade back — the card comes back with its answer shown;
 - **Edit** opens the note at the card's line; the **⋯** menu can make a card start over.

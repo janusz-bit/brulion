@@ -108,6 +108,8 @@ class AppSettings : public QObject {
     /// 99, 90), the tags that make a note a deck ("flashcards, fiszki").
     Q_PROPERTY(int flashcardsNewPerDay READ flashcardsNewPerDay WRITE setFlashcardsNewPerDay NOTIFY flashcardsSettingsChanged FINAL)
     Q_PROPERTY(int flashcardsRetention READ flashcardsRetention WRITE setFlashcardsRetention NOTIFY flashcardsSettingsChanged FINAL)
+    /// A field to type a card's answer in before it is shown (the review compares them).
+    Q_PROPERTY(bool flashcardsTypeAnswer READ flashcardsTypeAnswer WRITE setFlashcardsTypeAnswer NOTIFY flashcardsSettingsChanged FINAL)
     Q_PROPERTY(QString flashcardsTags READ flashcardsTags WRITE setFlashcardsTags NOTIFY flashcardsSettingsChanged FINAL)
     /// The built-in AI assistant extension (asks about a page, summarises it). Off by default.
     Q_PROPERTY(bool assistantEnabled READ assistantEnabled WRITE setAssistantEnabled NOTIFY assistantEnabledChanged FINAL)
@@ -457,6 +459,8 @@ public:
     void setFlashcardsNewPerDay(int n);
     int flashcardsRetention() const;
     void setFlashcardsRetention(int percent);
+    bool flashcardsTypeAnswer() const;
+    void setFlashcardsTypeAnswer(bool on);
     QString flashcardsTags() const;
     void setFlashcardsTags(const QString &tags);
     /// The flashcards' settings as the extension takes them ({tags, newPerDay, retention}).

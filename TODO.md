@@ -267,7 +267,7 @@ done in the repository simply disappears from the list.
   review log names no card yet), the plugin's remaining settings (the tags to ignore, "cloze patterns" of one's own, cards shown
   as inputs, a bold or curly cloze drawn as one in the editor), the recall fork's FSRS state
   kept outside the notes (`tracked_files.json`), SiYuan's cards (their state is no Markdown), picture
-  occlusion, typing the answer, and a session checked by hand on a real phone and tablet. The
+  occlusion, and a session checked by hand on a real phone and tablet. The
   plugin's whole-note reviews (`#review`, `sr-due:` …) are there (docs/SYNTAX.md §15 "Notes to
   review"); missing from them: the plugin's link weighting of a new note's ease, its tags and
   folders to ignore for notes, "open a random note" and "open the next note after a review", and the

@@ -42,7 +42,7 @@ Wtyczka Spaced Repetition pozwala zmienić sposób zapisu fiszek i Brulion ma te
 ## Sesja
 Fiszka pokazuje pytanie, duże, a nad nim stronę i nagłówki, z których pochodzi. Przypomnij sobie odpowiedź, potem:
 
-- **Pokaż odpowiedź** (spacja) — odpowiedź pojawia się pod kreską;
+- **Pokaż odpowiedź** (spacja) — odpowiedź pojawia się pod kreską; z włączonym **Wpisuj odpowiedź** (*Ustawienia → Rozszerzenia → Fiszki*) najpierw ją wpisujesz, a **Sprawdź** mówi, czy była dobra;
 - oceń, jak dobrze ją znałeś: **Znowu** (1) — zapomniałeś, **Trudne** (2), **Dobrze** (3), **Łatwe** (4). Każdy przycisk mówi, kiedy fiszka wróci: nowa za minutę albo dziesięć, dopóki jej nie umiesz, znana za dni, tygodnie, miesiące;
 - **Cofnij** (U) cofa ostatnią ocenę — fiszka wraca z pokazaną odpowiedzią;
 - **Edytuj** otwiera notatkę w wierszu fiszki; menu **⋯** potrafi zacząć fiszkę od nowa.

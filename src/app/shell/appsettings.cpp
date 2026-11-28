@@ -68,6 +68,7 @@ constexpr auto kAssistant = "extensions/asystent"_L1;
 constexpr auto kFlashcards = "extensions/fiszki"_L1;
 constexpr auto kFlashcardsNew = "flashcards/newPerDay"_L1;
 constexpr auto kFlashcardsRetention = "flashcards/retention"_L1;
+constexpr auto kFlashcardsTypeAnswer = "flashcards/typeAnswer"_L1;
 constexpr auto kFlashcardsTags = "flashcards/tags"_L1;
 constexpr auto kAiProvider = "ai/provider"_L1;
 constexpr auto kAiModel = "ai/model"_L1;
@@ -985,6 +986,17 @@ void AppSettings::setFlashcardsRetention(int percent)
         Q_EMIT flashcardsSettingsChanged();
 }
 
+bool AppSettings::flashcardsTypeAnswer() const
+{
+    return m_settings->value(kFlashcardsTypeAnswer, false).toBool();
+}
+
+void AppSettings::setFlashcardsTypeAnswer(bool on)
+{
+    if (store(kFlashcardsTypeAnswer, on, flashcardsTypeAnswer()))
+        Q_EMIT flashcardsSettingsChanged();
+}
+
 QString AppSettings::flashcardsTags() const
 {
     const QString tags = m_settings->value(kFlashcardsTags, QString()).toString().simplified();
@@ -1004,7 +1016,8 @@ QVariantMap AppSettings::flashcardsSettings() const
 {
     return {{u"tags"_s, flashcardsTags()},
             {u"newPerDay"_s, flashcardsNewPerDay()},
-            {u"retention"_s, flashcardsRetention() / 100.0}};
+            {u"retention"_s, flashcardsRetention() / 100.0},
+            {u"typeAnswer"_s, flashcardsTypeAnswer()}};
 }
 
 QStringList AppSettings::enabledExtensions() const

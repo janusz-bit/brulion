@@ -57,6 +57,7 @@ type Settings = {
     learning: { number }, -- minutes
     relearning: { number },
     fuzz: boolean,
+    typeAnswer: boolean, -- a field for the answer before it is shown (a device setting)
     -- The plugin's card settings (docs/SYNTAX.md §15 "Settings of the cards"):
     inline: { { sep: string, kind: string } }, -- the single-line separators, the longest first
     multi: string, -- "" = off
@@ -163,6 +164,9 @@ local INTERFACE = {
         doneNothing = "Następna powtórka: %s.",
         noNext = "brak zaplanowanych",
         showAnswer = "Pokaż odpowiedź",
+        typeHint = "Wpisz odpowiedź",
+        check = "Sprawdź",
+        typed = "Twoja odpowiedź: %s",
         grades = { "Znowu", "Trudne", "Dobrze", "Łatwe" },
         undo = "Cofnij",
         undone = "Cofnięto ocenę",
@@ -244,6 +248,9 @@ local INTERFACE = {
         doneNothing = "Next review: %s.",
         noNext = "none scheduled",
         showAnswer = "Show answer",
+        typeHint = "Type the answer",
+        check = "Check",
+        typed = "Your answer: %s",
         grades = { "Again", "Hard", "Good", "Easy" },
         undo = "Undo",
         undone = "Grade undone",
@@ -1958,6 +1965,7 @@ local function settingsOf(args: { [string]: any }?): Settings
         learning = { 1, 10 },
         relearning = { 10 },
         fuzz = a.fuzz ~= false and a.fuzz ~= "false",
+        typeAnswer = a.typeAnswer == true or a.typeAnswer == "true",
     }
 end
 
@@ -2243,14 +2251,14 @@ end
 
 -- The review session: what was graded and how to undo it, the card shown with its answer.
 type Session = {
-    key: string, day: number, done: number, revealed: string?, last: string?, undo: { { steps: { Step }, id: string } },
+    key: string, day: number, done: number, revealed: string?, typed: string?, last: string?, undo: { { steps: { Step }, id: string } },
     total: number,
 }
-local session: Session = { key = "", day = -1, done = 0, revealed = nil, last = nil, undo = {}, total = 0 }
+local session: Session = { key = "", day = -1, done = 0, revealed = nil, typed = nil, last = nil, undo = {}, total = 0 }
 
 local function sessionFor(key: string, now: number): Session
     if session.key ~= key or session.day ~= now // 1440 then
-        session = { key = key, day = now // 1440, done = 0, revealed = nil, last = nil, undo = {}, total = 0 }
+        session = { key = key, day = now // 1440, done = 0, revealed = nil, typed = nil, last = nil, undo = {}, total = 0 }
     end
     return session
 end
@@ -2294,6 +2302,19 @@ local function nextCard(q: Queue, last: string?): Card?
 end
 
 local GRADE_TONES = { "danger", "warning", "success", "info" }
+
+-- An answer's words as a typed one is compared with them: its plain text, letter case and
+-- diacritics aside, spaces single.
+local function answerWords(text: string): string
+    return b.fold(trim((b.plain(text):gsub("%s+", " "))))
+end
+
+-- What was typed, with the answer: right (its words) or wrong.
+local function typedNode(i: any, typed: string, answer: string): Node
+    local right = answerWords(typed) ~= "" and answerWords(typed) == answerWords(answer)
+    return b.ui.text(string.format(i.typed, trim(typed)),
+        { tone = if right then "success" else "danger", icon = if right then "check" else "x" })
+end
 
 local function reviewView(params: { [string]: any }): Node
     local st = settingsOf(params)
@@ -2361,12 +2382,18 @@ local function reviewView(params: { [string]: any }): Node
     if revealed then
         table.insert(face, b.ui.divider())
         table.insert(face, b.ui.markdown(c.answer))
+        if s.typed ~= nil then
+            table.insert(face, typedNode(i, s.typed :: string, c.answer))
+        end
     end
     table.insert(nodes, b.ui.card(face))
     local args = { id = c.id, ref = c.stateRef, text = c.stateText, deck = deck }
     if not revealed then
+        if st.typeAnswer then
+            table.insert(nodes, b.ui.input({ placeholder = i.typeHint, action = "typed", args = args, submit = i.check }))
+        end
         table.insert(nodes, b.ui.row({
-            b.ui.button(i.showAnswer, "reveal", args, { key = "space", primary = true, icon = "eye" }),
+            b.ui.button(i.showAnswer, "reveal", args, { key = "space", primary = not st.typeAnswer, icon = "eye" }),
         }))
     else
         local row: { Node } = {}
@@ -2409,6 +2436,13 @@ end
 local reviewActions = {
     reveal = function(args)
         session.revealed = args.id
+        session.typed = nil
+        return nil
+    end,
+    -- The answer typed (typeAnswer): the card shown with it.
+    typed = function(args)
+        session.revealed = args.id
+        session.typed = if type(args.value) == "string" then string.sub(args.value, 1, 2000) else nil
         return nil
     end,
     grade = function(args)
@@ -2420,6 +2454,7 @@ local reviewActions = {
         local c = cardFor(st, args)
         if c == nil then
             session.revealed = nil
+            session.typed = nil
             return { message = ui().changed, tone = "warning" }
         end
         local ok, result, steps = pcall(grade, st, c :: Card, g, nowMinutes())
@@ -2434,6 +2469,7 @@ local reviewActions = {
         session.done += 1
         session.last = (c :: Card).id
         session.revealed = nil
+        session.typed = nil
         return nil
     end,
     undo = function(args)
@@ -2463,6 +2499,7 @@ local reviewActions = {
         end
         table.insert(session.undo, { steps = steps :: { Step }, id = (c :: Card).id })
         session.revealed = nil
+        session.typed = nil
         return { message = ui().resetDone, tone = "success" }
     end,
 }

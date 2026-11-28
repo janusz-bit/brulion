@@ -1033,7 +1033,10 @@ page; the icon `layers`): cards written in notes and scheduled with FSRS (docs/S
 * **Review**: a progress bar ("3 reviewed · left: 12 due, 5 new, 1 learning"), the card as a card —
   its page and headings muted, the question as Markdown in a large size (`b.ui.markdown`: rich text
   through `InlineRenderer`, links open their pages), after **Show answer** (Space; a primary button
-  that takes the row) a line and the answer —, then the four grades, Again (danger) · Hard (warning)
+  that takes the row) a line and the answer — with **Type the answer** on (Settings → Extensions →
+  Flashcards, a device setting: `typeAnswer`) a field comes first ("Check", Enter), and the answer
+  shown says "Your answer: …" in green with a check when its words are the answer's (letter case,
+  diacritics and spaces aside), else in red with an x —, then the four grades, Again (danger) · Hard (warning)
   · Good (success) · Easy (info), each with the interval it would schedule under its label ("10
   min", "4 dni") and its key 1–4 beside it, sharing the row evenly; under them **Undo** (U: the
   last grade's lines written back, the card shown again with its answer), **Edit** (the note at the

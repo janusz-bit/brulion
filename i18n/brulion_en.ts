@@ -336,7 +336,7 @@
 <context>
     <name>CanvasCard</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/canvas/CanvasCard.qml" line="309"/>
+        <location filename="../src/app/qml/canvas/CanvasCard.qml" line="314"/>
         <source>%1 · %n page(s)</source>
         <translation>
             <numerusform>%1 · %n page</numerusform>
@@ -1835,7 +1835,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3570"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3578"/>
         <source>%n warning(s) or error(s)</source>
         <translation>
             <numerusform>%n warning or error</numerusform>
@@ -1843,7 +1843,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3435"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3443"/>
         <source>Last check %1: %n reminder(s), the sync failed.</source>
         <translation>
             <numerusform>Last check %1: %n reminder, the sync failed.</numerusform>
@@ -1875,7 +1875,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2624"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2632"/>
         <source>%n device(s) paired. Another one scans a code.</source>
         <translation>
             <numerusform>%n device paired. Another one scans a code.</numerusform>
@@ -1883,7 +1883,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3259"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3267"/>
         <source>Type check: %n warning(s), %1</source>
         <translation>
             <numerusform>Type check: %n warning, %1</numerusform>
@@ -1891,7 +1891,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3437"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3445"/>
         <source>Last check %1: %n reminder(s).</source>
         <translation>
             <numerusform>Last check %1: %n reminder.</numerusform>

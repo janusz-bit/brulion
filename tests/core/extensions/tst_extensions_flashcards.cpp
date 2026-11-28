@@ -801,6 +801,48 @@ private Q_SLOTS:
 
     // A grade through the review view: reveal, grade (the state and the log written), undo (both
     // as they were, byte for byte).
+    void typingTheAnswer()
+    {
+        // With typeAnswer: a field before the answer is shown; the typed answer is shown with it,
+        // right when it is the answer's words (letter case and diacritics aside), else marked wrong.
+        QVERIFY(open({{u"Nauka.md"_s, u"---\ntags: [fiszki]\n---\nStolica Peru::Lima\nStolica Chile::Santiago de Chile\n"_s}}));
+        const QVariantMap typing{{u"fuzz"_s, false}, {u"typeAnswer"_s, true}};
+        QVariantMap view = render(u"review"_s, typing);
+        const QVariantMap field = firstOfType(view, u"input"_s);
+        QCOMPARE(field.value(u"action"_s).toString(), u"typed"_s);
+        QVERIFY(!firstOfType(view, u"button"_s, u"reveal"_s).isEmpty()); // (the answer can still be shown)
+        QVariantMap args = field.value(u"args"_s).toMap();
+        args.insert(u"value"_s, u"  LIMA "_s);
+        QVERIFY(act(u"typed"_s, args).ok());
+        view = render(u"review"_s, typing);
+        QVariantMap said;
+        for (const QVariantMap &n : nodes(view)) {
+            if (n.value(u"type"_s) == u"text"_s && n.value(u"text"_s).toString().contains(u"LIMA"_s))
+                said = n;
+        }
+        QCOMPARE(said.value(u"tone"_s).toString(), u"success"_s);
+        QList<QVariantMap> grades;
+        for (const QVariantMap &n : nodes(view))
+            if (n.value(u"action"_s) == u"grade"_s)
+                grades << n;
+        QCOMPARE(grades.size(), 4);
+        QVERIFY(act(u"grade"_s, grades[2].value(u"args"_s).toMap()).ok());
+        // The next card: a wrong answer, then without the setting no field at all.
+        view = render(u"review"_s, typing);
+        args = firstOfType(view, u"input"_s).value(u"args"_s).toMap();
+        args.insert(u"value"_s, u"Valparaíso"_s);
+        QVERIFY(act(u"typed"_s, args).ok());
+        view = render(u"review"_s, typing);
+        bool wrong = false;
+        for (const QVariantMap &n : nodes(view))
+            wrong = wrong || (n.value(u"type"_s) == u"text"_s && n.value(u"text"_s).toString().contains(u"Valparaíso"_s)
+                              && n.value(u"tone"_s) == u"danger"_s);
+        QVERIFY(wrong);
+        QVERIFY(firstOfType(render(u"review"_s, {{u"fuzz"_s, false}}), u"input"_s).isEmpty());
+        // Typed in a session of another card's: the typed answer is not shown on this one.
+        QVERIFY(act(u"typed"_s, {{u"id"_s, u"nie-ma"_s}, {u"value"_s, u"x"_s}}).ok());
+    }
+
     void reviewSession()
     {
         const QString note = u"---\ntags: [fiszki]\n---\nStolica Peru::Lima\nStolica Chile::Santiago\n"_s;

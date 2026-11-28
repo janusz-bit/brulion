@@ -1733,6 +1733,14 @@ Item {
                         onActivated: (value) => AppSettings.flashcardsNewPerDay = value
                     }
                 }
+                SettingSwitch {
+                    objectName: "flashcardsTypeAnswerSetting"
+                    visible: AppSettings.flashcardsEnabled
+                    text: qsTr("Type the answer")
+                    description: qsTr("A field for your answer before a card's answer is shown; the review then says whether it was right. On this device.")
+                    checked: AppSettings.flashcardsTypeAnswer
+                    onToggled: AppSettings.flashcardsTypeAnswer = checked
+                }
                 ShellSettingRow {
                     visible: AppSettings.flashcardsEnabled
                     title: qsTr("Desired retention")
