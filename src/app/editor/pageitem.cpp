@@ -386,10 +386,12 @@ PageItem::Row *PageItem::layoutRow(int row)
     e->listItem = e->kind == u"listItem";
     e->ordered = e->listItem && !e->marker.isEmpty() && e->marker.at(0).isDigit();
     e->level = e->view == u"heading" ? std::clamp(role(BlockListModel::HeadingLevelRole).toInt(), 1, 6) : 0;
-    // What the item draws: text rows without anything that needs a delegate.
+    // What the item draws: text rows without anything that needs a delegate (a styled tag's
+    // tint is the delegate's: BlockPartTagTint).
     const bool textView = e->view == u"text" || e->view == u"heading";
     bool drawn = textView && !m_forceHosted.contains(uid) && role(BlockListModel::VisibleRole).toBool()
                  && role(BlockListModel::TaskStatusRole).toString().isEmpty()
+                 && role(BlockListModel::TagTintRole).toString().isEmpty()
                  && !role(BlockListModel::IsEditingRole).toBool()
                  && role(BlockListModel::SelectionEdgeRole).toString().isEmpty()
                  && !role(BlockListModel::CollapsedRole).toBool()

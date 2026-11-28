@@ -5126,8 +5126,10 @@ style or a parent with one (`#projekt/dom` by `projekt`); tags in code are none.
 among the text's roles (typing a tag tints at once) and `EditorHost::tagStylesChanged` tells every
 row again. The theme's tints are its pairs (`Theme.danger` / `Theme.dangerBg` …, `neutral`:
 `Theme.borderStrong` / `Theme.bgSunken`); a `#rrggbb` is the bar as it is and the background at
-13 % (light) or 20 % (dark) opacity. Rows drawn by `PageItem` or `JournalDayItem` (behind their
-environment switches) show no tint yet. Which style a block gets is core's `markdown::tagStyleOf`
+13 % (light) or 20 % (dark) opacity. `PageItem` hosts a tinted row as its `BlockDelegate`, and
+`JournalDayItem` leaves a day with one to its editor's rows (both behind their environment
+switches): the tint is drawn in one place (`tst_editor_pageitem` `hostsTintedRows`,
+`tst_editor_journalday` `tintedBlockIsTheEditors`). Which style a block gets is core's `markdown::tagStyleOf`
 (`markdown/tagstyle.h`), the same for the exports: `io::ExportInput::tagStyles` (the export
 dialog and a page's own export give the workspace's), drawn by the HTML renderer as the element's
 style — the tint at 14 % as the background, a 3 px bar, the theme's names from the export's own
@@ -6786,8 +6788,8 @@ memory, which falls (no per-row QML) only once the item draws most rows.
   a journal day; not with a screen reader) shows its rows through the item over a Flickable; the
   `ListView` stays without rows and keeps the keyboard. The item draws paragraphs, headings and
   list items (their text, bullets, a document's numbers, guide lines) and hosts every other row
-  as the editor's own `BlockDelegate` (code, tables, tasks, frames, pictures, embedded pages,
-  selected, folded and edited rows): tapping a drawn row edits it — the row is then hosted and
+  as the editor's own `BlockDelegate` (code, tables, tasks, frames, pictures, embedded pages, rows
+  tinted by a styled tag, selected, folded and edited rows): tapping a drawn row edits it — the row is then hosted and
   its inline editor works as in the list, the caret kept in view (`BlockEditor.ensureVisible()`
   through `PageItem.ensureVisible()`) —, links open, hover underlines them, the find bar's
   matches are drawn, "scroll to block", find and reveal go through `positionAtRow()` (a revealed
@@ -6837,7 +6839,8 @@ code) a day that is not being edited is drawn by one C++ item instead
   compares every row's top, height, first line and text with the editor's rows the day switches to.
 * **A day it does not draw shows its editor's rows, the whole day** (`drawable` false): a table,
   code, a calculation, a query, a formula, a diagram, a chart, a picture or an embedded page, the
-  page properties, a callout, raw HTML, text it cannot draw (`RenderedText::drawable`). Hosting such
+  page properties, a callout, raw HTML, text it cannot draw (`RenderedText::drawable`), a block
+  tinted by a styled tag (`b.app.tagStyle`: "Styles of blocks by tag"). Hosting such
   blocks as QML delegates placed by the item would need the delegates anyway: every block view reads
   its `BlockDelegate` and the editor through it (`block.editor.*`). That is stage C's work (one item
   per page with a height sum tree, rich blocks hosted); for a journal the whole day is the simpler

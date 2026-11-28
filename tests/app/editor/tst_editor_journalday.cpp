@@ -141,6 +141,18 @@ private Q_SLOTS:
         QVERIFY(!f.item->drawable());
     }
 
+    /// A block with a styled tag (b.app.tagStyle): the editor's rows draw its tint
+    /// (BlockPartTagTint), so the day is theirs while a style tints one of its blocks.
+    void tintedBlockIsTheEditors()
+    {
+        Fixture f(u"- zwykły punkt\n- zrobić #pilne\n"_s);
+        QVERIFY(f.item->drawable());
+        f.host.setTagStyle(u"pilne"_s, u"danger"_s);
+        QVERIFY(!f.item->drawable());
+        f.host.setTagStyle(u"pilne"_s, QString());
+        QVERIFY(f.item->drawable());
+    }
+
     // The text items of rows no longer drawn leave the scene at once and are deleted later: QML
     // may hold one (textItemOf(), a self-test's compiled locals, read by the garbage collector
     // until its function returns) — a tap that made the day editable deleted it under the

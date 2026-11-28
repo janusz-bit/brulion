@@ -4,9 +4,11 @@
 // contentHeight driven by the item and its contentY read back, the anchor keeping what is on screen
 // while rows above are measured or edited, "scroll to block" exact on estimated rows, rich rows
 // (code, tasks) hosted by a QML delegate with the row's roles and index and released when scrolled
-// away, folds, links and text of drawn rows, and a frame drawn.
+// away, rows with a styled tag hosted (their delegate draws the tint), folds, links and text of
+// drawn rows, and a frame drawn.
 #include "blocklistmodel.h"
 #include "editorhost.h"
+#include "fakeeditorhost.h"
 #include "markdown/inlinerenderer.h"
 #include "pageitem.h"
 #include "renderedtextitem.h"
@@ -360,6 +362,27 @@ private Q_SLOTS:
         m_page->hostRow(m_page->firstShownRow());
         m_page->forceLayout();
         QVERIFY(m_page->rowItem(m_page->firstShownRow()));
+    }
+
+    /// A row with a styled tag (b.app.tagStyle) is hosted: the editor's delegate draws its tint
+    /// (BlockPartTagTint); the item draws it again once the style is gone.
+    void hostsTintedRows()
+    {
+        setUpPage(u"- zwykły punkt\n- zrobić #pilne\n- drugi zwykły\n"_s);
+        FakeEditorHost host;
+        m_model->setHost(&host);
+        connect(&host, &brulion::EditorHost::tagStylesChanged, m_model.get(), &BlockListModel::followTagStyles);
+        m_page->forceLayout();
+        QCOMPARE(m_page->hostedRowCount(), 0);
+        host.setTagStyle(u"pilne"_s, u"danger"_s);
+        m_page->forceLayout();
+        QVERIFY(m_page->rowItem(1));
+        QVERIFY(!m_page->rowItem(0) && !m_page->rowItem(2));
+        QCOMPARE(m_page->hostedRowCount(), 1);
+        host.setTagStyle(u"pilne"_s, QString());
+        m_page->forceLayout();
+        QVERIFY(!m_page->rowItem(1));
+        QCOMPARE(m_page->hostedRowCount(), 0);
     }
 
     /// A fold hides rows (no height, not drawn); the anchor stays in place.

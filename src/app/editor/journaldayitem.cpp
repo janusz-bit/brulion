@@ -355,7 +355,8 @@ void JournalDayItem::reload()
         row.kind = index.data(BlockListModel::KindRole).toString();
         if (!drawnView(row.view) || row.kind == u"frontmatter" || index.data(BlockListModel::IsEditingRole).toBool()
             || index.data(BlockListModel::IsSelectedRole).toBool()
-            || !index.data(BlockListModel::TransclusionsRole).toList().isEmpty()) {
+            || !index.data(BlockListModel::TransclusionsRole).toList().isEmpty()
+            || !index.data(BlockListModel::TagTintRole).toString().isEmpty()) { // the tint: BlockPartTagTint
             drawable = false;
             break;
         }
