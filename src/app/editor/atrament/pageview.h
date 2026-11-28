@@ -41,6 +41,8 @@
 
 #include <QMetaObject>
 #include <QPointer>
+#include <QSize>
+#include <QUrl>
 #include <QVariantMap>
 
 #include <functional>
@@ -907,6 +909,19 @@ private:
     std::optional<atrament::AnyElement> mediaRow(std::size_t row, const QModelIndex &index);
     atrament::AnyElement embedsPart(std::size_t row, const QVariantList &embeds, float width);
     atrament::AnyElement webPending(std::size_t row, const QVariantMap &embed, int index);
+    // A PDF's tile (mediarows.cpp): what its page's painter needs — its thumbnail's cache key, URL
+    // and size, whether it is drawn (`ready`) or being drawn.
+    struct PdfPage {
+        std::size_t row = 0;
+        int embed = 0;
+        QString key;
+        QUrl url;
+        QSize thumb;
+        bool ready = false;
+        bool drawing = false;
+    };
+    atrament::AnyElement pdfTile(std::size_t row, const QVariantMap &embed, int index, atrament::Div::ClickListener click);
+    void paintPdfPage(atrament::Rect bounds, atrament::Window &window, const PdfPage &page);
     atrament::AnyElement transclusionsPart(std::size_t row, quint64 uid, const QVariantList &transclusions);
     atrament::AnyElement queryRow(std::size_t row, const QModelIndex &index, float textX);
     void mediaClicked(std::size_t row, const atrament::ClickEvent &click);

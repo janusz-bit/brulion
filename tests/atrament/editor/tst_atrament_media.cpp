@@ -153,6 +153,7 @@ private Q_SLOTS:
     void undecodablePictureNamesItsFormat();
     void foreignKindsStayTheDelegates();
     void fileChipsAndPdfThumbnails();
+    void pdfBeingDrawnOrFailed();
     void editedRowKeepsItsPictures();
     void transclusionDrawnWithLinksAndTasks();
     void queryResultsDrawn();
@@ -380,6 +381,67 @@ void TestAtramentMedia::fileChipsAndPdfThumbnails()
     h.tw.simulateClick(h.frames(1)[0].bounds.center());
     QVERIFY(clicked.value(u"pdf"_s).toBool());
     QCOMPARE(clicked.value(u"page"_s).toInt(), 3);
+}
+
+// A PDF's page while its thumbnail is drawn: the tile in the page's shape (A4's until the PDF says)
+// with the spinner turning; a PDF that cannot be shown: the tile with a lock and the reason
+// (PdfEmbedTile's), its button named with the reason; a thumbnail that arrives: drawn. The row
+// stays Atrament's throughout (before, a QML delegate while drawing and after a failure).
+void TestAtramentMedia::pdfBeingDrawnOrFailed()
+{
+    Harness h(u"- Wykład ![[wykład.pdf]]\n"_s, [](FakeEditorHost &host) {
+        host.saveAttachment(u"wykład.pdf"_s, QByteArray("%PDF-1.7"));
+        host.setPdfViewable(true);
+    });
+    QVERIFY(h.view().drawsRow(0));
+    auto f = h.frames(0);
+    QCOMPARE(int(f.size()), 1);
+    QCOMPARE(f[0].bounds.width(), 297.0f);
+    QVERIFY2(std::abs(f[0].bounds.height() - 297 * 1.414f) < 1.5f, qPrintable(QString::number(f[0].bounds.height())));
+    QVERIFY(f[0].loading);
+    QVERIFY(!f[0].decoded);
+    const std::uint64_t before = h.window().frameCount();
+    h.tw.advance(std::chrono::milliseconds(100));
+    QVERIFY(h.window().frameCount() > before); // the spinner turns
+
+    h.host.setPdfThumbnail(u"assets/wykład.pdf"_s,
+                           QVariantMap{{u"state"_s, u"failed"_s}, {u"error"_s, u"PDF chroniony hasłem"_s}, {u"locked"_s, true}});
+    h.tw.settle();
+    QVERIFY(h.view().drawsRow(0));
+    f = h.frames(0);
+    QCOMPARE(int(f.size()), 1);
+    QVERIFY(!f[0].loading);
+    QVERIFY(!f[0].decoded);
+    h.window().setAccessibilityEnabled(true);
+    h.tw.settle();
+    const at::AccessibilityNode *tile = h.node(at::Role::Button, u"wykład.pdf");
+    QVERIFY2(tile, qPrintable(str(h.window().accessibilityTree().dump())));
+    QVERIFY2(tile->name.find(u"PDF chroniony hasłem") != std::u16string_view::npos, qPrintable(str(tile->name)));
+    // Nothing turns: no frame is asked for.
+    h.tw.advance(std::chrono::milliseconds(100));
+    const std::uint64_t settled = h.window().frameCount();
+    h.tw.advance(std::chrono::milliseconds(200));
+    QCOMPARE(h.window().frameCount(), settled);
+    // The reason is drawn (its glyphs on the white page, in PdfEmbedTile's grey).
+    int grey = 0;
+    const at::Rect page = h.frames(0)[0].bounds;
+    for (int y = int(page.top()) + 4; y < int(page.bottom()) - 4; ++y)
+        for (int x = int(page.left()) + 4; x < int(page.right()) - 4; ++x)
+            grey += h.tw.pixel(x, y).r < 200 ? 1 : 0;
+    QVERIFY2(grey > 100, qPrintable(QString::number(grey)));
+
+    const QString picture = h.host.saveAttachment(u"strona.png"_s, png(212, 300, Qt::white));
+    h.host.setPdfThumbnail(u"assets/wykład.pdf"_s,
+                           QVariantMap{{u"state"_s, u"ready"_s},
+                                       {u"url"_s, h.host.assetUrl(picture)},
+                                       {u"width"_s, 212},
+                                       {u"height"_s, 300},
+                                       {u"pages"_s, 12},
+                                       {u"pageWidth"_s, 595.0},
+                                       {u"pageHeight"_s, 842.0}});
+    h.tw.settle();
+    QVERIFY(h.view().drawsRow(0));
+    QVERIFY(h.waitDecoded(0));
 }
 
 void TestAtramentMedia::editedRowKeepsItsPictures()

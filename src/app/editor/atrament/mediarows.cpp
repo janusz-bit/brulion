@@ -61,9 +61,9 @@ bool scalableEmbed(const QVariantMap &e)
 
 // What EmbedView would show for an embed, as far as Atrament draws it: a picture (a local one, a
 // cached one from the internet, a format the device cannot decode — its frame says so — a drawing's
-// preview from its image provider), a PDF's thumbnail, a chip, a picture from the internet not shown
-// yet (its placeholder: "Show", "Save to notebook"); Foreign for the rest (players, bases, a PDF's
-// thumbnail being drawn, a drawing whose preview's provider is not registered).
+// preview from its image provider), a PDF's thumbnail (drawn, being drawn, failed), a chip, a
+// picture from the internet not shown yet (its placeholder: "Show", "Save to notebook"); Foreign
+// for the rest (players, bases, a drawing whose preview's provider is not registered).
 EmbedKind embedKind(const QVariantMap &e, bool dark)
 {
     if (e.value(u"base"_s).toBool() || e.value(u"media"_s).toBool())
@@ -72,10 +72,9 @@ EmbedKind embedKind(const QVariantMap &e, bool dark)
         return PictureCache::readable(drawingUrl(e, dark)) ? EmbedKind::Picture : EmbedKind::Foreign;
     const QUrl url = e.value(u"url"_s).toUrl();
     if (e.value(u"pdf"_s).toBool()) {
-        const QString state = e.value(u"state"_s).toString();
-        if (!e.value(u"viewable"_s).toBool() || state == u"unsupported")
-            return EmbedKind::Chip;
-        return state == u"ready" && PictureCache::readable(url) ? EmbedKind::PdfTile : EmbedKind::Foreign;
+        // (Its thumbnail drawn, being drawn or failed: PdfEmbedTile's states.)
+        const bool shown = e.value(u"viewable"_s).toBool() && e.value(u"state"_s).toString() != u"unsupported";
+        return shown ? EmbedKind::PdfTile : EmbedKind::Chip;
     }
     const bool web = e.value(u"web"_s).toBool();
     if (!e.value(u"image"_s).toBool() || (!web && url.isEmpty()))
@@ -585,89 +584,7 @@ at::AnyElement PageView::embedsPart(std::size_t row, const QVariantList &embeds,
         }
 
         if (kind == EmbedKind::PdfTile) {
-            // PdfEmbedTile: the page's thumbnail on white paper, its shape from the page's size, and a
-            // caption — a page icon, the file's name, its page count, the page shown.
-            const double pageW = e.value(u"pageWidth"_s).toDouble();
-            const double pageH = e.value(u"pageHeight"_s).toDouble();
-            const QSize thumb(e.value(u"width"_s).toInt(), e.value(u"height"_s).toInt());
-            const double aspect = pageW > 0 && pageH > 0 ? std::clamp(pageH / pageW, 1.0 / 32, 32.0)
-                                  : !thumb.isEmpty()     ? double(thumb.height()) / thumb.width()
-                                                         : 1.414;
-            float width = aspect >= 1 ? 297 : 480;
-            if (std::round(width * aspect) > 420)
-                width = float(std::floor(420 / aspect));
-            const int pages = e.value(u"pages"_s).toInt();
-            const int page = std::max(1, e.value(u"page"_s).toInt());
-            QString details;
-            if (pages > 0)
-                details = translated("PdfEmbedTile", "%n page(s)", pages);
-            if (page > 1 && (pages == 0 || page <= pages))
-                details += (details.isEmpty() ? QString() : u" · "_s)
-                           + translated("PdfEmbedTile", "p. %1").arg(page);
-            if (!details.isEmpty())
-                details = u"· "_s + details;
-            const QString label = translated("PdfEmbedTile", "PDF %1, page %2 of %3")
-                                          .arg(name)
-                                          .arg(page)
-                                          .arg(pages > 0 ? QString::number(pages) : u"?"_s);
-            const QString key = pictureKey(e, false);
-            const QUrl url = e.value(u"url"_s).toUrl();
-            const at::Color frameColor = look.frame;
-            const float r = look.radiusSm;
-            at::Div frame = at::div()
-                                    .relative()
-                                    .w(width)
-                                    .when(true, capWidth)
-                                    .aspectRatio(float(1 / aspect))
-                                    .bg(at::rgb(0xffffff)) // a page is white, also in the dark theme
-                                    .border(1)
-                                    .borderColor(frameColor)
-                                    .rounded(r)
-                                    .child(at::canvas([self, key, url, thumb, row, embed](at::Rect b, at::Window &w, at::App &) {
-                                               Media &md = *self->m_media;
-                                               md.scale = w.scaleFactor();
-                                               // (Inside its border; the thumbnail 3 px in, as PdfEmbedTile's.)
-                                               const at::Rect inner = at::Rect::fromLTRB(b.left() + 2, b.top() + 2,
-                                                                                         b.right() - 2, b.bottom() - 2);
-                                               const PictureCache::Result p = md.cache->picture(
-                                                       key, url, PictureCache::sideFor(inner.width(), inner.height(), md.scale), thumb);
-                                               if (p.image) {
-                                                   md.held.push_back(p.image);
-                                                   w.paintPicture(at::Img::fitRect({float(p.image->width), float(p.image->height)},
-                                                                                   inner, at::ObjectFit::Contain),
-                                                                  {}, p.image);
-                                               }
-                                               self->m_pictureFrames.push_back(
-                                                       {int(row), embed,
-                                                        at::Rect::fromLTRB(b.left() - 1, b.top() - 1, b.right() + 1,
-                                                                           b.bottom() + 1),
-                                                        bool(p.image)});
-                                           }).absolute().inset(0));
-            at::Div caption = at::div()
-                                      .flexRow()
-                                      .itemsCenter()
-                                      .gap(4)
-                                      .textSize(look.smallSize)
-                                      .textColor(m_palette.muted)
-                                      .whitespaceNowrap()
-                                      .overflowHidden()
-                                      .ariaHidden()
-                                      .child(glyphElement(look.smallSize + 2, m_palette.muted, Glyph::FileText))
-                                      .child(at::text(u16View(name)));
-            if (!details.isEmpty())
-                std::move(caption).child(at::text(u16View(details)));
-            std::move(column).child(at::div()
-                                            .id(at::ElementId::number(quint64(k) + 1))
-                                            .flexCol()
-                                            .gap(4)
-                                            .w(width)
-                                            .when(true, capWidth)
-                                            .cursorPointer()
-                                            .role(at::Role::Button)
-                                            .ariaLabel(u16View(label))
-                                            .child(std::move(frame))
-                                            .child(std::move(caption))
-                                            .onClick(click));
+            std::move(column).child(pdfTile(row, e, embed, click));
             continue;
         }
 
@@ -824,6 +741,169 @@ at::AnyElement PageView::embedsPart(std::size_t row, const QVariantList &embeds,
         std::move(column).child(std::move(frame));
     }
     return column;
+}
+
+// --- A PDF's page (PdfEmbedTile) ------------------------------------------------------------------
+
+namespace {
+
+// The grey of a PDF tile's spinner and failure, on its white page in both themes.
+constexpr at::Color kPdfInk = at::rgb(0x5f6368);
+
+// A page's shape (its height over its width): the page's size, else its thumbnail's, else A4's.
+double pdfAspect(const QVariantMap &e)
+{
+    const double pageW = e.value(u"pageWidth"_s).toDouble();
+    const double pageH = e.value(u"pageHeight"_s).toDouble();
+    if (pageW > 0 && pageH > 0)
+        return std::clamp(pageH / pageW, 1.0 / 32, 32.0);
+    const QSize thumb(e.value(u"width"_s).toInt(), e.value(u"height"_s).toInt());
+    return thumb.isEmpty() ? 1.414 : double(thumb.height()) / thumb.width();
+}
+
+// The tile's width: 297 px for an upright page, 480 for a wide one, at most 420 px high.
+float pdfWidth(double aspect)
+{
+    const float width = aspect >= 1 ? 297 : 480;
+    return std::round(width * aspect) > 420 ? float(std::floor(420 / aspect)) : width;
+}
+
+// The caption after the name: "· 12 pages · p. 3".
+QString pdfDetails(int pages, int page)
+{
+    QString details;
+    if (pages > 0)
+        details = translated("PdfEmbedTile", "%n page(s)", pages);
+    if (page > 1 && (pages == 0 || page <= pages))
+        details += (details.isEmpty() ? QString() : u" · "_s) + translated("PdfEmbedTile", "p. %1").arg(page);
+    return details.isEmpty() ? details : u"· "_s + details;
+}
+
+// The tile for screen readers: the page shown, or why the PDF cannot be shown.
+QString pdfLabel(const QVariantMap &e, const QString &name, int page, int pages)
+{
+    if (e.value(u"state"_s).toString() == u"failed")
+        return translated("PdfEmbedTile", "PDF %1: %2").arg(name, e.value(u"error"_s).toString());
+    return translated("PdfEmbedTile", "PDF %1, page %2 of %3")
+            .arg(name)
+            .arg(page)
+            .arg(pages > 0 ? QString::number(pages) : u"?"_s);
+}
+
+// Why a PDF cannot be shown, in the middle of its page: a lock (a password) or a warning, and
+// the reason in two lines at most.
+at::AnyElement pdfFailure(const QVariantMap &e, const PageView::MediaLook &look)
+{
+    const QString icon = e.value(u"locked"_s).toBool() ? u"lock"_s : u"triangle-alert"_s;
+    const QString error = e.value(u"error"_s).toString();
+    return at::div()
+            .absolute()
+            .inset(0)
+            .flexCol()
+            .itemsCenter()
+            .justifyCenter()
+            .gap(8)
+            .px(12)
+            .textSize(look.smallSize)
+            .textColor(kPdfInk)
+            .textCenter()
+            .lineClamp(2)
+            .when(!look.uiFamily.empty(), [&look](at::Div &&d) { return std::move(d).fontFamily(look.uiFamily); })
+            .ariaHidden()
+            .child(at::canvas([icon](at::Rect b, at::Window &w, at::App &) {
+                       if (const auto i = pageIcon(icon))
+                           w.paintIcon(*i, b, kPdfInk);
+                   }).size(20))
+            .child(at::div().wFull().child(at::text(u16View(error))));
+}
+
+} // namespace
+
+void PageView::paintPdfPage(at::Rect b, at::Window &w, const PdfPage &page)
+{
+    Media &md = *m_media;
+    md.scale = w.scaleFactor();
+    // (Inside its border; the thumbnail 3 px in, as PdfEmbedTile's.)
+    const at::Rect inner = at::Rect::fromLTRB(b.left() + 2, b.top() + 2, b.right() - 2, b.bottom() - 2);
+    PictureCache::Result p;
+    if (page.ready)
+        p = md.cache->picture(page.key, page.url, PictureCache::sideFor(inner.width(), inner.height(), md.scale), page.thumb);
+    if (p.image) {
+        md.held.push_back(p.image);
+        w.paintPicture(at::Img::fitRect({float(p.image->width), float(p.image->height)}, inner, at::ObjectFit::Contain), {},
+                       p.image);
+    }
+    // BSpinner while the thumbnail is drawn or its picture decoded.
+    const bool loading = !p.image && (page.drawing || p.loading);
+    if (loading) {
+        const auto now = md.now();
+        paintSpinner(w, inner.center(), 20, kPdfInk, now);
+        md.wakeUp(now + kSpinnerStep, now);
+    }
+    m_pictureFrames.push_back({int(page.row), page.embed, at::Rect::fromLTRB(b.left() - 1, b.top() - 1, b.right() + 1, b.bottom() + 1),
+                               bool(p.image), loading});
+}
+
+// PdfEmbedTile: the page's thumbnail on white paper (white in a dark theme too), its shape from the
+// page's size, and a caption — a page icon, the file's name, its page count, the page shown; a
+// spinner while the thumbnail is drawn, the reason when the PDF cannot be shown.
+at::AnyElement PageView::pdfTile(std::size_t row, const QVariantMap &e, int embed, at::Div::ClickListener click)
+{
+    const MediaLook &look = m_mediaLook;
+    const QString name = e.value(u"name"_s).toString();
+    const QString state = e.value(u"state"_s).toString();
+    const double aspect = pdfAspect(e);
+    const float width = pdfWidth(aspect);
+    const int pages = e.value(u"pages"_s).toInt();
+    const int page = std::max(1, e.value(u"page"_s).toInt());
+    const PdfPage shown{row,
+                        embed,
+                        pictureKey(e, false),
+                        e.value(u"url"_s).toUrl(),
+                        QSize(e.value(u"width"_s).toInt(), e.value(u"height"_s).toInt()),
+                        state == u"ready",
+                        state != u"ready" && state != u"failed"};
+    PageView *self = this;
+    at::Div frame = at::div()
+                            .relative()
+                            .w(width)
+                            .when(true, capWidth)
+                            .aspectRatio(float(1 / aspect))
+                            .bg(at::rgb(0xffffff)) // a page is white, also in the dark theme
+                            .border(1)
+                            .borderColor(look.frame)
+                            .rounded(look.radiusSm)
+                            .child(at::canvas([self, shown](at::Rect b, at::Window &w, at::App &) { self->paintPdfPage(b, w, shown); })
+                                           .absolute()
+                                           .inset(0));
+    if (state == u"failed")
+        std::move(frame).child(pdfFailure(e, look));
+    const QString details = pdfDetails(pages, page);
+    at::Div caption = at::div()
+                              .flexRow()
+                              .itemsCenter()
+                              .gap(4)
+                              .textSize(look.smallSize)
+                              .textColor(m_palette.muted)
+                              .whitespaceNowrap()
+                              .overflowHidden()
+                              .ariaHidden()
+                              .child(glyphElement(look.smallSize + 2, m_palette.muted, Glyph::FileText))
+                              .child(at::text(u16View(name)));
+    if (!details.isEmpty())
+        std::move(caption).child(at::text(u16View(details)));
+    return at::div()
+            .id(at::ElementId::number(quint64(embed) + 1))
+            .flexCol()
+            .gap(4)
+            .w(width)
+            .when(true, capWidth)
+            .cursorPointer()
+            .role(at::Role::Button)
+            .ariaLabel(u16View(pdfLabel(e, name, page, pages)))
+            .child(std::move(frame))
+            .child(std::move(caption))
+            .onClick(std::move(click));
 }
 
 // A picture from the internet not shown yet (EmbedView's placeholder): its frame names what it is

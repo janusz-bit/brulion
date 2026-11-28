@@ -1327,7 +1327,8 @@ scrolling, `tst_atrament_editor`) before the next:
      file), a click beside it edits the block, a right-click or a finger held on a picture from the
      internet its menu (`embedMenuRequested` → WebPictureMenu), elsewhere the block's menu. A
      PDF's thumbnail is PdfEmbedTile's (white paper of the page's shape, the caption with the page
-     count), other files are BChip's chips (an icon of Atrament's own — a page, a picture — and the
+     count; while it is drawn the spinner on it, a PDF that cannot be shown a lock or a warning and
+     the reason, its button named with it — `PageView::pdfTile`), other files are BChip's chips (an icon of Atrament's own — a page, a picture — and the
      name). While a picture loads BSpinner turns in its frame (a ring and an arc of 100°, once in
      850 ms: `paintSpinner`, the page drawn again every 33 ms on Atrament's clock while it does). An
      **animated picture** (a GIF) plays while it is shown — its frames from the cache, each as long
