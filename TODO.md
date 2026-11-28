@@ -354,8 +354,8 @@ done in the repository simply disappears from the list.
 * **End-to-end encryption of sync: what is left** (docs/SYNC-ENCRYPTION.md; done: the design, the
   core, the setting with the password and the recovery key in the sync settings, unlocking on
   another device, a device without the key locked, a plain setting that never syncs an encrypted
-  folder, changing the password, the guide) — the note "this notebook moved to an encrypted
-  folder" written into the old plain folder; turning it off (a new plain folder); and a check on
+  folder, changing the password, the note left in the old plain folder, the guide) — turning it
+  off (a new plain folder); and a check on
   real devices: a phone opening a notebook a laptop encrypted, the key derivation's time there
   (PBKDF2, 600 000 rounds).
 * **App lock and encrypted notes — check on real devices.** Checked automatically: the crypto

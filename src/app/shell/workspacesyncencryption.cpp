@@ -165,6 +165,7 @@ void WorkspaceSync::putKeyFile(sync::WebDavClient *client, const QString &folder
                                     failEncryption(client, put.error);
                                     return;
                                 }
+                                leaveMovedNote(folder);
                                 // (Best effort: a note for older versions; the notebook works without it.)
                                 client->put(kReadme, readmeText(), {}, [this, client, folder, notebook](const sync::PutResult &) {
                                     finishEncryption(client);
@@ -221,6 +222,31 @@ void WorkspaceSync::changeEncryptionPassword(const QString &newPassword)
                                 });
                 });
     });
+}
+
+void WorkspaceSync::leaveMovedNote(const QString &folder)
+{
+    // Only from a plain folder this notebook synced with (other devices may still sync with it),
+    // and only into another one; the note is written once, never over a file of that name.
+    if (!m_nextcloud.isComplete() || m_nextcloud.encrypted || !m_scheduler || !m_scheduler->status().lastSync.isValid()
+        || defaultFolder(m_nextcloud.folder) == defaultFolder(folder))
+        return;
+    const QString text = u"# This notebook moved to an encrypted folder\n\n"
+                         "Brulion now syncs this notebook end to end encrypted, in the server folder \u201c%1\u201d. "
+                         "This folder is no longer kept up to date. On every device: open the sync settings, set the "
+                         "folder to \u201c%1\u201d, turn on \u201cEncrypt on the server\u201d and enter the notebook's "
+                         "password. Delete this folder on the server once no device uses it.\n\n"
+                         "# Ten notatnik przeniesiono do zaszyfrowanego folderu\n\n"
+                         "Brulion synchronizuje teraz ten notatnik zaszyfrowany end-to-end, w folderze \u201e%1\u201d na "
+                         "serwerze. Ten folder nie jest już aktualizowany. Na każdym urządzeniu: otwórz ustawienia "
+                         "synchronizacji, ustaw folder \u201e%1\u201d, włącz \u201eSzyfruj na serwerze\u201d i wpisz "
+                         "hasło notatnika. Usuń ten folder na serwerze, gdy żadne urządzenie już z niego nie korzysta.\n"_s
+                                 .arg(defaultFolder(folder));
+    auto *old = new sync::WebDavClient(currentDavUrl(), m_nextcloud.user.trimmed(), m_nextcloud.password, transport(), this);
+    sync::PutOptions createOnly;
+    createOnly.ifNoneMatch = true;
+    old->put(u"Brulion — this notebook moved to an encrypted folder.md"_s, text.toUtf8(), createOnly,
+             [old](const sync::PutResult &) { old->deleteLater(); });
 }
 
 void WorkspaceSync::finishEncryption(sync::WebDavClient *client)

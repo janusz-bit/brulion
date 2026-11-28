@@ -292,6 +292,26 @@ private Q_SLOTS:
         QVERIFY(other->readFile(u"README.txt"_s).isEmpty()); // nothing of it downloaded
         QCOMPARE(other->readFile(u"jawna.md"_s), u"jawna\n"_s);
     }
+
+    void theOldPlainFolderGetsANote()
+    {
+        FakeWebDavServer server(synctest::serverOptions(m_clock));
+        auto laptop = open(&server, {{u"a.md"_s, u"a\n"_s}});
+        laptop->sync()->setNextcloud(account(server, u"Notatki"_s));
+        QVERIFY(syncAndWait(laptop->sync())); // the plain folder other devices still sync with
+        const Answer made = setUp(laptop->sync(), server, kPassword);
+        QVERIFY2(made.ok, qPrintable(made.failure));
+        const QString note = u"Notatki/Brulion — this notebook moved to an encrypted folder.md"_s;
+        QTRY_VERIFY(server.text(note).has_value());
+        QVERIFY(server.text(note)->contains(kFolder));
+        QVERIFY(server.text(note)->contains(u"zaszyfrowanego"_s)); // (in Polish too)
+        QCOMPARE(server.text(u"Notatki/a.md"_s), std::optional<QString>(u"a\n"_s)); // the rest left alone
+        // Opening an encrypted folder (not moving into one) writes nothing anywhere.
+        auto phone = open(&server);
+        phone->sync()->setNextcloud(account(server, u"Inny"_s));
+        QVERIFY(setUp(phone->sync(), server, kPassword).ok);
+        QVERIFY(!server.text(u"Inny/Brulion — this notebook moved to an encrypted folder.md"_s).has_value());
+    }
 };
 
 QTEST_MAIN(TestWorkspaceSyncEncryption)

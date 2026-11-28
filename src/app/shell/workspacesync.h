@@ -479,6 +479,8 @@ private:
     void putKeyFile(sync::WebDavClient *client, const QString &folder,
                     const std::shared_ptr<sync::encryption::NewNotebook> &notebook);
     void finishEncryption(sync::WebDavClient *client);
+    /// The note in the plain folder this notebook synced with, naming the encrypted one.
+    void leaveMovedNote(const QString &folder);
 
     QPointer<Vault> m_vault;
     sync::HttpTransport *m_transport = nullptr;
