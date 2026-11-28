@@ -486,6 +486,8 @@ private:
     CodePlace codeSessionOf(const Stream *s, const QJsonObject &params) const;
     /// A device's turn of a thread runs in `folder` now (its commit and revert wait for it).
     bool turnRunsIn(const QString &folder) const;
+    /// GET projects/<id>/branches: the project's branches as gitcli::pickerBranches() lists them.
+    void branches(const QString &project, const http::Reply &reply);
 
     // The app's own conversations (acp/appchats.h), over the link to the app.
     /// onHeaders() of `chats/…`: refused (404, 405), or the body it may have.

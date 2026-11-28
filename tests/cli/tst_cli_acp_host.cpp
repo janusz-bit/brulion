@@ -2448,6 +2448,26 @@ private Q_SLOTS:
         remoteHead.start(u"git"_s, {u"-C"_s, bare, u"rev-parse"_s, u"brulion/rabat"_s});
         QVERIFY(remoteHead.waitForFinished(30000));
         QCOMPARE(QString::fromUtf8(remoteHead.readAllStandardOutput()).trimmed(), out({u"rev-parse"_s, u"HEAD"_s}));
+        // The project's branches, as the app's picker lists them (a new worktree's base on the phone).
+        QList<acp::RemoteBranch> listed;
+        acp::RemoteError branchesError;
+        bool branchesDone = false;
+        acp::fetchRemoteBranches(m_transport.get(), QUrl(m_base), token, u"kod"_s,
+                                 [&](const QList<acp::RemoteBranch> &b, const acp::RemoteError &e) {
+                                     listed = b;
+                                     branchesError = e;
+                                     branchesDone = true;
+                                 });
+        QVERIFY(QTest::qWaitFor([&] { return branchesDone; }, kTimeoutMs));
+        QVERIFY2(!branchesError.failed(), qPrintable(branchesError.detail));
+        const auto listedBranch = [&listed](const QString &name) {
+            const auto it = std::ranges::find(listed, name, &acp::RemoteBranch::name);
+            return it == listed.cend() ? std::optional<acp::RemoteBranch>() : std::optional(*it);
+        };
+        QVERIFY(listedBranch(u"brulion/rabat"_s) && listedBranch(u"brulion/rabat"_s)->current);
+        QVERIFY(listedBranch(u"main"_s) && listedBranch(u"main"_s)->isDefault && !listedBranch(u"main"_s)->current);
+        QCOMPARE(http("GET", u"projects/nie-ma/branches"_s, {}, bearer(token)).status, 404);
+        QCOMPARE(http("POST", u"projects/kod/branches"_s, "{}", bearer(token)).status, 405);
         // gh refusing: the device hears why.
         qputenv("FAKE_GH_MODE", "signed-out");
         std::tie(opened, prError) = device(pr);

@@ -946,7 +946,7 @@ std::optional<http::Response> projectsHeaders(const QStringList &parts, const QB
     const QString action = parts.size() == 3 ? parts.at(2) : QString();
     const bool git = acp::RemoteGitRequest::kindOf(action).has_value();
     const bool post = git || action == u"worktrees";
-    if (!post && action != u"changes" && action != u"diff")
+    if (!post && action != u"changes" && action != u"diff" && action != u"branches")
         return apiError(404, u"not_found"_s, u"Not found"_s);
     *maxBody = git ? acp::MaxRemoteGitBodyBytes : post ? 4096 : 0;
     return onlyMethod(method, post ? "POST"_ba : "GET"_ba);
@@ -2943,6 +2943,8 @@ void AcpHost::projectsRequest(const QStringList &parts, const http::Request &req
         createWorktree(project, request, reply);
     else if (parts.at(2) == u"changes")
         changes(project, request, reply);
+    else if (parts.at(2) == u"branches")
+        branches(project, reply);
     else
         diff(project, request, reply);
 }
@@ -3004,6 +3006,42 @@ void AcpHost::createWorktree(const QString &project, const http::Request &reques
                            reply.send(http::Response::json(
                                    201, QJsonObject{{u"folder"_s, place.folder}, {u"branch"_s, place.branch}}));
                        });
+}
+
+void AcpHost::branches(const QString &project, const http::Reply &reply)
+{
+    QPointer<AcpHost> self(this);
+    requestPlace(project, QString(), [self, reply](const CodePlace &place, const http::Response &refusal) {
+        if (!self)
+            return;
+        if (place.folder.isEmpty()) {
+            reply.send(refusal);
+            return;
+        }
+        gitcli::RunOptions ro;
+        ro.readOnly = true;
+        // (origin's HEAD names the default branch, as the app's own picker takes it.)
+        const QString folder = place.folder;
+        self->git()->git(folder, {u"symbolic-ref"_s, u"--quiet"_s, u"--short"_s, u"refs/remotes/origin/HEAD"_s}, ro,
+                         [self, reply, folder](const gitcli::RunResult &head) {
+                             if (!self)
+                                 return;
+                             const QString originHead =
+                                     head.ok() ? QString::fromUtf8(head.out).section(u'\n', 0, 0).trimmed() : QString();
+                             self->git()->branches(folder, [reply, originHead](const gitcli::BranchList &list) {
+                                 if (!list.ok) {
+                                     reply.send(apiError(409, u"git_failed"_s, list.error.left(1000)));
+                                     return;
+                                 }
+                                 QList<acp::RemoteBranch> out;
+                                 for (const gitcli::PickedBranch &p : gitcli::pickerBranches(list.branches, originHead))
+                                     out.append({p.branch.name, p.branch.remote, p.branch.current, p.isDefault});
+                                 out = out.mid(0, acp::MaxRemoteBranches);
+                                 reply.send(http::Response::json(
+                                         200, QJsonObject{{u"branches"_s, acp::remoteBranchesJson(out)}}));
+                             });
+                         });
+    });
 }
 
 void AcpHost::changes(const QString &project, const http::Request &request, const http::Reply &reply)

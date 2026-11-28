@@ -9,6 +9,7 @@
 //                                                  agent sharing writes it from its CodeProjects)
 //   device → host   GET  projects                              → {projects: [{id, name, path}]}
 //                   POST projects/<id>/worktrees {title, base} → 201 {folder, branch}
+//                   GET  projects/<id>/branches                → {branches: [{name, remote, current, isDefault}]}
 //                   GET  projects/<id>/changes?worktree=&since= → {changes: [{path, oldPath, change, …}]}
 //                   GET  projects/<id>/diff?worktree=&since=&path=&oldPath= → {path, oldText, newText, …}
 //                   POST projects/<id>/commit {worktree, message, files?}   → {commit, branch, message}
@@ -38,6 +39,7 @@
 
 #include "acp/remote.h"
 
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QLatin1StringView>
@@ -161,6 +163,23 @@ struct RemoteWorktree {
 void createRemoteWorktree(sync::HttpTransport *transport, const QUrl &base, const QString &token,
                           const QString &project, const QString &title, const QString &from,
                           std::function<void(const RemoteWorktree &worktree, const RemoteError &error)> done);
+
+/// A branch of a project there (GET projects/<id>/branches → {branches: [{name, remote?, current?,
+/// isDefault?}]}): as gitcli::pickerBranches() lists them — a new worktree's base picked on a device.
+struct RemoteBranch {
+    QString name;
+    bool remote = false;
+    bool current = false;
+    bool isDefault = false;
+    friend bool operator==(const RemoteBranch &, const RemoteBranch &) = default;
+};
+inline constexpr int MaxRemoteBranches = 500;
+QJsonArray remoteBranchesJson(const QList<RemoteBranch> &branches);
+/// The answer's branches: at most MaxRemoteBranches, each with a name a branch may have (as a
+/// worktree's base is checked), none twice.
+QList<RemoteBranch> remoteBranchesFromJson(const QJsonObject &answer);
+void fetchRemoteBranches(sync::HttpTransport *transport, const QUrl &base, const QString &token, const QString &project,
+                         std::function<void(const QList<RemoteBranch> &branches, const RemoteError &error)> done);
 
 /// One changed file of a project there (GET projects/<id>/changes).
 struct RemoteChange {

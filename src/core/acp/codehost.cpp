@@ -3,6 +3,7 @@
 #include <QDir>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QSet>
 
 #include <algorithm>
 #include <array>
@@ -318,6 +319,51 @@ void createRemoteWorktree(sync::HttpTransport *transport, const QUrl &base, cons
                 e = RemoteError{RemoteError::Kind::Malformed, response.status, QString(), u"no folder in the answer"_s};
         }
         done(w, e);
+    });
+}
+
+QJsonArray remoteBranchesJson(const QList<RemoteBranch> &branches)
+{
+    QJsonArray list;
+    for (const RemoteBranch &b : branches) {
+        QJsonObject o{{u"name"_s, b.name}};
+        if (b.remote)
+            o.insert(u"remote"_s, true);
+        if (b.current)
+            o.insert(u"current"_s, true);
+        if (b.isDefault)
+            o.insert(u"isDefault"_s, true);
+        list.append(o);
+    }
+    return list;
+}
+
+QList<RemoteBranch> remoteBranchesFromJson(const QJsonObject &answer)
+{
+    QList<RemoteBranch> branches;
+    QSet<QString> seen;
+    for (const QJsonValue &v : answer.value(u"branches"_s).toArray()) {
+        const QJsonObject o = v.toObject();
+        const QString name = o.value(u"name"_s).toString();
+        if (!branchLike(name) || seen.contains(name))
+            continue;
+        seen.insert(name);
+        branches.append({name, o.value(u"remote"_s).toBool(), o.value(u"current"_s).toBool(),
+                         o.value(u"isDefault"_s).toBool()});
+        if (branches.size() >= MaxRemoteBranches)
+            break;
+    }
+    return branches;
+}
+
+void fetchRemoteBranches(sync::HttpTransport *transport, const QUrl &base, const QString &token, const QString &project,
+                         std::function<void(const QList<RemoteBranch> &, const RemoteError &)> done)
+{
+    const QString endpoint = u"projects/%1/branches"_s.arg(queryValue(project));
+    transport->send(remoteRequest("GET", base, endpoint, token, nullptr), [done](const sync::HttpResponse &response) {
+        QJsonObject o;
+        const RemoteError e = remoteErrorOf(response, &o);
+        done(e.failed() ? QList<RemoteBranch>() : remoteBranchesFromJson(o), e);
     });
 }
 

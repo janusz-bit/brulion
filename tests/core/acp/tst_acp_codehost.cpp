@@ -8,7 +8,7 @@
 // device asks of git there — a commit, a push, a pull request, a turn reverted —: written and read
 // back, every refusal (an empty message, paths out of the work tree or into .git, a base that is no
 // branch, a checkpoint that is none, sizes), the answers read, a pull request's number, and the
-// request sent (its endpoint, its body) or — refused — never sent.
+// request sent (its endpoint, its body) or — refused — never sent; a project's branches there.
 #include "acp/acp.h"
 #include "acp/codehost.h"
 #include "sync/http.h"
@@ -420,6 +420,57 @@ private Q_SLOTS:
         QFETCH(QString, url);
         QFETCH(int, number);
         QCOMPARE(pullRequestNumber(url), number);
+    }
+
+    void branches()
+    {
+        // A project's branches there (a new worktree's base picked on the phone): written by the host,
+        // read back bounded — no name, a name twice, a name that is no branch's left out.
+        QList<RemoteBranch> sent{{u"main"_s, false, true, true},
+                                 {u"żółw/rabat"_s, false, false, false},
+                                 {u"origin/obcy"_s, true, false, false}};
+        QJsonArray list = remoteBranchesJson(sent);
+        list.append(QJsonObject{{u"name"_s, u"main"_s}});
+        list.append(QJsonObject{{u"name"_s, u"-rf"_s}});
+        list.append(QJsonObject{{u"remote"_s, true}});
+        QCOMPARE(remoteBranchesFromJson(QJsonObject{{u"branches"_s, list}}), sent);
+        QJsonArray many;
+        for (int i = 0; i < MaxRemoteBranches + 5; ++i)
+            many.append(QJsonObject{{u"name"_s, u"b%1"_s.arg(i)}});
+        QCOMPARE(remoteBranchesFromJson(QJsonObject{{u"branches"_s, many}}).size(), MaxRemoteBranches);
+
+        struct Transport : sync::HttpTransport {
+            QList<sync::HttpRequest> sent;
+            sync::HttpResponse answer;
+            void send(const sync::HttpRequest &request, sync::HttpCallback done) override
+            {
+                sent.append(request);
+                done(answer);
+            }
+        } transport;
+        transport.answer.status = 200;
+        transport.answer.headers.insert("content-type"_ba, "application/json"_ba);
+        transport.answer.body = QJsonDocument(QJsonObject{{u"branches"_s, remoteBranchesJson(sent)}}).toJson();
+        QList<RemoteBranch> got;
+        RemoteError error{RemoteError::Kind::Network, 0, {}, {}};
+        fetchRemoteBranches(&transport, QUrl(u"https://pi.example.ts.net:8790"_s), u"bat_x"_s, u"zolw"_s,
+                            [&](const QList<RemoteBranch> &b, const RemoteError &e) {
+                                got = b;
+                                error = e;
+                            });
+        QCOMPARE(transport.sent.first().method, "GET"_ba);
+        QVERIFY(transport.sent.first().url.path().endsWith(u"/projects/zolw/branches"_s));
+        QVERIFY(!error.failed());
+        QCOMPARE(got, sent);
+        transport.answer.status = 404;
+        transport.answer.body = R"({"error":{"code":"not_found","message":"Not found"}})";
+        fetchRemoteBranches(&transport, QUrl(u"https://pi.example.ts.net:8790"_s), u"zolw"_s, u"zolw"_s,
+                            [&](const QList<RemoteBranch> &b, const RemoteError &e) {
+                                got = b;
+                                error = e;
+                            });
+        QCOMPARE(error.status, 404);
+        QVERIFY(got.isEmpty());
     }
 
     void gitSent()
