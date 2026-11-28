@@ -69,6 +69,7 @@
 #include "workspacechats.h"
 
 #include "acp/appchats.h"
+#include "agentusage.h"
 #include "chat/chat.h"
 #include "log/redact.h"
 #include "webhook/webhook.h"
@@ -2528,6 +2529,95 @@ private Q_SLOTS:
         qInfo().noquote() << page;
         QVERIFY(page.section(u"🤖"_s, -1).contains(u"add"_s));
         QCOMPARE(chats->checkpoints(path).size(), 2);
+    }
+
+    // Scheduled conversations and their webhooks with a real agent, when one is named
+    // (BRULION_REAL_ACP_AGENT, _OPTION; docs/UI.md "Scheduled conversations"): a rule's time comes
+    // and the agent answers in a new conversation; a webhook's body reaches it as data.
+    void realAgentScheduledAndHooked()
+    {
+        const QString command = qEnvironmentVariable("BRULION_REAL_ACP_AGENT");
+        if (command.isEmpty())
+            QSKIP("no real agent named (BRULION_REAL_ACP_AGENT)");
+        AgentConfig agent{u"real"_s, u"Real"_s, command, true};
+        if (const QString o = qEnvironmentVariable("BRULION_REAL_ACP_OPTION"); o.contains(u'='))
+            agent.options = QJsonObject{{o.section(u'=', 0, 0), o.section(u'=', 1)}};
+        auto ws = open({agent});
+        WorkspaceChats *chats = ws->chats();
+        ChatSchedules *schedules = chats->schedules();
+        QDateTime now(QDate(2026, 11, 20), QTime(9, 15));
+        schedules->setClock([&now] { return now; });
+        QByteArray kept;
+        schedules->setStorage([&kept] { return kept; }, [&kept](const QByteArray &json) { kept = json; });
+        QSignalSpy ran(schedules, &ChatSchedules::ran);
+
+        // Its time comes: a new conversation, answered.
+        const QString id =
+                schedules->add(u"Plan dnia"_s, u"Jakie zadanie jest w notatce Dom? Odpowiedz krótko, jednym zdaniem."_s,
+                               u"acp:real"_s, u"codziennie o 7:30"_s, false, true);
+        QVERIFY2(!id.isEmpty(), qPrintable(schedules->lastError()));
+        now = QDateTime(QDate(2026, 11, 21), QTime(7, 30, 20));
+        schedules->runDue();
+        QCOMPARE(ran.size(), 1);
+        const QString morning = ran.first().at(2).toString();
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->isRunning(morning), 600000);
+        qInfo().noquote() << ws->read(morning);
+        QCOMPARE(chats->turn(morning)->failure(), QString());
+        QVERIFY2(chats->lastAnswer(morning).contains(u"czynsz"_s, Qt::CaseInsensitive),
+                 qPrintable(chats->lastAnswer(morning)));
+
+        // A webhook's body: data in the conversation, read by the agent.
+        const QString token = schedules->newHookToken();
+        const QString hooked = schedules->save(QString(), u"Dzwonek"_s,
+                                               u"Ktoś dzwoni do drzwi. Podaj samo imię osoby z pola „kto” danych."_s,
+                                               u"acp:real"_s, QString(), false, true, token);
+        QVERIFY2(!hooked.isEmpty(), qPrintable(schedules->lastError()));
+        webhook::Body body;
+        body.kind = webhook::BodyKind::Json;
+        body.text = u"{\n    \"kto\": \"Zenon Żółkiewski\"\n}"_s;
+        body.bytes = int(body.text.toUtf8().size());
+        const ChatSchedules::HookOutcome out = schedules->runHook({token, body});
+        QCOMPARE(out.status, u"started"_s);
+        QCOMPARE(ran.size(), 2);
+        const QString door = ran.last().at(2).toString();
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->isRunning(door), 600000);
+        qInfo().noquote() << ws->read(door);
+        QCOMPARE(chats->turn(door)->failure(), QString());
+        QVERIFY2(chats->lastAnswer(door).contains(u"Zenon"_s), qPrintable(chats->lastAnswer(door)));
+    }
+
+    // The usage of a real agent read from its own session logs on this computer (docs/UI.md "Its
+    // usage"), when one is named (BRULION_REAL_ACP_AGENT, _OPTION: Claude Code or Codex): after a
+    // turn in this notebook, today's usage of this notebook is not empty.
+    void realAgentUsageCounted()
+    {
+        const QString command = qEnvironmentVariable("BRULION_REAL_ACP_AGENT");
+        if (command.isEmpty())
+            QSKIP("no real agent named (BRULION_REAL_ACP_AGENT)");
+        AgentConfig agent{u"real"_s, u"Real"_s, command, true};
+        if (const QString o = qEnvironmentVariable("BRULION_REAL_ACP_OPTION"); o.contains(u'='))
+            agent.options = QJsonObject{{o.section(u'=', 0, 0), o.section(u'=', 1)}};
+        auto ws = open({agent});
+        WorkspaceChats *chats = ws->chats();
+        shell::AgentUsage *usage = chats->usage();
+        if (!usage->applies(u"acp:real"_s))
+            QSKIP("not Claude Code or Codex: no logs to read");
+        usage->setCacheDir(m_tmp.filePath(u"usage-%1"_s.arg(m_n)));
+        const QString path =
+                chats->send(QString(), u"Ile to jest 2 + 2? Odpowiedz samą liczbą."_s, QString(), {}, u"acp:real"_s);
+        QVERIFY(!path.isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->turn(path)->running(), 600000);
+        QCOMPARE(chats->turn(path)->failure(), QString());
+        usage->refresh(u"acp:real"_s);
+        QTRY_VERIFY_WITH_TIMEOUT(!usage->state(u"acp:real"_s).value(u"busy"_s).toBool()
+                                         && usage->state(u"acp:real"_s).value(u"read"_s).toBool(),
+                                 300000);
+        const QVariantMap state = usage->state(u"acp:real"_s);
+        qInfo() << "usage:" << state.value(u"summary"_s).toString() << state.value(u"failure"_s).toString();
+        QCOMPARE(state.value(u"failure"_s).toString(), QString());
+        const QVariantMap today = usage->details(u"acp:real"_s, 1, true);
+        qInfo() << "this notebook today:" << today.value(u"total"_s) << today.value(u"models"_s);
+        QVERIFY2(!today.value(u"empty"_s).toBool(), qPrintable(today.value(u"emptyText"_s).toString()));
     }
 
     // A secret a real agent asks for (docs/UI.md "A secret the agent asks for"), when one is named

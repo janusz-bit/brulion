@@ -2302,7 +2302,8 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   again later, both files at once, the text's limit; each way a cache entry cannot be trusted, an
   unreadable log, one gone for longer than the history, a line exactly at the limit, what the cache
   keeps coming back as it was),
-  `tst_shell_agentusage`, `tst_cli_acp_usage`, the shell self-test's `checkAgentUsage` (Claude
+  `tst_shell_agentusage`, `tst_cli_acp_usage`, `tst_shell_agents` `realAgentUsageCounted` (a real
+  agent's turn counted from its own logs — Claude Code (Haiku), 2026-11-28), the shell self-test's `checkAgentUsage` (Claude
   Code's preset with synthetic logs: the row's line, Usage…, 30 and 7 bars, this notebook only).
 * **Slash commands**: while the field holds "/" and a name being typed, the agent's commands that
   match are chips above it (`chatCommands`, `chatCommand`: `available_commands_update` of the

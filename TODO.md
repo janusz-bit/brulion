@@ -51,8 +51,10 @@ done in the repository simply disappears from the list.
   changed files with Undo — its editing tool and a shell command (realAgentChatFeatures,
   realAgentUndoesItsChanges, 2026-11-28), a plan to approve in Claude Code's plan mode
   (realAgentPlanApproved), a secret Claude Code asks for in a private card and reads from its file
-  (realAgentAsksForASecret). Not yet with them: scheduled conversations and their webhooks, the
-  subscription limits and the usage history from their own session logs.
+  (realAgentAsksForASecret), a scheduled conversation and a webhook's run
+  (realAgentScheduledAndHooked), the usage read from Claude Code's own session logs
+  (realAgentUsageCounted). Not yet with them: the subscription limits (read over the network with
+  the agent's own sign-in token: not something an automatic test should do on its own).
 * **AI agents (ACP): what is still missing** — an agent the user runs answers in the AI chat over
   the Agent Client Protocol (docs/UI.md "AI agents (ACP)"; tried with Claude Code, Codex and
   OpenCode), on the computer or, through `brulion-cli acp serve` on a computer of the user's — the
