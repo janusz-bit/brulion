@@ -5128,7 +5128,14 @@ among the text's roles (typing a tag tints at once) and `EditorHost::tagStylesCh
 row again. The theme's tints are its pairs (`Theme.danger` / `Theme.dangerBg` …, `neutral`:
 `Theme.borderStrong` / `Theme.bgSunken`); a `#rrggbb` is the bar as it is and the background at
 13 % (light) or 20 % (dark) opacity. Rows drawn by `PageItem` or `JournalDayItem` (behind their
-environment switches) show no tint yet. Tests: `tst_editor_inputrules` (the roles), the playground's
+environment switches) show no tint yet. Which style a block gets is core's `markdown::tagStyleOf`
+(`markdown/tagstyle.h`), the same for the exports: `io::ExportInput::tagStyles` (the export
+dialog and a page's own export give the workspace's), drawn by the HTML renderer as the element's
+style — the tint at 14 % as the background, a 3 px bar, the theme's names from the export's own
+palette, nothing that is not a colour (`tintStyle()`) — and kept as the block's background by the
+PDF and DOCX documents made from that HTML (DOCX: over white, it has no transparency). Tests:
+`tst_markdown_tagstyle`, `tst_io_export` (`htmlTagTints`), `tst_io_paper` (`tagTintsOnPaper`),
+`tst_appio_export` (`tagTints`: an extension's style to the files). Tests: `tst_editor_inputrules` (the roles), the playground's
 self-test (`--editor-script selftest`: `checkTagStyles`).
 
 ### Selecting and copying

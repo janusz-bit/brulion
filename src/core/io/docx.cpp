@@ -57,9 +57,14 @@ QString xmlText(QStringView text)
     return out;
 }
 
+/// A colour as Word writes it. Word has no transparency: a colour with alpha (a block's tint, an
+/// Obsidian highlight's `#FF5582A6`) is the colour over the white page, not the colour itself.
 QString hex(const QColor &color)
 {
-    return color.name(QColor::HexRgb).mid(1).toUpper();
+    const auto over = [a = color.alphaF()](int channel) { return qRound(255 - (255 - channel) * a); };
+    const QColor flat =
+            color.alpha() == 255 ? color : QColor(over(color.red()), over(color.green()), over(color.blue()));
+    return flat.name(QColor::HexRgb).mid(1).toUpper();
 }
 
 QString num(qint64 value)

@@ -598,7 +598,7 @@ b.app.inputRule({ match = "...", replace = "…" })
 b.app.inputRule({ match = "teh", replace = "the", word = true })
 ```
 
-**Blocks by tag.** `b.app.tagStyle({ tag, tint })` draws every block with that tag on a coloured background with a bar at its left edge. The `tint` is one of the theme's colours — `"accent"`, `"success"`, `"danger"`, `"warning"`, `"info"`, `"neutral"`, which follow the light and the dark mode — or a colour `"#rrggbb"`. `fill = false` keeps only the bar, `bar = false` only the background. A style of `projekt` also colours `#projekt/dom`.
+**Blocks by tag.** `b.app.tagStyle({ tag, tint })` draws every block with that tag on a coloured background with a bar at its left edge. The `tint` is one of the theme's colours — `"accent"`, `"success"`, `"danger"`, `"warning"`, `"info"`, `"neutral"`, which follow the light and the dark mode — or a colour `"#rrggbb"`. `fill = false` keeps only the bar, `bar = false` only the background. A style of `projekt` also colours `#projekt/dom`. Exports to HTML, PDF and Word show the colours too (PDF and Word: the background).
 
 ```luau
 -- Urgent blocks on red, waiting ones with an amber bar.

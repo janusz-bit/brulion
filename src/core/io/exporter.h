@@ -4,6 +4,7 @@
 
 #include "calc/calclocale.h"
 #include "io/files.h"
+#include "markdown/tagstyle.h"
 #include "types.h"
 
 #include <QByteArray>
@@ -59,6 +60,11 @@ struct ExportInput {
     /// Brulion on <now>"). Publishing gives one without the time, so that a page that did not
     /// change stays the same bytes.
     QString footer;
+    /// Extensions' styles of blocks by tag (b.app.tagStyle; docs/EXTENSIONS.md "Styles of blocks
+    /// by tag"): "html-site", "html-single", "pdf" and "docx" tint the blocks as the editor does
+    /// (a light background, a bar at the left edge in HTML; the paper documents the background).
+    /// Empty: no tints.
+    markdown::TagStyles tagStyles;
 };
 
 /// A produced file: a suggested file name, its MIME type and content.

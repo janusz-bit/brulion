@@ -2064,7 +2064,8 @@ print(`{#b.app.inputRules()} rules`)
 
 `b.app.tagStyle({ tag, tint, fill?, bar? })` draws every block carrying the tag tinted — in the
 editor, being edited or not, and in reading mode: a background and a bar down the block's left
-edge.
+edge — and so do the exports to HTML (both kinds), PDF and DOCX (the paper documents keep the
+background; Word's is the tint over white).
 
 * `tag` is the tag's name, with or without its `#` (`"pilne"`, `"#pilne"`, `"#[[Jan Kowalski]]"`),
   matched in any case; a style of `projekt` also tints `#projekt/dom` (its own style wins).

@@ -6,6 +6,7 @@
 // missing ones fetched from a tiny HTTP server on 127.0.0.1, failures as warnings); one HTML file
 // protected with a password (the lock page of protected publishing, opened here from the scheme).
 #include "exportcontroller.h"
+#include "pagetools.h"
 #include "workspace.h"
 
 #include "crypto/aead.h"
@@ -337,6 +338,41 @@ private Q_SLOTS:
         QTRY_VERIFY(!c.summary().value(u"valid"_s).toBool());
         c.prepare();
         QCOMPARE(c.state(), u"error"_s);
+    }
+
+    void tagTints()
+    {
+        // An extension's styles of blocks by tag reach the documents (b.app.tagStyle).
+        QHash<QString, QByteArray> files = sampleVault();
+        files.insert(u"Rozszerzenia/Kolory.md"_s,
+                     "---\ntags: [rozszerzenie]\npermissions: [app]\n---\n```luau\nb.app.tagStyle({ tag = \"pilne\", "
+                     "tint = \"danger\" })\n```\n");
+        files.insert(u"Zadania.md"_s, "- Zapłacić czynsz #pilne\n- Zwykły blok\n");
+        auto ws = open(files);
+        const QString extension = u"Rozszerzenia/Kolory.md"_s;
+        QTRY_VERIFY(!ws->extensions()->pageState(extension).isEmpty());
+        ws->extensions()->approve(extension);
+        QTRY_VERIFY2(ws->extensions()->pageState(extension) == u"running",
+                     qPrintable(ws->extensions()->pageMessage(extension)));
+        QTRY_VERIFY(ws->tagStyles().contains(u"pilne"_s));
+        ExportController c;
+        c.setWorkspace(ws.get());
+        c.setScope(u"page"_s);
+        c.setPage(u"Zadania.md"_s);
+        c.setFormat(u"html-single"_s);
+        QTRY_VERIFY(c.summary().value(u"valid"_s).toBool());
+        c.prepare();
+        QVERIFY(waitState(c, u"ready"_s));
+        const QString html = QString::fromUtf8(c.result().first().data);
+        QVERIFY2(html.contains(u"<li style=\"background-color:rgba(178,60,49,0.14);border-left:3px solid #b23c31;"
+                               u"padding-left:.5em\">Zapłacić czynsz "_s),
+                 qPrintable(html));
+        QVERIFY(html.contains(u"<li>Zwykły blok"_s));
+        // The page's own export (its tools' "Export as HTML") too.
+        brulion::content::PageTools tools;
+        tools.setWorkspace(ws.get());
+        const QString page = tools.exportText(u"Zadania.md"_s, u"html"_s);
+        QVERIFY2(page.contains(u"border-left:3px solid #b23c31"_s), qPrintable(page));
     }
 
     void passwordProtectedHtml()

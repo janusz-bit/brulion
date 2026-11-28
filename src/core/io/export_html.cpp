@@ -181,6 +181,7 @@ public:
     {
         HtmlLinks l;
         l.idPrefix = m_idPrefix ? m_idPrefix(notePath) : QString();
+        l.tagStyles = m_vault.input().tagStyles;
         const auto fragment = [this](const VaultPath &target, const QString &heading,
                                      const QString &blockId) -> QString {
             const QString prefix = m_idPrefix ? m_idPrefix(target) : QString();

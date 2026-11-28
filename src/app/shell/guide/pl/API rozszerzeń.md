@@ -598,7 +598,7 @@ b.app.inputRule({ match = "...", replace = "…" })
 b.app.inputRule({ match = "zolw", replace = "żółw", word = true })
 ```
 
-**Bloki według tagu.** `b.app.tagStyle({ tag, tint })` rysuje każdy blok z tym tagiem na kolorowym tle z paskiem przy lewej krawędzi. `tint` to jeden z kolorów motywu — `"accent"`, `"success"`, `"danger"`, `"warning"`, `"info"`, `"neutral"`, które dopasowują się do jasnego i ciemnego trybu — albo kolor `"#rrggbb"`. `fill = false` zostawia sam pasek, `bar = false` samo tło. Styl tagu `projekt` koloruje też `#projekt/dom`.
+**Bloki według tagu.** `b.app.tagStyle({ tag, tint })` rysuje każdy blok z tym tagiem na kolorowym tle z paskiem przy lewej krawędzi. `tint` to jeden z kolorów motywu — `"accent"`, `"success"`, `"danger"`, `"warning"`, `"info"`, `"neutral"`, które dopasowują się do jasnego i ciemnego trybu — albo kolor `"#rrggbb"`. `fill = false` zostawia sam pasek, `bar = false` samo tło. Styl tagu `projekt` koloruje też `#projekt/dom`. Eksport do HTML, PDF i Worda też pokazuje te kolory (PDF i Word: tło).
 
 ```luau
 -- Pilne bloki na czerwono, czekające z bursztynowym paskiem.

@@ -13,6 +13,7 @@
 #include "io/paperdoc_p.h"
 #include "io/zip.h"
 
+#include <QBrush>
 #include <QBuffer>
 #include <QElapsedTimer>
 #include <QImage>
@@ -333,6 +334,49 @@ private Q_SLOTS:
         QVERIFY2(text.contains(words), qPrintable(text));
         for (const QString &emoji : {u"📅"_s, u"⏳"_s, u"🛫"_s, u"✅"_s, u"⏫"_s, u"⏰"_s, u"🔁"_s})
             QVERIFY2(!text.contains(emoji), qPrintable(text));
+    }
+
+    void tagTintsOnPaper()
+    {
+        // Extensions' styles of blocks by tag (b.app.tagStyle): the paper documents (PDF, DOCX) keep
+        // the background — light, the tint over the paper (QTextDocument draws no left bar).
+        ExportInput in;
+        in.files = {iotest::text(u"Zadania.md"_s, u"- Zapłacić czynsz #pilne\n- Zwykły blok\n\nAkapit #pilne\n"_s)};
+        in.tagStyles = {{u"pilne"_s, {u"danger"_s, true, true}}};
+        detail::PaperDocument paper(detail::cleanExportInput(in), paperLayout(PaperSize::A4));
+        QHash<QString, QBrush> backgrounds;
+        for (QTextBlock b = paper.document()->begin(); b.isValid(); b = b.next())
+            backgrounds.insert(b.text().trimmed(), b.blockFormat().background());
+        for (const QString &tinted : {u"Zapłacić czynsz #pilne"_s, u"Akapit #pilne"_s}) {
+            const QBrush brush = backgrounds.value(tinted);
+            QVERIFY2(brush.style() != Qt::NoBrush, qPrintable(tinted));
+            QCOMPARE(brush.color().red(), 178);
+            QVERIFY2(brush.color().alpha() < 64, qPrintable(QString::number(brush.color().alpha())));
+        }
+        QCOMPARE(backgrounds.value(u"Zwykły blok"_s).style(), Qt::NoBrush);
+
+        // DOCX has no transparency: the shading is the tint over white, light, never the full colour.
+        const ExportResult r = exportAs(u"docx"_s, in);
+        const QByteArray document = docxParts(r.files.first().data).value(u"word/document.xml"_s);
+        static const QRegularExpression shading(
+                u"<w:shd w:val=\"clear\" w:color=\"auto\" w:fill=\"([0-9A-F]{6})\"/>"_s);
+        const QRegularExpressionMatch m = shading.match(QString::fromUtf8(document));
+        QVERIFY2(m.hasMatch(), document.constData());
+        // danger (#b23c31) at 14 % over white — QTextDocument keeps the alpha as 35 / 255 —:
+        // 255 − (255 − c) × 35 / 255 for each channel, never the full colour.
+        QCOMPARE(m.captured(1), u"F4E4E3"_s);
+    }
+
+    void docxTransparentColoursOverWhite()
+    {
+        // A colour with alpha in Word — which has none — is that colour over the white page: an
+        // Obsidian highlight `#FF5582A6` (65 %), never its full pink.
+        ExportInput in;
+        in.files = {iotest::text(u"Zakreślenia.md"_s,
+                                 u"Zażółć <mark style=\"background: #FF5582A6;\">gęślą</mark> jaźń\n"_s)};
+        const QByteArray document = docxParts(exportAs(u"docx"_s, in).files.first().data).value(u"word/document.xml"_s);
+        QVERIFY2(document.contains("w:fill=\"FF90AE\""), document.constData());
+        QVERIFY(!document.contains("w:fill=\"FF5582\""));
     }
 
     void documentOfSeveralNotes()

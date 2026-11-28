@@ -735,6 +735,8 @@ QByteArray PageTools::exportData(const QString &rawPath, const QString &format) 
     input.vaultName = paths::pageTitle(path);
     input.now = m_workspace->now();
     input.macroTexts = m_workspace->extensions()->macroTexts(input.files);
+    // Blocks tinted by their tags as in the editor (b.app.tagStyle, docs/EXTENSIONS.md).
+    input.tagStyles = m_workspace->tagStyles();
     // Inline calculations show their results in the UI language.
     input.calcLocale = m_workspace->uiLanguage() == u"en" ? calc::CalcLocale::English : calc::CalcLocale::Polish;
     const io::ExportResult result = io::runExport(*exporter, input);

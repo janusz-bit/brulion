@@ -585,6 +585,49 @@ private Q_SLOTS:
         QVERIFY(page.contains(u"<code>&lt;mark&gt;kod&lt;/mark&gt;</code> &lt;mark&gt;otwarte"_s));
     }
 
+    void htmlTagTints()
+    {
+        // Extensions' styles of blocks by tag (b.app.tagStyle) drawn as the editor draws them:
+        // a light background and / or a bar at the left edge, from the first styled tag or a parent.
+        ExportInput in;
+        in.files = {iotest::text(u"Zadania.md"_s, u"# Plan #pilne\n\n"
+                                                  u"- Zapłacić czynsz #pilne\n"
+                                                  u"- Remont #projekt/kuchnia\n"
+                                                  u"- Zwykły #dom\n"
+                                                  u"- Tło #tło\n"
+                                                  u"- Nic #nic\n"
+                                                  u"- `#pilne` w kodzie\n\n"
+                                                  u"Akapit #zły\n"_s)};
+        in.tagStyles = {{u"pilne"_s, {u"danger"_s, true, true}},
+                        {u"projekt"_s, {u"#12ab34"_s, false, true}},
+                        {u"tło"_s, {u"success"_s, true, false}},
+                        {u"nic"_s, {u"info"_s, false, false}},
+                        {u"zły"_s, {u"red;position:fixed;background:url(https://t.example/p.gif)"_s, true, true}}};
+        const QString danger = u" style=\"background-color:rgba(178,60,49,0.14);border-left:3px solid #b23c31;"
+                               u"padding-left:.5em\""_s;
+        for (const QString &format : {u"html-site"_s, u"html-single"_s}) {
+            const ExportedFile f = exportWith(format, in);
+            const QString page = format == u"html-site" ? textOf(readZip(f.data), u"Brulion/Zadania.html"_s)
+                                                        : QString::fromUtf8(f.data);
+            QVERIFY2(page.contains(u"<h1 id=\""_s) && page.contains(u"\""_s + danger + u">Plan "_s), qPrintable(page));
+            QVERIFY2(page.contains(u"<li"_s + danger + u">Zapłacić czynsz "_s), qPrintable(page));
+            QVERIFY2(page.contains(u"<li style=\"border-left:3px solid #12ab34;padding-left:.5em\">Remont "_s),
+                     qPrintable(page));
+            QVERIFY(page.contains(u"<li>Zwykły "_s));
+            QVERIFY2(page.contains(u"<li style=\"background-color:rgba(42,110,68,0.14)\">Tło "_s), qPrintable(page));
+            QVERIFY(page.contains(u"<li>Nic "_s)); // neither a background nor a bar: nothing
+            QVERIFY(page.contains(u"<li><code>#pilne</code> w kodzie"_s));
+            QVERIFY2(page.contains(u"<p>Akapit "_s), qPrintable(page)); // a tint that is no colour: none
+            QVERIFY(!page.contains(u"position:fixed"_s));
+            QVERIFY(!page.contains(u"t.example"_s));
+        }
+        // No styles: the blocks as before.
+        in.tagStyles.clear();
+        const QString plain = textOf(readZip(exportWith(u"html-site"_s, in).data), u"Brulion/Zadania.html"_s);
+        QVERIFY(plain.contains(u"<li>Zapłacić czynsz "_s));
+        QVERIFY(!plain.contains(u"border-left:3px"_s));
+    }
+
     void htmlHeadingLinksMatchLikeTheApp()
     {
         // Heading links and embeds as Brulion copies them (SYNTAX §2): markup and tag hashes left

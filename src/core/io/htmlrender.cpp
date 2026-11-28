@@ -9,10 +9,13 @@
 #include "io/rendercommon_p.h"
 #include "markdown/inline.h"
 #include "markdown/math.h"
+#include "markdown/tagstyle.h"
 #include "markdown/tokens.h"
 #include "text/text.h"
 #include "util/paths.h"
 
+#include <QColor>
+#include <QHash>
 #include <QRegularExpression>
 #include <QScopeGuard>
 #include <QStringTokenizer>
@@ -174,6 +177,22 @@ QString codeBlockHtml(const QString &lang, const QString &code, const QString &i
     }
     const QString cls = lang.isEmpty() ? QString() : u" class="_s + attr(u"language-"_s + lang);
     return u"<pre"_s + id + u"><code"_s + cls + u'>' + esc(code) + u"</code></pre>"_s;
+}
+
+/// The colour of a block's tint: the export's palette for the theme's names (as the stylesheet's
+/// links, callouts and dates), "#rrggbb" as written; nullopt for anything else.
+std::optional<QColor> tintColor(const QString &tint)
+{
+    static const QHash<QString, QColor> palette{
+            {u"accent"_s, QColor(0x2c, 0x6a, 0xa3)}, {u"success"_s, QColor(0x2a, 0x6e, 0x44)},
+            {u"danger"_s, QColor(0xb2, 0x3c, 0x31)}, {u"warning"_s, QColor(0xc2, 0x7c, 0x0e)},
+            {u"info"_s, QColor(0x2a, 0x7d, 0x9c)},   {u"neutral"_s, QColor(0x6b, 0x72, 0x80)}};
+    if (const auto it = palette.constFind(tint); it != palette.cend())
+        return *it;
+    static const QRegularExpression hex(u"^#[0-9a-fA-F]{6}$"_s);
+    if (hex.match(tint).hasMatch())
+        return QColor::fromString(tint);
+    return std::nullopt;
 }
 
 } // namespace
@@ -503,7 +522,7 @@ QString HtmlRenderer::renderListItem(const ParsedNote &note, int index, int leve
         out += u" class=\"task "_s + statusName(b.task->status) + u'"';
     if (!b.id.isEmpty())
         out += u" id="_s + attr(m_links.idPrefix + blockAnchor(b.id));
-    out += u'>';
+    out += tintOf(b) + u'>';
     if (b.task) {
         const bool checked = b.task->status == TaskStatus::Done || b.task->status == TaskStatus::Cancelled;
         out += u"<input type=\"checkbox\" disabled"_s + (checked ? u" checked"_s : QString()) + u"> "_s;
@@ -608,17 +627,39 @@ QString HtmlRenderer::fenceHtml(const ParsedNote &note, int line, const QString 
            + u"</code></pre></details></figure>"_s;
 }
 
+QString tintStyle(const markdown::TagStyle &style)
+{
+    const std::optional<QColor> color = tintColor(style.tint);
+    if (!color || (!style.fill && !style.bar))
+        return {};
+    QStringList parts;
+    if (style.fill)
+        parts << u"background-color:rgba(%1,%2,%3,0.14)"_s.arg(color->red()).arg(color->green()).arg(color->blue());
+    if (style.bar)
+        parts << u"border-left:3px solid "_s + color->name(QColor::HexRgb) << u"padding-left:.5em"_s;
+    return u" style=\""_s + parts.join(u';') + u'"';
+}
+
+QString HtmlRenderer::tintOf(const Block &block) const
+{
+    if (m_links.tagStyles.isEmpty())
+        return {};
+    const std::optional<markdown::TagStyle> style = markdown::tagStyleOf(block.kind, block.text, m_links.tagStyles);
+    return style ? tintStyle(*style) : QString();
+}
+
 QString HtmlRenderer::renderBlock(const ParsedNote &note, int index) const
 {
     const Block &b = note.blocks[index];
-    const QString id = b.id.isEmpty() ? QString() : u" id="_s + attr(m_links.idPrefix + blockAnchor(b.id));
+    const QString tint = tintOf(b);
+    const QString id = (b.id.isEmpty() ? QString() : u" id="_s + attr(m_links.idPrefix + blockAnchor(b.id))) + tint;
     switch (b.kind) {
     case BlockKind::Frontmatter: return {};
     case BlockKind::Heading: {
         const int level = std::clamp(b.headingLevel, 1, 6);
         const QString anchor = m_links.idPrefix + (b.id.isEmpty() ? headingAnchor(b.text) : blockAnchor(b.id));
-        return u"<h"_s + QString::number(level) + u" id="_s + attr(anchor) + u'>' + renderInline(b.text) + metaChips(b)
-               + u"</h"_s + QString::number(level) + u'>';
+        return u"<h"_s + QString::number(level) + u" id="_s + attr(anchor) + tint + u'>' + renderInline(b.text)
+               + metaChips(b) + u"</h"_s + QString::number(level) + u'>';
     }
     case BlockKind::Paragraph: {
         // A paragraph that is only a page embed shows the embedded page.

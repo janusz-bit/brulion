@@ -6,6 +6,7 @@
 #pragma once
 
 #include "chart/chart.h"
+#include "markdown/tagstyle.h"
 #include "types.h"
 
 #include <QString>
@@ -47,7 +48,16 @@ struct HtmlLinks {
     /// The groups of a ```chart block's `query:` run in the note's vault; unset: such a chart
     /// stays its source.
     std::function<chart::QueryCounts(const QString &query)> chartQuery;
+    /// Extensions' styles of blocks by tag (ExportInput::tagStyles): a styled block gets them as
+    /// its element's style (tintStyle()).
+    markdown::TagStyles tagStyles;
 };
+
+/// The style attribute (" style=\"…\"", "" for none) of a block drawn in `style`: a light
+/// background (the tint at 14 %, also on a dark page), a 3 px bar at the left edge. The tint is
+/// one of the theme's names (the export's palette) or "#rrggbb"; anything else draws nothing —
+/// what reaches CSS is only a colour of ours.
+QString tintStyle(const markdown::TagStyle &style);
 
 class HtmlRenderer {
 public:
@@ -73,6 +83,8 @@ public:
 private:
     QString renderBlock(const ParsedNote &note, int index) const;
     QString renderListItem(const ParsedNote &note, int index, int level) const;
+    /// tintStyle() of the block's style by its tags (markdown::tagStyleOf), "" for none.
+    QString tintOf(const Block &block) const;
     QString renderTable(const QString &source) const;
     /// A fenced block (`lang`, `code`, at `line` of `note`; `id`: attribute text or empty) as
     /// HTML: a ```chart as SVG with its data and source folded under it, else — also when it

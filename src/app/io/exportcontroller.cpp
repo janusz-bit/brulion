@@ -703,6 +703,8 @@ io::ExportInput ExportController::exportInput()
     input.paperSize = m_paperSize;
     // What the macros of extensions show goes into the documents (docs/SYNTAX.md §13 "Macros").
     input.macroTexts = m_workspace->extensions()->macroTexts(input.files);
+    // Blocks tinted by their tags as in the editor (b.app.tagStyle, docs/EXTENSIONS.md).
+    input.tagStyles = m_workspace->tagStyles();
     // Inline calculations show their results in the UI language.
     input.calcLocale = m_workspace->uiLanguage() == u"en" ? calc::CalcLocale::English : calc::CalcLocale::Polish;
     m_readQueue.clear();

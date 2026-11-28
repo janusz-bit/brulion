@@ -6,6 +6,7 @@
 
 #include <QAbstractTextDocumentLayout>
 #include <QBuffer>
+#include <QColor>
 #include <QFontDatabase>
 #include <QFontMetricsF>
 #include <QGuiApplication>
@@ -515,6 +516,17 @@ QString PaperDocument::adapt(QString body)
     });
     body.replace(u"<input type=\"checkbox\" disabled checked> "_s, kChecked);
     body.replace(u"<input type=\"checkbox\" disabled> "_s, kUnchecked);
+    // A coloured highlight's CSS colour is #RRGGBBAA; QTextDocument would read eight digits as
+    // Qt's #AARRGGBB (the red `#FF5582A6` became blue `#5582A6`): rgba() is the same in both.
+    static const QRegularExpression colouredMark(u"<mark style=\"background: #([0-9A-Fa-f]{6})([0-9A-Fa-f]{2});\">"_s);
+    body = replaceMatches(body, colouredMark, [](const Match &m) -> std::optional<QString> {
+        const QColor rgb = QColor::fromString(u'#' + m.captured(1));
+        const int alpha = m.captured(2).toInt(nullptr, 16);
+        return u"<span style=\"background-color:rgba(%1,%2,%3,%4)\">"_s.arg(rgb.red())
+                .arg(rgb.green())
+                .arg(rgb.blue())
+                .arg(QString::number(alpha / 255.0, 'f', 3)); // (rounded: Qt truncates alpha × 255)
+    });
     body.replace(u"<mark>"_s, u"<span style=\"background-color:#f9e2a6\">"_s).replace(u"</mark>"_s, u"</span>"_s);
     body.replace(u"<del>"_s, u"<s>"_s).replace(u"</del>"_s, u"</s>"_s);
     return body;
