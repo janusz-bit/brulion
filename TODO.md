@@ -12,7 +12,7 @@ done in the repository simply disappears from the list.
   run on Windows too: the ConPTY terminal, git, gh). Missing: Code mode tried by hand on Windows and on
   macOS at all; t3.json read again when it changes, on Windows (CI's runner saw no change of it:
   tst_shell_codeprojects configInProject skips it there); a terminal on Windows before 10 1809;
-  hunks of the Changes panel's other sources than Uncommitted (single lines are staged or thrown away),
+  staging hunks of the Changes panel's other sources than Uncommitted (they are reverted alone; single lines are staged or thrown away),
   the pull request of "Commit, push and create PR" written by AI too (the pull request dialog's and the
   commit message are: "Write with AI", an empty message written by itself) (docs/CODE-GIT.md
   "Not done (yet)"); for a thread of another computer's project (continued from

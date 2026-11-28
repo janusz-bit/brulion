@@ -283,6 +283,10 @@ Item {
             repo.stageHunk(panel.selectedPath, first, last)
         } else if (action === "unstage") {
             repo.unstageHunk(panel.selectedPath, first, last)
+        } else if (action === "revert") {
+            panel.discardFirst = first
+            panel.discardLast = last
+            hunkRevertDialog.open()
         } else {
             panel.discardFirst = first
             panel.discardLast = last
@@ -1049,6 +1053,9 @@ Item {
                             // (Lines by their numbers: only while nothing of the file is staged.)
                             canStageLines: diffView.hunks && panel.selectedUnstaged && !panel.selectedStaged
                             canDiscardLines: diffView.hunks && panel.selectedUnstaged && !panel.selectedStaged
+                            // (Another source's hunk of a changed file: taken out of the files alone.)
+                            canRevert: !panel.uncommitted && repo.compareLoaded && panel.selectedStatus === "modified"
+                                       && !panel.selectedBinary
                             onHunkRequested: (action, first, last) => panel.onHunk(action, first, last)
                             onLinesRequested: (action, from, to) => panel.onLines(action, from, to)
                             onCommented: (text) => panel.addToChat(text)
@@ -1569,6 +1576,20 @@ Item {
             else
                 panel.revertTurn()
         }
+    }
+
+    BConfirmDialog {
+        id: hunkRevertDialog
+        objectName: "gitHunkRevertDialog"
+        title: qsTr("Revert this change?")
+        subject: panel.selectedPath
+        subjectIcon: "undo-2"
+        message: qsTr("Only this change is taken out of the file; the rest of it stays. If its lines changed since, nothing is changed.")
+        detail: qsTr("Commits and the staging area stay as they are.")
+        confirmText: qsTr("Revert")
+        destructive: true
+        onAccepted: repo.revertHunk(panel.selectedPath, repo.comparisonBase, repo.compareTarget, panel.discardFirst,
+                                    panel.discardLast)
     }
 
     BConfirmDialog {

@@ -317,6 +317,24 @@ void Client::applyHunk(const QString &folder, const QString &path, HunkAction ac
     }, std::move(done));
 }
 
+void Client::revertHunk(const QString &folder, const QString &path, const QString &base, const QString &target,
+                        int first, int last, std::function<void(const Outcome &)> done)
+{
+    // (Revisions as git reads them, never an option.)
+    if (base.isEmpty() || base.startsWith(u'-') || target.startsWith(u'-') || first <= 0 || last <= 0) {
+        later([done = std::move(done)] { done(failedWith(GitMessages::tr("No such change to revert"))); });
+        return;
+    }
+    QStringList range{base};
+    if (!target.isEmpty())
+        range << target;
+    applyPart(folder, path, HunkAction::Discard, [first, last](const FilePatch &patch) -> PatchPart {
+        const QList<int> hunks = hunksTouching(patch, first, last, true);
+        return {hunks.isEmpty() ? QByteArray() : patchOf(patch, hunks, true),
+                GitMessages::tr("Reverted %n hunk(s)", "", int(hunks.size()))};
+    }, std::move(done), range);
+}
+
 void Client::applyLines(const QString &folder, const QString &path, HunkAction action, int oldFirst, int oldLast,
                         int newFirst, int newLast, std::function<void(const Outcome &)> done)
 {
@@ -335,7 +353,8 @@ void Client::applyLines(const QString &folder, const QString &path, HunkAction a
 }
 
 void Client::applyPart(const QString &folder, const QString &path, HunkAction action,
-                       std::function<PatchPart(const FilePatch &)> part, std::function<void(const Outcome &)> done)
+                       std::function<PatchPart(const FilePatch &)> part, std::function<void(const Outcome &)> done,
+                       const QStringList &range)
 {
     if (!isSafeRelativePath(path)) {
         later([done = std::move(done), path] {
@@ -348,10 +367,10 @@ void Client::applyPart(const QString &folder, const QString &path, HunkAction ac
                      u"-U3"_s};
     if (action == HunkAction::Unstage)
         diff << u"--cached"_s;
-    diff << u"--"_s << u":(literal)"_s + path;
+    diff << range << u"--"_s << u":(literal)"_s + path;
     RunOptions ro;
     ro.readOnly = true;
-    git(folder, diff, ro, [this, folder, path, action, part = std::move(part), done = std::move(done)](const RunResult &d) {
+    git(folder, diff, ro, [this, folder, path, action, range, part = std::move(part), done = std::move(done)](const RunResult &d) {
         if (!d.ok()) {
             done(failedWith(d.message()));
             return;
@@ -363,8 +382,9 @@ void Client::applyPart(const QString &folder, const QString &path, HunkAction ac
         }
         const PatchPart chosen = part(patch);
         if (chosen.patch.isEmpty()) {
-            done(failedWith(action == HunkAction::Unstage ? GitMessages::tr("Nothing of these lines is staged")
-                                                          : GitMessages::tr("These lines have no unstaged changes")));
+            done(failedWith(!range.isEmpty()                ? GitMessages::tr("These lines have no change to revert")
+                            : action == HunkAction::Unstage ? GitMessages::tr("Nothing of these lines is staged")
+                                                            : GitMessages::tr("These lines have no unstaged changes")));
             return;
         }
         applyChosen(folder, action, chosen, done);

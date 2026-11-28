@@ -358,7 +358,11 @@ entry chosen on a touch screen says why this way too), `openFile(absolutePath, l
 `hunkRequested(action, first, last)`, `commented(text)`): the rows of CodeGit.diffRows
 (`gitDiffRows`) — a header per hunk (`gitHunk_<i>`: "@@ -a,b +c,d @@" and, for Uncommitted files
 that are tracked and not conflicted, `gitHunkStage` / `gitHunkUnstage` / `gitHunkDiscard` —
-discarding asks first), "N unchanged lines" rows that show the whole file, changed words marked,
+discarding asks first; for a changed file of another source — a turn, the branch, a commit —
+`gitHunkRevert` (`canRevert`): `gitHunkRevertDialog`, then `CodeGit.revertHunk(path, comparisonBase,
+compareTarget, first, last)` → `gitcli::Client::revertHunk()`, that hunk of `git diff <base> [<target>]`
+taken out of the work tree alone with `git apply -R` (the index untouched; refused, nothing written,
+when its lines changed since)), "N unchanged lines" rows that show the whole file, changed words marked,
 line numbers; long lines wrapped or, stacked, scrolled sideways (side by side: elided); hidden
 whitespace changes (`gitDiffIdentical` when nothing else changed). **Find** (Ctrl+F while the diff
 has focus, or the options' "Find in the diff"): `gitDiffFindBar` (`gitDiffFind`,
@@ -464,8 +468,8 @@ too), the stashes (`gitStashList`: `gitStash_<i>` with `gitStashApply`, `gitStas
   commit message's first line, its description is typed; the pull request dialog's "Write with AI"
   writes both), and a repository's pull request template or the thread's conversation in the question
   (T3 Code sends them).
-* Hunks of untracked, conflicted or binary files; the hunks of the other sources (a turn, the branch)
-  staged or thrown away; single lines of a file that has staged changes (their numbers would be the
+* Hunks of untracked, conflicted or binary files; the hunks of the other sources staged (they are
+  reverted, `gitHunkRevert`), those of an added or deleted file reverted; single lines of a file that has staged changes (their numbers would be the
   index's: offered while nothing of it is staged).
 * Editing the message of a merge.
 * Watching the whole working tree for changes git does not see (the panel relies on

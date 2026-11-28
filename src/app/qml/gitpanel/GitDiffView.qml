@@ -38,6 +38,8 @@ FocusScope {
     property bool canStageLines: false
     property bool canDiscardLines: false
     property bool canDiscard: false
+    /// A hunk of another source (a turn, the branch, a commit) can be taken out of the files alone.
+    property bool canRevert: false
 
     /// Find in the diff.
     property bool finding: false
@@ -444,6 +446,14 @@ FocusScope {
                     variant: "ghost"
                     size: "small"
                     onClicked: view.hunkRequested("discard", hrow.row.newFirst, hrow.row.newLast)
+                }
+                BButton {
+                    objectName: "gitHunkRevert"
+                    visible: view.canRevert
+                    text: qsTr("Revert…")
+                    variant: "ghost"
+                    size: "small"
+                    onClicked: view.hunkRequested("revert", hrow.row.newFirst, hrow.row.newLast)
                 }
             }
         }

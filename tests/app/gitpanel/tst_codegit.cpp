@@ -153,6 +153,7 @@ private Q_SLOTS:
     void linesOfTheDiff();
     void revertAnOlderTurn();
     void turnsEndAtTheirOwnSnapshot();
+    void hunkOfATurnReverted();
 
 private:
     QTemporaryDir m_home;
@@ -1556,6 +1557,36 @@ void TestCodeGit::turnsEndAtTheirOwnSnapshot()
     QCOMPARE(target(2), gitcli::Client::checkpointRef(u"c3"_s));
     QCOMPARE(target(3), gitcli::Client::checkpointRef(u"a1-end"_s));
     QCOMPARE(rows.at(3).toMap().value(u"base"_s).toString(), gitcli::Client::checkpointRef(u"a1"_s));
+}
+
+// A hunk of a turn (checkpoint → checkpoint) reverted alone from the panel: the other hunk stays.
+void TestCodeGit::hunkOfATurnReverted()
+{
+    Repo repo;
+    QByteArray lines;
+    for (int i = 1; i <= 20; ++i)
+        lines += "wiersz " + QByteArray::number(i) + '\n';
+    repo.write(u"ż.txt"_s, lines);
+    repo.commitAll(u"a"_s);
+    CodeGit git;
+    git.setFolder(repo.root);
+    QTRY_VERIFY_WITH_TIMEOUT(git.loaded(), Wait);
+    QSignalSpy made(&git, &CodeGit::checkpointMade);
+    const QString before = git.checkpoint();
+    QTRY_COMPARE_WITH_TIMEOUT(made.count(), 1, Wait);
+    QByteArray turn = lines;
+    turn.replace("wiersz 2\n", "WIERSZ 2\n");
+    turn.replace("wiersz 18\n", "WIERSZ 18\n");
+    repo.write(u"ż.txt"_s, turn);
+    const QString after = git.checkpoint();
+    QTRY_COMPARE_WITH_TIMEOUT(made.count(), 2, Wait);
+    QSignalSpy actions(&git, &CodeGit::actionFinished);
+    git.revertHunk(u"ż.txt"_s, gitcli::Client::checkpointRef(before), gitcli::Client::checkpointRef(after), 18, 18);
+    QTRY_VERIFY_WITH_TIMEOUT(!finished(actions, u"revertHunk"_s).isEmpty(), Wait);
+    QVERIFY2(finished(actions, u"revertHunk"_s).at(1).toBool(), qPrintable(finished(actions, u"revertHunk"_s).at(2).toString()));
+    QByteArray expected = lines;
+    expected.replace("wiersz 2\n", "WIERSZ 2\n");
+    QCOMPARE(repo.read(u"ż.txt"_s), expected);
 }
 
 QTEST_GUILESS_MAIN(TestCodeGit)

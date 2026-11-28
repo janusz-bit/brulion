@@ -244,6 +244,7 @@ private Q_SLOTS:
     void discardRefused();
     void hunks();
     void singleLines();
+    void hunkOfARangeReverted();
     void commitChosenFiles();
     void commitStagedOnly();
     void commitOnNewBranch();
@@ -1873,6 +1874,62 @@ void TestGitCliRepo::singleLines()
     QVERIFY(!await<Outcome>([&](auto done) {
         client.applyLines(repo.root, u"wiersze.txt"_s, HunkAction::Stage, 4, 4, 4, 4, done);
     }).ok);
+}
+
+// A hunk of another source than the work tree's changes — a commit's, a turn's, a branch's
+// (`base` → `target`) — taken out of the work tree alone; the other hunk stays. Lines the user has
+// changed since: refused, the file as it was. A target-less range is the work tree itself.
+void TestGitCliRepo::hunkOfARangeReverted()
+{
+    Repo repo;
+    QByteArray lines;
+    for (int i = 1; i <= 30; ++i)
+        lines += "linia " + QByteArray::number(i) + '\n';
+    repo.write(u"plik ż.txt"_s, lines);
+    repo.commitAll(u"a"_s);
+    QByteArray changed = lines;
+    changed.replace("linia 3\n", "LINIA 3\n");
+    changed.replace("linia 25\n", "LINIA 25\nnowa po 25\n");
+    repo.write(u"plik ż.txt"_s, changed);
+    repo.commitAll(u"b"_s);
+    Client client;
+    // The commit's second hunk (its lines 25–26) undone in the work tree.
+    Outcome o = await<Outcome>([&](auto done) {
+        client.revertHunk(repo.root, u"plik ż.txt"_s, u"HEAD~1"_s, u"HEAD"_s, 25, 26, done);
+    });
+    QVERIFY2(o.ok, qPrintable(o.message));
+    QByteArray expected = lines;
+    expected.replace("linia 3\n", "LINIA 3\n");
+    QCOMPARE(repo.read(u"plik ż.txt"_s), expected);
+    QCOMPARE(repo.text({u"diff"_s, u"--cached"_s, u"--name-only"_s}), QString()); // (the index untouched)
+    // The first hunk's lines changed by the user since: refused, nothing written.
+    QByteArray edited = expected;
+    edited.replace("LINIA 3\n", "linia trzecia, moja\n");
+    repo.write(u"plik ż.txt"_s, edited);
+    o = await<Outcome>([&](auto done) {
+        client.revertHunk(repo.root, u"plik ż.txt"_s, u"HEAD~1"_s, u"HEAD"_s, 3, 3, done);
+    });
+    QVERIFY(!o.ok);
+    QCOMPARE(repo.read(u"plik ż.txt"_s), edited);
+    // No hunk there, a base that is an option, an unsafe path: refused.
+    o = await<Outcome>([&](auto done) {
+        client.revertHunk(repo.root, u"plik ż.txt"_s, u"HEAD~1"_s, u"HEAD"_s, 12, 12, done);
+    });
+    QVERIFY(!o.ok);
+    QVERIFY2(o.message.contains(u"revert"_s), qPrintable(o.message));
+    QVERIFY(!await<Outcome>([&](auto done) {
+        client.revertHunk(repo.root, u"plik ż.txt"_s, u"--output=x"_s, u"HEAD"_s, 3, 3, done);
+    }).ok);
+    QVERIFY(!QFileInfo::exists(repo.path(u"x"_s)));
+    QVERIFY(!await<Outcome>([&](auto done) {
+        client.revertHunk(repo.root, u"../poza.txt"_s, u"HEAD~1"_s, u"HEAD"_s, 3, 3, done);
+    }).ok);
+    // Against the work tree (no target): the user's own line thrown away.
+    o = await<Outcome>([&](auto done) {
+        client.revertHunk(repo.root, u"plik ż.txt"_s, u"HEAD"_s, QString(), 3, 3, done);
+    });
+    QVERIFY2(o.ok, qPrintable(o.message));
+    QCOMPARE(repo.read(u"plik ż.txt"_s), expected);
 }
 
 void TestGitCliRepo::hunks()

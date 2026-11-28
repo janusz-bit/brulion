@@ -318,6 +318,10 @@ public:
     Q_INVOKABLE void stageHunk(const QString &path, int first, int last);
     Q_INVOKABLE void unstageHunk(const QString &path, int first, int last);
     Q_INVOKABLE void discardHunk(const QString &path, int first, int last);
+    /// A hunk of another source (`base` → `target`: compareBase … compareTarget — a turn's, the
+    /// branch's, a commit's) changing `target`'s lines [first, last] taken out of the work tree
+    /// (gitcli::Client::revertHunk()): actionFinished("revertHunk", …).
+    Q_INVOKABLE void revertHunk(const QString &path, const QString &base, const QString &target, int first, int last);
     /// The changed lines among the diff's rows [from, to] (`rows`: diffRows()) staged / thrown away
     /// alone (gitcli::Client::applyLines(); the numbers are the work tree's and HEAD's: offered while
     /// nothing of the file is staged): actionFinished("stageLines" / "discardLines", …).

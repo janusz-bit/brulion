@@ -461,6 +461,12 @@ public:
     /// file (index → work tree, or HEAD → index) through `git apply`.
     void applyHunk(const QString &folder, const QString &path, HunkAction action, int first, int last,
                    std::function<void(const Outcome &)> done);
+    /// The hunks of `path`'s diff `base` → `target` ("" the work tree) that change `target`'s lines
+    /// [first, last] taken out of the work tree (`git apply -R`, the index untouched): a commit's, a
+    /// turn's or a branch's change undone alone. Fails, writing nothing, when the work tree's lines
+    /// are no longer as `target` has them.
+    void revertHunk(const QString &folder, const QString &path, const QString &base, const QString &target, int first,
+                    int last, std::function<void(const Outcome &)> done);
     /// Single lines of `path` staged, unstaged or thrown away: the deletions of its old lines
     /// [oldFirst, oldLast] and the insertions of its new lines [newFirst, newLast] (0, 0: none of
     /// that side) of git's diff, the rest of the file's changes left (linesOnly()).
@@ -506,9 +512,11 @@ private:
         QByteArray patch;
         QString message;
     };
-    /// The part `part` chooses of git's diff of `path` applied as `action` does (applyHunk(), applyLines()).
+    /// The part `part` chooses of git's diff of `path` applied as `action` does (applyHunk(),
+    /// applyLines(), revertHunk()): the diff of the `range` ({base} or {base, target}) when given.
     void applyPart(const QString &folder, const QString &path, HunkAction action,
-                   std::function<PatchPart(const FilePatch &)> part, std::function<void(const Outcome &)> done);
+                   std::function<PatchPart(const FilePatch &)> part, std::function<void(const Outcome &)> done,
+                   const QStringList &range = {});
     /// `git apply [--cached] [-R] -` of `chosen`'s patch as `action` says.
     void applyChosen(const QString &folder, HunkAction action, const PatchPart &chosen,
                      std::function<void(const Outcome &)> done);

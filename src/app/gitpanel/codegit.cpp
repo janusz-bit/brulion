@@ -1492,6 +1492,13 @@ void CodeGit::discardHunk(const QString &path, int first, int last)
     });
 }
 
+void CodeGit::revertHunk(const QString &path, const QString &base, const QString &target, int first, int last)
+{
+    simpleAction(u"revertHunk"_s, [this, path, base, target, first, last](const QString &root, auto done) {
+        m_client.revertHunk(root, path, base, target, first, last, done);
+    });
+}
+
 // ---- Commits, pull requests, publishing ---------------------------------------------------------
 
 void CodeGit::commitFiles(const QString &message, const QStringList &paths, const QString &newBranch, bool push,
