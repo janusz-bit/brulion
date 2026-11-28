@@ -378,9 +378,9 @@ private Q_SLOTS:
         QTRY_VERIFY_WITH_TIMEOUT(features().contains(QString(acp::ChatsFeature)), kTimeoutMs);
 #ifdef Q_OS_LINUX
         {
-            QFile environ(u"/proc/%1/environ"_s.arg(share->server()->processId()));
-            QVERIFY(environ.open(QIODevice::ReadOnly));
-            const QList<QByteArray> vars = environ.readAll().split('\0');
+            QFile environment(u"/proc/%1/environ"_s.arg(share->server()->processId()));
+            QVERIFY(environment.open(QIODevice::ReadOnly));
+            const QList<QByteArray> vars = environment.readAll().split('\0');
             QVERIFY(vars.contains("BRULION_APP_SHARE_TOKEN=" + granted.first().toUtf8()));
             QVERIFY(vars.contains("BRULION_APP_SOCKET=" + appKey.toUtf8()));
         }
