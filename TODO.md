@@ -439,8 +439,9 @@ done in the repository simply disappears from the list.
   even a download), in `tst_sync_folders` and `tst_sync_folders_streamed`
   (`manyPagesMovedAtOnce`, which syncs once more there and skips on a second miss, printing what
   the run saw); once a page renamed into a folder in the vault was refused there too (asked again
-  now, and a lasting refusal skips with the vault's reason). Never seen on Linux or Android. Find
-  out why on a Windows machine.
+  now, and a lasting refusal skips with the vault's reason). Never seen on Linux or Android. What a
+  missed run saw goes into the CI run's summary page (GITHUB_STEP_SUMMARY: ctest never shows a
+  passing or skipped test's output); find out why from it, or on a Windows machine.
 
 ## Performance
 

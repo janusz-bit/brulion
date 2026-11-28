@@ -12,6 +12,19 @@ using namespace synctest;
 
 namespace {
 
+/// A line for the CI run's summary page (GitHub Actions' GITHUB_STEP_SUMMARY, set for the step
+/// ctest runs in): what a passing or skipped test saw, which ctest's output never shows — the
+/// Windows runners' missed mass move (TODO.md "Windows"). Nothing outside GitHub Actions.
+[[maybe_unused]] void noteInRunSummary(const QString &text)
+{
+    const QString file = qEnvironmentVariable("GITHUB_STEP_SUMMARY");
+    if (file.isEmpty())
+        return;
+    QFile f(file);
+    if (f.open(QIODevice::Append | QIODevice::Text))
+        f.write((u"- `"_s + QCoreApplication::applicationName() + u"` "_s + text + u'\n').toUtf8());
+}
+
 QString noteName(int i)
 {
     return u"Notatka %1 ąę.md"_s.arg(i, 3, 10, QLatin1Char('0'));
@@ -1918,8 +1931,10 @@ private Q_SLOTS:
         bool done = false;                                                                                             \
         for (int attempt = 0; attempt < 10 && !(done = (side).vault->rename((from), (to))); ++attempt)                 \
             QTest::qWait(200);                                                                                         \
-        if (!done)                                                                                                     \
+        if (!done) {                                                                                                   \
+            noteInRunSummary(u"a rename refused: "_s + (side).vault->errorString());                                  \
             QSKIP(qPrintable(u"a rename refused on Windows (TODO.md): "_s + (side).vault->errorString()));             \
+        }                                                                                                              \
     } while (false)
 #else
 #define RENAMED_OR_SKIP(side, from, to)                                                                                \
@@ -1973,8 +1988,10 @@ private Q_SLOTS:
         if (r.changeCount() == 0) {
             // Once more, saying what the missed run saw (TODO.md "Windows"); a second miss skips.
             qWarning("a mass move on the server was missed: %s", qPrintable(what(r)));
+            noteInRunSummary(u"a mass move on the server missed — "_s + what(r));
             r = p.a.sync();
             QVERIFY2(!r.failed(), qPrintable(r.failureMessage()));
+            noteInRunSummary(u"the sync after it — "_s + what(r));
             if (r.changeCount() == 0)
                 QSKIP(qPrintable(u"missed again on Windows (TODO.md): "_s + what(r)));
         }
