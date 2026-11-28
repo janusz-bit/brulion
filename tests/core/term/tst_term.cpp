@@ -55,6 +55,8 @@ private Q_SLOTS:
     void wideCharacters();
     void combiningMarks();
     void graphemeClusters();
+    void graphemeClusterEdges_data();
+    void graphemeClusterEdges();
     void polishText();
     void sgr_data();
     void sgr();
@@ -386,6 +388,53 @@ void TestTerm::graphemeClusters()
     // Off again: as wcwidth() counts.
     on.feed("\x1b[?2027l\r\n" + family);
     QCOMPARE(on.screen().cursorColumn(), 6);
+    // A reset turns it off, and forgets a ZWJ before it.
+    Term reset(20, 2);
+    reset.feed("\x1b[?2027h" + QString::fromUcs4(U"\x1F600\x200D").toUtf8() + "\x1b" "c" "\x1b[?2027h"
+               + QString::fromUcs4(U"\x1F600").toUtf8());
+    QCOMPARE(reset.screen().cursorColumn(), 2);
+    reset.feed("\x1b" "c");
+    reset.feed(family);
+    QCOMPARE(reset.screen().cursorColumn(), 6);
+}
+
+// The edges of what mode 2027 joins: emoji after a ZWJ (the pictographic blocks), skin tones,
+// regional indicators; a reset turns the mode off and forgets the ZWJ before it.
+void TestTerm::graphemeClusterEdges_data()
+{
+    QTest::addColumn<uint>("before");
+    QTest::addColumn<uint>("cp");
+    QTest::addColumn<bool>("joins");
+    const uint zwj = 0x200D;
+    for (const uint cp : {0x1F000u, 0x1FAFFu, 0x2600u, 0x27BFu, 0x2300u, 0x23FFu, 0x2B00u, 0x2BFFu})
+        QTest::addRow("ZWJ U+%04X", cp) << zwj << cp << true;
+    for (const uint cp : {0x1EFFFu, 0x1FB00u, 0x25FFu, 0x27C0u, 0x22FFu, 0x2400u, 0x2AFFu, 0x2C00u})
+        QTest::addRow("ZWJ U+%04X", cp) << zwj << cp << false;
+    for (const uint cp : {0x1F3FBu, 0x1F3FFu})
+        QTest::addRow("skin U+%04X", cp) << 0x1F600u << cp << true;
+    for (const uint cp : {0x1F3FAu, 0x1F400u})
+        QTest::addRow("no skin U+%04X", cp) << 0x1F600u << cp << false;
+    QTest::addRow("skin after a letter") << uint('a') << 0x1F3FBu << false;
+    for (const uint cp : {0x1F1E6u, 0x1F1FFu})
+        QTest::addRow("flag U+%04X", cp) << 0x1F1E6u << cp << true;
+    QTest::addRow("no flag") << 0x1F1E5u << 0x1F1E6u << false;
+}
+
+void TestTerm::graphemeClusterEdges()
+{
+    QFETCH(uint, before);
+    QFETCH(uint, cp);
+    QFETCH(bool, joins);
+    Term term(20, 2);
+    // (A base emoji first, so a ZWJ has something to join.)
+    const char32_t base = before == 0x200D ? U'\x1F600' : char32_t(before);
+    char32_t text[3] = {base, char32_t(cp), 0};
+    if (before == 0x200D) {
+        term.feed("\x1b[?2027h" + QString::fromUcs4(U"\x1F600\x200D", 2).toUtf8() + QString::fromUcs4(text + 1, 1).toUtf8());
+    } else {
+        term.feed("\x1b[?2027h" + QString::fromUcs4(text, 2).toUtf8());
+    }
+    QCOMPARE(term.screen().line(0).cellText(0).contains(QString::fromUcs4(text + 1, 1)), joins);
 }
 
 void TestTerm::polishText()
