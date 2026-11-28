@@ -61,13 +61,17 @@ bool branchChar(QChar c)
     return c.unicode() > u' ' && c.unicode() != 0x7f && !QStringView(u"~^:?*[\\").contains(c);
 }
 
+/// A part of a name git refuses in a branch's ("..", "@{", "//", ".lock" at its end).
+bool badBranchPart(QStringView name)
+{
+    return name.endsWith(u".lock") || name.contains(u"..") || name.contains(u"@{") || name.contains(u"//");
+}
+
 bool branchLike(QStringView name)
 {
     if (name.isEmpty() || name.size() > 250 || name.startsWith(u'-') || name.startsWith(u'/') || name.endsWith(u'/'))
         return false;
-    const bool badPart =
-            name.endsWith(u".lock") || name.contains(u"..") || name.contains(u"@{") || name.contains(u"//");
-    return !badPart && std::ranges::all_of(name, branchChar);
+    return !badBranchPart(name) && std::ranges::all_of(name, branchChar);
 }
 
 /// The strings of a JSON list (at most `max`; what is no text left out).

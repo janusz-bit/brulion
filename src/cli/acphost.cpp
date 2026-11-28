@@ -931,20 +931,25 @@ namespace {
 
 /// The headers of a request of Code mode's projects: GET projects, POST …/worktrees and the git
 /// requests (a bigger body), GET …/changes and …/diff.
+/// 405 unless `method` is `allowed`.
+std::optional<http::Response> onlyMethod(const QByteArray &method, const QByteArray &allowed)
+{
+    if (method == allowed)
+        return std::nullopt;
+    return apiError(405, u"method"_s, u"Method not allowed"_s);
+}
+
 std::optional<http::Response> projectsHeaders(const QStringList &parts, const QByteArray &method, qint64 *maxBody)
 {
     if (parts.size() == 1)
-        return method == "GET" ? std::nullopt
-                               : std::optional<http::Response>(apiError(405, u"method"_s, u"Method not allowed"_s));
+        return onlyMethod(method, "GET"_ba);
     const QString action = parts.size() == 3 ? parts.at(2) : QString();
     const bool git = acp::RemoteGitRequest::kindOf(action).has_value();
     const bool post = git || action == u"worktrees";
     if (!post && action != u"changes" && action != u"diff")
         return apiError(404, u"not_found"_s, u"Not found"_s);
-    if (method != (post ? "POST"_ba : "GET"_ba))
-        return apiError(405, u"method"_s, u"Method not allowed"_s);
     *maxBody = git ? acp::MaxRemoteGitBodyBytes : post ? 4096 : 0;
-    return std::nullopt;
+    return onlyMethod(method, post ? "POST"_ba : "GET"_ba);
 }
 
 } // namespace
@@ -3138,19 +3143,21 @@ QString gitRefusal(const acp::RemoteGitRequest &request)
 
 /// What a device's commit takes: every change, or the files it named among them (what is no change
 /// of the work tree left out), as the Changes panel's Commit takes them (CodeGit::commitFiles).
+bool takenForCommit(const gitcli::FileChange &f, const QSet<QString> &wanted)
+{
+    if (f.change == gitcli::Change::Ignored || f.path.endsWith(u'/')) // (a nested repository)
+        return false;
+    return wanted.isEmpty() || wanted.contains(f.path) || wanted.contains(f.oldPath);
+}
+
 gitcli::CommitRequest commitOf(const acp::RemoteGitRequest &request, const QList<gitcli::FileChange> &changes)
 {
     const QSet<QString> wanted(request.files.cbegin(), request.files.cend());
-    const auto taken = [&wanted](const gitcli::FileChange &f) {
-        if (f.change == gitcli::Change::Ignored || f.path.endsWith(u'/')) // (a nested repository)
-            return false;
-        return wanted.isEmpty() || wanted.contains(f.path) || wanted.contains(f.oldPath);
-    };
     gitcli::CommitRequest commit;
     commit.message = request.message;
     commit.mode = wanted.isEmpty() ? u"all"_s : u"paths"_s;
     for (const gitcli::FileChange &f : changes) {
-        if (!taken(f))
+        if (!takenForCommit(f, wanted))
             continue;
         commit.paths.append(f.path);
         if (!f.oldPath.isEmpty())
