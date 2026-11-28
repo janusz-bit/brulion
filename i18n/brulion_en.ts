@@ -40,7 +40,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="1288"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="1289"/>
         <source>%n occurrence(s) replaced</source>
         <translation>
             <numerusform>%n occurrence replaced</numerusform>
@@ -48,7 +48,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="1289"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="1290"/>
         <source>%n note(s)</source>
         <translation>
             <numerusform>%n note</numerusform>
@@ -56,8 +56,8 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/AppShell.qml" line="1298"/>
-        <location filename="../src/app/qml/shell/AppShell.qml" line="1300"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="1299"/>
+        <location filename="../src/app/qml/shell/AppShell.qml" line="1301"/>
         <source>%n note(s) restored</source>
         <translation>
             <numerusform>%n note restored</numerusform>
@@ -1857,7 +1857,7 @@
 <context>
     <name>SettingsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3598"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3606"/>
         <source>%n warning(s) or error(s)</source>
         <translation>
             <numerusform>%n warning or error</numerusform>
@@ -1865,7 +1865,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3463"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3471"/>
         <source>Last check %1: %n reminder(s), the sync failed.</source>
         <translation>
             <numerusform>Last check %1: %n reminder, the sync failed.</numerusform>
@@ -1897,7 +1897,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1333"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1341"/>
         <source>%n word(s), kept in this notebook and synced with it.</source>
         <translation>
             <numerusform>%n word, kept in this notebook and synced with it.</numerusform>
@@ -1905,7 +1905,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2632"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2640"/>
         <source>%n device(s) paired. Another one scans a code.</source>
         <translation>
             <numerusform>%n device paired. Another one scans a code.</numerusform>
@@ -1913,7 +1913,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3287"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3295"/>
         <source>Type check: %n warning(s), %1</source>
         <translation>
             <numerusform>Type check: %n warning, %1</numerusform>
@@ -1921,7 +1921,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3465"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3473"/>
         <source>Last check %1: %n reminder(s).</source>
         <translation>
             <numerusform>Last check %1: %n reminder.</numerusform>
@@ -2222,7 +2222,7 @@
 <context>
     <name>ShellTopBar</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="353"/>
+        <location filename="../src/app/qml/shell/ShellTopBar.qml" line="354"/>
         <source>Notifications: %n unread</source>
         <translation>
             <numerusform>Notifications: %n unread</numerusform>
@@ -3180,7 +3180,7 @@
 <context>
     <name>brulion::shell::WorkspaceChats</name>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacechats.cpp" line="665"/>
+        <location filename="../src/app/shell/workspacechats.cpp" line="668"/>
         <source>%n file(s) put back as they were</source>
         <translation>
             <numerusform>%n file put back as it was</numerusform>
@@ -3188,7 +3188,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacechats.cpp" line="666"/>
+        <location filename="../src/app/shell/workspacechats.cpp" line="669"/>
         <source>%n file(s) put back</source>
         <translation>
             <numerusform>%n file put back</numerusform>
@@ -3196,7 +3196,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacechats.cpp" line="667"/>
+        <location filename="../src/app/shell/workspacechats.cpp" line="670"/>
         <source>%n changed since or not known before: left as they are (their history has them)</source>
         <translation>
             <numerusform>%n changed since or not known before: left as it is (its history has it)</numerusform>
@@ -3204,7 +3204,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacechats.cpp" line="1194"/>
+        <location filename="../src/app/shell/workspacechats.cpp" line="1201"/>
         <source>The files are back as they were before that message (%n file(s) changed).</source>
         <translation>
             <numerusform>The files are back as they were before that message (%n file changed).</numerusform>
@@ -3212,7 +3212,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacechats.cpp" line="2713"/>
+        <location filename="../src/app/shell/workspacechats.cpp" line="2720"/>
         <source>%n message(s) taken out of the conversation</source>
         <translation>
             <numerusform>%n message taken out of the conversation</numerusform>
