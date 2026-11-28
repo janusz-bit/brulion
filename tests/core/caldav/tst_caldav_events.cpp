@@ -467,12 +467,14 @@ void TestCalDavEvents::attendees()
     for (int i = 0; i < 250; ++i)
         many += u"ATTENDEE:mailto:osoba%1@example.pl\r\n"_s.arg(i);
     many += u"ORGANIZER:mailto:"_s + QString(400, u'ż') + u"@example.pl\r\n"_s;
-    const Event &list = parseCalendarData(calendar(vevent(u"l"_s, u"DTSTART:20261120T170000Z\r\n"_s + many))).events.first();
+    const CalendarData listed = parseCalendarData(calendar(vevent(u"l"_s, u"DTSTART:20261120T170000Z\r\n"_s + many)));
+    const Event &list = listed.events.first();
     QCOMPARE(list.attendees.size(), MaxAttendees);
     QCOMPARE(list.attendees.last().address, u"osoba199@example.pl"_s);
     QCOMPARE(list.organizer.address.size(), MaxAddressLength);
     // Without ORGANIZER and ATTENDEE: no invitation.
-    const Event &plain = parseCalendarData(calendar(vevent(u"p"_s, u"DTSTART:20261120T170000Z\r\n"_s))).events.first();
+    const CalendarData none = parseCalendarData(calendar(vevent(u"p"_s, u"DTSTART:20261120T170000Z\r\n"_s)));
+    const Event &plain = none.events.first();
     QVERIFY(plain.organizer.address.isEmpty());
     QVERIFY(plain.attendees.isEmpty());
 }
