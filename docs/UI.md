@@ -6085,10 +6085,11 @@ the wide window's side panel lists them), "Showing the first 20 000 pages." beyo
   trimmed) with the toast "Copied to the clipboard"; Ctrl+A selects the current page's text; Esc
   clears the selection first. Each request runs on `PdfRenderPool` (priority Selection) and a newer
   one makes the older moot, so a fast drag never queues work.
-* **Contents** (the PDF's outline, read once it opens: `PdfReader::outline()` — poppler only, so
-  the Nix package and other poppler builds; Qt PDF's `QPdfBookmarkModel` follows a looping outline
-  until the stack overflows — a hostile PDF would crash the app — so the Qt PDF builds (Windows, the
-  AppImage) read none, and Android's PdfRenderer has none: the button is not there): `pdfOutline`, a dialog (a bottom sheet on phones) with the entries indented by level, each
+* **Contents** (the PDF's outline, read once it opens: `PdfReader::outline()` — poppler's own, and
+  in the Qt PDF builds (Windows, the AppImage) core `pdfoutline` reading the file's bytes: Qt PDF's
+  `QPdfBookmarkModel` follows a looping outline until the stack overflows, ours visits each entry
+  once, within MaxPdfOutlineItems and MaxPdfOutlineDepth; an encrypted PDF shows none there.
+  Android's PdfRenderer has none: the button is not there): `pdfOutline`, a dialog (a bottom sheet on phones) with the entries indented by level, each
   with its page number, the entry of the current page marked and scrolled to; a tap jumps to the
   page and the place the entry names (`positionForTarget(page, top)`: that height, a gap above it).
   Titles are plain text, one line (`pdfCleanTitle`: control characters as spaces, at most 300

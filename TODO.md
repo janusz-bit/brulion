@@ -209,10 +209,9 @@ done in the repository simply disappears from the list.
     `getGotoLinks`) and opening password-protected PDFs (`LoadParams.setPassword`) to
     PdfRenderer — needs checking on an emulator or a phone; PdfRenderer does not give the table of
     contents at all;
-  * the PDF table of contents in the builds with Qt PDF (Windows, AppImage): `QPdfBookmarkModel`
-    does not guard against a looping outline (recursion until stack overflow — `tst_pdfpages`
-    `loopingOutline`), so today the table of contents comes only with poppler; a safe bookmark
-    reader of our own is needed;
+  * the PDF table of contents of the builds with Qt PDF (Windows, AppImage), now read by core
+    `pdfoutline` from the file: checked by its tests and on CI's Qt PDF builds, not yet by hand
+    with real PDFs there (an encrypted PDF has none);
   * creating your own annotations (highlights, notes) saved in the PDF — today existing ones are
     only shown, new ones are made in another app.
 * **Spell checking — check on devices and further ideas.** Underlining errors in the edited

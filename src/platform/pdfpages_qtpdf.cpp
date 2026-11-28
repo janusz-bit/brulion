@@ -9,12 +9,16 @@
 //
 // Selection: getSelection() between two points (pdfium's characters nearest to them, 16 pt around)
 // and getSelectionAtIndex(); the links from QPdfLinkModel, made on the reader's thread for the call
-// (their locations in points, top-left origin); no outline (QPdfBookmarkModel is not safe with a
-// hostile PDF, below). A password: QPdfDocument::setPassword(), when the PDF asks for one.
+// (their locations in points, top-left origin); the outline from core pdfoutline.h (QPdfBookmarkModel
+// is not safe with a hostile PDF, below). A password: QPdfDocument::setPassword(), when the PDF asks
+// for one (an encrypted PDF's outline is then none: its titles are encrypted strings).
 #include "pdfpages.h"
 #include "pdfsearch.h"
 #include "pdftext.h"
 
+#include "pdfoutline/pdfoutline.h"
+
+#include <QFile>
 #include <QPdfDocument>
 #include <QPdfDocumentRenderOptions>
 #include <QPdfLink>
@@ -58,9 +62,12 @@ QList<QRectF> lineRects(const QPdfSelection &selection)
     return pdfRangeRects(boxes, {0, boxes.size()});
 }
 
+/// The largest PDF whose outline is read (the file is read whole for it).
+constexpr qint64 MaxOutlineFileBytes = 256LL << 20;
+
 class QtPdfReader final : public PdfReader {
 public:
-    explicit QtPdfReader(std::unique_ptr<QPdfDocument> doc) : m_doc(std::move(doc)) { }
+    QtPdfReader(std::unique_ptr<QPdfDocument> doc, QString file) : m_doc(std::move(doc)), m_file(std::move(file)) { }
 
     int pageCount() const override { return m_doc->pageCount(); }
 
@@ -158,9 +165,29 @@ public:
         return selection(m_doc->getSelectionAtIndex(page - 1, int(from), int(to - from)));
     }
 
-    // No outline(): Qt PDF's QPdfBookmarkModel follows a PDF's outline without a guard against
-    // loops (an entry its own /First child recursed until the stack overflowed in tst_pdfpages'
-    // loopingOutline) — a hostile PDF would crash the app. PdfReader's default: none.
+    // Not QPdfBookmarkModel: it follows a PDF's outline without a guard against loops (an entry
+    // its own /First child recursed until the stack overflowed in tst_pdfpages' loopingOutline).
+    // The outline is read from the file's bytes instead (core pdfoutline.h: bounded, loops end).
+    QList<PdfOutlineItem> outline() override
+    {
+        QFile f(m_file);
+        if (f.size() > MaxOutlineFileBytes || !f.open(QIODevice::ReadOnly))
+            return {};
+        const QByteArray bytes = f.readAll();
+        pdfoutline::Limits limits;
+        limits.maxItems = MaxPdfOutlineItems;
+        limits.maxDepth = MaxPdfOutlineDepth;
+        QList<PdfOutlineItem> out;
+        for (const pdfoutline::Entry &e : pdfoutline::readOutline(bytes, limits)) {
+            PdfOutlineItem item;
+            item.title = pdfCleanTitle(e.title);
+            item.level = e.level;
+            item.page = e.page <= m_doc->pageCount() ? e.page : 0;
+            item.top = e.top;
+            out.append(item);
+        }
+        return out;
+    }
 
     QList<PdfLink> links(int page) override
     {
@@ -249,6 +276,7 @@ private:
     }
 
     std::unique_ptr<QPdfDocument> m_doc;
+    QString m_file;
     int m_linesPage = 0;
     QString m_text;
     QList<QRectF> m_lines;
@@ -305,7 +333,7 @@ std::unique_ptr<PdfReader> PdfReader::open(const QString &file, PdfInfo *info, c
     out.pages = doc->pageCount();
     out.pagePoints = {doc->pagePointSize(0)};
     // (Owned by the opening thread; a lease gives it back to no thread, the next one pulls it.)
-    return std::make_unique<QtPdfReader>(std::move(doc));
+    return std::make_unique<QtPdfReader>(std::move(doc), file);
 }
 
 } // namespace brulion::platform

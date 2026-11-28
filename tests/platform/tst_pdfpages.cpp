@@ -990,8 +990,8 @@ void TestPdfPages::outline()
     for (const PdfOutlineItem &item : items)
         qInfo("%s: outline %d “%s” → %d at %g", qPrintable(pdfBackendName()), item.level, qPrintable(item.title),
               item.page, item.top);
-    if (pdfBackendName() != u"poppler"_s) {
-        // PdfRenderer has no outline; Qt PDF's bookmark model is not safe with a looping one.
+    if (pdfBackendName() != u"poppler"_s && pdfBackendName() != u"Qt PDF"_s) {
+        // Android's PdfRenderer has no outline (Qt PDF's is read from the file: core pdfoutline.h).
         QVERIFY(items.isEmpty());
         return;
     }
