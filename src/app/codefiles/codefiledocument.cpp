@@ -183,30 +183,31 @@ void CodeFileDocument::find(const QString &pattern, bool caseSensitive, bool who
     refind();
 }
 
+QList<CodeFileDocument::Match> CodeFileDocument::matchesIn(const QStringList &lines, const SearchOptions &options,
+                                                           QString *error)
+{
+    const QRegularExpression expression = searchExpression(options);
+    if (!expression.isValid()) {
+        *error = expression.errorString();
+        return {};
+    }
+    QList<Match> out;
+    for (int row = 0; row < lines.size() && out.size() < MaxMatches; ++row)
+        // (matchRanges() gives {start, end}.)
+        for (const auto &[from, end] : matchRanges(lines.at(row), expression, MaxMatches))
+            out.append({row, from, end - from});
+    return out;
+}
+
 void CodeFileDocument::refind()
 {
-    const QList<Match> before = m_matches;
-    m_matches.clear();
+    const QList<Match> before = std::exchange(m_matches, {});
     m_findError.clear();
-    if (!m_findPattern.isEmpty()) {
-        SearchOptions options;
-        options.pattern = m_findPattern;
-        options.caseSensitive = m_findCase;
-        options.wholeWord = m_findWord;
-        options.regex = m_findRegex;
-        const QRegularExpression expression = searchExpression(options);
-        if (!expression.isValid())
-            m_findError = expression.errorString();
-        for (int row = 0; expression.isValid() && row < m_lines.size() && m_matches.size() < MaxMatches; ++row)
-            // (matchRanges() gives {start, end}.)
-            for (const auto &[from, end] : matchRanges(m_lines.at(row), expression, MaxMatches))
-                m_matches.append({row, from, end - from});
-    }
+    if (!m_findPattern.isEmpty())
+        m_matches = matchesIn(m_lines, {m_findPattern, m_findCase, m_findWord, m_findRegex}, &m_findError);
     // (The rows that had or have a match show it, or no longer.)
     QSet<int> rows;
-    for (const Match &m : std::as_const(before))
-        rows.insert(m.row);
-    for (const Match &m : std::as_const(m_matches))
+    for (const Match &m : before + m_matches)
         rows.insert(m.row);
     for (const int row : std::as_const(rows))
         if (row < m_lines.size())
@@ -306,6 +307,48 @@ void CodeFileDocument::reload()
     load();
 }
 
+CodeFileDocument::Loaded CodeFileDocument::readFile(const QString &abs, int tabWidth)
+{
+    Loaded l;
+    l.path = abs;
+    const ViewerFile file = readForViewer(abs);
+    l.kind = kindName(file.kind);
+    l.truncated = file.truncated;
+    l.size = file.size;
+    l.shape = file.shape;
+    l.hash = file.hash;
+    if (file.kind != FileKind::Text)
+        return l;
+    l.language = languageForPath(abs);
+    QStringView text = file.text;
+    // (A last line break ends the last line: no empty line after it.)
+    if (text.endsWith(u'\n'))
+        text.chop(text.endsWith(u"\r\n") ? 2 : 1);
+    else if (text.endsWith(u'\r'))
+        text.chop(1);
+    lexLines(text, tabWidth, l);
+    return l;
+}
+
+void CodeFileDocument::lexLines(QStringView text, int tabWidth, Loaded &l)
+{
+    CodeState state;
+    qsizetype start = 0;
+    const qsizetype n = text.size();
+    while (start <= n) {
+        qsizetype end = start;
+        while (end < n && text.at(end) != u'\n' && text.at(end) != u'\r')
+            ++end;
+        const QStringView line = text.sliced(start, end - start);
+        l.lines.append(line.toString());
+        l.spans.append(lexCodeLine(l.language, line, &state));
+        l.maxColumns = std::max(l.maxColumns, columnsOf(line, tabWidth));
+        if (end >= n)
+            break;
+        start = end + ((text.at(end) == u'\r' && end + 1 < n && text.at(end + 1) == u'\n') ? 2 : 1);
+    }
+}
+
 void CodeFileDocument::load()
 {
     const int generation = ++m_generation;
@@ -328,41 +371,7 @@ void CodeFileDocument::load()
     const int tabWidth = m_tabWidth;
     detail::onPool<Loaded>(
             this,
-            [abs, tabWidth] {
-                Loaded l;
-                l.path = abs;
-                const ViewerFile file = readForViewer(abs);
-                l.kind = kindName(file.kind);
-                l.truncated = file.truncated;
-                l.size = file.size;
-                l.shape = file.shape;
-                l.hash = file.hash;
-                if (file.kind != FileKind::Text)
-                    return l;
-                l.language = languageForPath(abs);
-                QStringView text = file.text;
-                // (A last line break ends the last line: no empty line after it.)
-                if (text.endsWith(u'\n'))
-                    text.chop(text.endsWith(u"\r\n") ? 2 : 1);
-                else if (text.endsWith(u'\r'))
-                    text.chop(1);
-                CodeState state;
-                qsizetype start = 0;
-                const qsizetype n = text.size();
-                while (start <= n) {
-                    qsizetype end = start;
-                    while (end < n && text.at(end) != u'\n' && text.at(end) != u'\r')
-                        ++end;
-                    const QStringView line = text.sliced(start, end - start);
-                    l.lines.append(line.toString());
-                    l.spans.append(lexCodeLine(l.language, line, &state));
-                    l.maxColumns = std::max(l.maxColumns, columnsOf(line, tabWidth));
-                    if (end >= n)
-                        break;
-                    start = end + ((text.at(end) == u'\r' && end + 1 < n && text.at(end + 1) == u'\n') ? 2 : 1);
-                }
-                return l;
-            },
+            [abs, tabWidth] { return readFile(abs, tabWidth); },
             [this, generation](Loaded l) {
                 if (generation == m_generation)
                     apply(std::move(l));

@@ -175,39 +175,56 @@ struct CutLine {
     QList<QByteArray> markers;
 };
 
+/// One changed line of a block written to `out` as the target keeps it: chosen as it is; not chosen,
+/// as context where the target has it (`keepAsContext`), else left out. Its markers ride with it.
+void putLine(const CutLine &l, bool keepAsContext, QList<QByteArray> &out, bool *changed)
+{
+    if (!l.chosen && !keepAsContext)
+        return;
+    out << (l.chosen ? l.line : QByteArray(' ' + l.line.mid(1)));
+    out += l.markers;
+    *changed = *changed || l.chosen;
+}
+
 /// One block of changes (its deletions and insertions) written to `out`, pair by pair — the k-th
 /// deletion, then the k-th insertion — so a change not chosen keeps its place beside the chosen ones:
 /// forward a deletion not chosen is context and an insertion not chosen goes, reversed the other way.
 void flushBlock(QList<CutLine> &dels, QList<CutLine> &ins, bool reverse, QList<QByteArray> &out, bool *changed)
 {
-    const auto put = [&out](const CutLine &l, const QByteArray &line) {
-        out << line;
-        out += l.markers;
-    };
     for (qsizetype k = 0; k < std::max(dels.size(), ins.size()); ++k) {
-        if (k < dels.size()) {
-            const CutLine &d = dels.at(k);
-            if (d.chosen)
-                put(d, d.line);
-            else if (!reverse)
-                put(d, ' ' + d.line.mid(1));
-            *changed = *changed || d.chosen;
-        }
-        if (k < ins.size()) {
-            const CutLine &i = ins.at(k);
-            if (i.chosen)
-                put(i, i.line);
-            else if (reverse)
-                put(i, ' ' + i.line.mid(1));
-            *changed = *changed || i.chosen;
-        }
+        if (k < dels.size())
+            putLine(dels.at(k), !reverse, out, changed);
+        if (k < ins.size())
+            putLine(ins.at(k), reverse, out, changed);
     }
     dels.clear();
     ins.clear();
 }
 
+/// The lines of a hunk counted on one side (`side` '-' the old one, '+' the new one).
+int countSide(const QList<QByteArray> &lines, char side)
+{
+    return int(std::ranges::count_if(lines, [side](const QByteArray &l) {
+        return l.isEmpty() || l.startsWith(' ') || l.startsWith(side);
+    }));
+}
+
+/// The chosen ranges of linesOnly(): a line `n` of a side is chosen when it is in [first, last].
+struct Chosen {
+    int oldFirst, oldLast, newFirst, newLast;
+    bool old(int n) const { return oldFirst > 0 && n >= oldFirst && n <= oldLast; }
+    bool fresh(int n) const { return newFirst > 0 && n >= newFirst && n <= newLast; }
+};
+
+/// Where a "\\ No newline" marker goes: with the last line of `last` (a block being cut), else
+/// straight into the hunk's lines.
+QList<QByteArray> &markerOf(QList<CutLine> *last, QList<QByteArray> &lines)
+{
+    return last && !last->isEmpty() ? last->last().markers : lines;
+}
+
 /// One hunk cut to its chosen changes (linesOnly()); `changed` false when none is left.
-Hunk cutHunk(const Hunk &hunk, int oldFirst, int oldLast, int newFirst, int newLast, bool reverse, bool *changed)
+Hunk cutHunk(const Hunk &hunk, const Chosen &chosen, bool reverse, bool *changed)
 {
     Hunk out = hunk;
     out.lines.clear();
@@ -218,18 +235,12 @@ Hunk cutHunk(const Hunk &hunk, int oldFirst, int oldLast, int newFirst, int newL
     for (const QByteArray &line : hunk.lines) {
         const char kind = line.isEmpty() ? ' ' : line.at(0);
         if (kind == '\\') {
-            if (last && !last->isEmpty())
-                last->last().markers << line;
-            else
-                out.lines << line;
+            markerOf(last, out.lines) << line;
             continue;
         }
-        if (kind == '-') {
-            dels.append({line, oldFirst > 0 && oldNo >= oldFirst && oldNo <= oldLast, {}});
-            last = &dels;
-        } else if (kind == '+') {
-            ins.append({line, newFirst > 0 && newNo >= newFirst && newNo <= newLast, {}});
-            last = &ins;
+        if (kind == '-' || kind == '+') {
+            last = kind == '-' ? &dels : &ins;
+            last->append({line, kind == '-' ? chosen.old(oldNo) : chosen.fresh(newNo), {}});
         } else {
             flushBlock(dels, ins, reverse, out.lines, changed);
             out.lines << line;
@@ -239,13 +250,8 @@ Hunk cutHunk(const Hunk &hunk, int oldFirst, int oldLast, int newFirst, int newL
         newNo += kind != '-';
     }
     flushBlock(dels, ins, reverse, out.lines, changed);
-    const auto counts = [&out](char side) {
-        return int(std::ranges::count_if(out.lines, [side](const QByteArray &l) {
-            return l.isEmpty() || l.startsWith(' ') || l.startsWith(side);
-        }));
-    };
-    out.oldLines = counts('-');
-    out.newLines = counts('+');
+    out.oldLines = countSide(out.lines, '-');
+    out.newLines = countSide(out.lines, '+');
     return out;
 }
 
@@ -257,7 +263,7 @@ FilePatch linesOnly(const FilePatch &patch, int oldFirst, int oldLast, int newFi
     out.hunks.clear();
     for (const Hunk &hunk : patch.hunks) {
         bool changed = false;
-        const Hunk cut = cutHunk(hunk, oldFirst, oldLast, newFirst, newLast, reverse, &changed);
+        const Hunk cut = cutHunk(hunk, {oldFirst, oldLast, newFirst, newLast}, reverse, &changed);
         if (changed)
             out.hunks << cut;
     }

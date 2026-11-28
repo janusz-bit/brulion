@@ -87,6 +87,8 @@ private:
     /// `folder`'s watcher set to the index's folders.
     void watch(const QString &folder, Slot &slot);
     void changedOnDisk(const QString &folder);
+    /// `watcher` set to watch the folders `wanted` and no others.
+    static void watchOnly(QFileSystemWatcher *watcher, const QStringList &wanted);
     void forget(Slot &slot);
     void build(const QString &folder);
     void finish(const QString &folder, int generation, std::shared_ptr<const FileIndex> index, const QString &source);

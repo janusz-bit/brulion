@@ -1676,6 +1676,17 @@ QString Workspace::settingsNote() const
     return m_vault ? m_vault->settingsNote() : QString();
 }
 
+bool Workspace::undoMark(const QString &path, const QString &mark, bool on)
+{
+    if (mark == u"pinned")
+        return m_chats->setPinned(path, !on);
+    if (mark == u"archived")
+        return m_chats->setArchived(path, !on);
+    if (mark == u"settled")
+        return on ? m_codeThreads->unsettle(path) : m_codeThreads->settle(path);
+    return mark == u"snoozed" && m_codeThreads->wake(path);
+}
+
 QString Workspace::notebookLayout() const
 {
     return m_vault ? uilayout::blockOf(m_vault->settingsNoteText()) : QString();

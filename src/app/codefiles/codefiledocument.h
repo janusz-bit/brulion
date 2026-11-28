@@ -16,6 +16,7 @@
 #pragma once
 
 #include "codefiles/highlight.h"
+#include "codefiles/search.h"
 #include "codefiles/viewer.h"
 
 #include <QAbstractListModel>
@@ -127,6 +128,9 @@ Q_SIGNALS:
 
 private:
     struct Loaded;
+    /// The file `abs` read and lexed (on a pool thread) / its text's lines lexed into `l`.
+    static Loaded readFile(const QString &abs, int tabWidth);
+    static void lexLines(QStringView text, int tabWidth, Loaded &l);
     void load();
     void apply(Loaded result);
 
@@ -159,6 +163,9 @@ private:
     QString m_findError;
     /// The matches of the rows again (a find, a new read).
     void refind();
+    /// The matches of `options` in `lines` (at most MaxMatches); none, with `error`, for a pattern
+    /// that is no expression.
+    static QList<Match> matchesIn(const QStringList &lines, const SearchOptions &options, QString *error);
     QList<std::pair<int, int>> matchesOf(int row) const;
 };
 

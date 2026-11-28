@@ -138,30 +138,27 @@ QDateTime CodeThreads::lastActivity(const chat::Conversation &conversation, qint
     return time.isValid() ? time : QDateTime::fromMSecsSinceEpoch(mtime);
 }
 
+bool CodeThreads::untouched(const FileStat &file) const
+{
+    bool ok = false;
+    const QString content = threadContent(file.path, &ok);
+    const chat::Conversation conversation = ok ? chat::parse(content) : chat::Conversation();
+    if (conversation.messages.isEmpty())
+        return false;
+    const codethreads::Facts facts{conversation.pinned, conversation.archived, false};
+    return codethreads::settlesFromInactivity(codethreads::readState(content), facts,
+                                              lastActivity(conversation, file.mtime), m_workspace->now(),
+                                              m_autoSettleDays, m_chats->heldBack(file.path));
+}
+
 QStringList CodeThreads::settleUntouched()
 {
     QStringList out;
     if (m_autoSettleDays <= 0 || !m_workspace->ready() || !m_workspace->vault())
         return out;
-    const QDateTime now = m_workspace->now();
-    for (const FileStat &f : m_workspace->vault()->markdownFiles()) {
-        if (!chat::inFolder(f.path))
-            continue;
-        bool ok = false;
-        const QString content = threadContent(f.path, &ok);
-        if (!ok)
-            continue;
-        const chat::Conversation conversation = chat::parse(content);
-        if (conversation.messages.isEmpty())
-            continue;
-        const QDateTime last = lastActivity(conversation, f.mtime);
-        const codethreads::Facts facts{conversation.pinned, conversation.archived, false};
-        if (!codethreads::settlesFromInactivity(codethreads::readState(content), facts, last, now, m_autoSettleDays,
-                                                m_chats->heldBack(f.path)))
-            continue;
-        if (settle(f.path))
+    for (const FileStat &f : m_workspace->vault()->markdownFiles())
+        if (chat::inFolder(f.path) && untouched(f) && settle(f.path))
             out << f.path;
-    }
     if (!out.isEmpty())
         Q_EMIT autoSettled(out, m_autoSettleDays);
     return out;

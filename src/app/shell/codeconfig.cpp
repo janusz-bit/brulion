@@ -58,18 +58,26 @@ void readSubmodules(const QJsonObject &o, CodeProjects::Config &config)
                config.warnings);
 }
 
+/// The file `relative` names inside the project `folder` (its real path), "" for one that leaves it,
+/// is missing or larger than 64 KB.
+QString sparseFile(const QString &relative, const QString &folder)
+{
+    const QString root = QFileInfo(folder).canonicalFilePath();
+    const QFileInfo info(QDir(folder).filePath(relative));
+    const QString real = info.canonicalFilePath();
+    const bool inside = !relative.isEmpty() && !QDir::isAbsolutePath(relative) && !relative.startsWith(u".."_s)
+                        && !real.isEmpty() && real.startsWith(root + u'/');
+    return inside && info.size() <= 64 * 1024 ? real : QString();
+}
+
 /// t3.json's worktreeSparsePatternsPath: the patterns of a file inside the project (at most 64 KB; its
 /// non-empty lines that are no comment), else none with a warning.
 void readSparsePatterns(const QJsonObject &o, const QString &folder, CodeProjects::Config &config)
 {
-    const QString relative = QDir::cleanPath(o.value(u"worktreeSparsePatternsPath"_s).toString().trimmed());
     if (!o.contains(u"worktreeSparsePatternsPath"_s))
         return;
-    const QString root = QFileInfo(folder).canonicalFilePath();
-    const QString real = QFileInfo(QDir(folder).filePath(relative)).canonicalFilePath();
-    QFile file(real);
-    if (relative.isEmpty() || QDir::isAbsolutePath(relative) || relative.startsWith(u".."_s) || real.isEmpty()
-        || !real.startsWith(root + u'/') || file.size() > 64 * 1024 || !file.open(QIODevice::ReadOnly)) {
+    QFile file(sparseFile(QDir::cleanPath(o.value(u"worktreeSparsePatternsPath"_s).toString().trimmed()), folder));
+    if (file.fileName().isEmpty() || !file.open(QIODevice::ReadOnly)) {
         config.warnings << CodeProjects::tr("worktreeSparsePatternsPath names no file of the project: no sparse checkout.");
         return;
     }

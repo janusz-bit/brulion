@@ -22,6 +22,7 @@
 #pragma once
 
 #include "chat/chat.h"
+#include "types.h"
 
 #include <QObject>
 #include <QSet>
@@ -104,6 +105,8 @@ private:
     void pullRequestKnown(const QString &path, const QString &state);
     void changesKnown(const QString &path, const QString &state, int changes);
     void tidyDone();
+    /// The thread page `file` settles from inactivity now (settleUntouched()).
+    bool untouched(const FileStat &file) const;
     /// The threads of this device's projects that have a worktree and branch of their own.
     QList<std::pair<QString, chat::Conversation>> worktreeThreads() const;
     /// When a thread last changed: its last message's time, else its page's (`mtime`).

@@ -9,30 +9,34 @@ namespace brulion::uilayout {
 
 namespace {
 
-/// A place's items read: `items` the place's so far; false when `item` is left out (`why` says).
-bool takeItem(const QString &placeName, const QStringList &known, QStringList &items, const QString &item, QString *why)
+/// The buttons among `items` (no groups, no hidden ones).
+qsizetype buttonsOf(const QStringList &items)
 {
-    if (item.isEmpty()) {
-        *why = u"an empty item"_s;
-        return false;
-    }
+    return std::ranges::count_if(items, [](const QString &i) { return i != u"|" && !i.startsWith(u'-'); });
+}
+
+/// A button more than a place holds (the bottom bar's MaxBottom): why `item` is left out, "" it is not.
+QString overflowOf(const QString &placeName, const QStringList &items, const QString &item)
+{
+    if (placeName != u"bottom" || item.startsWith(u'-') || buttonsOf(items) < MaxBottom)
+        return {};
+    return u"more than %1 bottom buttons: “%2” left out"_s.arg(MaxBottom).arg(item);
+}
+
+/// Why `item` cannot come next in the place `placeName` (`items` its items so far; `known` its names):
+/// "" it can.
+QString problemOf(const QString &placeName, const QStringList &known, const QStringList &items, const QString &item)
+{
+    if (item.isEmpty())
+        return u"an empty item"_s;
     if (item == u"|")
-        return true;
+        return {};
     const QString name = item.startsWith(u'-') ? item.mid(1) : item;
-    if (!known.contains(name)) {
-        *why = u"“%1” is no item of %2"_s.arg(name, placeName);
-        return false;
-    }
-    if (items.contains(name) || items.contains(u'-' + name)) {
-        *why = u"“%1” is in %2 twice"_s.arg(name, placeName);
-        return false;
-    }
-    const qsizetype buttons = std::ranges::count_if(items, [](const QString &i) { return i != u"|" && !i.startsWith(u'-'); });
-    if (placeName == u"bottom" && !item.startsWith(u'-') && buttons >= MaxBottom) {
-        *why = u"more than %1 bottom buttons: “%2” left out"_s.arg(MaxBottom).arg(name);
-        return false;
-    }
-    return true;
+    if (!known.contains(name))
+        return u"“%1” is no item of %2"_s.arg(name, placeName);
+    if (items.contains(name) || items.contains(u'-' + name))
+        return u"“%1” is in %2 twice"_s.arg(name, placeName);
+    return overflowOf(placeName, items, item);
 }
 
 /// One call's place read from its arguments, its problems added to `warnings` ("line N: …").
@@ -41,8 +45,8 @@ Place readCall(const QString &name, const QString &arguments, const QStringList 
     Place place{name, {}};
     for (const QString &raw : arguments.split(u',')) {
         const QString item = raw.trimmed();
-        QString why;
-        if (takeItem(name, known, place.items, item, &why))
+        const QString why = problemOf(name, known, place.items, item);
+        if (why.isEmpty())
             place.items << item;
         else
             warnings << u"line %1: %2"_s.arg(line).arg(why);

@@ -2693,14 +2693,7 @@ int AppController::toastUndoRename(const QString &text, const QString &actionTex
 
 void AppController::undoChatMark(const QString &path, const QString &mark, bool on)
 {
-    if (mark == u"pinned")
-        m_workspace->chats()->setPinned(path, !on);
-    else if (mark == u"archived")
-        m_workspace->chats()->setArchived(path, !on);
-    else if (mark == u"settled")
-        on ? m_workspace->codeThreads()->unsettle(path) : m_workspace->codeThreads()->settle(path);
-    else if (mark == u"snoozed")
-        m_workspace->codeThreads()->wake(path);
+    m_workspace->undoMark(path, mark, on);
 }
 
 int AppController::toastUndoChatMark(const QString &text, const QString &actionText, const QString &path,

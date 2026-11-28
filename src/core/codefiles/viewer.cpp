@@ -137,6 +137,9 @@ QByteArray encodeEdited(QStringView text, const TextShape &shape)
     return out;
 }
 
+/// `bytes` (read whole, or cut: `file.truncated`) as the text of `file`, its shape and hash.
+void takeText(ViewerFile &file, const QByteArray &bytes);
+
 ViewerFile readForViewer(const QString &absolutePath, qint64 maxBytes)
 {
     ViewerFile out;
@@ -172,15 +175,20 @@ ViewerFile readForViewer(const QString &absolutePath, qint64 maxBytes)
         if (const qsizetype lf = bytes.lastIndexOf('\n'); lf >= 0)
             bytes.truncate(lf + 1);
     }
-    out.kind = FileKind::Text;
-    out.shape = shapeOf(bytes);
-    if (!out.truncated)
-        out.hash = QCryptographicHash::hash(bytes, QCryptographicHash::Sha1);
-    out.text = QString::fromUtf8(bytes);
-    // (A byte order mark is no character of the text.)
-    if (out.text.startsWith(QChar(0xfeff)))
-        out.text.remove(0, 1);
+    takeText(out, bytes);
     return out;
+}
+
+void takeText(ViewerFile &file, const QByteArray &bytes)
+{
+    file.kind = FileKind::Text;
+    file.shape = shapeOf(bytes);
+    // (A file cut short is never saved over: no hash, nothing to compare.)
+    file.hash = file.truncated ? QByteArray() : QCryptographicHash::hash(bytes, QCryptographicHash::Sha1);
+    file.text = QString::fromUtf8(bytes);
+    // (A byte order mark is no character of the text.)
+    if (file.text.startsWith(QChar(0xfeff)))
+        file.text.remove(0, 1);
 }
 
 QChar tableSeparator(QStringView path, QStringView firstLine)

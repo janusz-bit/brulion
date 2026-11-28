@@ -147,20 +147,25 @@ void FileIndexCache::watch(const QString &folder, Slot &slot)
         connect(slot.watcher, &QFileSystemWatcher::directoryChanged, this,
                 [this, folder](const QString &) { changedOnDisk(folder); });
     }
-    const QStringList now = slot.watcher->directories();
+    watchOnly(slot.watcher, wanted);
+#endif
+}
+
+void FileIndexCache::watchOnly(QFileSystemWatcher *watcher, const QStringList &wanted)
+{
+    const QStringList now = watcher->directories();
     const QSet<QString> wantedSet(wanted.cbegin(), wanted.cend()), nowSet(now.cbegin(), now.cend());
     QStringList gone, added;
     for (const QString &d : now)
         if (!wantedSet.contains(d))
             gone << d;
-    for (const QString &d : std::as_const(wanted))
+    for (const QString &d : wanted)
         if (!nowSet.contains(d))
             added << d;
     if (!gone.isEmpty())
-        slot.watcher->removePaths(gone);
+        watcher->removePaths(gone);
     if (!added.isEmpty())
-        slot.watcher->addPaths(added);
-#endif
+        watcher->addPaths(added);
 }
 
 void FileIndexCache::changedOnDisk(const QString &folder)

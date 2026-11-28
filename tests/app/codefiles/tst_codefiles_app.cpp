@@ -99,6 +99,16 @@ private Q_SLOTS:
         QTRY_VERIFY_WITH_TIMEOUT(cache->index(folder)->contains(u"lib/x.h"), 10000);
         QVERIFY(writeFile(dir.filePath(u"lib/y.h"_s), "\n"));
         QTRY_VERIFY_WITH_TIMEOUT(cache->index(folder)->contains(u"lib/y.h"), 10000);
+        // More folders than the cache keeps: the least recently asked for goes, its watcher with it.
+        QList<std::shared_ptr<QTemporaryDir>> others;
+        for (int i = 0; i < FileIndexCache::MaxFolders; ++i) {
+            others << std::make_shared<QTemporaryDir>();
+            QVERIFY(writeFile(others.last()->filePath(u"a.txt"_s), "a\n"));
+            cache->index(others.last()->path());
+        }
+        QCOMPARE(cache->watchedCount(folder), 0);
+        QVERIFY(!cache->building(folder));
+        QTRY_VERIFY(cache->watchedCount(others.last()->path()) >= 1);
     }
 
     void indexOfARepository()

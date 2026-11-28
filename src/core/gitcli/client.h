@@ -509,6 +509,9 @@ private:
     /// The part `part` chooses of git's diff of `path` applied as `action` does (applyHunk(), applyLines()).
     void applyPart(const QString &folder, const QString &path, HunkAction action,
                    std::function<PatchPart(const FilePatch &)> part, std::function<void(const Outcome &)> done);
+    /// `git apply [--cached] [-R] -` of `chosen`'s patch as `action` says.
+    void applyChosen(const QString &folder, HunkAction action, const PatchPart &chosen,
+                     std::function<void(const Outcome &)> done);
     struct Run;
     void start(const QString &program, const QString &folder, const QStringList &arguments, const RunOptions &options,
                bool isGh, Done done);

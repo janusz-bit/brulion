@@ -783,6 +783,10 @@ public:
     /// config.json's.
     QString settingsNote() const;
     QString notebookLayout() const;
+    /// A conversation's or thread's mark set back from `on` (AppController's Undo): "pinned",
+    /// "archived" (WorkspaceChats), "settled" (unsettled or settled again), "snoozed" (woken —
+    /// CodeThreads). False for another mark or when nothing was written.
+    bool undoMark(const QString &path, const QString &mark, bool on);
     /// "Move the settings into a note": the note made from the settings in use (or completed:
     /// idempotent), named in the app's language; its path ("" failed, said by errorOccurred()).
     Q_INVOKABLE QString moveSettingsToNote();

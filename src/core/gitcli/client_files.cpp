@@ -367,18 +367,24 @@ void Client::applyPart(const QString &folder, const QString &path, HunkAction ac
                                                           : GitMessages::tr("These lines have no unstaged changes")));
             return;
         }
-        RunOptions a;
-        a.noHooks = true;
-        a.input = chosen.patch;
-        QStringList args{u"apply"_s, u"--whitespace=nowarn"_s};
-        if (action != HunkAction::Discard)
-            args << u"--cached"_s;
-        if (action != HunkAction::Stage)
-            args << u"-R"_s;
-        args << u"-"_s;
-        git(folder, args, a, [done, message = chosen.message](const RunResult &r) {
-            done(r.ok() ? succeededWith(message) : failedWith(r.message()));
-        });
+        applyChosen(folder, action, chosen, done);
+    });
+}
+
+void Client::applyChosen(const QString &folder, HunkAction action, const PatchPart &chosen,
+                         std::function<void(const Outcome &)> done)
+{
+    RunOptions a;
+    a.noHooks = true;
+    a.input = chosen.patch;
+    QStringList args{u"apply"_s, u"--whitespace=nowarn"_s};
+    if (action != HunkAction::Discard)
+        args << u"--cached"_s;
+    if (action != HunkAction::Stage)
+        args << u"-R"_s;
+    args << u"-"_s;
+    git(folder, args, a, [done = std::move(done), message = chosen.message](const RunResult &r) {
+        done(r.ok() ? succeededWith(message) : failedWith(r.message()));
     });
 }
 

@@ -224,6 +224,23 @@ private Q_SLOTS:
         QCOMPARE(snoozed.size(), 3);
         QVERIFY(!threads->snoozeLabel(u"evening"_s).isEmpty());
         QCOMPARE(threads->snoozeLabel(u"wczoraj"_s), QString());
+        // Undo of a toast (Workspace::undoMark): settled → back, back → settled; a snooze woken; a
+        // pin and an archive set back; another mark nothing.
+        QVERIFY(threads->settle(Koszyk));
+        QVERIFY(ws->undoMark(Koszyk, u"settled"_s, true));
+        QCOMPARE(threads->state(Koszyk).value(u"settled"_s).toString(), QString());
+        QVERIFY(ws->undoMark(Koszyk, u"settled"_s, false));
+        QVERIFY(!threads->state(Koszyk).value(u"settled"_s).toString().isEmpty());
+        QCOMPARE(threads->snooze(Koszyk, u"3h"_s), QString());
+        QVERIFY(ws->undoMark(Koszyk, u"snoozed"_s, true));
+        QVERIFY(!threads->state(Koszyk).value(u"snoozed"_s).toBool());
+        QVERIFY(ws->chats()->setPinned(Koszyk, true));
+        QVERIFY(ws->undoMark(Koszyk, u"pinned"_s, true));
+        QVERIFY(!chat::parse(ws->read(Koszyk)).pinned);
+        QVERIFY(ws->undoMark(Koszyk, u"archived"_s, false));
+        QVERIFY(chat::parse(ws->read(Koszyk)).archived);
+        QVERIFY(!ws->undoMark(Koszyk, u"inny"_s, true));
+        QVERIFY(ws->chats()->setArchived(Koszyk, false));
         // Snoozing a settled thread: snoozed, no longer settled.
         QVERIFY(threads->settle(Rabat));
         QCOMPARE(threads->snooze(Rabat, u"tomorrow"_s), QString());
