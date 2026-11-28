@@ -1899,6 +1899,12 @@ private Q_SLOTS:
         QCOMPARE(ws->read(u"Stara.md"_s), old);
         QTRY_VERIFY(!QFileInfo::exists(ws->absoluteFilePath(u"Przeniesiona.md"_s)));
 
+        // A file a call named but did not change in the end (the edit failed): not among them.
+        QCOMPARE(chats->send(path, u"Proszę nieudana edycja"_s), path);
+        QTRY_VERIFY_WITH_TIMEOUT(!turn->running(), 20000);
+        QVERIFY(ws->read(path).contains(u"Nie wyszło."_s));
+        QVERIFY(chats->changes(path).isEmpty());
+
         // Another program's change while the turn runs no command: not the turn's.
         QCOMPARE(chats->send(path, u"Proszę powoli"_s), path);
         QVERIFY(turn->running());

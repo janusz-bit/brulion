@@ -30,6 +30,7 @@
 //                     Nowa.md made and Stara.md (when there is one) renamed Przeniesiona.md, the call
 //                     completed 50 ms later (before the watcher tells):
 //                     "Polecenie wykonane."
+//   "… nieudana …"    an edit call naming Dom.md that fails, the file unchanged: "Nie wyszło."
 //   "… narzędzia …"   a tool call and no words
 //   "… model …"       "Model: <the model option now>"
 //   "… obrazy …"      "Obrazy: <the prompt's pictures: the file names of its image and resource_link blocks>"
@@ -545,6 +546,21 @@ int main(int argc, char **argv)
                                                                        {u"oldText"_s, u"Zapłacić czynsz"_s},
                                                                        {u"newText"_s, u"Zapłacić czynsz i prąd"_s}}}}});
                 end(u"Zmieniono Dom.md."_s);
+                continue;
+            }
+            if (text.contains(u"nieudana"_s)) {
+                const QString file = QDir(cwd).filePath(u"Dom.md"_s);
+                update(session, {{u"sessionUpdate"_s, u"tool_call"_s},
+                                 {u"toolCallId"_s, u"f1"_s},
+                                 {u"title"_s, u"Edit Dom.md"_s},
+                                 {u"kind"_s, u"edit"_s},
+                                 {u"status"_s, u"pending"_s},
+                                 {u"locations"_s, QJsonArray{QJsonObject{{u"path"_s, file}}}}});
+                QThread::msleep(300);
+                update(session, {{u"sessionUpdate"_s, u"tool_call_update"_s},
+                                 {u"toolCallId"_s, u"f1"_s},
+                                 {u"status"_s, u"failed"_s}});
+                end(u"Nie wyszło."_s);
                 continue;
             }
             if (text.contains(u"powłoką"_s)) {
