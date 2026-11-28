@@ -983,7 +983,7 @@
 <context>
     <name>GitChangesPanel</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="742"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="775"/>
         <source>%n file(s) with conflicts: take a side, or edit them and mark them resolved.</source>
         <translation>
             <numerusform>%n file with conflicts: take a side, or edit them and mark them resolved.</numerusform>
@@ -991,7 +991,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="914"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="947"/>
         <source>and %n more file(s)</source>
         <translation>
             <numerusform>and %n more file</numerusform>
@@ -999,7 +999,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1539"/>
+        <location filename="../src/app/qml/gitpanel/GitChangesPanel.qml" line="1581"/>
         <source>The files go back to how they were before the turn: the %n file(s) it changed are put back, files it added are deleted.</source>
         <translation>
             <numerusform>The files go back to how they were before the turn: the %n file it changed is put back, files it added are deleted.</numerusform>
@@ -1029,7 +1029,7 @@
 <context>
     <name>GitDiffView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/gitpanel/GitDiffView.qml" line="439"/>
+        <location filename="../src/app/qml/gitpanel/GitDiffView.qml" line="470"/>
         <source>%n unchanged line(s)</source>
         <translation>
             <numerusform>%n unchanged line</numerusform>
@@ -1075,7 +1075,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/gitcli/client_files.cpp" line="349"/>
+        <location filename="../src/core/gitcli/client_files.cpp" line="314"/>
         <source>Staged %n hunk(s)</source>
         <translation>
             <numerusform>Staged %n hunk</numerusform>
@@ -1083,7 +1083,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/gitcli/client_files.cpp" line="350"/>
+        <location filename="../src/core/gitcli/client_files.cpp" line="315"/>
         <source>Unstaged %n hunk(s)</source>
         <translation>
             <numerusform>Unstaged %n hunk</numerusform>
@@ -1091,11 +1091,19 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/core/gitcli/client_files.cpp" line="351"/>
+        <location filename="../src/core/gitcli/client_files.cpp" line="316"/>
         <source>Threw away %n hunk(s)</source>
         <translation>
             <numerusform>Threw away %n hunk</numerusform>
             <numerusform>Threw away %n hunks</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/core/gitcli/client_files.cpp" line="334"/>
+        <source>Reverted %n hunk(s)</source>
+        <translation>
+            <numerusform>Reverted %n hunk</numerusform>
+            <numerusform>Reverted %n hunks</numerusform>
         </translation>
     </message>
 </context>
@@ -2768,7 +2776,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/gitpanel/codegit.cpp" line="1107"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="1162"/>
         <source>Reverted %n file(s)</source>
         <translation>
             <numerusform>Reverted %n file</numerusform>
@@ -2776,7 +2784,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/gitpanel/codegit.cpp" line="1252"/>
+        <location filename="../src/app/gitpanel/codegit.cpp" line="1307"/>
         <source>The remote has %n new commit(s): pull first</source>
         <translation>
             <numerusform>The remote has %n new commit: pull first</numerusform>
@@ -3163,7 +3171,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacechats.cpp" line="1143"/>
+        <location filename="../src/app/shell/workspacechats.cpp" line="1194"/>
         <source>The files are back as they were before that message (%n file(s) changed).</source>
         <translation>
             <numerusform>The files are back as they were before that message (%n file changed).</numerusform>
@@ -3171,7 +3179,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacechats.cpp" line="2656"/>
+        <location filename="../src/app/shell/workspacechats.cpp" line="2713"/>
         <source>%n message(s) taken out of the conversation</source>
         <translation>
             <numerusform>%n message taken out of the conversation</numerusform>
