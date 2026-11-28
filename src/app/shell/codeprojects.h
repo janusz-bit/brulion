@@ -170,6 +170,9 @@ public:
         /// A new worktree's submodules: "recursive", "top-level", "none"; "" not said (recursive,
         /// T3 Code's default).
         QString worktreeSubmodules;
+        /// The patterns of worktreeSparsePatternsPath's file (git's non-cone syntax; empty: no
+        /// sparse checkout — none said, a path that leaves the project, a missing file).
+        QStringList sparsePatterns;
         bool operator==(const Config &) const = default;
     };
 
@@ -569,6 +572,10 @@ private:
     void nameWorktree(const QString &title, std::function<void(const QString &name)> done);
     /// createWorktree()'s part once named: the base fetched when it is a remote one, the worktree
     /// of a free branch and folder of `name` made; worktreeCreated() — `fail(error)` on failure.
+    /// t3.json's sparse patterns set in the new worktree `folder` (made without a checkout) and its
+    /// files checked out, then `then` ("" fine, else why not).
+    void checkOutSparse(const QString &folder, const QStringList &patterns,
+                        const std::function<void(const QString &error)> &then);
     /// t3.json's worktreeSubmodules checked out in the new worktree `folder` of `id`, then `then`.
     void checkOutSubmodules(const QString &id, const QString &folder, const std::function<void()> &then);
     void makeWorktree(const QString &id, const QString &repo, const QString &from, const QString &name,

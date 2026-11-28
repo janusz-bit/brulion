@@ -52,6 +52,28 @@ void readSubmodules(const QJsonObject &o, CodeProjects::Config &config)
         config.warnings << CodeProjects::tr("worktreeSubmodules is neither “recursive”, “top-level” nor “none”: left out.");
 }
 
+/// t3.json's worktreeSparsePatternsPath: the patterns of a file inside the project (at most 64 KB; its
+/// non-empty lines that are no comment), else none with a warning.
+void readSparsePatterns(const QJsonObject &o, const QString &folder, CodeProjects::Config &config)
+{
+    const QString relative = QDir::cleanPath(o.value(u"worktreeSparsePatternsPath"_s).toString().trimmed());
+    if (!o.contains(u"worktreeSparsePatternsPath"_s))
+        return;
+    const QString root = QFileInfo(folder).canonicalFilePath();
+    const QString real = QFileInfo(QDir(folder).filePath(relative)).canonicalFilePath();
+    QFile file(real);
+    if (relative.isEmpty() || QDir::isAbsolutePath(relative) || relative.startsWith(u".."_s) || real.isEmpty()
+        || !real.startsWith(root + u'/') || file.size() > 64 * 1024 || !file.open(QIODevice::ReadOnly)) {
+        config.warnings << CodeProjects::tr("worktreeSparsePatternsPath names no file of the project: no sparse checkout.");
+        return;
+    }
+    for (const QString &line : QString::fromUtf8(file.readAll()).split(u'\n')) {
+        const QString pattern = line.trimmed();
+        if (!pattern.isEmpty() && !pattern.startsWith(u'#'))
+            config.sparsePatterns << pattern;
+    }
+}
+
 /// t3.json's iconPath: a picture inside the project `folder` (no absolute path, nothing that leaves
 /// it — a link pointing out of it neither).
 void readIconPath(const QJsonObject &o, const QString &folder, CodeProjects::Config &config)
@@ -165,6 +187,7 @@ CodeProjects::Config CodeProjects::parseConfig(const QByteArray &data, const QSt
 
     readEnvMode(o, config);
     readSubmodules(o, config);
+    readSparsePatterns(o, folder, config);
     readIconPath(o, folder, config);
 
     const QJsonValue scripts = o.value(u"scripts"_s);

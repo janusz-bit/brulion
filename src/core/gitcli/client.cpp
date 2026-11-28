@@ -852,7 +852,7 @@ void Client::checkout(const QString &folder, const QString &name, std::function<
 }
 
 void Client::addWorktree(const QString &folder, const QString &path, const QString &branch, const QString &base,
-                         std::function<void(const Outcome &)> done)
+                         std::function<void(const Outcome &)> done, bool noCheckout)
 {
     const QString target = QDir::cleanPath(QDir::isAbsolutePath(path) ? path : QDir(folder).absoluteFilePath(path));
     if (path.trimmed().isEmpty() || (!branch.isEmpty() && !isValidBranchName(branch)) || base.startsWith(u'-')) {
@@ -864,6 +864,8 @@ void Client::addWorktree(const QString &folder, const QString &path, const QStri
         return;
     }
     QStringList args{u"worktree"_s, u"add"_s};
+    if (noCheckout)
+        args << u"--no-checkout"_s;
     if (!branch.isEmpty())
         args << u"-b"_s << branch;
     args << u"--"_s << target;

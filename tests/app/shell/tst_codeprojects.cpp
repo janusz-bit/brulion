@@ -321,6 +321,45 @@ private Q_SLOTS:
         QCOMPARE(c.warnings.size(), 1);
     }
 
+    // t3.json's worktreeSparsePatternsPath: a new worktree checks out only what its patterns (git's
+    // non-cone syntax) name; a path that leaves the project, or a missing file, is no sparse checkout.
+    void worktreeSparse()
+    {
+        if (!m_git)
+            QSKIP("no git");
+        const QString repo = fresh(u"rzadki"_s);
+        QDir().mkpath(repo);
+        git(repo, {u"init"_s, u"-q"_s});
+        QVERIFY(writeFile(repo + u"/frontend/app.js"_s, "x\n"));
+        QVERIFY(writeFile(repo + u"/backend/main.go"_s, "y\n"));
+        QVERIFY(writeFile(repo + u"/README.md"_s, "z\n"));
+        QVERIFY(writeFile(repo + u"/.t3/sparse"_s, "/frontend/\n/README.md\n"));
+        QVERIFY(writeFile(repo + u"/t3.json"_s, R"({"worktreeSparsePatternsPath":".t3/sparse"})"));
+        git(repo, {u"add"_s, u"-A"_s});
+        git(repo, {u"commit"_s, u"-qm"_s, u"x"_s});
+        CodeProjects projects;
+        projects.setPrograms(QStandardPaths::findExecutable(u"git"_s), QString());
+        projects.setWorktreesRoot(fresh(u"drzewa"_s));
+        const QString id = projects.add(repo);
+        QCOMPARE(projects.config(id).sparsePatterns, (QStringList{u"/frontend/"_s, u"/README.md"_s}));
+        QSignalSpy created(&projects, &CodeProjects::worktreeCreated);
+        QVERIFY(projects.createWorktree(id, u"Tylko frontend"_s));
+        QTRY_COMPARE_WITH_TIMEOUT(created.size(), 1, 30000);
+        QCOMPARE(created.at(0).at(3).toString(), QString());
+        const QString folder = created.at(0).at(1).toString();
+        QVERIFY(QFileInfo(folder + u"/frontend/app.js"_s).isFile());
+        QVERIFY(QFileInfo(folder + u"/README.md"_s).isFile());
+        QVERIFY(!QFileInfo::exists(folder + u"/backend"_s));
+        QCOMPARE(gitOut(folder, {u"status"_s, u"--porcelain"_s}), QString());
+        // Paths that are no sparse checkout: outside the project, missing.
+        for (const QByteArray &bad : {QByteArray(R"({"worktreeSparsePatternsPath":"../poza"})"),
+                                      QByteArray(R"({"worktreeSparsePatternsPath":"brak.txt"})")}) {
+            const CodeProjects::Config c = CodeProjects::parseConfig(bad, repo);
+            QVERIFY(c.sparsePatterns.isEmpty());
+            QCOMPARE(c.warnings.size(), 1);
+        }
+    }
+
     void previewUrlOf_data()
     {
         QTest::addColumn<QString>("text");

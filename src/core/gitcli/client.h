@@ -360,7 +360,7 @@ public:
     /// `git worktree add [-b <branch>] <path> [<base>]` (`path` relative to `folder` when not
     /// absolute).
     void addWorktree(const QString &folder, const QString &path, const QString &branch, const QString &base,
-                     std::function<void(const Outcome &)> done);
+                     std::function<void(const Outcome &)> done, bool noCheckout = false);
     /// `git worktree remove [--force] <path>` (without force git refuses one with changes).
     void removeWorktree(const QString &folder, const QString &path, bool force,
                         std::function<void(const Outcome &)> done);

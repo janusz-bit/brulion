@@ -163,6 +163,28 @@ bool CodeProjects::createWorktree(const QString &id, const QString &title, const
     return true;
 }
 
+void CodeProjects::checkOutSparse(const QString &folder, const QStringList &patterns,
+                                  const std::function<void(const QString &error)> &then)
+{
+    if (patterns.isEmpty()) {
+        then(QString());
+        return;
+    }
+    // `sparse-checkout set --no-cone` (the patterns on standard input), then the files they name.
+    gitcli::RunOptions set;
+    set.input = patterns.join(u'\n').toUtf8() + '\n';
+    git()->git(folder, {u"sparse-checkout"_s, u"set"_s, u"--no-cone"_s, u"--stdin"_s}, set,
+               [this, folder, then](const gitcli::RunResult &r) {
+                   if (!r.ok()) {
+                       then(tr("git could not set the sparse checkout: %1").arg(r.message().right(500)));
+                       return;
+                   }
+                   git()->git(folder, {u"checkout"_s}, {}, [then](const gitcli::RunResult &c) {
+                       then(c.ok() ? QString() : tr("git could not check out the files: %1").arg(c.message().right(500)));
+                   });
+               });
+}
+
 void CodeProjects::checkOutSubmodules(const QString &id, const QString &folder, const std::function<void()> &then)
 {
     // (t3.json's worktreeSubmodules: recursive unless it says otherwise; nothing without .gitmodules.)
@@ -192,18 +214,27 @@ void CodeProjects::makeWorktree(const QString &id, const QString &repo, const QS
         freeName(repo, dir, name, [this, id, repo, from, dir, fail](const QString &branch, const QString &folderName) {
             QDir().mkpath(dir);
             const QString folder = QDir(dir).filePath(folderName);
-            git()->addWorktree(repo, folder, branch, from.isEmpty() ? u"HEAD"_s : from,
-                               [this, id, folder, branch, fail](const gitcli::Outcome &o) {
-                                   if (!o.ok) {
-                                       fail(o.message.isEmpty() ? tr("git could not make the worktree.")
-                                                                : o.message.right(500));
-                                       return;
-                                   }
-                                   // (Ready once its submodules are there: the agent starts after it.)
-                                   checkOutSubmodules(id, folder, [this, id, folder, branch] {
-                                       Q_EMIT worktreeCreated(id, folder, branch, QString());
-                                   });
-                               });
+            const QStringList sparse = m_configs.value(id).sparsePatterns;
+            git()->addWorktree(
+                    repo, folder, branch, from.isEmpty() ? u"HEAD"_s : from,
+                    [this, id, folder, branch, fail, sparse](const gitcli::Outcome &o) {
+                        if (!o.ok) {
+                            fail(o.message.isEmpty() ? tr("git could not make the worktree.") : o.message.right(500));
+                            return;
+                        }
+                        // (Its files — only those of t3.json's sparse patterns —, then its submodules:
+                        // ready once they are there, the agent starts after it.)
+                        checkOutSparse(folder, sparse, [this, id, folder, branch, fail](const QString &error) {
+                            if (!error.isEmpty()) {
+                                fail(error);
+                                return;
+                            }
+                            checkOutSubmodules(id, folder, [this, id, folder, branch] {
+                                Q_EMIT worktreeCreated(id, folder, branch, QString());
+                            });
+                        });
+                    },
+                    !sparse.isEmpty());
         });
     };
     if (from.isEmpty()) {
