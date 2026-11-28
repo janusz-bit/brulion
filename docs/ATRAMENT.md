@@ -1193,7 +1193,19 @@ scrolling, `tst_atrament_editor`) before the next:
    is no list item, deeper than the block above allows, where the next block's parent would change,
    above the page's properties, outside a zoom, and for a paragraph, a heading or a table below the
    top level. The edge scrolling as in step 3; the release clicks nothing (a bullet's click without a
-   drag still zooms). Not yet: a drop across the journal's days.
+   drag still zooms). **Across the journal's days**: blocks dragged out of their day show the drop
+   line in the day under the pointer (`PageEmbedding::dragBlocksTo` → `JournalView::dragBlocksTo`:
+   the same `dropAt` on that day's page, its places those `PageController::canInsertBlocksAt` takes —
+   a paragraph, a heading, a table only at the top level —, drawn there: `PageView::setIncomingDrop`),
+   the stream scrolling at its edges and the days coming in taking it; let go there
+   (`endBlockDrag`), their Markdown (`selectionMarkdown()`) goes into that day's file first
+   (`insertBlocksAt`: their nesting below the place, their block ids kept — a move) and then out of
+   theirs (`deleteSelection`), selected where they went. **Undo**: two steps, one per file (each day
+   has its own undo stack, PageController's); the stream pairs them — Ctrl+Z in either day while both
+   are still those days' last steps (`undoToken()`) takes the move back in both, Ctrl+Y right after
+   does it again in both (`JournalView::undoMoveAcross` around the day's `onUndo`); after another edit
+   in either day each undoes its own half. Not yet: a drop into a day without blocks (its prompt),
+   the toolbar's and the menu's Undo pairing them (they undo the day they act on).
 5. **Blocks with views.** Code (the input with the code highlighter), tables, math (Brulion Math's
    glyphs through Atrament's text), charts and Mermaid (their core layouts painted as Atrament paths),
    pictures (`img`), queries, transclusions, properties. When nothing is foreign, M2's gate is

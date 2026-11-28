@@ -341,6 +341,11 @@ public:
         // where they are now): over another page of the view around the selection goes on there —
         // true; over this one, false (the page selects).
         std::function<bool(int fixedRow, atrament::Point p)> selectTo;
+        // Blocks of this page being moved are at window point `p`, their text column at window x
+        // `textX`: over another page that page shows where they would go — true; over this one,
+        // false. The drag ended (`drop`: let go there): the view around moves them where it showed.
+        std::function<bool(atrament::Point p, float textX)> dragBlocksTo;
+        std::function<void(bool drop)> endBlockDrag;
     };
     void setEmbedding(std::optional<PageEmbedding> embedding, atrament::Context<PageView> &cx);
     bool embedded() const { return m_embedding.has_value(); }
@@ -1183,6 +1188,9 @@ public:
         atrament::Rect line;
     };
     std::optional<DropTarget> dropTarget() const;
+    // Embedded: blocks dragged from another page of the view around would go here (its drop line
+    // drawn on this page; dropTarget() gives it while this page drags nothing).
+    void setIncomingDrop(std::optional<DropTarget> drop, atrament::Context<PageView> &cx);
     // The place nearest window point `p` (where the rows are now) for blocks whose text column is
     // at window x `textX`: the gap above or below the half of the row under it, the level of the
     // ones it allows (from the next block's to a child of the one above) nearest that column that
@@ -1239,6 +1247,7 @@ private:
         atrament::PointerKind pointer = atrament::PointerKind::Mouse;
         std::optional<DropTarget> drop;
     } m_drag;
+    std::optional<DropTarget> m_incomingDrop;
     atrament::EdgeScroller m_edgeScroll;
     bool m_touchGrips = false;
     bool m_touchPicking = false;

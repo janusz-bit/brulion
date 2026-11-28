@@ -369,6 +369,21 @@ bool JournalView::makeDay(int day, at::Context<JournalView> &cx)
             });
             return took;
         };
+        // Its blocks dragged into another day, moved there.
+        e.dragBlocksTo = [app, self, guard](at::Point p, float textX) {
+            bool took = false;
+            app->updateEntity<JournalView>(self, [&](JournalView &j, at::Context<JournalView> &c) {
+                took = j.dragBlocksTo(guard.data(), p, textX);
+                c.notify();
+            });
+            return took;
+        };
+        e.endBlockDrag = [app, self, guard](bool drop) {
+            app->updateEntity<JournalView>(self, [&](JournalView &j, at::Context<JournalView> &c) {
+                j.endBlockDrag(guard.data(), drop);
+                c.notify();
+            });
+        };
         v.setEmbedding(std::move(e), pc);
         v.setStyle(dayMetrics(day), m_palette);
         v.setKeysActive(keys, pc);
@@ -395,6 +410,22 @@ bool JournalView::makeDay(int day, at::Context<JournalView> &cx)
             default:
                 return false;
             }
+        };
+        // Ctrl+Z / Ctrl+Y right after a move across days: both of its days.
+        std::function<void(bool)> hostUndo = v.onUndo;
+        v.onUndo = [hostUndo, app, self, guard](bool redo) {
+            bool paired = false;
+            app->updateEntity<JournalView>(self, [&](JournalView &j, at::Context<JournalView> &) {
+                paired = j.undoMoveAcross(guard.data(), redo);
+            });
+            if (paired || !guard)
+                return;
+            if (hostUndo)
+                hostUndo(redo);
+            else if (redo)
+                guard->redo();
+            else
+                guard->undo();
         };
         // Shift+↑/↓ past the edited block's text at the day's edge: into the day around.
         if (!v.onExtendSelection)

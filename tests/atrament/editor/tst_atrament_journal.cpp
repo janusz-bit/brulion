@@ -174,6 +174,26 @@ struct Harness {
         });
         tw.settle();
     }
+    // The bullet of an outline's list item `row` of day `d` (left of its text, in the gutter).
+    at::Point bulletOf(int d, int row)
+    {
+        const PageView *p = page(d);
+        const std::optional<at::Rect> b = view().rowBounds(d, row);
+        if (!p || !b)
+            return {-1, -1};
+        const PageMetrics &m = p->metrics();
+        const int depth = day(d)->blocks()->index(row).data(BlockListModel::DepthRole).toInt();
+        const float textX = m.contentX + m.gutter + float(depth) * m.indentStep;
+        return {textX - m.bulletColumn / 2, b->top() + m.rowPad + m.lineHeight / 2};
+    }
+    // The day showing blocks dragged from another day (−1: none).
+    int incomingDropDay()
+    {
+        for (int d : view().madeDays())
+            if (page(d)->dragKind() == PageView::DragKind::None && page(d)->dropTarget())
+                return d;
+        return -1;
+    }
     float scrollY()
     {
         float y = 0;
@@ -228,6 +248,8 @@ private Q_SLOTS:
     void mouseDragAcrossDaysScrollsTheStream();
     void fingerSelectionAcrossDaysScrolls();
     void zoomShowsTheDaysTop();
+    void blockMovedIntoAnotherDay();
+    void blockDraggedPastTheEdgeLandsInADayScrolledIn();
 };
 
 void TestAtramentJournal::daysLaidOutInOrder()
@@ -677,6 +699,74 @@ void TestAtramentJournal::fingerSelectionAcrossDaysScrolls()
     h.tw.settle();
     QVERIFY(h.settledAfterDrag());
     QVERIFY(h.stream.active());
+}
+
+void TestAtramentJournal::blockMovedIntoAnotherDay()
+{
+    Harness h(4);
+    PageController *first = h.day(1);
+    PageController *second = h.day(2);
+    const QString firstBefore = first->sourceText();
+    const QString secondBefore = second->sourceText();
+    // Day 1's first block by its bullet into day 2, between its first and second blocks: the drop
+    // line shows there, not in the day it comes from.
+    const at::Point bullet = h.bulletOf(1, 0);
+    h.tw.simulateMouseMove(bullet);
+    h.tw.simulateMouseDown(bullet);
+    h.tw.simulateMouseMove({bullet.x, bullet.y + 10}, at::MouseButton::Left);
+    QCOMPARE(h.page(1)->dragKind(), PageView::DragKind::Move);
+    const at::Point there{bullet.x, h.view().rowBounds(2, 1)->top() + 2};
+    h.tw.simulateMouseMove(there, at::MouseButton::Left);
+    h.tw.settle();
+    QVERIFY(!h.page(1)->dropTarget());
+    QCOMPARE(h.incomingDropDay(), 2);
+    QCOMPARE(h.page(2)->dropTarget()->place, (BlockPlace{1, 0}));
+    QVERIFY(h.page(2)->dropTarget()->line.width() > 0); // drawn there
+    // Let go: the Markdown moves from day 1's file to day 2's, the block selected where it went.
+    h.tw.simulateMouseUp(there);
+    h.tw.settle();
+    QCOMPARE(first->sourceText(), firstBefore.mid(firstBefore.indexOf(u'\n') + 1));
+    QCOMPARE(second->sourceText(), secondBefore.left(secondBefore.indexOf(u'\n') + 1)
+                                           + firstBefore.left(firstBefore.indexOf(u'\n') + 1)
+                                           + secondBefore.mid(secondBefore.indexOf(u'\n') + 1));
+    QCOMPARE(second->selectedRow(), 1);
+    QCOMPARE(first->selectionCount(), 0);
+    QCOMPARE(h.view().activeDay(), 2);
+    QCOMPARE(h.incomingDropDay(), -1);
+    QVERIFY(h.settledAfterDrag());
+    // One Ctrl+Z takes it back to where it was in both days, Ctrl+Y moves it again.
+    QVERIFY(h.tw.simulateKeystrokes(u"ctrl-z"));
+    h.tw.settle();
+    QCOMPARE(first->sourceText(), firstBefore);
+    QCOMPARE(second->sourceText(), secondBefore);
+    QVERIFY(h.tw.simulateKeystrokes(u"ctrl-y"));
+    h.tw.settle();
+    QVERIFY(!first->sourceText().contains(u"Dzień 1"_s));
+    QVERIFY(second->sourceText().contains(u"Dzień 1"_s));
+}
+
+void TestAtramentJournal::blockDraggedPastTheEdgeLandsInADayScrolledIn()
+{
+    Harness h(14);
+    PageController *first = h.day(1);
+    const at::Point bullet = h.bulletOf(1, 0);
+    h.tw.simulateMouseMove(bullet);
+    h.tw.simulateMouseDown(bullet);
+    h.tw.simulateMouseMove({bullet.x, bullet.y + 10}, at::MouseButton::Left);
+    // Held at the stream's bottom edge: it scrolls, the drop line goes on into the days coming in.
+    const float before = h.scrollY();
+    h.tw.simulateMouseMove({bullet.x, 698}, at::MouseButton::Left);
+    h.tw.advance(700ms);
+    h.tw.settle();
+    QVERIFY2(h.scrollY() > before + 300, qPrintable(QString::number(h.scrollY() - before)));
+    const int target = h.incomingDropDay();
+    QVERIFY2(target > 3, qPrintable(QString::number(target)));
+    PageController *to = h.day(target);
+    h.tw.simulateMouseUp({bullet.x, 698});
+    h.tw.settle();
+    QVERIFY(!first->sourceText().contains(u"Dzień 1:"_s));
+    QVERIFY(to->sourceText().contains(u"Dzień 1: zakupy, mleko i chleb"_s));
+    QVERIFY(h.settledAfterDrag());
 }
 
 QTEST_MAIN(TestAtramentJournal)

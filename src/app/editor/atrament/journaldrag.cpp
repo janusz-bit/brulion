@@ -1,9 +1,12 @@
 // JournalView's drags across days (journalview.h; docs/ATRAMENT.md "The journal stream as one
 // list"): a drag that leaves the day it began in goes on in the stream — the selection into the
-// days around (StreamSelection.extendFrom) —, its edge scrolling scrolls the stream and the days
-// that scroll in take it (the pointer's day and block where the days are now), and its moves and
-// release are followed by the stream while the day it began in is scrolled away
-// (PageView::followDrag).
+// days around (StreamSelection.extendFrom), blocks moved into another day (its drop line shown
+// there, the Markdown moved between the two days' files) —, its edge scrolling scrolls the stream
+// and the days that scroll in take it (the pointer's day and block where the days are now), and
+// its moves and release are followed by the stream while the day it began in is scrolled away
+// (PageView::followDrag). A move into another day is two undo steps, one per file — the blocks
+// inserted into the day they went to, deleted from the one they left — taken back (and done again)
+// together by Ctrl+Z (Ctrl+Y) in either day while they are still those days' last steps.
 #include "journalview.h"
 
 #include "blocklistmodel.h"
@@ -17,6 +20,20 @@
 namespace brulion::editor::atr {
 
 namespace at = brulion::atrament;
+
+namespace {
+
+// Whether every block selected is a list item (only those go below another day's top level).
+bool onlyListItems(const PageController &c)
+{
+    const markdown::BlockDocument &doc = c.blocks()->document();
+    const QVariantList rows = c.selectedRows();
+    return std::ranges::all_of(rows, [&](const QVariant &r) {
+        return doc.at(r.toInt()).kind == BlockKind::ListItem;
+    });
+}
+
+} // namespace
 
 
 std::optional<at::Rect> JournalView::viewport() const
@@ -103,6 +120,87 @@ void JournalView::dragAcross(at::Point p)
             });
         return;
     }
+}
+
+bool JournalView::dragBlocksTo(PageController *from, at::Point p, float textX)
+{
+    const int source = dayOfController(from);
+    const float y = pointerY(p);
+    const int day = dayUnder(y);
+    if (source < 0 || day < 0 || day == source) {
+        showCrossDrop(-1, std::nullopt, source);
+        return false;
+    }
+    // Where the blocks would go in that day: a place it takes them at (a paragraph, a heading…
+    // only at the top level), its level nearest their text column.
+    PageController *target = controller(day);
+    const at::Entity<PageView> *targetPage = page(day);
+    std::optional<PageView::DropTarget> drop;
+    if (target && targetPage && target->loaded() && !target->readOnly()) {
+        const bool listItems = onlyListItems(*from);
+        drop = targetPage->read(*m_app).dropAt({p.x, y - scrolledSinceFrame()}, textX,
+                                                [target, listItems](BlockPlace place) {
+                                                    return (listItems || place.depth == 0)
+                                                           && target->canInsertBlocksAt(place);
+                                                });
+    }
+    showCrossDrop(day, drop, source);
+    return true;
+}
+
+void JournalView::showCrossDrop(int day, std::optional<PageView::DropTarget> drop, int source)
+{
+    m_crossDrop = drop ? std::optional<CrossDrop>(CrossDrop{day, drop->place}) : std::nullopt;
+    // (Not the day the drag is in: it shows its own drop line.)
+    for (int d : madeDays()) {
+        if (d != source)
+            page(d)->update(*m_app, [&](PageView &v, at::Context<PageView> &pc) {
+                v.setIncomingDrop(d == day ? drop : std::nullopt, pc);
+            });
+    }
+}
+
+void JournalView::endBlockDrag(PageController *from, bool drop)
+{
+    const std::optional<CrossDrop> target = m_crossDrop;
+    showCrossDrop(-1, std::nullopt, dayOfController(from));
+    if (drop && target)
+        moveAcross(from, controller(target->day), target->place);
+}
+
+bool JournalView::moveAcross(PageController *from, PageController *to, BlockPlace place)
+{
+    if (!from || !to || from == to)
+        return false;
+    const QString markdown = from->selectionMarkdown();
+    // Into the day they go to first (nothing is lost when it refuses them), then out of the one they
+    // leave; they stay selected where they went.
+    const markdown::RowRange rows = to->insertBlocksAt(place, markdown);
+    if (markdown.isEmpty() || rows.count <= 0)
+        return false;
+    from->deleteSelection();
+    from->clearSelection();
+    to->selectRange(rows.first, rows.last());
+    m_lastMove = MoveAcross{from, to, from->undoToken(), to->undoToken(), false};
+    return true;
+}
+
+bool JournalView::undoMoveAcross(PageController *in, bool redo)
+{
+    MoveAcross &m = m_lastMove;
+    if (!m.from || !m.to || (in != m.from && in != m.to) || m.undone != redo
+        || m.from->undoToken() != m.fromToken || m.to->undoToken() != m.toToken)
+        return false;
+    if (redo) {
+        m.to->redo();
+        m.from->redo();
+    } else if (!m.to->undoStep(m.toToken) || !m.from->undoStep(m.fromToken)) {
+        return false;
+    }
+    m.undone = !redo;
+    m.fromToken = m.from->undoToken();
+    m.toToken = m.to->undoToken();
+    return true;
 }
 
 bool JournalView::followDrag(const at::PlatformInput &input)

@@ -6951,6 +6951,9 @@ list"; `qml/editor/EditorAtramentJournal.qml`, loaded by JournalsView by its fil
 * **Dragging across days**: a mouse's or a finger's drag selection that leaves its day selects on
   into the day under the pointer; held at the stream's top or bottom edge it scrolls the stream,
   the days coming in taking the selection's end — also once the day it began in has scrolled away.
+  Blocks dragged by their bullet (or a selection long-pressed in the selection mode) into another
+  day show the drop line there and move to that day's file when let go; Ctrl+Z right after takes the
+  move back in both days, Ctrl+Y does it again.
 * Not yet: a long day laid out only where it shows (a day is laid out whole, as ContentJournalDay
   builds all its blocks).
 

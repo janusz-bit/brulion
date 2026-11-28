@@ -9,7 +9,8 @@
 // goes on its moves and its release are taken before the rows see them (a capture listener of the
 // drag layer, or of the view around for a page embedded in it: followDrag()): no hover follows it,
 // its release clicks nothing. Embedded (a day of the journal stream), a drag that leaves the page
-// goes on in the view around (PageEmbedding: the selection into the other days).
+// goes on in the view around (PageEmbedding: the selection into the other days, blocks moved into
+// another day — the drop line there: setIncomingDrop).
 #include "pageview.h"
 
 #include "blocklistmodel.h"
@@ -224,6 +225,11 @@ void PageView::dragUpdate(at::Context<PageView> &)
         return;
     }
     case DragKind::Move:
+        // Over another page of the view around: its drop line shows where the blocks would go.
+        if (m_embedding && m_embedding->dragBlocksTo && m_embedding->dragBlocksTo(m_drag.last, dragTextX())) {
+            m_drag.drop.reset();
+            return;
+        }
         updateDropTarget();
         return;
     }
@@ -311,9 +317,17 @@ std::optional<PageView::DropTarget> PageView::dropAt(at::Point p, float textX,
 
 std::optional<PageView::DropTarget> PageView::dropTarget() const
 {
-    if (m_drag.kind != DragKind::Move || !m_drag.active)
-        return std::nullopt;
-    return m_drag.drop;
+    if (m_drag.kind == DragKind::Move && m_drag.active)
+        return m_drag.drop;
+    return m_incomingDrop;
+}
+
+void PageView::setIncomingDrop(std::optional<DropTarget> drop, at::Context<PageView> &cx)
+{
+    const bool same = drop.has_value() == m_incomingDrop.has_value() && (!drop || drop->place == m_incomingDrop->place);
+    m_incomingDrop = drop;
+    if (!same)
+        cx.notify();
 }
 
 void PageView::dragReleased(bool cancelled, at::Context<PageView> &cx)
@@ -326,9 +340,13 @@ void PageView::dragReleased(bool cancelled, at::Context<PageView> &cx)
     m_dragUid = 0;
     m_dragSelected = false;
     m_dragFocus = -1;
-    if (kind == DragKind::Move && active && !cancelled && drop && m_controller
-        && m_controller->moveSelectionTo(drop->place))
-        revealRow(m_controller->selectedRow(), cx);
+    if (kind == DragKind::Move && active) {
+        if (!cancelled && drop && m_controller && m_controller->moveSelectionTo(drop->place))
+            revealRow(m_controller->selectedRow(), cx);
+        // (Embedded: let go over another page, the view around moves them there.)
+        if (m_embedding && m_embedding->endBlockDrag)
+            m_embedding->endBlockDrag(!cancelled && !drop);
+    }
     cx.notify();
 }
 
@@ -397,16 +415,19 @@ bool PageView::dragging() const
 at::AnyElement PageView::dragLayer()
 {
     // Nothing between drags (no listener, nothing painted).
-    if (!dragging())
+    if (!dragging() && !m_incomingDrop)
         return at::div().absolute().size(0);
     PageView *self = this;
     const at::EntityId id = m_selfId;
     // Embedded, the view around follows the drag (it goes on while this page is scrolled away).
     const bool listens = !m_embedding;
     return at::canvas([self, id, listens](at::Rect, at::Window &window, at::App &) {
-               // The drop line where the moved blocks would go.
+               // The drop line where the moved blocks would go — this page's own, or blocks coming
+               // from another page of the view around.
                if (self->m_drag.kind == DragKind::Move && self->m_drag.active && self->m_drag.drop)
                    self->paintDropLine(*self->m_drag.drop, window);
+               else if (self->m_incomingDrop)
+                   self->paintDropLine(*self->m_incomingDrop, window);
                if (!listens)
                    return;
                // The drag's moves and its release before anything under it sees them.

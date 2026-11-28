@@ -244,6 +244,29 @@ private:
     void dragAcross(atrament::Point p);
     // A move or a release of a day's drag (PageView::followDrag): whether it was the drag's.
     bool followDrag(const atrament::PlatformInput &input);
+    // Blocks of `from` being moved at window point `p`, their text column at `textX`: over another
+    // day its drop line (whether it is another day's); the drag's end (`drop`: there).
+    bool dragBlocksTo(PageController *from, atrament::Point p, float textX);
+    void endBlockDrag(PageController *from, bool drop);
+    // The drop line of blocks from day `source` shown on `day` (−1, nothing: none).
+    void showCrossDrop(int day, std::optional<PageView::DropTarget> drop, int source);
+    // `from`'s selected blocks moved to `place` of `to`: into `to` first, then out of `from`.
+    bool moveAcross(PageController *from, PageController *to, BlockPlace place);
+    // Ctrl+Z / Ctrl+Y in day `in`: the last move across days taken back / done again in both of its
+    // days while it is still their last step (true); else the day's own undo.
+    bool undoMoveAcross(PageController *in, bool redo);
+    struct CrossDrop {
+        int day = -1;
+        BlockPlace place;
+    };
+    std::optional<CrossDrop> m_crossDrop;
+    struct MoveAcross {
+        QPointer<PageController> from;
+        QPointer<PageController> to;
+        QString fromToken;
+        QString toToken;
+        bool undone = false;
+    } m_lastMove;
     atrament::AnyElement renderDay(std::size_t row);
     atrament::AnyElement heading(int day, const DayInfo &info);
     atrament::AnyElement prompt(int day, const DayInfo &info);
