@@ -18,6 +18,7 @@
 #include "pagecontroller.h"
 #include "foreignhost.h"
 #include "journalview.h"
+#include "atramentmedia.h"
 #include "pageview.h"
 #include "streamfind.h"
 #include "streamselection.h"
@@ -724,8 +725,9 @@ void AtramentView::styleOne(const PageHandle &handle)
         media.embeddedName = QCoreApplication::translate("TransclusionView", "Embedded: %1");
         page.setDrawsMedia((m_drawsPictures ? PageView::Pictures : 0u) | (m_drawsFiles ? PageView::Files : 0u)
                                    | (m_drawsTransclusions ? PageView::Transclusions : 0u)
-                                   | (m_drawsQueries ? PageView::Queries : 0u),
+                                   | (m_drawsQueries ? PageView::Queries : 0u) | (m_drawsSounds ? PageView::Sounds : 0u),
                            media, cx);
+        page.setMediaSource(m_drawsSounds ? mediaSource() : nullptr, cx);
         page.setEditLook(atColor(m_caretColor), atColor(m_selectionColor),
                          std::u16string(u16View(m_placeholderText)), std::u16string(u16View(m_editLabel)), cx);
         // The grips (BlockSelectionGrip: Theme.link on Theme.bg) and the drop line (Theme.focusRing).
@@ -736,6 +738,20 @@ void AtramentView::styleOne(const PageHandle &handle)
     Q_UNUSED(handle)
 #endif
 }
+
+#ifdef BRULION_HAS_ATRAMENT_EDITOR
+std::shared_ptr<brulion::editor::atr::MediaSource> AtramentView::mediaSource()
+{
+    if (!m_mediaSource) {
+        QPointer<AtramentView> guard = this;
+        m_mediaSource = std::make_shared<AtramentMediaSource>([guard](const QString &path) {
+            auto *host = guard ? qobject_cast<brulion::EditorHost *>(guard->m_editorHost.data()) : nullptr;
+            return host ? host->assetUrl(path) : QUrl();
+        });
+    }
+    return m_mediaSource;
+}
+#endif
 
 void AtramentView::applyTouchSelection()
 {
@@ -968,6 +984,21 @@ void AtramentView::connectPageSignals(const PageHandle &handle)
                         act();
                         if (guard)
                             Q_EMIT guard->webPictureRequested(row, embed.value(u"target"_s).toString(), save);
+                    };
+                    page.onMediaMenu = [guard, act](int row, const QVariantMap &embed, at::Point p) {
+                        act();
+                        if (guard)
+                            Q_EMIT guard->mediaMenuRequested(row, embed, p.x, p.y);
+                    };
+                    page.onMediaFullscreen = [guard, act](int row, const QVariantMap &embed) {
+                        act();
+                        if (guard)
+                            Q_EMIT guard->mediaFullscreenRequested(row, embed);
+                    };
+                    page.onOpenElsewhere = [guard, act](const QString &path) {
+                        act();
+                        if (guard)
+                            Q_EMIT guard->openElsewhereRequested(path);
                     };
                     page.onEmbeddedLink = [guard, act](int row, const QString &link, const QString &path, int line,
                                                   const QString &raw) {

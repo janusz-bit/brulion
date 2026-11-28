@@ -34,6 +34,7 @@
 #include "blockmove.h"
 #include "editstyles.h"
 #include "foreignrows.h"
+#include "mediasource.h"
 #include "pagerows.h"
 #include "renderedspans.h"
 #include "spell/spellwords.h"
@@ -864,6 +865,7 @@ public:
         Files = 2,         // other attachments, PDFs without a thumbnail: their chips
         Transclusions = 4, // ![[Page]], ![[Page#Heading]], ![[Page#^id]], !((id))
         Queries = 8,       // ```query and ```dataview results (not database views: `view:`, ```base)
+        Sounds = 16,       // sounds and videos: MediaEmbedTile's card over the host's player (setMediaSource)
     };
     // The look of those parts (EmbedView's, TransclusionView's, QueryBlockView's Theme values).
     struct MediaLook {
@@ -918,6 +920,24 @@ public:
     // (PageController::showWebPicture), true to store it in the notebook
     // (BlockEditor.downloadWebPictures); the embed's `target` is its address.
     std::function<void(int row, const QVariantMap &embed, bool save)> onWebPicture;
+    // The app's one player of sounds and videos (mediasource.h, mediacards.cpp): their cards play
+    // through it. None (or Sounds off): their rows stay the QML delegate's.
+    void setMediaSource(std::shared_ptr<MediaSource> source, atrament::Context<PageView> &cx);
+    // A card's "More" (MediaEmbedMenu at window point `at`), a video's "Full screen" (the player's
+    // view), "Open in another app" where nothing plays.
+    std::function<void(int row, const QVariantMap &embed, atrament::Point at)> onMediaMenu;
+    std::function<void(int row, const QVariantMap &embed)> onMediaFullscreen;
+    std::function<void(const QString &path)> onOpenElsewhere;
+    // Where the last frame drew videos' screens: the row, the embed's index, window bounds, whether
+    // the player's frames show (else the poster).
+    struct MediaScreen {
+        int row = -1;
+        int embed = -1;
+        atrament::Rect bounds;
+        bool playing = false;
+        bool loading = false; // the player loading it: the spinner over it
+    };
+    const std::vector<MediaScreen> &mediaScreens() const { return m_mediaFrames; }
     // A link of an embedded block's text clicked: its file, line and Markdown (a date chip's dialog,
     // a task's place: TransclusionView.activate). Unset: onLink with the link.
     std::function<void(int row, const QString &link, const QString &path, int line, const QString &raw)>
@@ -970,6 +990,7 @@ private:
     std::optional<atrament::AnyElement> mediaRow(std::size_t row, const QModelIndex &index);
     atrament::AnyElement embedsPart(std::size_t row, const QVariantList &embeds, float width);
     atrament::AnyElement webPending(std::size_t row, const QVariantMap &embed, int index);
+    atrament::AnyElement fileChip(const QVariantMap &embed, int index, atrament::Div::ClickListener click);
     // A PDF's tile (mediarows.cpp): what its page's painter needs — its thumbnail's cache key, URL
     // and size, whether it is drawn (`ready`) or being drawn.
     struct PdfPage {
@@ -983,6 +1004,37 @@ private:
     };
     atrament::AnyElement pdfTile(std::size_t row, const QVariantMap &embed, int index, atrament::Div::ClickListener click);
     void paintPdfPage(atrament::Rect bounds, atrament::Window &window, const PdfPage &page);
+    // A sound's or a video's card (mediacards.cpp): what it shows of its embed and of the player.
+    struct MediaCard {
+        QString path, name;
+        bool videoKind = false; // its file is a video (the embed's kind)
+        bool video = false;     // shown as one (until the file says it has no picture)
+        bool available = false, current = false, playing = false, loading = false, started = false;
+        double startMs = -1, endMs = -1, duration = -1, position = 0, rate = 1;
+        float aspect = 16.0f / 9;
+        MediaSource::Info info;
+        void withPlayer(MediaSource &src);
+    };
+    MediaCard mediaCard(const QVariantMap &e) const;
+    atrament::AnyElement mediaTile(std::size_t row, const QVariantMap &e, int embed);
+    atrament::AnyElement mediaName(const MediaCard &c);
+    atrament::AnyElement mediaScreen(std::size_t row, int embed, const MediaCard &c);
+    void paintMediaScreen(atrament::Rect b, atrament::Window &w, const MediaCard &c);
+    atrament::AnyElement mediaControls(std::size_t row, const QVariantMap &e, int embed, const MediaCard &c);
+    atrament::AnyElement mediaButton(const QString &icon, const QString &label, std::function<void(atrament::Point)> clicked);
+    atrament::AnyElement mediaSlider(std::size_t row, int embed, const MediaCard &c, const QString &positionText);
+    std::optional<atrament::Rect> mediaSliderBounds(int row, int embed) const;
+    atrament::AnyElement mediaElsewhere(const MediaCard &c);
+    void mediaCardsFrame();
+    std::shared_ptr<MediaSource> m_mediaSource;
+    struct MediaSlider {
+        int row = -1;
+        int embed = -1;
+        atrament::Rect bounds;
+    };
+    std::vector<MediaSlider> m_mediaSliders;
+    std::vector<MediaScreen> m_mediaFrames;
+    std::vector<QString> m_mediaShown, m_mediaShownLast; // the cards' files this frame and the last
     atrament::AnyElement transclusionsPart(std::size_t row, quint64 uid, const QVariantList &transclusions);
     atrament::AnyElement queryRow(std::size_t row, const QModelIndex &index, float textX);
     void mediaClicked(std::size_t row, const atrament::ClickEvent &click);

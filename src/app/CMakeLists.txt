@@ -137,7 +137,8 @@ set(BRULION_UI_SOURCES
 )
 # AtramentView (`AtramentView { view: "gallery" }`): an Atrament view in QML (docs/ATRAMENT.md D12).
 if(TARGET brulion_atrament_gallery)
-    list(APPEND BRULION_UI_SOURCES ui/atramentview.h ui/atramentview.cpp ui/atramentviews.cpp)
+    list(APPEND BRULION_UI_SOURCES ui/atramentview.h ui/atramentview.cpp ui/atramentviews.cpp
+         ui/atramentmedia.h ui/atramentmedia.cpp)
 endif()
 set_source_files_properties(qml/theme/Theme.qml qml/components/LinkPreviews.qml qml/components/OpenIn.qml
     PROPERTIES QT_QML_SINGLETON_TYPE TRUE)

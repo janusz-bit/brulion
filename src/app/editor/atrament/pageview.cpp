@@ -174,6 +174,8 @@ PageView::PageView(at::Context<PageView> &cx, BlockListModel *model, PageMetrics
 
 PageView::~PageView()
 {
+    if (m_mediaSource)
+        m_mediaSource->unlisten(this);
     for (const QMetaObject::Connection &c : m_connections)
         QObject::disconnect(c);
     for (const QMetaObject::Connection &c : m_controllerConnections)
@@ -415,6 +417,8 @@ at::AnyElement PageView::render(at::Window &window, at::Context<PageView> &cx)
     focusEdited(window, cx);
     forgetOldRowText(window.frameCount());
     m_frame = window.frameCount();
+    if (m_embedding)
+        mediaCardsFrame(); // (a journal day's: the last frame's cards, one frame late)
     mediaFrame(); // (the pictures and texts of the last frame forgotten, whether media rows show or not)
     m_selfId = cx.entityId();
     m_viewWidth = window.viewportSize().width;
@@ -469,6 +473,7 @@ at::AnyElement PageView::pageColumn()
                            .fontFamily(m_palette.bodyFamily))
             // After the list's prepaint (its rows measured): the page's height, when it changed.
             .child(at::canvas([self](at::Rect, at::Window &, at::App &) {
+                       self->mediaCardsFrame(); // (the cards the rows showed told to the player)
                        const float h = self->contentHeight();
                        if (std::abs(h - self->m_reportedHeight) < 0.5f)
                            return;

@@ -68,6 +68,8 @@ public:
     // A URL the cache reads: a local file, a data: URL, image://<id>/… of a provider registered
     // (setImageProvider). (qrc:, http: are not its.)
     static bool readable(const QUrl &url);
+    // A picture as Atrament's premultiplied RGBA (a video's frame too: atramentmedia.cpp).
+    static std::shared_ptr<atrament::ImageData> imageData(QImage picture);
     // The picture of `id` (an image:// URL's path and query, as Qt Quick gives a provider), `size`
     // set to its own size, fitted into `requested`: QQuickImageProvider::requestImage's contract.
     using ImageProvider = std::function<QImage(const QString &id, QSize *size, const QSize &requested)>;

@@ -12,6 +12,7 @@
 #include "fakeeditorhost.h"
 #include "pagecontroller.h"
 #include "mediarows_p.h"
+#include "mediasource.h"
 #include "pageview.h"
 #include "picturecache.h"
 #include "queryresultmodel.h"
@@ -65,7 +66,8 @@ QByteArray png(int w, int h, QColor colour)
     return bytes;
 }
 
-constexpr unsigned AllKinds = PageView::Pictures | PageView::Files | PageView::Transclusions | PageView::Queries;
+constexpr unsigned AllKinds = PageView::Pictures | PageView::Files | PageView::Transclusions | PageView::Queries
+                              | PageView::Sounds;
 
 // Drawings' previews from the test's image provider (the app's: image://drawing/…, DrawingImageProvider).
 struct TestHost : FakeEditorHost {
@@ -141,11 +143,53 @@ struct Harness {
 
 void noSetup(FakeEditorHost &) { }
 
+// The app's player as the tests see it: what the cards asked of it, in order.
+struct FakeMedia : MediaSource {
+    bool canPlay = true;
+    State player;
+    QHash<QString, Info> infos;
+    QStringList calls;
+    std::shared_ptr<at::ImageData> frame;
+    bool available() const override { return canPlay; }
+    State state() const override { return player; }
+    Info info(const QString &path) override { return infos.value(path); }
+    QHash<QString, double> left; // where a file was left
+    double positionOf(const QString &path) const override { return left.value(path); }
+    QString timeText(double ms, double) const override
+    {
+        const int s = int(ms / 1000);
+        return u"%1:%2"_s.arg(s / 60).arg(s % 60, 2, 10, u'0');
+    }
+    QString rateText(double rate) const override { return QString::number(rate) + u"×"_s; }
+    void toggle(const QString &path, double start, double end) override
+    {
+        calls.append(u"toggle %1 %2 %3"_s.arg(path).arg(start).arg(end));
+    }
+    void seek(const QString &path, double ms, double end) override
+    {
+        calls.append(u"seek %1 %2 %3"_s.arg(path).arg(qRound(ms)).arg(end));
+    }
+    void cycleRate() override { calls.append(u"rate"_s); }
+    void addView(const QString &path) override { calls.append(u"view+ "_s + path); }
+    void removeView(const QString &path) override { calls.append(u"view- "_s + path); }
+    void showVideo(const QString &path, bool shown) override { calls.append(u"video %1 %2"_s.arg(path).arg(shown)); }
+    std::shared_ptr<const at::ImageData> videoFrame() const override { return frame; }
+    void changed() { tellChanged(); }
+};
+
+
 } // namespace
 
 class TestAtramentMedia : public QObject {
     Q_OBJECT
 private Q_SLOTS:
+    void audioCardDrawnAndPlayed();
+    void videoCardPosterAndScreen();
+    void nothingPlaysHere();
+    void cardFollowsThePlayer();
+    void lengthsAndSeeking();
+    void cardsToldOncePerFile();
+    void longNameOnOneLine();
     void pictureKeepsItsSizeAndIsDrawn();
     void pictureNamedForScreenReaders();
     void pictureClickOpensBesideEdits();
@@ -924,6 +968,279 @@ void TestAtramentMedia::drawingFromItsProvider()
     p = h.tw.pixel(int(b.center().x), int(b.center().y));
     QVERIFY2(p.b > 100 && p.g < 60, qPrintable(u"%1 %2 %3"_s.arg(p.r).arg(p.g).arg(p.b)));
     PictureCache::setImageProvider(u"testdrawing"_s, {});
+}
+
+// A recording embedded in a block: MediaEmbedTile's card drawn by Atrament (no foreign row) — its
+// name, Play, the position and the length, the seek bar for screen readers; Play asks the player to
+// play the file from its fragment; the player playing it: Pause, the bar where it is; a press on the
+// bar seeks there; the speed button cycles the speed; the card shown is told to the player.
+void TestAtramentMedia::audioCardDrawnAndPlayed()
+{
+    auto media = std::make_shared<FakeMedia>();
+    Harness h(u"- Nagranie ![[Nagranie 2026-11-20 18.30.m4a]]\n"_s, [](FakeEditorHost &host) {
+        host.saveAttachment(u"Nagranie 2026-11-20 18.30.m4a"_s, QByteArray("....ftypM4A "));
+    });
+    const QString path = h.model()->index(0).data(BlockListModel::EmbedsRole).toList().value(0).toMap().value(u"path"_s).toString();
+    QVERIFY(!path.isEmpty());
+    media->infos.insert(path, MediaSource::Info{u"ready"_s, 245000, false, QString(), 0, 0});
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &cx) { v.setMediaSource(media, cx); });
+    h.window().setAccessibilityEnabled(true);
+    h.tw.settle();
+    QVERIFY(h.view().drawsRow(0));
+    QVERIFY2(media->calls.contains(u"view+ "_s + path), qPrintable(media->calls.join(u" | "_s)));
+    const at::AccessibilityNode *play = h.node(at::Role::Button, u"Play");
+    QVERIFY2(play, qPrintable(str(h.window().accessibilityTree().dump())));
+    const at::AccessibilityNode *bar = h.node(at::Role::Slider, u"Position");
+    QVERIFY(bar && bar->hasRange);
+    QCOMPARE(bar->range.value, 0.0f);
+    QVERIFY(str(h.window().accessibilityTree().dump()).contains(u"4:05"_s));
+    h.tw.simulateClick(play->bounds.center());
+    QCOMPARE(media->calls.last(), u"toggle %1 -1 -1"_s.arg(path));
+    // Playing it, a quarter in.
+    media->player = MediaSource::State{path, true, false, 61250, 245000, 1};
+    media->changed();
+    h.tw.settle();
+    QVERIFY(h.node(at::Role::Button, u"Pause"));
+    bar = h.node(at::Role::Slider, u"Position");
+    QVERIFY2(std::abs(bar->range.value - 0.25f) < 0.01f, qPrintable(QString::number(bar->range.value)));
+    // A press on the bar's middle: half of the length.
+    h.tw.simulateClick({bar->bounds.left() + bar->bounds.width() / 2, bar->bounds.center().y});
+    QVERIFY2(media->calls.contains(u"seek %1 122500 -1"_s.arg(path)), qPrintable(media->calls.join(u" | "_s)));
+    const at::AccessibilityNode *rate = h.node(at::Role::Button, u"Speed");
+    QVERIFY(rate);
+    h.tw.simulateClick(rate->bounds.center());
+    QCOMPARE(media->calls.last(), u"rate"_s);
+}
+
+// A video: its poster with the play button until it plays (a click on the picture plays it from its
+// fragment, #t=83), then the player's frames while it plays; full screen and "More" asked of the
+// page at the click.
+void TestAtramentMedia::videoCardPosterAndScreen()
+{
+    auto media = std::make_shared<FakeMedia>();
+    QString poster;
+    Harness h(u"![](film.mp4#t=83)\n"_s, [&poster](FakeEditorHost &host) {
+        host.saveAttachment(u"film.mp4"_s, QByteArray("....ftypisom"));
+        poster = host.assetUrl(host.saveAttachment(u"plakat.png"_s, png(320, 180, Qt::darkCyan))).toString();
+    });
+    const QString path = h.model()->index(0).data(BlockListModel::EmbedsRole).toList().value(0).toMap().value(u"path"_s).toString();
+    media->infos.insert(path, MediaSource::Info{u"ready"_s, 600000, true, poster, 1280, 720});
+    int fullscreen = -1;
+    QString menuPath;
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &cx) {
+        v.setMediaSource(media, cx);
+        v.onMediaFullscreen = [&](int row, const QVariantMap &) { fullscreen = row; };
+        v.onMediaMenu = [&](int, const QVariantMap &e, at::Point) { menuPath = e.value(u"path"_s).toString(); };
+    });
+    h.window().setAccessibilityEnabled(true);
+    h.tw.settle();
+    QVERIFY(h.view().drawsRow(0));
+    const auto screens = h.view().mediaScreens();
+    QCOMPARE(int(screens.size()), 1);
+    QVERIFY2(std::abs(screens[0].bounds.width() / screens[0].bounds.height() - 16.0f / 9) < 0.02f,
+             qPrintable(QString::number(screens[0].bounds.width())));
+    QVERIFY(!screens[0].playing);
+    // Its poster (decoded in the background) left of the play button; the screen at the card's
+    // border, no padding (an audio card's is 12 px).
+    const auto cyan = [&h, &screens] {
+        const at::Rect b = screens[0].bounds;
+        const at::Pixel p = h.tw.pixel(int(b.left() + b.width() / 8), int(b.center().y));
+        return p.b > 100 && p.g > 100 && p.r < 60;
+    };
+    for (int i = 0; i < 400 && !cyan(); ++i) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+        h.tw.settle();
+        QTest::qWait(5);
+    }
+    QVERIFY(cyan());
+    const at::AccessibilityNode *card = h.node(at::Role::Group, u"film.mp4");
+    QVERIFY(card);
+    QCOMPARE(screens[0].bounds.left() - card->bounds.left(), 1.0f);
+    h.tw.simulateClick(screens[0].bounds.center());
+    QVERIFY2(media->calls.contains(u"toggle %1 83000 -1"_s.arg(path)), qPrintable(media->calls.join(u" | "_s)));
+    media->player = MediaSource::State{path, true, false, 84000, 600000, 1};
+    media->frame = at::ImageData::make(64, 36, std::vector<at::Pixel>(64 * 36, at::Pixel{255, 0, 0, 255}));
+    media->changed();
+    h.tw.settle();
+    QVERIFY(h.view().mediaScreens().front().playing);
+    QVERIFY2(media->calls.contains(u"video %1 1"_s.arg(path)), qPrintable(media->calls.join(u" | "_s)));
+    const at::Rect s = h.view().mediaScreens().front().bounds;
+    const at::Pixel red = h.tw.pixel(int(s.center().x), int(s.center().y));
+    QVERIFY2(red.r > 200 && red.g < 60 && red.b < 60, qPrintable(u"%1 %2 %3"_s.arg(red.r).arg(red.g).arg(red.b)));
+    h.tw.simulateClick(h.node(at::Role::Button, u"Full screen")->bounds.center());
+    QCOMPARE(fullscreen, 0);
+    h.tw.simulateClick(h.node(at::Role::Button, u"More")->bounds.center());
+    QCOMPARE(menuPath, path);
+}
+
+// A build where nothing plays: the card names the file and offers another app.
+void TestAtramentMedia::nothingPlaysHere()
+{
+    auto media = std::make_shared<FakeMedia>();
+    media->canPlay = false;
+    Harness h(u"- ![[Nagranie.m4a]]\n"_s,
+              [](FakeEditorHost &host) { host.saveAttachment(u"Nagranie.m4a"_s, QByteArray("....ftypM4A ")); });
+    QString opened;
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &cx) {
+        v.setMediaSource(media, cx);
+        v.onOpenElsewhere = [&](const QString &path) { opened = path; };
+    });
+    h.window().setAccessibilityEnabled(true);
+    h.tw.settle();
+    QVERIFY(h.view().drawsRow(0));
+    QVERIFY(!h.node(at::Role::Button, u"Play"));
+    const at::AccessibilityNode *other = h.node(at::Role::Button, u"Open in another app");
+    QVERIFY2(other, qPrintable(str(h.window().accessibilityTree().dump())));
+    h.tw.simulateClick(other->bounds.center());
+    QVERIFY(opened.endsWith(u"Nagranie.m4a"_s));
+    QVERIFY2(!media->calls.join(u" "_s).contains(u"view+"_s), qPrintable(media->calls.join(u" | "_s)));
+}
+
+// A card as the player says: a file not loaded where it was left (else its fragment's start), a
+// failed one "Cannot be played here", the name shown above an audio bar (a video's is its screen);
+// a video's screen 2:1 by its file, 16:9 while unknown; paused at its start its poster, with the
+// play button; another file loading: no spinner here, this one loading: its spinner.
+void TestAtramentMedia::cardFollowsThePlayer()
+{
+    auto media = std::make_shared<FakeMedia>();
+    Harness h(u"- Nagranie ![[a.m4a]]\n- Film ![](b.mp4#t=83)\n"_s, [](FakeEditorHost &host) {
+        host.saveAttachment(u"a.m4a"_s, QByteArray("....ftypM4A "));
+        host.saveAttachment(u"b.mp4"_s, QByteArray("....ftypisom"));
+    });
+    const auto pathOf = [&h](int row) {
+        return h.model()->index(row).data(BlockListModel::EmbedsRole).toList().value(0).toMap().value(u"path"_s).toString();
+    };
+    const QString a = pathOf(0), b = pathOf(1);
+    media->infos.insert(a, MediaSource::Info{u"ready"_s, 245000, false, QString(), 0, 0});
+    media->infos.insert(b, MediaSource::Info{u"ready"_s, 600000, true, QString(), 800, 400});
+    media->left.insert(a, 30000);
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &cx) { v.setMediaSource(media, cx); });
+    h.window().setAccessibilityEnabled(true);
+    h.tw.settle();
+    const auto dump = [&h] { return str(h.window().accessibilityTree().dump()); };
+    QVERIFY2(dump().contains(u"text \"0:30\""_s) && dump().contains(u"text \"1:23\""_s), qPrintable(dump()));
+    QVERIFY2(dump().contains(u"text \"a.m4a\""_s) && !dump().contains(u"text \"b.mp4\""_s), qPrintable(dump()));
+    QVERIFY(!dump().contains(u"Cannot be played here"_s));
+    QCOMPARE(int(h.view().mediaScreens().size()), 1);
+    const at::Rect screen = h.view().mediaScreens().front().bounds;
+    QVERIFY2(std::abs(screen.width() / screen.height() - 2.0f) < 0.02f, qPrintable(QString::number(screen.width())));
+    // Loaded, paused at 0: still the poster; another file loading: no spinner on this one.
+    media->player = MediaSource::State{b, false, false, 0, 600000, 1};
+    media->changed();
+    h.tw.settle();
+    QVERIFY(!h.view().mediaScreens().front().playing);
+    media->player = MediaSource::State{a, false, true, 0, 0, 1};
+    media->changed();
+    h.tw.settle();
+    QVERIFY(!h.view().mediaScreens().front().loading);
+    media->player = MediaSource::State{b, false, true, 0, 0, 1};
+    media->changed();
+    h.tw.settle();
+    QVERIFY(h.view().mediaScreens().front().loading);
+    // The file failed; a video of unknown size.
+    media->player = {};
+    media->infos.insert(a, MediaSource::Info{u"failed"_s, -1, false, QString(), 0, 0});
+    media->infos.insert(b, MediaSource::Info{u"unknown"_s, -1, false, QString(), 0, 0});
+    media->changed();
+    h.tw.settle();
+    QVERIFY2(dump().contains(u"Cannot be played here"_s), qPrintable(dump()));
+    const at::Rect unknown = h.view().mediaScreens().front().bounds;
+    QVERIFY(std::abs(unknown.width() / unknown.height() - 16.0f / 9) < 0.02f);
+    for (const auto &[w, hgt] : {std::pair{0, 400}, std::pair{800, 0}}) {
+        media->infos.insert(b, MediaSource::Info{u"ready"_s, 600000, true, QString(), w, hgt});
+        media->changed();
+        h.tw.settle();
+        const at::Rect half = h.view().mediaScreens().front().bounds;
+        QVERIFY2(std::abs(half.width() / half.height() - 16.0f / 9) < 0.02f, qPrintable(u"%1 × %2"_s.arg(w).arg(hgt)));
+    }
+    // An audio card's bar 12 px in (and the border).
+    const at::AccessibilityNode *audio = h.node(at::Role::Group, u"a.m4a");
+    QCOMPARE(h.node(at::Role::Button, u"Play")->bounds.left() - audio->bounds.left(), 13.0f);
+}
+
+// The length in whole seconds (61.5 s: "1:02"), none when it is 0 — no bar to seek then; the
+// player's own length when it knows it, else the file's; a drag on the bar seeks as it goes.
+void TestAtramentMedia::lengthsAndSeeking()
+{
+    auto media = std::make_shared<FakeMedia>();
+    Harness h(u"- ![[a.m4a]]\n"_s, [](FakeEditorHost &host) { host.saveAttachment(u"a.m4a"_s, QByteArray("....ftypM4A ")); });
+    const QString a = h.model()->index(0).data(BlockListModel::EmbedsRole).toList().value(0).toMap().value(u"path"_s).toString();
+    media->infos.insert(a, MediaSource::Info{u"ready"_s, 61500, false, QString(), 0, 0});
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &cx) { v.setMediaSource(media, cx); });
+    h.window().setAccessibilityEnabled(true);
+    h.tw.settle();
+    const auto dump = [&h] { return str(h.window().accessibilityTree().dump()); };
+    QVERIFY2(dump().contains(u"text \"1:02\""_s), qPrintable(dump()));
+    // Loaded, its length not known yet to the player: the file's.
+    media->player = MediaSource::State{a, true, false, 1000, 0, 1};
+    media->changed();
+    h.tw.settle();
+    QVERIFY2(dump().contains(u"text \"1:02\""_s), qPrintable(dump()));
+    // A drag along the bar: seeks where the pointer goes.
+    const at::AccessibilityNode *bar = h.node(at::Role::Slider, u"Position");
+    QVERIFY(bar);
+    const at::Rect r = bar->bounds;
+    media->calls.clear();
+    h.tw.simulateMouseDown({r.left() + r.width() / 4, r.center().y});
+    h.tw.simulateMouseMove({r.left() + r.width() * 3 / 4, r.center().y}, at::MouseButton::Left);
+    h.tw.simulateMouseUp({r.left() + r.width() * 3 / 4, r.center().y});
+    QVERIFY2(media->calls.contains(u"seek %1 %2 -1"_s.arg(a).arg(qRound(61500 * 0.75))), qPrintable(media->calls.join(u" | "_s)));
+    // A length of 0: no length shown, the bar at its start, no seek.
+    media->player = {};
+    media->infos.insert(a, MediaSource::Info{u"ready"_s, 0, false, QString(), 0, 0});
+    media->changed();
+    h.tw.settle();
+    QCOMPARE(dump().count(u"text \"0:00\""_s), 1); // (where it is; no length)
+    bar = h.node(at::Role::Slider, u"Position");
+    QCOMPARE(bar->range.value, 0.0f);
+    media->calls.clear();
+    h.tw.simulateClick(bar->bounds.center());
+    QVERIFY2(media->calls.isEmpty(), qPrintable(media->calls.join(u" | "_s)));
+}
+
+// A long file name stays on one line, however narrow the card.
+void TestAtramentMedia::longNameOnOneLine()
+{
+    auto media = std::make_shared<FakeMedia>();
+    Harness h(u"- ![[a.m4a]]\n- ![[Nagranie z bardzo długą nazwą pliku, której nie da się zmieścić.m4a]]\n"_s,
+              [](FakeEditorHost &host) {
+                  host.saveAttachment(u"a.m4a"_s, QByteArray("....ftypM4A "));
+                  host.saveAttachment(u"Nagranie z bardzo długą nazwą pliku, której nie da się zmieścić.m4a"_s,
+                                      QByteArray("....ftypM4A "));
+              },
+              {320, 700});
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &cx) { v.setMediaSource(media, cx); });
+    h.window().setAccessibilityEnabled(true);
+    h.tw.settle();
+    const at::AccessibilityNode *shortCard = h.node(at::Role::Group, u"a.m4a");
+    const at::AccessibilityNode *longCard = h.node(at::Role::Group, u"Nagranie z bardzo");
+    QVERIFY(shortCard && longCard);
+    QCOMPARE(longCard->bounds.height(), shortCard->bounds.height());
+}
+
+// Two cards of one file and one of another: each file told once; a block gone with its card:
+// only its file told gone (and its video hidden).
+void TestAtramentMedia::cardsToldOncePerFile()
+{
+    auto media = std::make_shared<FakeMedia>();
+    Harness h(u"- ![[b.m4a]]\n- ![[a.m4a]]\n- ![[b.m4a]]\n"_s, [](FakeEditorHost &host) {
+        host.saveAttachment(u"a.m4a"_s, QByteArray("....ftypM4A "));
+        host.saveAttachment(u"b.m4a"_s, QByteArray("....ftypM4A "));
+    });
+    const auto pathOf = [&h](int row) {
+        return h.model()->index(row).data(BlockListModel::EmbedsRole).toList().value(0).toMap().value(u"path"_s).toString();
+    };
+    const QString a = pathOf(1), b = pathOf(0);
+    h.page.update(h.app, [&](PageView &v, at::Context<PageView> &cx) { v.setMediaSource(media, cx); });
+    h.tw.settle();
+    QCOMPARE(media->calls.count(u"view+ "_s + a), 1);
+    QCOMPARE(media->calls.count(u"view+ "_s + b), 1);
+    media->calls.clear();
+    h.controller.deleteBlock(1);
+    h.tw.settle();
+    QVERIFY2(media->calls.contains(u"view- "_s + a) && media->calls.contains(u"video %1 0"_s.arg(a)),
+             qPrintable(media->calls.join(u" | "_s)));
+    QVERIFY2(!media->calls.contains(u"view- "_s + b), qPrintable(media->calls.join(u" | "_s)));
 }
 
 QTEST_MAIN(TestAtramentMedia)

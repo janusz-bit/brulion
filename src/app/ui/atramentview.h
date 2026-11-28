@@ -30,6 +30,7 @@ class PageController;
 }
 namespace brulion::editor::atr {
 class JournalView;
+class MediaSource;
 class PageView;
 }
 namespace brulion::atrament {
@@ -201,6 +202,9 @@ class AtramentView : public brulion::atrament::AtramentItem {
     Q_PROPERTY(bool drawsFiles MEMBER m_drawsFiles NOTIFY styleChanged FINAL)
     Q_PROPERTY(bool drawsTransclusions MEMBER m_drawsTransclusions NOTIFY styleChanged FINAL)
     Q_PROPERTY(bool drawsQueries MEMBER m_drawsQueries NOTIFY styleChanged FINAL)
+    // Sounds and videos as cards drawn by Atrament over the app's player (MediaPlayback; else the
+    // QML MediaEmbedTile's rows).
+    Q_PROPERTY(bool drawsSounds MEMBER m_drawsSounds NOTIFY styleChanged FINAL)
     Q_PROPERTY(QVariantMap mediaLook MEMBER m_mediaLook NOTIFY styleChanged FINAL)
     // The find bar's query and options (NoteFind): its matches tinted with findColor.
     Q_PROPERTY(QString findQuery MEMBER m_findQuery NOTIFY findChanged FINAL)
@@ -548,6 +552,11 @@ Q_SIGNALS:
     // (`save` false: PageController.showWebPicture) or "Save to notebook" (`save`:
     // BlockEditor.downloadWebPictures) for its address `url`.
     void webPictureRequested(int row, const QString &url, bool save);
+    // A sound's or a video's card drawn by Atrament: its "More" (MediaEmbedMenu at x, y of this
+    // item), a video's "Full screen" (MediaFullscreen), "Open in another app" where nothing plays.
+    void mediaMenuRequested(int row, const QVariantMap &embed, qreal x, qreal y);
+    void mediaFullscreenRequested(int row, const QVariantMap &embed);
+    void openElsewhereRequested(const QString &path);
     // A link of an embedded block's text (TransclusionView.activate: its file, line and Markdown).
     void embeddedLinkActivated(int row, const QString &link, const QString &path, int line, const QString &raw);
     // A link of a query result's text (QueryBlockView: a date chip's dialog, else
@@ -669,7 +678,11 @@ private:
     bool m_drawsFiles = true;
     bool m_drawsTransclusions = true;
     bool m_drawsQueries = true;
+    bool m_drawsSounds = true;
     QVariantMap m_mediaLook;
+    // The app's player as the pages' cards see it (atramentmedia.h), made with the first page.
+    std::shared_ptr<brulion::editor::atr::MediaSource> m_mediaSource;
+    std::shared_ptr<brulion::editor::atr::MediaSource> mediaSource();
     void applyFind();
     qreal m_contentHeight = 0;
     QString m_findQuery;

@@ -39,7 +39,7 @@ bool textView(const QString &view)
     return view == u"text" || view == u"heading" || view == u"quote" || view == u"callout";
 }
 
-enum class EmbedKind { Picture, PdfTile, Chip, WebPending, Foreign };
+enum class EmbedKind { Picture, PdfTile, Chip, WebPending, Media, Foreign };
 
 // A drawing's preview in the app's theme (the embed's `url` light, `darkUrl` dark).
 QUrl drawingUrl(const QVariantMap &e, bool dark)
@@ -63,7 +63,8 @@ bool scalableEmbed(const QVariantMap &e)
 // cached one from the internet, a format the device cannot decode — its frame says so — a drawing's
 // preview from its image provider), a PDF's thumbnail (drawn, being drawn, failed), a chip, a
 // picture from the internet not shown yet (its placeholder: "Show", "Save to notebook"); Foreign
-// for the rest (players, bases, a drawing whose preview's provider is not registered).
+// for the rest (bases, a drawing whose preview's provider is not registered); a sound's or a
+// video's card (mediacards.cpp) where the host gave a player.
 // A picture from the internet: its placeholder until it is cached, then the picture where this
 // device decodes its format.
 EmbedKind webKind(const QVariantMap &e, const QUrl &url)
@@ -90,8 +91,10 @@ EmbedKind localKind(const QVariantMap &e, const QUrl &url)
 // A base, a player, a drawing or a PDF; nothing: another embed.
 std::optional<EmbedKind> specialKind(const QVariantMap &e, bool dark)
 {
-    if (e.value(u"base"_s).toBool() || e.value(u"media"_s).toBool())
+    if (e.value(u"base"_s).toBool())
         return EmbedKind::Foreign;
+    if (e.value(u"media"_s).toBool())
+        return EmbedKind::Media;
     if (e.value(u"drawing"_s).toBool())
         return PictureCache::readable(drawingUrl(e, dark)) ? EmbedKind::Picture : EmbedKind::Foreign;
     if (!e.value(u"pdf"_s).toBool())
@@ -110,6 +113,21 @@ EmbedKind embedKind(const QVariantMap &e, bool dark)
     if (!e.value(u"image"_s).toBool() || (!web && url.isEmpty()))
         return EmbedKind::Chip;
     return web ? webKind(e, url) : localKind(e, url);
+}
+
+// The MediaKind an embed of `kind` needs drawn (0: none draws it — a foreign row); a sound's or a
+// video's card needs the host's player.
+unsigned kindsFor(EmbedKind kind, bool player)
+{
+    switch (kind) {
+    case EmbedKind::Picture:
+    case EmbedKind::PdfTile:
+    case EmbedKind::WebPending: return PageView::Pictures;
+    case EmbedKind::Chip: return PageView::Files;
+    case EmbedKind::Media: return player ? PageView::Sounds : 0u;
+    case EmbedKind::Foreign: break;
+    }
+    return 0;
 }
 
 // The cache's key of an embed's picture: short (a data: URL is the whole file).
@@ -305,21 +323,9 @@ std::optional<bool> PageView::drawsMediaRow(int row) const
                             || (m_metrics.documentMode && !embeds.isEmpty() && !listItem));
     if (!noText && !index.data(BlockListModel::RenderedTextRole).value<RenderedTextRef>().drawable())
         return false;
-    for (const QVariant &v : embeds) {
-        switch (embedKind(v.toMap(), m_mediaLook.dark)) {
-        case EmbedKind::Picture:
-        case EmbedKind::PdfTile:
-        case EmbedKind::WebPending:
-            if (!(m_mediaKinds & Pictures))
-                return false;
-            break;
-        case EmbedKind::Chip:
-            if (!(m_mediaKinds & Files))
-                return false;
-            break;
-        case EmbedKind::Foreign: return false;
-        }
-    }
+    for (const QVariant &v : embeds)
+        if (!(m_mediaKinds & kindsFor(embedKind(v.toMap(), m_mediaLook.dark), bool(m_mediaSource))))
+            return false;
     if (!transclusions.isEmpty()) {
         if (!(m_mediaKinds & Transclusions))
             return false;
@@ -338,6 +344,8 @@ void PageView::mediaFrame()
     m_pictureFrame = m_frame;
     m_pictureFrames.clear();
     m_partTexts.clear();
+    m_mediaFrames.clear();
+    m_mediaSliders.clear();
     if (!m_media)
         return;
     m_media->heldBefore = std::move(m_media->held);
@@ -539,6 +547,37 @@ std::optional<at::AnyElement> PageView::mediaRow(std::size_t row, const QModelIn
 
 // --- Pictures and files (EmbedView, PdfEmbedTile) --------------------------------------------------
 
+// A file's chip (BChip, interactive and outlined: Theme.bgElevated, Theme.borderStrong): an icon of
+// its kind and the file's name.
+at::AnyElement PageView::fileChip(const QVariantMap &e, int embed, at::Div::ClickListener click)
+{
+    const MediaLook &look = m_mediaLook;
+    const bool pdf = e.value(u"pdf"_s).toBool();
+    const Glyph glyph = pdf ? Glyph::FileText : e.value(u"image"_s).toBool() ? Glyph::Picture : Glyph::File;
+    return at::div()
+            .id(at::ElementId::number(quint64(embed) + 1))
+            .flexRow()
+            .itemsCenter()
+            .gap(5)
+            .h(m_metrics.touch ? 32 : 26)
+            .pl(10)
+            .pr(11)
+            .roundedFull()
+            .bg(look.queryBackground)
+            .border(1)
+            .borderColor(look.borderStrong)
+            .textSize(look.smallSize)
+            .fontMedium()
+            .textColor(look.chipText)
+            .whitespaceNowrap()
+            .when(!look.uiFamily.empty(), [&look](at::Div &&d) { return std::move(d).fontFamily(look.uiFamily); })
+            .cursorPointer()
+            .role(at::Role::Button)
+            .child(glyphElement(look.smallSize + 2, look.chipText, glyph))
+            .child(at::text(u16View(e.value(u"name"_s).toString())))
+            .onClick(std::move(click));
+}
+
 at::AnyElement PageView::embedsPart(std::size_t row, const QVariantList &embeds, float)
 {
     const MediaLook &look = m_mediaLook;
@@ -557,33 +596,7 @@ at::AnyElement PageView::embedsPart(std::size_t row, const QVariantList &embeds,
         };
 
         if (kind == EmbedKind::Chip) {
-            // BChip, interactive and outlined (Theme.bgElevated, Theme.borderStrong): an icon of its
-            // kind and the file's name.
-            const bool pdf = e.value(u"pdf"_s).toBool();
-            const Glyph glyph = pdf ? Glyph::FileText : e.value(u"image"_s).toBool() ? Glyph::Picture : Glyph::File;
-            std::move(column).child(at::div()
-                                            .id(at::ElementId::number(quint64(k) + 1))
-                                            .flexRow()
-                                            .itemsCenter()
-                                            .gap(5)
-                                            .h(m_metrics.touch ? 32 : 26)
-                                            .pl(10)
-                                            .pr(11)
-                                            .roundedFull()
-                                            .bg(look.queryBackground)
-                                            .border(1)
-                                            .borderColor(look.borderStrong)
-                                            .textSize(look.smallSize)
-                                            .fontMedium()
-                                            .textColor(look.chipText)
-                                            .whitespaceNowrap()
-                                            .when(!look.uiFamily.empty(),
-                                                  [&look](at::Div &&d) { return std::move(d).fontFamily(look.uiFamily); })
-                                            .cursorPointer()
-                                            .role(at::Role::Button)
-                                            .child(glyphElement(look.smallSize + 2, look.chipText, glyph))
-                                            .child(at::text(u16View(name)))
-                                            .onClick(click));
+            std::move(column).child(fileChip(e, embed, click));
             continue;
         }
 
@@ -594,6 +607,11 @@ at::AnyElement PageView::embedsPart(std::size_t row, const QVariantList &embeds,
 
         if (kind == EmbedKind::WebPending) {
             std::move(column).child(webPending(row, e, embed));
+            continue;
+        }
+
+        if (kind == EmbedKind::Media) {
+            std::move(column).child(mediaTile(row, e, embed));
             continue;
         }
 

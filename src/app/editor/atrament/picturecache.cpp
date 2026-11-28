@@ -73,16 +73,6 @@ std::shared_ptr<const PictureCache::ImageProvider> providerOf(const QString &id)
     return p.byId.value(id);
 }
 
-std::shared_ptr<at::ImageData> imageData(QImage picture)
-{
-    picture = picture.convertToFormat(QImage::Format_RGBA8888_Premultiplied);
-    const int w = picture.width();
-    const int h = picture.height();
-    std::vector<at::Pixel> pixels(std::size_t(w) * std::size_t(h));
-    for (int y = 0; y < h; ++y)
-        std::memcpy(pixels.data() + std::size_t(y) * std::size_t(w), picture.constScanLine(y), std::size_t(w) * 4);
-    return at::ImageData::make(w, h, std::move(pixels));
-}
 
 // An image provider's picture (image://<id>/…), fitted into side × side.
 Decoded provided(const QUrl &url, int side)
@@ -102,7 +92,7 @@ Decoded provided(const QUrl &url, int side)
     if (picture.width() > side || picture.height() > side)
         picture = picture.scaled(side, side, Qt::KeepAspectRatio, Qt::SmoothTransformation);
     out.natural = natural.isValid() && !natural.isEmpty() ? natural : picture.size();
-    out.image = imageData(std::move(picture));
+    out.image = PictureCache::imageData(std::move(picture));
     return out;
 }
 
@@ -133,7 +123,7 @@ void decodeFrames(QImageReader &reader, QSize target, Decoded &out)
         int delay = reader.nextImageDelay();
         if (delay < 20)
             delay = 100;
-        animation->frames.push_back(imageData(std::move(picture)));
+        animation->frames.push_back(PictureCache::imageData(std::move(picture)));
         animation->delays.push_back(delay);
         animation->duration += delay;
     }
@@ -204,7 +194,7 @@ Decoded decode(const QUrl &url, int side, bool scalable)
                                      std::max(1, int(std::lround(picture.height() * s))), Qt::IgnoreAspectRatio,
                                      Qt::SmoothTransformation);
     }
-    out.image = imageData(std::move(picture));
+    out.image = PictureCache::imageData(std::move(picture));
     return out;
 }
 
@@ -228,6 +218,17 @@ std::shared_ptr<PictureCache> PictureCache::shared()
     // Made on first use (on the GUI thread) and kept for the process, as Atrament's App.
     static auto *cache = new std::shared_ptr<PictureCache>(std::make_shared<PictureCache>());
     return *cache;
+}
+
+std::shared_ptr<at::ImageData> PictureCache::imageData(QImage picture)
+{
+    picture = picture.convertToFormat(QImage::Format_RGBA8888_Premultiplied);
+    const int w = picture.width();
+    const int h = picture.height();
+    std::vector<at::Pixel> pixels(std::size_t(w) * std::size_t(h));
+    for (int y = 0; y < h; ++y)
+        std::memcpy(pixels.data() + std::size_t(y) * std::size_t(w), picture.constScanLine(y), std::size_t(w) * 4);
+    return at::ImageData::make(w, h, std::move(pixels));
 }
 
 bool PictureCache::readable(const QUrl &url)

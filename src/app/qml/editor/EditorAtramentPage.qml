@@ -496,6 +496,64 @@ AtramentView {
         if (root.editor)
             root.editor.openWebPictureMenu(row, target, host, root, x, y)
     }
+    // ---- Sounds and videos drawn by Atrament (MediaEmbedTile's card over MediaPlayback): its
+    // "More" (MediaEmbedMenu), a video's "Full screen" (MediaFullscreen), "Open in another app".
+    MapHolder { id: mediaInfo }
+    property string mediaPath
+    property string mediaTarget
+    property int mediaRow: -1
+    property real mediaStart: -1
+    property real mediaEnd: -1
+    /// The embed's fields into plain values (the menu's and the full screen's).
+    function takeMedia(row: int, embed: var): void {
+        mediaInfo.map = embed
+        root.mediaRow = row
+        root.mediaPath = "" + AppController.routeText(mediaInfo.map, "path")
+        root.mediaTarget = "" + AppController.routeText(mediaInfo.map, "target")
+        root.mediaStart = 0 + AppController.routeInt(mediaInfo.map, "start", -1)
+        root.mediaEnd = 0 + AppController.routeInt(mediaInfo.map, "end", -1)
+    }
+    onMediaMenuRequested: (row, embed, x, y) => {
+        root.takeMedia(row, embed)
+        mediaMenuLoader.active = true
+        const menu = mediaMenuLoader.item as MediaEmbedMenu
+        if (menu)
+            menu.popup(root, x, y)
+    }
+    onMediaFullscreenRequested: (row, embed) => {
+        root.takeMedia(row, embed)
+        mediaFullscreenLoader.active = true
+    }
+    onOpenElsewhereRequested: (path) => Workspace.openInOtherApp(path)
+    Loader {
+        id: mediaMenuLoader
+        active: false
+        sourceComponent: MediaEmbedMenu {
+            path: root.mediaPath
+            target: root.mediaTarget
+            onTranscribeRequested: {
+                if (root.editor)
+                    root.editor.transcribeRecording(root.mediaRow, root.mediaPath, root.mediaTarget)
+            }
+            onCopyRequested: (text) => {
+                if (root.editor)
+                    root.editor.copyPlainText(text)
+            }
+        }
+    }
+    Loader {
+        id: mediaFullscreenLoader
+        active: false
+        sourceComponent: MediaFullscreen {
+            path: root.mediaPath
+            source: Workspace.assetUrl(root.mediaPath)
+            startMs: root.mediaStart
+            endMs: root.mediaEnd
+            host: root
+            onClosed: mediaFullscreenLoader.active = false
+        }
+        onLoaded: (mediaFullscreenLoader.item as MediaFullscreen).open()
+    }
     /// A link of an embedded block's text (TransclusionView's tap and activate()): a date chip's
     /// dialog; a 🔁 or priority chip edits the block with the embed; tasks and reminders belong to
     /// the source block (its place opens); any other link opens.
