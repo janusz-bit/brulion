@@ -294,6 +294,15 @@ PictureCache &PageView::pictureCache()
     return *m_media->cache;
 }
 
+// A query block's results (not while its source is edited: QueryBlockView's InlineEditor does that);
+// a database view (`view:`) its table, once its results are in (databaserows.cpp).
+bool PageView::drawsQueryRow(int row, const QModelIndex &index) const
+{
+    if (!(m_mediaKinds & Queries) || !m_media || index.data(BlockListModel::IsEditingRole).toBool())
+        return false;
+    return index.data(BlockListModel::QueryRole).toMap().value(u"view"_s).toString().isEmpty() || drawsDatabase(row);
+}
+
 std::optional<bool> PageView::drawsMediaRow(int row) const
 {
     if (!m_model || row < 0 || row >= m_model->rowCount())
@@ -301,12 +310,7 @@ std::optional<bool> PageView::drawsMediaRow(int row) const
     const QModelIndex index = m_model->index(row, 0);
     const QString view = index.data(BlockListModel::ViewRole).toString();
     if (view == u"query") {
-        // Its results (not a database view, not while its source is edited: QueryBlockView's
-        // InlineEditor does that).
-        if (!(m_mediaKinds & Queries) || !m_media)
-            return false;
-        const QVariantMap query = index.data(BlockListModel::QueryRole).toMap();
-        return query.value(u"view"_s).toString().isEmpty() && !index.data(BlockListModel::IsEditingRole).toBool();
+        return drawsQueryRow(row, index);
     }
     const QVariantList embeds =
             textView(view) ? index.data(BlockListModel::EmbedsRole).toList() : QVariantList();
@@ -366,17 +370,8 @@ void PageView::mediaFrame()
         m_media->playback.removeIf([this](const auto &it) { return it.value().drawn + 600 < m_frame; });
     for (auto it = m_media->transclusions.begin(); it != m_media->transclusions.end();)
         it = it->second.frame + 3 < m_frame ? m_media->transclusions.erase(it) : std::next(it);
-    for (auto it = m_media->queries.begin(); it != m_media->queries.end();) {
-        if (it->second.frame + 3 < m_frame) {
-            for (const QMetaObject::Connection &c : it->second.connections)
-                QObject::disconnect(c);
-            // (Not inside a signal of its own: the frame runs from Atrament's loop.)
-            it->second.model.release()->deleteLater();
-            it = m_media->queries.erase(it);
-        } else {
-            ++it;
-        }
-    }
+    pruneModels(m_media->views, m_frame);
+    pruneModels(m_media->queries, m_frame);
 }
 
 std::chrono::steady_clock::time_point PageView::Media::now() const
@@ -477,6 +472,8 @@ std::optional<at::AnyElement> PageView::mediaRow(std::size_t row, const QModelIn
     const quint64 uid = index.data(BlockListModel::UidRole).toString().toULongLong();
     if (view == u"query") {
         m_drawn.push_back(row);
+        if (!index.data(BlockListModel::QueryRole).toMap().value(u"view"_s).toString().isEmpty())
+            return databaseRow(row, index, textX);
         return queryRow(row, index, textX);
     }
 

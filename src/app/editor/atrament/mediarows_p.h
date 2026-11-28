@@ -7,6 +7,7 @@
 #include "pageview.h"
 #include "picturecache.h"
 #include "queryresultmodel.h"
+#include "viewresultmodel.h"
 
 #include "markdown/renderedtext.h"
 #include "scene/vectorpath.h"
@@ -212,6 +213,16 @@ struct PageView::Media {
         std::vector<std::vector<std::pair<QString, std::shared_ptr<const markdown::RenderedText>>>> cells;
     };
     std::unordered_map<quint64, Query> queries;
+    // Database views' rows by uid, kept while drawn (databaserows.cpp): the block's ViewResultModel
+    // and its cells' rendered text by row.
+    struct View {
+        std::unique_ptr<ViewResultModel> model;
+        std::vector<QMetaObject::Connection> connections;
+        std::uint64_t frame = 0;
+        std::vector<std::vector<std::pair<QString, std::shared_ptr<const markdown::RenderedText>>>> cells;
+        bool qml = false; // handed to the QML view (a click on it), until it leaves the view
+    };
+    mutable std::unordered_map<quint64, View> views;
 
     ~Media()
     {
@@ -220,10 +231,46 @@ struct PageView::Media {
         for (auto &[uid, q] : queries)
             for (const QMetaObject::Connection &c : q.connections)
                 QObject::disconnect(c);
+        for (auto &[uid, v] : views)
+            for (const QMetaObject::Connection &c : v.connections)
+                QObject::disconnect(c);
     }
 
     const Parsed &parse(quint64 uid, const QVariantList &list);
 };
 
+
+// A text's runs read from its HTML once (a query's item, a view's cell; kept while the HTML stays).
+inline std::shared_ptr<const markdown::RenderedText>
+renderedOnce(std::vector<std::pair<QString, std::shared_ptr<const markdown::RenderedText>>> &cache, std::size_t i,
+             const QString &html)
+{
+    if (cache.size() <= i)
+        cache.resize(i + 1);
+    auto &[source, text] = cache[i];
+    if (!text || source != html) {
+        source = html;
+        text = std::make_shared<markdown::RenderedText>(markdown::renderedTextFromHtml(html));
+    }
+    return text;
+}
+
+// The models of rows not drawn for three frames released (queries', database views'), each out of
+// its signals first and deleted later (not inside a signal of its own: the frame runs from
+// Atrament's loop).
+template<class Map>
+void pruneModels(Map &models, std::uint64_t frame)
+{
+    for (auto it = models.begin(); it != models.end();) {
+        if (it->second.frame + 3 >= frame) {
+            ++it;
+            continue;
+        }
+        for (const QMetaObject::Connection &c : it->second.connections)
+            QObject::disconnect(c);
+        it->second.model.release()->deleteLater();
+        it = models.erase(it);
+    }
+}
 
 } // namespace brulion::editor::atr

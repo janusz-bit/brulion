@@ -725,7 +725,8 @@ void AtramentView::styleOne(const PageHandle &handle)
         media.embeddedName = QCoreApplication::translate("TransclusionView", "Embedded: %1");
         page.setDrawsMedia((m_drawsPictures ? PageView::Pictures : 0u) | (m_drawsFiles ? PageView::Files : 0u)
                                    | (m_drawsTransclusions ? PageView::Transclusions : 0u)
-                                   | (m_drawsQueries ? PageView::Queries : 0u) | (m_drawsSounds ? PageView::Sounds : 0u),
+                                   | (m_drawsQueries ? PageView::Queries : 0u) | (m_drawsSounds ? PageView::Sounds : 0u)
+                                   | (m_drawsDatabases ? PageView::Databases : 0u),
                            media, cx);
         page.setMediaSource(m_drawsSounds ? mediaSource() : nullptr, cx);
         page.setEditLook(atColor(m_caretColor), atColor(m_selectionColor),

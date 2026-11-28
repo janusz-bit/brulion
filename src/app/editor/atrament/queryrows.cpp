@@ -50,19 +50,6 @@ QString pageLabel(const QString &title, const QString &journal, const BlockListM
                 : title;
 }
 
-std::shared_ptr<const markdown::RenderedText>
-renderedOnce(std::vector<std::pair<QString, std::shared_ptr<const markdown::RenderedText>>> &cache, std::size_t i,
-             const QString &html)
-{
-    if (cache.size() <= i)
-        cache.resize(i + 1);
-    auto &[source, text] = cache[i];
-    if (!text || source != html) {
-        source = html;
-        text = std::make_shared<markdown::RenderedText>(markdown::renderedTextFromHtml(html));
-    }
-    return text;
-}
 
 } // namespace
 

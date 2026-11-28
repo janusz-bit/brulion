@@ -16,6 +16,7 @@
 #include "pageview.h"
 #include "picturecache.h"
 #include "queryresultmodel.h"
+#include "viewresultmodel.h"
 #include "text/fonts.h"
 #include "ui/testplatform.h"
 
@@ -190,6 +191,7 @@ private Q_SLOTS:
     void lengthsAndSeeking();
     void cardsToldOncePerFile();
     void longNameOnOneLine();
+    void databaseTableDrawn();
     void pictureKeepsItsSizeAndIsDrawn();
     void pictureNamedForScreenReaders();
     void pictureClickOpensBesideEdits();
@@ -1241,6 +1243,67 @@ void TestAtramentMedia::cardsToldOncePerFile()
     QVERIFY2(media->calls.contains(u"view- "_s + a) && media->calls.contains(u"video %1 0"_s.arg(a)),
              qPrintable(media->calls.join(u" | "_s)));
     QVERIFY2(!media->calls.contains(u"view- "_s + b), qPrintable(media->calls.join(u" | "_s)));
+}
+
+// A ```query block with `view:table` drawn by Atrament once its results are in: the columns'
+// labels over the rows' cells (their text rendered: a tag a tag), a table for screen readers; a
+// click hands the row to the QML view (DatabaseView edits it); a board stays the QML view's.
+void TestAtramentMedia::databaseTableDrawn()
+{
+    Harness h(u"Zakupy\n\n```query\ntype:tasks tag:zakupy view:table\n```\n"_s,
+              [](FakeEditorHost &host) { host.setFile(u"Lista.md"_s, u"- [ ] Mleko #zakupy\n- [x] Chleb #zakupy\n"_s); },
+              {800, 700}, AllKinds | PageView::Databases);
+    h.window().setAccessibilityEnabled(true);
+    h.tw.settle();
+    int row = -1;
+    for (int r = 0; r < h.model()->rowCount(); ++r)
+        if (h.model()->index(r).data(BlockListModel::ViewRole).toString() == u"query")
+            row = r;
+    QVERIFY(row >= 0);
+    for (int i = 0; i < 300 && !h.view().drawsRow(std::size_t(row)); ++i) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+        h.tw.settle();
+    }
+    QVERIFY(h.view().drawsRow(std::size_t(row)));
+    const QString dump = str(h.window().accessibilityTree().dump());
+    ViewResultModel *model = h.view().databaseModel(row);
+    QVERIFY2(dump.contains(u"Mleko"_s) && dump.contains(u"Chleb"_s),
+             qPrintable(u"%1 rows, %2 columns: "_s.arg(model->rowCount()).arg(model->columnModel()->rowCount()) + dump));
+    QVERIFY2(dump.contains(u"table"_s), qPrintable(dump));
+    QVERIFY(model && model->kind() == u"table");
+    QVERIFY(model->columnModel()->rowCount() > 0);
+    QVERIFY(!h.view().databaseModel(-1));
+    QVERIFY(!h.view().databaseModel(h.model()->rowCount()));
+    QCOMPARE(h.view().databaseModel(row), model); // (kept while drawn)
+    // The notebook changed: the view runs again, the new row drawn.
+    h.host.setFile(u"Lista.md"_s, u"- [ ] Mleko #zakupy\n- [x] Chleb #zakupy\n- [ ] Jajka #zakupy\n"_s);
+    model->refresh();
+    for (int i = 0; i < 300 && !str(h.window().accessibilityTree().dump()).contains(u"Jajka"_s); ++i) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
+        h.tw.settle();
+    }
+    QVERIFY2(str(h.window().accessibilityTree().dump()).contains(u"Jajka"_s), qPrintable(str(h.window().accessibilityTree().dump())));
+    // A click on the table: the QML view's.
+    int asked = -1;
+    h.page.update(h.app, [&asked](PageView &v, at::Context<PageView> &) { v.onDatabaseCell = [&asked](int r, int, int) { asked = r; }; });
+    const at::AccessibilityNode *table = h.node(at::Role::Table, u"Table");
+    QVERIFY2(table, qPrintable(dump));
+    h.tw.simulateClick(table->bounds.center());
+    QCOMPARE(asked, row);
+    QVERIFY(!h.view().drawsRow(std::size_t(row)));
+    // Without Databases: the QML view's from the start.
+    Harness off(u"```query\ntype:tasks tag:zakupy view:table\n```\n"_s,
+                [](FakeEditorHost &host) { host.setFile(u"Lista.md"_s, u"- [ ] Mleko #zakupy\n"_s); });
+    QVERIFY(!off.view().drawsRow(0));
+    // A board: the QML view's.
+    Harness board(u"```query\ntype:tasks tag:zakupy view:board\n```\n"_s,
+                  [](FakeEditorHost &host) { host.setFile(u"Lista.md"_s, u"- [ ] Mleko #zakupy\n"_s); }, {800, 700},
+                  AllKinds | PageView::Databases);
+    for (int i = 0; i < 50; ++i) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 5);
+        board.tw.settle();
+    }
+    QVERIFY(!board.view().drawsRow(0));
 }
 
 QTEST_MAIN(TestAtramentMedia)

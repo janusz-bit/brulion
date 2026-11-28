@@ -58,6 +58,7 @@ namespace brulion::editor {
 class BlockListModel;
 class PageController;
 class QueryResultModel;
+class ViewResultModel;
 class SpellCheck;
 class VimSession;
 namespace atr {
@@ -866,6 +867,7 @@ public:
         Transclusions = 4, // ![[Page]], ![[Page#Heading]], ![[Page#^id]], !((id))
         Queries = 8,       // ```query and ```dataview results (not database views: `view:`, ```base)
         Sounds = 16,       // sounds and videos: MediaEmbedTile's card over the host's player (setMediaSource)
+        Databases = 32,    // database views (```query with `view:`): the table layout, read (databaserows.cpp)
     };
     // The look of those parts (EmbedView's, TransclusionView's, QueryBlockView's Theme values).
     struct MediaLook {
@@ -928,6 +930,11 @@ public:
     std::function<void(int row, const QVariantMap &embed, atrament::Point at)> onMediaMenu;
     std::function<void(int row, const QVariantMap &embed)> onMediaFullscreen;
     std::function<void(const QString &path)> onOpenElsewhere;
+    // A database view's table drawn by Atrament clicked: the row is handed to the QML view (its
+    // DatabaseView edits it) until it leaves the view; `viewRow`, `column`: the cell (−1: none).
+    std::function<void(int row, int viewRow, int column)> onDatabaseCell;
+    // The ViewResultModel of database row `row` (made when it is first asked for; nullptr: none).
+    ViewResultModel *databaseModel(int row) const;
     // Where the last frame drew videos' screens: the row, the embed's index, window bounds, whether
     // the player's frames show (else the poster).
     struct MediaScreen {
@@ -1037,6 +1044,12 @@ private:
     std::vector<QString> m_mediaShown, m_mediaShownLast; // the cards' files this frame and the last
     atrament::AnyElement transclusionsPart(std::size_t row, quint64 uid, const QVariantList &transclusions);
     atrament::AnyElement queryRow(std::size_t row, const QModelIndex &index, float textX);
+    atrament::AnyElement databaseRow(std::size_t row, const QModelIndex &index, float textX);
+    atrament::AnyElement databaseHeader(QAbstractItemModel *columns, float columnWidth);
+    atrament::AnyElement databaseCells(std::size_t row, int viewRow, const QStringList &cells, int columns, float columnWidth);
+    // Whether database row `row` is drawn by Atrament (a table, its results in, not handed to QML).
+    bool drawsDatabase(int row) const;
+    bool drawsQueryRow(int row, const QModelIndex &index) const;
     void mediaClicked(std::size_t row, const atrament::ClickEvent &click);
     void mediaFrame();
     unsigned m_mediaKinds = 0;

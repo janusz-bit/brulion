@@ -1512,6 +1512,17 @@ scrolling, `tst_atrament_editor`) before the next:
      of the page is QML's. Tests as the tables' (tst_atrament_tables): a view over a temp notebook's
      pages (tests/app/editor's FakeEditorHost with a QueryHost), every layout's geometry and
      requests, the hand-over to QML and back; the self-test AtramentSelfTest's database steps.
+     **Step (a) built** (2026-11-28; `databaserows.cpp`, MediaKind `Databases`,
+     AtramentView.drawsDatabases): a ```query block with `view:table` is Atrament's once its
+     ViewResultModel (made when the row is first asked about, kept while it shows, as a query's) has
+     its results — the columns' labels with the sorted one's arrow, the cells as rendered text read
+     from the model's HTML once (`renderedOnce`, shared with the queries), the summaries, sideways
+     scroll; a table for screen readers (column headers, rows, cells). A click hands the row to the
+     QML view (DatabaseView, which edits it) until the row leaves the view; still running, failed,
+     edited, held or another layout: the QML view's. Tested by `tst_atrament_media`
+     (databaseTableDrawn: drawn, its texts, the click's hand-over, off without the kind, a board
+     left to QML). Not yet: the click goes on into the QML view (today it takes a second click to
+     edit), ```base blocks and .base embeds (`base: true`), the other layouts.
    **Not yet** (the QML delegate's rows): Obsidian bases and database views (`view:`, ```base) —
    the design above. Nor: BIcon's icons
    for files' chips and the transclusions' headers (Atrament's own glyphs there), an animation's

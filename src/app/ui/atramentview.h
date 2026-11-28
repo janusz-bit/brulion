@@ -205,6 +205,9 @@ class AtramentView : public brulion::atrament::AtramentItem {
     // Sounds and videos as cards drawn by Atrament over the app's player (MediaPlayback; else the
     // QML MediaEmbedTile's rows).
     Q_PROPERTY(bool drawsSounds MEMBER m_drawsSounds NOTIFY styleChanged FINAL)
+    // Database views' tables (```query with `view:table`) drawn by Atrament until clicked (then the
+    // QML DatabaseView's, which edits them).
+    Q_PROPERTY(bool drawsDatabases MEMBER m_drawsDatabases NOTIFY styleChanged FINAL)
     Q_PROPERTY(QVariantMap mediaLook MEMBER m_mediaLook NOTIFY styleChanged FINAL)
     // The find bar's query and options (NoteFind): its matches tinted with findColor.
     Q_PROPERTY(QString findQuery MEMBER m_findQuery NOTIFY findChanged FINAL)
@@ -680,6 +683,7 @@ private:
     bool m_drawsTransclusions = true;
     bool m_drawsQueries = true;
     bool m_drawsSounds = true;
+    bool m_drawsDatabases = true;
     QVariantMap m_mediaLook;
     // The app's player as the pages' cards see it (atramentmedia.h), made with the first page.
     std::shared_ptr<brulion::editor::atr::MediaSource> m_mediaSource;
