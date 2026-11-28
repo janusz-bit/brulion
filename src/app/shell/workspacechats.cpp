@@ -974,6 +974,12 @@ void WorkspaceChats::keepCheckpoint(const QString &path, const QString &folder, 
     Q_EMIT checkpointsChanged();
 }
 
+void WorkspaceChats::endedHere(const QString &path)
+{
+    noteEnded(path);
+    snapshotTurnEnd(path);
+}
+
 void WorkspaceChats::snapshotTurnEnd(const QString &path)
 {
     const auto [id, folder] = m_turnCheckpoints.take(path.toLower());
@@ -1028,16 +1034,20 @@ QVariantList WorkspaceChats::checkpoints(const QString &path, int serial) const
         }
     }
     // The newest turn's, as the page says (a turn another device of the notebook ran).
-    if (const QString newest = pageCheckpoint(path); !newest.isEmpty() && !ids.contains(newest)) {
-        bool ok = false;
-        const chat::Conversation c = chat::parse(m_workspace->read(path, &ok));
-        out << QVariantMap{{u"id"_s, newest},
-                           {u"at"_s, QString()},
-                           {u"message"_s, int(std::ranges::count_if(c.messages, [](const chat::Message &m) {
-                                return m.role == chat::Role::User;
-                            }))}};
-    }
+    if (const QString newest = pageCheckpoint(path); !newest.isEmpty() && !ids.contains(newest))
+        out << pageOnlyCheckpoint(path, newest);
     return out;
+}
+
+QVariantMap WorkspaceChats::pageOnlyCheckpoint(const QString &path, const QString &id) const
+{
+    bool ok = false;
+    const chat::Conversation c = chat::parse(m_workspace->read(path, &ok));
+    return {{u"id"_s, id},
+            {u"at"_s, QString()},
+            {u"message"_s, int(std::ranges::count_if(c.messages, [](const chat::Message &m) {
+                 return m.role == chat::Role::User;
+             }))}};
 }
 
 namespace {
@@ -1724,10 +1734,8 @@ void WorkspaceChats::endTurn(ChatTurn *t)
     if (!t->m_key.isEmpty() && m_byKey.value(t->m_key) == t)
         m_byKey.remove(t->m_key);
     t->m_key.clear();
-    if (t->m_running && t->m_remoteHost.isEmpty()) {
-        noteEnded(t->m_path);
-        snapshotTurnEnd(t->m_path);
-    }
+    if (t->m_running && t->m_remoteHost.isEmpty())
+        endedHere(t->m_path);
     t->m_running = false;
     t->m_queued = false;
     t->m_place = 0;
@@ -1738,6 +1746,12 @@ void WorkspaceChats::endTurn(ChatTurn *t)
     t->clearPartial();
     t->setActivity({}, {});
     Q_EMIT t->stateChanged();
+    released(t);
+}
+
+void WorkspaceChats::released(ChatTurn *t)
+{
+    // (The device's model free again: the next turn waiting may start.)
     const bool freed = m_onDevice == t;
     if (freed)
         m_onDevice = nullptr;

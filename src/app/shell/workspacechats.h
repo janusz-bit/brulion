@@ -997,6 +997,12 @@ private:
     /// two turns is no turn's (docs/CODE-GIT.md "Checkpoints").
     QHash<QString, std::pair<QString, QString>> m_turnCheckpoints;
     void snapshotTurnEnd(const QString &path);
+    /// A turn that ran on this device ended: noted (endedSince()), its end's snapshot taken.
+    void endedHere(const QString &path);
+    /// endTurn()'s tail: `t` ended, the device's model freed when it was its, the waiting turns moved.
+    void released(ChatTurn *t);
+    /// checkpoints()'s entry of a checkpoint only the page names (another device's turn).
+    QVariantMap pageOnlyCheckpoint(const QString &path, const QString &id) const;
     /// Checkpoint `id` of the thread `path` ended at the snapshot `end`.
     void keepTurnEnd(const QString &path, const QString &id, const QString &end);
     /// The newest turn's checkpoint the thread's page names (`checkpoint:`; "" none) / sets it.

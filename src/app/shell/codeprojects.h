@@ -521,6 +521,8 @@ private:
     QHash<QString, std::pair<QList<QUrl>, QString>> m_drops;
     mutable gitcli::Client *m_git = nullptr;
     QString m_scratchRoot;
+    /// `base`, else `base`-2, -3 … : the first id no project has (nor ScratchId).
+    QString freeId(const QString &base) const;
     /// The scratch project as list() shows it.
     QVariantMap scratchProject() const;
     /// A new scratch thread's folder made (worktreeCreated() from the event loop): false when it

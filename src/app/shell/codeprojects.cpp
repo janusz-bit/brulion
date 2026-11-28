@@ -277,6 +277,15 @@ QString CodeProjects::projectOfFolder(const QString &folder) const
     return {};
 }
 
+QString CodeProjects::freeId(const QString &base) const
+{
+    // (Taken: by a project, or by the threads without one.)
+    QString id = base;
+    for (int n = 2; indexOf(id) >= 0 || isScratch(id); ++n)
+        id = base + u'-' + QString::number(n);
+    return id;
+}
+
 QString CodeProjects::add(const QString &folder)
 {
     QString path = folder.trimmed();
@@ -299,10 +308,7 @@ QString CodeProjects::add(const QString &folder)
     p.name = QFileInfo(path).fileName();
     if (p.name.isEmpty())
         p.name = path;
-    const QString base = slug(p.name);
-    p.id = base;
-    for (int n = 2; indexOf(p.id) >= 0 || isScratch(p.id); ++n)
-        p.id = base + u'-' + QString::number(n);
+    p.id = freeId(slug(p.name));
     p.path = path;
     m_projects.append(p);
     readConfig(p.id);
