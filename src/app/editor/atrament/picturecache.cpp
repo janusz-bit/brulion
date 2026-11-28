@@ -167,8 +167,12 @@ Decoded decode(const QUrl &url, int side, bool scalable)
     }
     // The suffix's format first, the bytes' if it is not that (a .jpg that is a PNG).
     QImageReader reader(device.get(), formatHint(url));
-    reader.setAutoTransform(false); // the file's own pixels, as the QML Image and the header's size
-    const QSize size = reader.size();
+    // Shown upright by its EXIF orientation, as QML's Image (autoTransform) and the header's size
+    // (editor::pictureSize): a quarter turn transposes the size; Qt scales the file's pixels, then
+    // turns them.
+    reader.setAutoTransform(true);
+    const bool turned = reader.transformation() & QImageIOHandler::TransformationRotate90;
+    const QSize size = turned ? reader.size().transposed() : reader.size();
     if (size.isValid() && qint64(size.width()) * qint64(size.height()) > PictureCache::MaxPixels)
         return out;
     out.natural = size;
@@ -179,7 +183,7 @@ Decoded decode(const QUrl &url, int side, bool scalable)
             target = QSize(std::max(1, int(std::lround(size.width() * s))), std::max(1, int(std::lround(size.height() * s))));
         out.full = !scalable && s >= 1;
         if (target != size)
-            reader.setScaledSize(target);
+            reader.setScaledSize(turned ? target.transposed() : target);
     }
     if (reader.supportsAnimation() && reader.imageCount() != 1 && size.isValid() && !size.isEmpty()) {
         decodeFrames(reader, target, out);

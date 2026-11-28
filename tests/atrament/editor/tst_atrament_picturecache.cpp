@@ -4,6 +4,7 @@
 // held pictures never evicted, the least recently asked for going first over the byte budget, a
 // header claiming too many pixels refused, a failure remembered until the file changes.
 #include "animatedgif.h"
+#include "exifjpeg.h"
 #include "picturecache.h"
 
 #include <QBuffer>
@@ -80,6 +81,8 @@ private Q_SLOTS:
     void animatedGifFrames();
     void largeAnimationDecodedSmaller();
     void imageProviderPictures();
+    void photosTurnedByTheirOrientation_data();
+    void photosTurnedByTheirOrientation();
 };
 
 void TestAtramentPictureCache::sidesInSteps()
@@ -314,6 +317,55 @@ void TestAtramentPictureCache::imageProviderPictures()
     QCOMPARE(int(r.image->pixels.front().b), 160);
     PictureCache::setImageProvider(u"rysunek"_s, {});
     QVERIFY(!PictureCache::readable(url));
+}
+
+// A photo stored sideways with its EXIF orientation shown upright, as QML's Image (autoTransform)
+// and editor::pictureSize give it: its size the upright one (a quarter turn transposes it), the
+// side asked for fitting the upright picture, its pixels turned — the file's left column the
+// picture's top row for a quarter turn clockwise (6).
+void TestAtramentPictureCache::photosTurnedByTheirOrientation_data()
+{
+    QTest::addColumn<int>("orientation");
+    QTest::addColumn<QSize>("shown");
+    QTest::newRow("upright (1)") << 1 << QSize(80, 40);
+    QTest::newRow("upside down (3)") << 3 << QSize(80, 40);
+    QTest::newRow("a quarter turn clockwise (6)") << 6 << QSize(40, 80);
+    QTest::newRow("a quarter turn back (8)") << 8 << QSize(40, 80);
+}
+
+void TestAtramentPictureCache::photosTurnedByTheirOrientation()
+{
+    QFETCH(int, orientation);
+    QFETCH(QSize, shown);
+    // 80 × 40 as stored: its left half red, its right half blue.
+    QImage stored(80, 40, QImage::Format_RGB32);
+    stored.fill(Qt::blue);
+    for (int y = 0; y < 40; ++y)
+        for (int x = 0; x < 40; ++x)
+            stored.setPixel(x, y, qRgb(255, 0, 0));
+    QTemporaryDir dir;
+    const QUrl url = writeFile(dir, u"zdjęcie.jpg"_s, brulion::test::exifOrientedJpeg(stored, quint16(orientation)));
+    PictureCache cache;
+    cache.picture(u"zdjęcie"_s, url, 64, shown);
+    QTRY_VERIFY(cache.contains(u"zdjęcie"_s));
+    const PictureCache::Result r = cache.picture(u"zdjęcie"_s, url, 64, shown);
+    QVERIFY(r.image);
+    QCOMPARE(r.natural, shown);
+    // Fitted into 64 × 64 upright: 64 × 32 or 32 × 64.
+    QCOMPARE(QSize(r.image->width, r.image->height), shown.scaled(64, 64, Qt::KeepAspectRatio));
+    if (orientation == 6) {
+        // The file's left (red) half is the upright picture's top half.
+        const brulion::atrament::Pixel top = r.image->pixels[std::size_t(4 * r.image->width + r.image->width / 2)];
+        const brulion::atrament::Pixel bottom =
+                r.image->pixels[std::size_t((r.image->height - 5) * r.image->width + r.image->width / 2)];
+        QVERIFY2(top.r > 200 && top.b < 60, qPrintable(u"top %1,%2,%3"_s.arg(top.r).arg(top.g).arg(top.b)));
+        QVERIFY2(bottom.b > 200 && bottom.r < 60, qPrintable(u"bottom %1,%2,%3"_s.arg(bottom.r).arg(bottom.g).arg(bottom.b)));
+    }
+    if (orientation == 3) {
+        // Upside down: the file's left (red) half is the picture's right half.
+        const brulion::atrament::Pixel right = r.image->pixels[std::size_t(16 * r.image->width + r.image->width - 5)];
+        QVERIFY2(right.r > 200 && right.b < 60, qPrintable(u"right %1,%2,%3"_s.arg(right.r).arg(right.g).arg(right.b)));
+    }
 }
 
 QTEST_MAIN(TestAtramentPictureCache)

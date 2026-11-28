@@ -1351,7 +1351,9 @@ scrolling, `tst_atrament_editor`) before the next:
    * **PictureCache** (one per process, `PictureCache::shared()`): QImageReader on two worker
      threads, from `file:` and `data:` URLs (a picture from the internet once cached), at the
      frame's longer side in device pixels in PictureDecode's steps (never enlarged; an SVG rendered
-     at that size), premultiplied RGBA as `ImageData`. A 48 MB budget over what nobody holds — a
+     at that size), premultiplied RGBA as `ImageData`, a photo stored sideways turned upright by its
+     EXIF orientation (as QML's Image with autoTransform and `editor::pictureSize`: a quarter turn
+     transposes the size and the side it is scaled to). A 48 MB budget over what nobody holds — a
      page keeps the pictures of its last two frames, so a screenful larger than the budget stays
      whole and nothing is decoded twice per frame —, the least recently asked for first; one
      picture per file, decoded again for another side while the old one is shown; a header of more
