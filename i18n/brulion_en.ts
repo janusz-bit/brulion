@@ -607,6 +607,28 @@
     </message>
 </context>
 <context>
+    <name>CodeRemoteChanges</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/code/CodeRemoteChanges.qml" line="436"/>
+        <source>The files on %1 go back to how they were before the turn: the %n file(s) it changed are put back, files it added are deleted.</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+</context>
+<context>
+    <name>CodeRemoteGitDialog</name>
+    <message numerus="yes">
+        <location filename="../src/app/qml/code/CodeRemoteGitDialog.qml" line="99"/>
+        <source>Only the %n file(s) of this turn</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
+        </translation>
+    </message>
+</context>
+<context>
     <name>CodeSearchPanel</name>
     <message numerus="yes">
         <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="143"/>
@@ -3060,6 +3082,17 @@
         <translation>
             <numerusform>%n card to study now</numerusform>
             <numerusform>%n cards to study now</numerusform>
+        </translation>
+    </message>
+</context>
+<context>
+    <name>brulion::shell::RemoteProjects</name>
+    <message numerus="yes">
+        <location filename="../src/app/shell/remoteprojects.cpp" line="481"/>
+        <source>The turn was reverted: %n file(s) put back</source>
+        <translation type="unfinished">
+            <numerusform></numerusform>
+            <numerusform></numerusform>
         </translation>
     </message>
 </context>
