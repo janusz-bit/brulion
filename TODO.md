@@ -119,7 +119,8 @@ done in the repository simply disappears from the list.
   real devices — a view block in a page drawn by `PageItem` (`BRULION_PAGE_ITEM=1`) and the new
   view controls (date dialog, slider, text area) on a phone,
   the type checker on an Android phone (built in, measured, not run on one yet), the browser's
-  hostile-extension self-test in Safari (Chromium's and Firefox's windows pass it: docs/WEB.md).
+  hostile-extension self-test in Safari itself, on macOS or an iPhone (Chromium's and Firefox's
+  windows and WebKit's Playwright build pass it: docs/WEB.md).
 * **The app as code (`b.app`, live code): what is next** — the app's settings, theme tokens and
   eleven slots of the UI are scriptable, its built-in views replaceable, and agents change the running app live (docs/EXTENSIONS.md
   "The app (`b.app`)", "Live code"). Still open: the bottom navigation's and the keyboard toolbar's

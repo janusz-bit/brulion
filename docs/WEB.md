@@ -266,7 +266,11 @@ Other options:
   did Firefox 157 (Gecko: no DevTools Protocol for this script — a page Playwright opens at
   `?selftest=extensions`, waiting for `window.brulionExtensionsSelfTest`, with the cached Playwright
   Firefox's GTK/X11 libraries and Mesa's software GL from `LD_LIBRARY_PATH` on NixOS and
-  `webgl.force-enabled`: without WebGL 2 the app stops at "Brulion needs WebGL 2").
+  `webgl.force-enabled`: without WebGL 2 the app stops at "Brulion needs WebGL 2"), and WebKit 27.2
+  — Safari's engine, JavaScriptCore with its own WebAssembly tiers — in the Playwright build Nix
+  ships (`nixpkgs#playwright-driver.browsers`, its `webkit-2370`: the headless WPE port only, no
+  window; `PLAYWRIGHT_BROWSERS_PATH` pointing there) on 2026-11-28, all 20 cases with the same
+  results. Safari itself (macOS, an iPhone) is still to be tried.
 
 Drawings in the app's theme are checked by a separate script, `tests/app/drawing/wasm-drawing-check.mjs`
 (the same minimal DevTools client, no changes to `wasm-smoke.mjs`): it writes to IndexedDB
