@@ -104,3 +104,12 @@ if(BRULION_BASH)
                      ${PROJECT_SOURCE_DIR}/scripts/wasm-single-file.py ${PROJECT_SOURCE_DIR})
     set_tests_properties(tst_scripts_wasm_single_file PROPERTIES SKIP_RETURN_CODE 77)
 endif()
+
+# The stores' manifests of a release (packaging/STORES.md): scripts/store-manifests.py on a made-up
+# release's checksums; needs python3 (skipped without it).
+if(BRULION_BASH)
+    add_test(NAME tst_scripts_store_manifests
+             COMMAND ${BRULION_BASH} ${CMAKE_CURRENT_SOURCE_DIR}/tst_store_manifests.sh
+                     ${PROJECT_SOURCE_DIR}/scripts/store-manifests.py)
+    set_tests_properties(tst_scripts_store_manifests PROPERTIES SKIP_RETURN_CODE 77)
+endif()

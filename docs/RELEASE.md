@@ -224,6 +224,10 @@ shows a notice with its tag's page (`shell/appupdates.h`). Only a `vX.Y.Z` tag c
 a test release show it to no one, and the notice appears only after publishing. Builds with the
 CMake option `BRULION_UPDATE_CHECK=OFF` (for F-Droid and IzzyOnDroid, docs/ANDROID.md) never ask.
 
+After publishing: the stores' manifests (Flathub, winget, AUR, Homebrew) from the release's
+`SHA256SUMS.txt` — `scripts/store-manifests.py --version X.Y.Z --sums SHA256SUMS.txt`, committed,
+then submitted by hand as packaging/STORES.md says.
+
 A failed build: "Re-run failed jobs" in the Actions tab (the draft release is reused). A run by
 hand (Actions → Release → Run workflow) for an existing tag has to be started **from that tag**
 ("Use workflow from" → Tags); a new tag is created on the selected branch when publishing.

@@ -1,0 +1,20 @@
+pkgbase = brulion-bin
+	pkgdesc = Offline-first Markdown notes with an outliner, journals and reminders
+	pkgver = 0.32.0
+	pkgrel = 1
+	url = https://github.com/janusz-bit/brulion
+	arch = x86_64
+	arch = aarch64
+	license = AGPL-3.0-or-later
+	depends = fuse2
+	depends = hicolor-icon-theme
+	provides = brulion
+	conflicts = brulion
+	options = !strip
+	options = !debug
+	source_x86_64 = Brulion-0.32.0-x86_64.AppImage::https://github.com/janusz-bit/brulion/releases/download/v0.32.0/Brulion-0.32.0-x86_64.AppImage
+	sha256sums_x86_64 = 2076a98eb427f154faa64b9fda2b2dc5d27b0428fad5ed5386cf8c7c0ae66e25
+	source_aarch64 = Brulion-0.32.0-aarch64.AppImage::https://github.com/janusz-bit/brulion/releases/download/v0.32.0/Brulion-0.32.0-aarch64.AppImage
+	sha256sums_aarch64 = 5ff94489a01d7321c8a57d1f89b28ab7a21867ddb734afb4e8b2b5a8b1a500f4
+
+pkgname = brulion-bin
