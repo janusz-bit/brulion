@@ -11,6 +11,12 @@
 //                   POST projects/<id>/worktrees {title, base} → 201 {folder, branch}
 //                   GET  projects/<id>/changes?worktree=&since= → {changes: [{path, oldPath, change, …}]}
 //                   GET  projects/<id>/diff?worktree=&since=&path=&oldPath= → {path, oldText, newText, …}
+//                   POST projects/<id>/commit {worktree, message, files?}   → {commit, branch, message}
+//                   POST projects/<id>/push   {worktree}                    → {branch, remote, message}
+//                   POST projects/<id>/pr     {worktree, title, body, base?, draft?} → {url, number, message}
+//                                                (`gh pr create` there, the branch pushed first)
+//                   POST projects/<id>/revert {worktree, checkpoint}        → {restored, removed, kept, message}
+//                                                (the files back as the checkpoint has them)
 //                   session/new | load | resume  params._meta["brulion/code"] = {project, worktree, branch}
 //                                                — the host takes it out: the session's cwd is the
 //                                                project's folder (or that worktree of it), its files
@@ -22,7 +28,9 @@
 //
 // A project id names a folder this computer's user added — never a folder the device names; a
 // worktree is accepted only when it lies under the project's worktrees root (<root>/<id>/…) or `git
-// worktree list` of the project lists it, compared as canonical paths (no "..", no link out).
+// worktree list` of the project lists it, compared as canonical paths (no "..", no link out). What a
+// device asks of git there (RemoteGitRequest) is refused unless it reads: a commit's message is never
+// empty (no AI writes it there), its files are paths inside the work tree, a checkpoint an id.
 //
 // Pure (QtCore): the types, the rules, the messages; acp serve (src/cli/acphost.h) and the app
 // (src/app/shell/remoteprojects.h, workspaceagents.h) carry them. The device's requests go through
@@ -35,6 +43,7 @@
 #include <QLatin1StringView>
 #include <QList>
 #include <QString>
+#include <QStringList>
 #include <QStringView>
 
 #include <functional>
@@ -56,6 +65,12 @@ inline constexpr qsizetype MaxWorktreeTitleChars = 200;
 inline constexpr qsizetype MaxRemotePathChars = 4096;
 /// The changes of one answer at most (more: `truncated`).
 inline constexpr int MaxRemoteChanges = 1000;
+/// The longest commit message, pull request title and description a device sends.
+inline constexpr qsizetype MaxCommitMessageChars = 20000;
+inline constexpr qsizetype MaxPullRequestTitleChars = 256;
+inline constexpr qsizetype MaxPullRequestBodyChars = 65536;
+/// The biggest body of a git request (a commit's message and files).
+inline constexpr qsizetype MaxRemoteGitBodyBytes = 1024 * 1024;
 
 /// "Mój Projekt (2)!" → "moj-projekt-2": lower-case ASCII letters, digits and dashes, Polish letters
 /// without their marks, at most 40 characters ("project" when nothing is left) — the ids of
@@ -177,5 +192,56 @@ struct RemoteDiff {
 void fetchRemoteDiff(sync::HttpTransport *transport, const QUrl &base, const QString &token, const QString &project,
                      const QString &worktree, const QString &since, const QString &path, const QString &oldPath,
                      std::function<void(const RemoteDiff &diff, const RemoteError &error)> done);
+
+/// What a device asks of the git of a project's folder there (or its worktree): a commit, a push, a
+/// pull request, a turn reverted (POST projects/<id>/commit | push | pr | revert).
+struct RemoteGitRequest {
+    enum class Kind : quint8 { Commit, Push, PullRequest, Revert };
+    Kind kind = Kind::Commit;
+    QString worktree;   ///< an absolute folder there ("" the project's own)
+    QString message;    ///< Commit: never empty
+    QStringList files;  ///< Commit: the files to commit (relative); none: every change
+    QString title;      ///< PullRequest
+    QString body;       ///< PullRequest ("" none)
+    QString base;       ///< PullRequest: the branch it goes into ("" the repository's default)
+    bool draft = false; ///< PullRequest
+    QString checkpoint; ///< Revert: the files back as this checkpoint has them
+
+    /// "commit" | "push" | "pr" | "revert".
+    static QString endpoint(Kind kind);
+    /// The kind of an endpoint's last part; nullopt: none of them.
+    static std::optional<Kind> kindOf(QStringView endpoint);
+    QJsonObject toJson() const;
+    /// The request of a body (`kind` from the endpoint); `code` the error code when it is no object
+    /// or problem() names one.
+    static std::optional<RemoteGitRequest> fromJson(Kind kind, const QJsonValue &body, QString *code = nullptr);
+    /// Why it cannot be asked ("" it can): "bad_worktree" (no absolute folder), "bad_message"
+    /// (empty, too long), "bad_files" (too many, a path that leaves the work tree or goes into
+    /// .git), "bad_title", "bad_body", "bad_base" (no branch's name), "bad_checkpoint".
+    QString problem() const;
+    friend bool operator==(const RemoteGitRequest &, const RemoteGitRequest &) = default;
+};
+/// What git did there.
+struct RemoteGitResult {
+    QString message;        ///< the computer's words of it
+    QString commit;         ///< Commit: the new commit
+    QString branch;         ///< Commit, Push: the branch ("" a detached HEAD)
+    QString remote;         ///< Push: where it went ("origin")
+    QString url;            ///< PullRequest: its address
+    int number = 0;         ///< PullRequest: its number (0 unknown)
+    QStringList restored;   ///< Revert: files written back
+    QStringList removed;    ///< Revert: files added since, deleted
+    QStringList kept;       ///< Revert: left as they are (ignored now, submodules)
+    QJsonObject toJson() const;
+    static RemoteGitResult fromJson(const QJsonObject &o);
+    friend bool operator==(const RemoteGitResult &, const RemoteGitResult &) = default;
+};
+/// The number of a pull request's address (".../pull/17" → 17; 0 none).
+int pullRequestNumber(QStringView url);
+/// POST projects/<project>/<endpoint> with `request`. A request problem() refuses is not sent:
+/// `done` at once with RemoteError::Kind::Refused (status 400, the code).
+void remoteGit(sync::HttpTransport *transport, const QUrl &base, const QString &token, const QString &project,
+               const RemoteGitRequest &request,
+               std::function<void(const RemoteGitResult &result, const RemoteError &error)> done);
 
 } // namespace brulion::acp

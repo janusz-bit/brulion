@@ -40,6 +40,44 @@ QString queryValue(const QString &value)
     return QString::fromLatin1(QUrl::toPercentEncoding(value));
 }
 
+/// A path inside a work tree, as git writes it: relative, '/'-separated, no part "", "." or "..",
+/// nothing of .git, no NUL or backslash.
+bool workTreePath(QStringView path)
+{
+    if (path.isEmpty() || path.size() > MaxRemotePathChars || path.contains(u'\0') || path.contains(u'\\')
+        || QDir::isAbsolutePath(path.toString()))
+        return false;
+    for (const QStringView part : path.tokenize(u'/')) {
+        if (part.isEmpty() || part == u"." || part == u".." || part.compare(u".git", Qt::CaseInsensitive) == 0)
+            return false;
+    }
+    return true;
+}
+
+/// A name a branch may have, as far as this side tells (the host asks git's own rule too).
+bool branchLike(QStringView name)
+{
+    if (name.isEmpty() || name.size() > 250 || name.startsWith(u'-') || name.startsWith(u'/') || name.endsWith(u'/')
+        || name.endsWith(u".lock") || name.contains(u"..") || name.contains(u"@{") || name.contains(u"//"))
+        return false;
+    return std::ranges::none_of(name, [](QChar c) {
+        return c.unicode() <= u' ' || c.unicode() == 0x7f || QStringView(u"~^:?*[\\").contains(c);
+    });
+}
+
+/// The strings of a JSON list (at most `max`; what is no text left out).
+QStringList stringsOf(const QJsonValue &value, qsizetype max)
+{
+    QStringList out;
+    for (const QJsonValue &v : value.toArray()) {
+        if (out.size() >= max)
+            break;
+        if (v.isString())
+            out.append(v.toString());
+    }
+    return out;
+}
+
 } // namespace
 
 QString projectSlug(QStringView text)
@@ -321,6 +359,230 @@ void fetchRemoteDiff(sync::HttpTransport *transport, const QUrl &base, const QSt
             d.tooLarge = o.value(u"tooLarge"_s).toBool();
         }
         done(d, e);
+    });
+}
+
+// ---- Git of a project there ---------------------------------------------------------------------------
+
+QString RemoteGitRequest::endpoint(Kind kind)
+{
+    switch (kind) {
+    case Kind::Commit:
+        return u"commit"_s;
+    case Kind::Push:
+        return u"push"_s;
+    case Kind::PullRequest:
+        return u"pr"_s;
+    case Kind::Revert:
+        break;
+    }
+    return u"revert"_s;
+}
+
+std::optional<RemoteGitRequest::Kind> RemoteGitRequest::kindOf(QStringView endpoint)
+{
+    for (const Kind k : {Kind::Commit, Kind::Push, Kind::PullRequest, Kind::Revert}) {
+        if (endpoint == RemoteGitRequest::endpoint(k))
+            return k;
+    }
+    return std::nullopt;
+}
+
+QJsonObject RemoteGitRequest::toJson() const
+{
+    QJsonObject o;
+    if (!worktree.isEmpty())
+        o.insert(u"worktree"_s, worktree);
+    switch (kind) {
+    case Kind::Commit:
+        o.insert(u"message"_s, message);
+        if (!files.isEmpty())
+            o.insert(u"files"_s, QJsonArray::fromStringList(files));
+        break;
+    case Kind::PullRequest:
+        o.insert(u"title"_s, title);
+        o.insert(u"body"_s, body);
+        if (!base.isEmpty())
+            o.insert(u"base"_s, base);
+        if (draft)
+            o.insert(u"draft"_s, true);
+        break;
+    case Kind::Revert:
+        o.insert(u"checkpoint"_s, checkpoint);
+        break;
+    case Kind::Push:
+        break;
+    }
+    return o;
+}
+
+namespace {
+
+/// The text of `key` ("" when it is not there); false when it is there and no text.
+bool textOf(const QJsonObject &o, QLatin1StringView key, QString *out)
+{
+    const QJsonValue v = o.value(key);
+    if (v.isUndefined() || v.isNull()) {
+        out->clear();
+        return true;
+    }
+    *out = v.toString();
+    return v.isString();
+}
+
+/// The fields of `o` a request of its kind takes; the code of the first that does not read ("" all do).
+QString readGitFields(const QJsonObject &o, RemoteGitRequest *r)
+{
+    if (!textOf(o, "worktree"_L1, &r->worktree))
+        return u"bad_worktree"_s;
+    if (!r->worktree.isEmpty() && QDir::isAbsolutePath(r->worktree))
+        r->worktree = QDir::cleanPath(r->worktree);
+    using Kind = RemoteGitRequest::Kind;
+    if (r->kind == Kind::Commit) {
+        if (!textOf(o, "message"_L1, &r->message))
+            return u"bad_message"_s;
+        const QJsonValue files = o.value(u"files"_s);
+        if (!files.isUndefined() && !files.isArray())
+            return u"bad_files"_s;
+        for (const QJsonValue &f : files.toArray()) {
+            if (!f.isString())
+                return u"bad_files"_s;
+            r->files.append(f.toString());
+        }
+    } else if (r->kind == Kind::PullRequest) {
+        if (!textOf(o, "title"_L1, &r->title))
+            return u"bad_title"_s;
+        if (!textOf(o, "body"_L1, &r->body))
+            return u"bad_body"_s;
+        if (!textOf(o, "base"_L1, &r->base))
+            return u"bad_base"_s;
+        r->draft = o.value(u"draft"_s).toBool();
+    } else if (r->kind == Kind::Revert && !textOf(o, "checkpoint"_L1, &r->checkpoint)) {
+        return u"bad_checkpoint"_s;
+    }
+    return QString();
+}
+
+} // namespace
+
+std::optional<RemoteGitRequest> RemoteGitRequest::fromJson(Kind kind, const QJsonValue &body, QString *code)
+{
+    RemoteGitRequest r;
+    r.kind = kind;
+    QString why = body.isObject() ? readGitFields(body.toObject(), &r) : u"bad_request"_s;
+    if (why.isEmpty())
+        why = r.problem();
+    if (code)
+        *code = why;
+    if (!why.isEmpty())
+        return std::nullopt;
+    return r;
+}
+
+QString RemoteGitRequest::problem() const
+{
+    if (!worktree.isEmpty() && !absolutePath(worktree))
+        return u"bad_worktree"_s;
+    switch (kind) {
+    case Kind::Commit:
+        if (message.trimmed().isEmpty() || message.size() > MaxCommitMessageChars)
+            return u"bad_message"_s;
+        if (files.size() > MaxRemoteChanges || !std::ranges::all_of(files, workTreePath))
+            return u"bad_files"_s;
+        break;
+    case Kind::PullRequest:
+        if (title.trimmed().isEmpty() || title.size() > MaxPullRequestTitleChars)
+            return u"bad_title"_s;
+        if (body.size() > MaxPullRequestBodyChars)
+            return u"bad_body"_s;
+        if (!base.isEmpty() && !branchLike(base))
+            return u"bad_base"_s;
+        break;
+    case Kind::Revert:
+        if (!isCheckpointId(checkpoint))
+            return u"bad_checkpoint"_s;
+        break;
+    case Kind::Push:
+        break;
+    }
+    return QString();
+}
+
+QJsonObject RemoteGitResult::toJson() const
+{
+    QJsonObject o;
+    const auto text = [&o](const QString &key, const QString &value) {
+        if (!value.isEmpty())
+            o.insert(key, value);
+    };
+    const auto list = [&o](const QString &key, const QStringList &value) {
+        if (!value.isEmpty())
+            o.insert(key, QJsonArray::fromStringList(value));
+    };
+    text(u"message"_s, message);
+    text(u"commit"_s, commit);
+    text(u"branch"_s, branch);
+    text(u"remote"_s, remote);
+    text(u"url"_s, url);
+    if (number > 0)
+        o.insert(u"number"_s, number);
+    list(u"restored"_s, restored);
+    list(u"removed"_s, removed);
+    list(u"kept"_s, kept);
+    return o;
+}
+
+RemoteGitResult RemoteGitResult::fromJson(const QJsonObject &o)
+{
+    RemoteGitResult r;
+    r.message = o.value(u"message"_s).toString().left(2000);
+    r.commit = o.value(u"commit"_s).toString().left(100);
+    r.branch = o.value(u"branch"_s).toString().left(250);
+    r.remote = o.value(u"remote"_s).toString().left(250);
+    r.url = o.value(u"url"_s).toString().left(2000);
+    r.number = std::max(0, o.value(u"number"_s).toInt());
+    r.restored = stringsOf(o.value(u"restored"_s), MaxRemoteChanges);
+    r.removed = stringsOf(o.value(u"removed"_s), MaxRemoteChanges);
+    r.kept = stringsOf(o.value(u"kept"_s), MaxRemoteChanges);
+    return r;
+}
+
+int pullRequestNumber(QStringView url)
+{
+    const qsizetype at = url.lastIndexOf(u"/pull/");
+    if (at < 0)
+        return 0;
+    QStringView rest = url.mid(at + 6);
+    const qsizetype slash = rest.indexOf(u'/');
+    if (slash >= 0)
+        rest = rest.left(slash);
+    bool ok = false;
+    const int n = rest.toInt(&ok);
+    return ok && n > 0 ? n : 0;
+}
+
+void remoteGit(sync::HttpTransport *transport, const QUrl &base, const QString &token, const QString &project,
+               const RemoteGitRequest &request, std::function<void(const RemoteGitResult &, const RemoteError &)> done)
+{
+    if (const QString why = request.problem(); !why.isEmpty()) {
+        done({}, RemoteError{RemoteError::Kind::Refused, 400, why, u"The request cannot be sent: %1"_s.arg(why)});
+        return;
+    }
+    const QJsonObject body = request.toJson();
+    const QString endpoint =
+            u"projects/%1/%2"_s.arg(queryValue(project), RemoteGitRequest::endpoint(request.kind));
+    sync::HttpRequest r = remoteRequest("POST", base, endpoint, token, &body);
+    // (Hooks run there; a push and gh go over the network.)
+    const bool network =
+            request.kind == RemoteGitRequest::Kind::Push || request.kind == RemoteGitRequest::Kind::PullRequest;
+    r.timeoutMs += network ? 180000 : 60000;
+    transport->send(r, [done](const sync::HttpResponse &response) {
+        QJsonObject o;
+        const RemoteError e = remoteErrorOf(response, &o);
+        RemoteGitResult result = e.failed() ? RemoteGitResult{} : RemoteGitResult::fromJson(o);
+        if (result.number == 0)
+            result.number = pullRequestNumber(result.url);
+        done(result, e);
     });
 }
 
