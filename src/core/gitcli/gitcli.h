@@ -438,6 +438,12 @@ QList<int> hunksTouching(const FilePatch &patch, int first, int last, bool newSi
 /// counted again as if only they were applied — with `reverse` (`git apply -R`, to a file that
 /// has all of them) the old sides' instead. "" when no index is a hunk.
 QByteArray patchOf(const FilePatch &patch, const QList<int> &indexes, bool reverse = false);
+/// `patch` cut to the changes of single lines: a deletion of an old line of [oldFirst, oldLast], an
+/// insertion of a new line of [newFirst, newLast] (0, 0: none of that side); the other changes left
+/// as the target file has them — forward (to apply onto the old side) a deletion not chosen becomes
+/// context and an insertion goes, with `reverse` (`git apply -R` onto the new side) the other way
+/// round —; the counts made again, hunks without a chosen change left out.
+FilePatch linesOnly(const FilePatch &patch, int oldFirst, int oldLast, int newFirst, int newLast, bool reverse);
 
 /// A line starts with a conflict marker of git's ("<<<<<<< " or ">>>>>>> ", or the marker alone).
 bool hasConflictMarkers(QByteArrayView data);

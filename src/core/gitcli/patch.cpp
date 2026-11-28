@@ -2,6 +2,8 @@
 // of lines, a patch of some of them for `git apply`, git's conflict markers.
 #include "gitcli/gitcli.h"
 
+#include <algorithm>
+
 using namespace Qt::StringLiterals;
 
 namespace brulion::gitcli {
@@ -160,6 +162,59 @@ QList<int> hunksTouching(const FilePatch &patch, int first, int last, bool newSi
         const int b = newSide ? h.newLast : h.oldLast;
         if (a > 0 && a <= last && first <= b)
             out.append(i);
+    }
+    return out;
+}
+
+namespace {
+
+/// One hunk cut to its chosen changes (linesOnly()); `changed` false when none is left.
+Hunk cutHunk(const Hunk &hunk, int oldFirst, int oldLast, int newFirst, int newLast, bool reverse, bool *changed)
+{
+    Hunk out = hunk;
+    out.lines.clear();
+    int oldNo = hunk.oldStart, newNo = hunk.newStart;
+    bool kept = true; // (the line before a "\ No newline" was kept)
+    *changed = false;
+    for (const QByteArray &line : hunk.lines) {
+        const char kind = line.isEmpty() ? ' ' : line.at(0);
+        if (kind == '\\') {
+            if (kept)
+                out.lines << line;
+            continue;
+        }
+        const bool chosen = kind == '-'   ? oldNo >= oldFirst && oldNo <= oldLast && oldFirst > 0
+                            : kind == '+' ? newNo >= newFirst && newNo <= newLast && newFirst > 0
+                                          : false;
+        kept = true;
+        if (kind == ' ' || chosen) {
+            out.lines << line;
+            *changed = *changed || chosen;
+        } else if ((kind == '-') != reverse) {
+            // (A change not chosen that the target keeps: context.)
+            out.lines << QByteArray(' ' + line.mid(1));
+        } else {
+            kept = false;
+        }
+        oldNo += kind != '+';
+        newNo += kind != '-';
+    }
+    out.oldLines = int(std::ranges::count_if(out.lines, [](const QByteArray &l) { return l.startsWith(' ') || l.startsWith('-') || l.isEmpty(); }));
+    out.newLines = int(std::ranges::count_if(out.lines, [](const QByteArray &l) { return l.startsWith(' ') || l.startsWith('+') || l.isEmpty(); }));
+    return out;
+}
+
+} // namespace
+
+FilePatch linesOnly(const FilePatch &patch, int oldFirst, int oldLast, int newFirst, int newLast, bool reverse)
+{
+    FilePatch out = patch;
+    out.hunks.clear();
+    for (const Hunk &hunk : patch.hunks) {
+        bool changed = false;
+        const Hunk cut = cutHunk(hunk, oldFirst, oldLast, newFirst, newLast, reverse, &changed);
+        if (changed)
+            out.hunks << cut;
     }
     return out;
 }

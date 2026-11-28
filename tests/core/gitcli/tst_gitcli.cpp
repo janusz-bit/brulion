@@ -124,6 +124,7 @@ private Q_SLOTS:
     void patchTouching();
     void patchOfSomeHunks();
     void patchOfSomeHunksReversed();
+    void patchOfSomeLines();
     void patchNoNewlineAndCrlf();
     void patchMalformed();
     void patchBinary();
@@ -1387,6 +1388,40 @@ void TestGitCli::patchOfSomeHunksReversed()
     const QByteArray insertion = patchOf(p, {1}, true);
     QVERIFY(insertion.contains("@@ -7,5 +7,6 @@\n"));
     QCOMPARE(patchOf(p, {0, 1, 2}, true), kPatch);
+}
+
+// Single lines of a hunk staged (forward) or thrown away (reverse): the changes outside the chosen
+// lines left as they are — forward, a deletion not chosen is context and an insertion not chosen
+// goes; reversed, the other way round —, the counts made again, a hunk left without a change gone.
+void TestGitCli::patchOfSomeLines()
+{
+    const QByteArray data = "diff --git a/x b/x\n--- a/x\n+++ b/x\n"
+                            "@@ -1,4 +1,4 @@\n a\n-b\n+B\n-c\n+C\n d\n"
+                            "@@ -10,2 +10,3 @@\n j\n+żółw\n k\n";
+    const FilePatch p = parsePatch(data);
+    // The second line's change alone, forward.
+    FilePatch two = linesOnly(p, 2, 2, 2, 2, false);
+    QCOMPARE(two.hunks.size(), 1);
+    QCOMPARE(patchOf(two, {0}), QByteArray("diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1,4 +1,4 @@\n a\n-b\n+B\n c\n d\n"));
+    // Reversed: the other change stays in the file (context), its old line not brought back.
+    two = linesOnly(p, 2, 2, 2, 2, true);
+    QCOMPARE(patchOf(two, {0}, true), QByteArray("diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1,4 +1,4 @@\n a\n-b\n+B\n C\n d\n"));
+    // Only an insertion chosen: its hunk alone; a deletion alone.
+    const FilePatch inserted = linesOnly(p, 0, 0, 11, 11, false);
+    QCOMPARE(inserted.hunks.size(), 1);
+    QCOMPARE(inserted.hunks.at(0).lines, (QList<QByteArray>{" j", "+żółw", " k"}));
+    const FilePatch deleted = linesOnly(p, 3, 3, 0, 0, false);
+    QCOMPARE(deleted.hunks.at(0).lines, (QList<QByteArray>{" a", " b", "-c", " d"}));
+    QCOMPARE(deleted.hunks.at(0).oldLines, 4);
+    QCOMPARE(deleted.hunks.at(0).newLines, 3);
+    // Nothing chosen: nothing.
+    QVERIFY(linesOnly(p, 5, 6, 5, 6, false).hunks.isEmpty());
+    QVERIFY(linesOnly(p, 0, 0, 0, 0, true).hunks.isEmpty());
+    // "\ No newline" stays with its line, goes with it.
+    const FilePatch eof = parsePatch("diff --git a/y b/y\n--- a/y\n+++ b/y\n@@ -1,2 +1,2 @@\n a\n-b\n"
+                                     "\\ No newline at end of file\n+B\n\\ No newline at end of file\n");
+    QCOMPARE(linesOnly(eof, 0, 0, 2, 2, false).hunks.at(0).lines,
+             (QList<QByteArray>{" a", " b", "\\ No newline at end of file", "+B", "\\ No newline at end of file"}));
 }
 
 void TestGitCli::patchNoNewlineAndCrlf()
