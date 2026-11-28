@@ -1472,7 +1472,7 @@
 <context>
     <name>JournalsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/editor/EditorAtramentJournal.qml" line="183"/>
+        <location filename="../src/app/qml/editor/EditorAtramentJournal.qml" line="192"/>
         <location filename="../src/app/qml/views/JournalsView.qml" line="706"/>
         <source>%n day(s) with notes</source>
         <translation>
@@ -1827,7 +1827,7 @@
 <context>
     <name>SettingsView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1323"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1333"/>
         <source>%n word(s), kept on this device for all notebooks.</source>
         <translation>
             <numerusform>%n word, kept on this device for all notebooks.</numerusform>
@@ -1835,7 +1835,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3560"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3570"/>
         <source>%n warning(s) or error(s)</source>
         <translation>
             <numerusform>%n warning or error</numerusform>
@@ -1843,7 +1843,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3425"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3435"/>
         <source>Last check %1: %n reminder(s), the sync failed.</source>
         <translation>
             <numerusform>Last check %1: %n reminder, the sync failed.</numerusform>
@@ -1875,7 +1875,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="2614"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="2624"/>
         <source>%n device(s) paired. Another one scans a code.</source>
         <translation>
             <numerusform>%n device paired. Another one scans a code.</numerusform>
@@ -1883,7 +1883,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3249"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3259"/>
         <source>Type check: %n warning(s), %1</source>
         <translation>
             <numerusform>Type check: %n warning, %1</numerusform>
@@ -1891,7 +1891,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SettingsView.qml" line="3427"/>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="3437"/>
         <source>Last check %1: %n reminder(s).</source>
         <translation>
             <numerusform>Last check %1: %n reminder.</numerusform>
@@ -2513,7 +2513,7 @@
 <context>
     <name>TasksView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TasksView.qml" line="286"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="372"/>
         <source>%n open</source>
         <translation>
             <numerusform>%n open</numerusform>
@@ -2521,7 +2521,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TasksView.qml" line="287"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="373"/>
         <source>%n overdue</source>
         <translation>
             <numerusform>%n overdue</numerusform>
@@ -2529,7 +2529,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TasksView.qml" line="288"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="374"/>
         <source>%n for today</source>
         <translation>
             <numerusform>%n for today</numerusform>
@@ -2537,7 +2537,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/TasksView.qml" line="388"/>
+        <location filename="../src/app/qml/views/TasksView.qml" line="509"/>
         <source>%n tasks in the notebook are hidden by the filters.</source>
         <translation>
             <numerusform>%n task in the notebook is hidden by the filters.</numerusform>
@@ -3047,7 +3047,7 @@
 <context>
     <name>brulion::shell::WorkspaceAgents</name>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspaceagents.cpp" line="1479"/>
+        <location filename="../src/app/shell/workspaceagents.cpp" line="1480"/>
         <source>%n AI agents are answering…</source>
         <translation>
             <numerusform>%n AI agent is answering…</numerusform>
