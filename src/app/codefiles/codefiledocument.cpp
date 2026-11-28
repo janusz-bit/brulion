@@ -198,8 +198,9 @@ void CodeFileDocument::refind()
         if (!expression.isValid())
             m_findError = expression.errorString();
         for (int row = 0; expression.isValid() && row < m_lines.size() && m_matches.size() < MaxMatches; ++row)
-            for (const auto &[from, length] : matchRanges(m_lines.at(row), expression, MaxMatches))
-                m_matches.append({row, from, length});
+            // (matchRanges() gives {start, end}.)
+            for (const auto &[from, end] : matchRanges(m_lines.at(row), expression, MaxMatches))
+                m_matches.append({row, from, end - from});
     }
     // (The rows that had or have a match show it, or no longer.)
     QSet<int> rows;

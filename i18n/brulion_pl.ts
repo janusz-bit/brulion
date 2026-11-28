@@ -6484,22 +6484,22 @@
         <translation>Następny wynik</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeFileFindBar.qml" line="125"/>
+        <location filename="../src/app/qml/codefiles/CodeFileFindBar.qml" line="121"/>
         <source>Match case</source>
         <translation>Wielkość liter</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeFileFindBar.qml" line="136"/>
+        <location filename="../src/app/qml/codefiles/CodeFileFindBar.qml" line="128"/>
         <source>Whole words</source>
         <translation>Całe słowa</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeFileFindBar.qml" line="147"/>
+        <location filename="../src/app/qml/codefiles/CodeFileFindBar.qml" line="135"/>
         <source>Regular expression</source>
         <translation>Wyrażenie regularne</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeFileFindBar.qml" line="154"/>
+        <location filename="../src/app/qml/codefiles/CodeFileFindBar.qml" line="142"/>
         <source>Close</source>
         <translation>Zamknij</translation>
     </message>
@@ -6608,183 +6608,183 @@
 <context>
     <name>CodeFilesPanel</name>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="87"/>
+        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="89"/>
         <source>Saved</source>
         <translation>Zapisano</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="97"/>
+        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="99"/>
         <source>Save or cancel the edit of this file first.</source>
         <translation>Najpierw zapisz albo anuluj edycję tego pliku.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="141"/>
+        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="143"/>
         <source>Path copied</source>
         <translation>Skopiowano ścieżkę</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="148"/>
+        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="150"/>
         <source>The editor could not be started: set its command in Settings → Extensions → Code mode.</source>
         <translation>Nie udało się uruchomić edytora: ustaw jego polecenie w Ustawieniach → Rozszerzenia → Tryb kodu.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="210"/>
+        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="212"/>
         <source>Recent files</source>
         <translation>Ostatnie pliki</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="237"/>
-        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="473"/>
+        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="239"/>
+        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="475"/>
         <source>Go to file…</source>
         <translation>Przejdź do pliku…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="245"/>
+        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="247"/>
         <source>Find in file</source>
         <translation>Szukaj w pliku</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="255"/>
+        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="257"/>
         <source>Show as text</source>
         <translation>Pokaż jako tekst</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="255"/>
+        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="257"/>
         <source>Show as a table</source>
         <translation>Pokaż jako tabelę</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="263"/>
+        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="265"/>
         <source>Edit</source>
         <translation>Edytuj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="272"/>
+        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="274"/>
         <source>Save</source>
         <translation>Zapisz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="281"/>
+        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="283"/>
         <source>Cancel</source>
         <translation>Anuluj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="288"/>
+        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="290"/>
         <source>Copy path</source>
         <translation>Kopiuj ścieżkę</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="296"/>
+        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="298"/>
         <source>Open in editor</source>
         <translation>Otwórz w edytorze</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="304"/>
+        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="306"/>
         <source>Reload</source>
         <translation>Wczytaj ponownie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="330"/>
+        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="332"/>
         <source>Only the first 2 MB of this %1 file are shown.</source>
         <translation>Widać tylko pierwsze 2 MB tego pliku (%1).</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="355"/>
+        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="357"/>
         <source>The file&apos;s text</source>
         <translation>Tekst pliku</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="411"/>
+        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="413"/>
         <source>Copied</source>
         <translation>Skopiowano</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="442"/>
+        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="444"/>
         <source>Binary file</source>
         <translation>Plik binarny</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="443"/>
+        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="445"/>
         <source>Not there</source>
         <translation>Nie ma go</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="444"/>
+        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="446"/>
         <source>A folder</source>
         <translation>To folder</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="445"/>
+        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="447"/>
         <source>Outside the project</source>
         <translation>Poza projektem</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="446"/>
+        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="448"/>
         <source>Cannot be read</source>
         <translation>Nie da się go odczytać</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="447"/>
+        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="449"/>
         <source>Its contents are not text (%1).</source>
         <translation>Jego zawartość to nie tekst (%1).</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="448"/>
+        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="450"/>
         <source>This file is not in the folder (any more).</source>
         <translation>Tego pliku nie ma (już) w folderze.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="449"/>
+        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="451"/>
         <source>Pick one of its files with Go to file….</source>
         <translation>Wybierz któryś z jego plików przez Przejdź do pliku….</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="450"/>
+        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="452"/>
         <source>Only the files of the thread&apos;s folder are shown here.</source>
         <translation>Tu widać tylko pliki z folderu wątku.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="451"/>
+        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="453"/>
         <source>Brulion may not read this file.</source>
         <translation>Brulion nie ma dostępu do tego pliku.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="466"/>
+        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="468"/>
         <source>No file open</source>
         <translation>Żaden plik nie jest otwarty</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="467"/>
+        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="469"/>
         <source>Open a file of the project to read it here: Go to file… (Ctrl+P), a search&apos;s result, a file an agent names.</source>
         <translation>Otwórz plik projektu, żeby przeczytać go tutaj: Przejdź do pliku… (Ctrl+P), wynik wyszukiwania, plik wskazany przez agenta.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="480"/>
+        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="482"/>
         <source>Recent</source>
         <translation>Ostatnie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="523"/>
+        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="525"/>
         <source>Comment on lines %1–%2</source>
         <translation>Komentarz do wierszy %1–%2</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="524"/>
+        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="526"/>
         <source>Comment on line %1</source>
         <translation>Komentarz do wiersza %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="527"/>
+        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="529"/>
         <source>Add to chat</source>
         <translation>Dodaj do czatu</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="535"/>
+        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="537"/>
         <source>What should the agent do here?</source>
         <translation>Co agent ma tu zrobić?</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="540"/>
+        <location filename="../src/app/qml/codefiles/CodeFilesPanel.qml" line="542"/>
         <source>The lines and your comment go to the thread&apos;s message, to send with what else you write.</source>
         <translation>Wiersze z Twoim komentarzem trafią do wiadomości wątku — wyślesz je razem z resztą tego, co napiszesz.</translation>
     </message>
@@ -7283,38 +7283,38 @@
 <context>
     <name>CodeSearchPanel</name>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="118"/>
+        <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="85"/>
         <source>Search in the project</source>
         <translation>Szukaj w projekcie</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="137"/>
+        <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="104"/>
         <source>Match case</source>
         <translation>Uwzględnij wielkość liter</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="144"/>
+        <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="111"/>
         <source>Whole words</source>
         <translation>Całe słowa</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="151"/>
+        <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="118"/>
         <source>Regular expression</source>
         <translation>Wyrażenie regularne</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="174"/>
+        <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="141"/>
         <source>Searching…</source>
         <translation>Szukam…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="175"/>
-        <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="325"/>
+        <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="142"/>
+        <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="292"/>
         <source>Nothing found</source>
         <translation>Nic nie znaleziono</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="176"/>
+        <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="143"/>
         <source>The first %n result(s)</source>
         <translation>
             <numerusform>Pierwszy %n wynik</numerusform>
@@ -7323,7 +7323,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="176"/>
+        <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="143"/>
         <source>%n result(s)</source>
         <translation>
             <numerusform>%n wynik</numerusform>
@@ -7332,7 +7332,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="177"/>
+        <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="144"/>
         <source>%n file(s)</source>
         <translation>
             <numerusform>%n plik</numerusform>
@@ -7341,37 +7341,37 @@
         </translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="186"/>
+        <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="153"/>
         <source>Brulion</source>
         <translation>Brulion</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="195"/>
+        <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="162"/>
         <source>Stop</source>
         <translation>Zatrzymaj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="218"/>
+        <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="185"/>
         <source>Search results</source>
         <translation>Wyniki wyszukiwania</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="247"/>
+        <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="214"/>
         <source>Line %1</source>
         <translation>Wiersz %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="325"/>
+        <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="292"/>
         <source>Search the project</source>
         <translation>Przeszukaj projekt</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="326"/>
+        <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="293"/>
         <source>No file of the project has “%1”.</source>
         <translation>Żaden plik projektu nie zawiera „%1”.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="327"/>
+        <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="294"/>
         <source>Text in every file of the project, ignored files left out. Ctrl+Shift+F comes here.</source>
         <translation>Tekst we wszystkich plikach projektu, bez ignorowanych. Ctrl+Shift+F prowadzi tutaj.</translation>
     </message>
@@ -39832,17 +39832,17 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
 <context>
     <name>brulion::codefiles::CodeFileDocument</name>
     <message>
-        <location filename="../src/app/codefiles/codefiledocument.cpp" line="404"/>
+        <location filename="../src/app/codefiles/codefiledocument.cpp" line="405"/>
         <source>This file cannot be edited here.</source>
         <translation>Tego pliku nie można tu edytować.</translation>
     </message>
     <message>
-        <location filename="../src/app/codefiles/codefiledocument.cpp" line="409"/>
+        <location filename="../src/app/codefiles/codefiledocument.cpp" line="410"/>
         <source>The file changed on disk since it was opened: reload it, then edit it again.</source>
         <translation>Plik zmienił się na dysku od otwarcia: wczytaj go ponownie i edytuj jeszcze raz.</translation>
     </message>
     <message>
-        <location filename="../src/app/codefiles/codefiledocument.cpp" line="414"/>
+        <location filename="../src/app/codefiles/codefiledocument.cpp" line="415"/>
         <source>The file could not be saved: %1</source>
         <translation>Nie udało się zapisać pliku: %1</translation>
     </message>

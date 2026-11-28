@@ -73,7 +73,7 @@ Rectangle {
             id: field
             objectName: "codeFileFindField"
             Layout.fillWidth: true
-            Layout.minimumWidth: 100
+            Layout.minimumWidth: 80
             size: "small"
             debounce: 150
             clearable: false
@@ -92,7 +92,7 @@ Rectangle {
         }
         BText {
             objectName: "codeFileFindStatus"
-            Layout.maximumWidth: 200
+            Layout.maximumWidth: 110
             text: bar.status()
             variant: "small"
             color: bar.document !== null && bar.document.findError !== "" ? Theme.dangerText : Theme.fgMuted
@@ -114,37 +114,25 @@ Rectangle {
             enabled: bar.document !== null && bar.document.matchCount > 0
             onClicked: bar.step(1)
         }
-        BButton {
+        CodeOptionToggle {
             id: caseButton
-            focusPolicy: Qt.NoFocus
             objectName: "codeFileFindCase"
-            size: "small"
-            variant: caseButton.checked ? "secondary" : "ghost"
-            text: "Aa"
-            checkable: true
-            Accessible.name: qsTr("Match case")
+            label: "Aa"
+            tip: qsTr("Match case")
             onToggled: bar.search()
         }
-        BButton {
+        CodeOptionToggle {
             id: wordButton
-            focusPolicy: Qt.NoFocus
             objectName: "codeFileFindWord"
-            size: "small"
-            variant: wordButton.checked ? "secondary" : "ghost"
-            text: "ab"
-            checkable: true
-            Accessible.name: qsTr("Whole words")
+            label: "ab"
+            tip: qsTr("Whole words")
             onToggled: bar.search()
         }
-        BButton {
+        CodeOptionToggle {
             id: regexButton
-            focusPolicy: Qt.NoFocus
             objectName: "codeFileFindRegex"
-            size: "small"
-            variant: regexButton.checked ? "secondary" : "ghost"
-            text: ".*"
-            checkable: true
-            Accessible.name: qsTr("Regular expression")
+            label: ".*"
+            tip: qsTr("Regular expression")
             onToggled: bar.search()
         }
         BIconButton {

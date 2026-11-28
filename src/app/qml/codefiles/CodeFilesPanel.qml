@@ -50,6 +50,8 @@ Item {
     })
     /// Find within the file shown (CodeFileFindBar; Ctrl+F in the viewer).
     function openFind(): void {
+        // (Its matches are marked in the lines: a table shows its text meanwhile.)
+        panel.asTable = false
         findBar.open = true
         findBar.focusField()
     }
@@ -241,7 +243,7 @@ Item {
             BIconButton {
                 objectName: "codeFilesFind"
                 size: "small"
-                iconName: "search"
+                iconName: "scan-text"
                 label: qsTr("Find in file")
                 shortcut: "Ctrl+F"
                 enabled: doc.kind === "text"

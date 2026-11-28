@@ -409,6 +409,8 @@ private Q_SLOTS:
         QCOMPARE(doc.matchCount(), 1);
         doc.find(u"je"_s, false, true, false);
         QCOMPARE(doc.matchCount(), 1);
+        // Only the match itself bold, not the rest of the line after it.
+        QCOMPARE(doc.data(doc.index(0), CodeFileDocument::HtmlRole).toString(), u"Żółw&nbsp;<b>je</b>."_s);
         doc.find(u"Ż\\w+"_s, true, false, true);
         QCOMPARE(doc.matchCount(), 2);
         doc.find(u"(["_s, false, false, true);

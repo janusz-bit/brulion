@@ -65,39 +65,6 @@ Item {
     }
 
     // A toggle of the search: a short label in the mono font, tinted when on.
-    component OptionToggle: T.AbstractButton {
-        id: toggle
-        required property string label
-        required property string tip
-        checkable: true
-        focusPolicy: Qt.NoFocus
-        implicitWidth: Math.max(28, toggleText.implicitWidth + 12)
-        implicitHeight: 28
-        hoverEnabled: !Theme.touchUi
-        Accessible.name: toggle.tip
-        BToolTip {
-            visible: toggle.hovered
-            text: toggle.tip
-        }
-        background: Rectangle {
-            radius: Theme.radiusSm
-            color: toggle.checked ? Theme.bgSelected : toggle.hovered ? Theme.bgHover : "transparent"
-            border.width: toggle.checked ? 1 : 0
-            border.color: Theme.link
-        }
-        contentItem: Text {
-            id: toggleText
-            text: toggle.label
-            textFormat: Text.PlainText
-            horizontalAlignment: Text.AlignHCenter
-            verticalAlignment: Text.AlignVCenter
-            font.family: Theme.fontMono
-            font.pixelSize: Theme.textSm
-            font.weight: Theme.weightSemiBold
-            color: toggle.checked ? Theme.link : Theme.fgMuted
-        }
-    }
-
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
@@ -131,21 +98,21 @@ Item {
                     results.forceActiveFocus()
                 }
             }
-            OptionToggle {
+            CodeOptionToggle {
                 objectName: "codeSearchCase"
                 label: "Aa"
                 tip: qsTr("Match case")
                 checked: search.caseSensitive
                 onToggled: search.caseSensitive = checked
             }
-            OptionToggle {
+            CodeOptionToggle {
                 objectName: "codeSearchWord"
                 label: "ab"
                 tip: qsTr("Whole words")
                 checked: search.wholeWord
                 onToggled: search.wholeWord = checked
             }
-            OptionToggle {
+            CodeOptionToggle {
                 objectName: "codeSearchRegex"
                 label: ".*"
                 tip: qsTr("Regular expression")

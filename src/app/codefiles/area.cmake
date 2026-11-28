@@ -38,6 +38,7 @@ qt_target_qml_sources(brulion QML_FILES
     qml/codefiles/CodeFilesPanel.qml
     qml/codefiles/CodeFileView.qml
     qml/codefiles/CodeFileFindBar.qml
+    qml/codefiles/CodeOptionToggle.qml
     qml/codefiles/CodeFilePicker.qml
     qml/codefiles/CodeSearchPanel.qml
     qml/codefiles/CodePanelTabs.qml

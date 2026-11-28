@@ -609,7 +609,7 @@
 <context>
     <name>CodeSearchPanel</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="176"/>
+        <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="143"/>
         <source>The first %n result(s)</source>
         <translation>
             <numerusform>The first %n result</numerusform>
@@ -617,7 +617,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="176"/>
+        <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="143"/>
         <source>%n result(s)</source>
         <translation>
             <numerusform>%n result</numerusform>
@@ -625,7 +625,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="177"/>
+        <location filename="../src/app/qml/codefiles/CodeSearchPanel.qml" line="144"/>
         <source>%n file(s)</source>
         <translation>
             <numerusform>%n file</numerusform>
