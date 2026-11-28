@@ -128,6 +128,72 @@ QString command(const QString &args = QString())
     return u"\"%1\""_s.arg(QStringLiteral(FAKE_ACP_AGENT)) + (args.isEmpty() ? QString() : u' ' + args);
 }
 
+#if defined(BRULION_CLI) && defined(BRULION_TEST_IPC)
+/// The real brulion-cli first on PATH (real agents' tools: toolsProgram()), while the guard lives.
+[[nodiscard]] auto cliFirstOnPath()
+{
+    const QByteArray path = qgetenv("PATH");
+    qputenv("PATH", QByteArray(QFileInfo(QStringLiteral(BRULION_CLI)).absolutePath().toLocal8Bit()
+                                         + QDir::listSeparator().toLatin1() + path));
+    return qScopeGuard([path] { qputenv("PATH", path); });
+}
+
+/// The app's control socket for real agents' tools in a private runtime folder, its chat answered
+/// as RemoteControl answers it — only the grants' connections (the remote control's setting off);
+/// the agents get the chat's grants and the app's instance while it lives.
+class RealAgentsControl {
+public:
+    explicit RealAgentsControl(Workspace *ws) : m_chatControl(ws), m_chats(ws->chats()) { }
+    ~RealAgentsControl() { m_chats->agents()->setChatGrants({}, {}); }
+    bool listen(const QString &runtime)
+    {
+        if (!QDir().mkpath(runtime))
+            return false;
+        QFile::setPermissions(runtime, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
+        const QString instance = runtime + u"/brulion-prawdziwe"_s;
+        WorkspaceChats *chats = m_chats;
+        ChatControl *chatControl = &m_chatControl;
+        m_control.setHandler([chatControl, chats](const ipc::ControlRequest &request, const ipc::ControlReply &reply) {
+            if (request.method == u"hello") {
+                reply.ok(QJsonObject{{u"protocol"_s, ipc::ControlProtocolVersion},
+                                     {u"app"_s, u"Brulion"_s},
+                                     {u"granted"_s, request.granted}});
+                return;
+            }
+            if (!ChatControl::handles(request.method)) {
+                reply.fail(u"unknown_method"_s, request.method);
+                return;
+            }
+            const ChatControl::Caller caller{
+                    request.granted, request.granted ? chats->agents()->grantConversation(request.grant) : QString(),
+                    request.client};
+            ChatControl::Reply answer;
+            answer.ok = [reply](const QJsonObject &result) { reply.ok(result); };
+            answer.fail = [reply](const QString &code, const QString &message, const QJsonObject &details) {
+                reply.fail(code, message, details);
+            };
+            answer.connected = [reply] { return reply.connected(); };
+            chatControl->handle(request.method, request.params, caller, answer);
+        });
+        m_control.setOpen(false);
+        if (!m_control.listen(ipc::controlKeyFor(instance)))
+            return false;
+        ipc::ControlServer *control = &m_control;
+        m_chats->agents()->setChatGrants(
+                [control](const QString &client) { return control->addGrant(client, ipc::GrantScope::Chat); },
+                [control](const QString &token) { control->revokeGrant(token); });
+        m_chats->agents()->setAppInstance(instance);
+        return true;
+    }
+    QString error() const { return m_control.errorString(); }
+
+private:
+    ChatControl m_chatControl;
+    WorkspaceChats *m_chats;
+    ipc::ControlServer m_control;
+};
+#endif
+
 } // namespace
 
 class TestAgents : public QObject {
@@ -2464,6 +2530,67 @@ private Q_SLOTS:
         QCOMPARE(chats->checkpoints(path).size(), 2);
     }
 
+    // A secret a real agent asks for (docs/UI.md "A secret the agent asks for"), when one is named
+    // (BRULION_REAL_ACP_AGENT, _OPTION): it calls brulion_app_chat_request_secret through the real
+    // brulion-cli, the card is answered, the agent reads the file in a command — and the value is
+    // never in the conversation's page.
+    void realAgentAsksForASecret()
+    {
+#if !defined(BRULION_CLI) || !defined(BRULION_TEST_IPC)
+        QSKIP("brulion-cli or the control socket is not built here");
+#else
+        const QString command = qEnvironmentVariable("BRULION_REAL_ACP_AGENT");
+        if (command.isEmpty())
+            QSKIP("no real agent named (BRULION_REAL_ACP_AGENT)");
+        auto restorePath = cliFirstOnPath();
+        AgentConfig agent{u"real"_s, u"Real"_s, command, true};
+        if (const QString o = qEnvironmentVariable("BRULION_REAL_ACP_OPTION"); o.contains(u'='))
+            agent.options = QJsonObject{{o.section(u'=', 0, 0), o.section(u'=', 1)}};
+        auto ws = open({agent});
+        WorkspaceChats *chats = ws->chats();
+        ChatSecrets *secrets = chats->secrets();
+        secrets->setBase(m_tmp.filePath(u"secrets-%1"_s.arg(m_n)));
+        RealAgentsControl control(ws.get());
+        QVERIFY2(control.listen(m_tmp.filePath(u"run-%1"_s.arg(m_n))), qPrintable(control.error()));
+        QString path;
+        QTimer answers; // its questions (may it use the tool, run the command?) allowed
+        answers.setInterval(200);
+        QObject::connect(&answers, &QTimer::timeout, chats, [&] {
+            if (path.isEmpty() || !chats->asking(path) || secrets->pending(path))
+                return;
+            const QStringList options = chats->questionOptions(path);
+            QString allow = options.value(0);
+            for (const QString &o : options)
+                if (o.contains(u"allow"_s, Qt::CaseInsensitive) && !o.contains(u"always"_s, Qt::CaseInsensitive)) {
+                    allow = o;
+                    break;
+                }
+            qInfo() << "asked:" << chats->questionText(path) << "->" << allow;
+            chats->answer(path, allow);
+        });
+        answers.start();
+        const QString value = u"kod-7731-abc"_s; // 12 characters
+        path = chats->send(QString(),
+                           u"Potrzebujesz kodu testowego, którego nie znasz. Poproś mnie o niego narzędziem Brulionu "
+                           u"do sekretów (brulion_app_chat_request_secret, etykieta „Kod testowy”). Gdy go dostaniesz, "
+                           u"policz jego znaki jednym poleceniem powłoki na pliku, który dostaniesz, i odpowiedz samą "
+                           u"liczbą. Nie pokazuj samego kodu."_s,
+                           QString(), {}, u"acp:real"_s);
+        QVERIFY(!path.isEmpty());
+        QVERIFY2(QTest::qWaitFor([&] { return secrets->pending(path) || !chats->turn(path)->running(); }, 600000),
+                 "no secret asked for in time");
+        qInfo() << "card:" << secrets->card(path);
+        QVERIFY2(secrets->pending(path), qPrintable(ws->read(path)));
+        QVERIFY(secrets->send(path, value));
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->turn(path)->running(), 600000);
+        const QString page = ws->read(path);
+        qInfo().noquote() << page;
+        QCOMPARE(chats->turn(path)->failure(), QString());
+        QVERIFY2(chats->lastAnswer(path).contains(u"12"_s), qPrintable(chats->lastAnswer(path)));
+        QVERIFY(!page.contains(value));
+#endif
+    }
+
     // A sub-conversation that wakes its parent with real agents (docs/UI.md "Agents delegate"), when
     // both are named: BRULION_REAL_ACP_AGENT the parent's agent, BRULION_REAL_ACP_CHILD the one it
     // gives the task (Claude Code and Codex — "npx -y @agentclientprotocol/claude-agent-acp",
@@ -2483,11 +2610,7 @@ private Q_SLOTS:
         const QString childCommand = qEnvironmentVariable("BRULION_REAL_ACP_CHILD");
         if (parentCommand.isEmpty() || childCommand.isEmpty())
             QSKIP("no real agents named (BRULION_REAL_ACP_AGENT and BRULION_REAL_ACP_CHILD)");
-        // The real brulion-cli is the agents' tools (the first on PATH: toolsProgram()).
-        const QByteArray path = qgetenv("PATH");
-        auto restorePath = qScopeGuard([path] { qputenv("PATH", path); });
-        qputenv("PATH", QByteArray(QFileInfo(QStringLiteral(BRULION_CLI)).absolutePath().toLocal8Bit()
-                                   + QDir::listSeparator().toLatin1() + path));
+        auto restorePath = cliFirstOnPath();
         const auto optionOf = [](const char *variable) {
             const QString o = qEnvironmentVariable(variable);
             return o.contains(u'=') ? QJsonObject{{o.section(u'=', 0, 0), o.section(u'=', 1)}} : QJsonObject{};
@@ -2499,43 +2622,8 @@ private Q_SLOTS:
         auto ws = open({parentAgent, childAgent});
         WorkspaceChats *chats = ws->chats();
 
-        // The app's control socket in a private runtime folder, its chat answered as RemoteControl
-        // answers it — only the grants' connections (the remote control's setting off).
-        const QString runtime = m_tmp.filePath(u"run"_s);
-        QVERIFY(QDir().mkpath(runtime));
-        QFile::setPermissions(runtime, QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
-        const QString instance = runtime + u"/brulion-prawdziwe"_s;
-        ChatControl chatControl(ws.get());
-        ipc::ControlServer control;
-        control.setHandler([&chatControl, chats](const ipc::ControlRequest &request, const ipc::ControlReply &reply) {
-            if (request.method == u"hello") {
-                reply.ok(QJsonObject{{u"protocol"_s, ipc::ControlProtocolVersion},
-                                     {u"app"_s, u"Brulion"_s},
-                                     {u"granted"_s, request.granted}});
-                return;
-            }
-            if (!ChatControl::handles(request.method)) {
-                reply.fail(u"unknown_method"_s, request.method);
-                return;
-            }
-            const ChatControl::Caller caller{
-                    request.granted,
-                    request.granted ? chats->agents()->grantConversation(request.grant) : QString(), request.client};
-            ChatControl::Reply answer;
-            answer.ok = [reply](const QJsonObject &result) { reply.ok(result); };
-            answer.fail = [reply](const QString &code, const QString &message, const QJsonObject &details) {
-                reply.fail(code, message, details);
-            };
-            answer.connected = [reply] { return reply.connected(); };
-            chatControl.handle(request.method, request.params, caller, answer);
-        });
-        control.setOpen(false);
-        QVERIFY2(control.listen(ipc::controlKeyFor(instance)), qPrintable(control.errorString()));
-        chats->agents()->setChatGrants(
-                [&control](const QString &client) { return control.addGrant(client, ipc::GrantScope::Chat); },
-                [&control](const QString &token) { control.revokeGrant(token); });
-        chats->agents()->setAppInstance(instance);
-        auto unset = qScopeGuard([chats] { chats->agents()->setChatGrants({}, {}); });
+        RealAgentsControl control(ws.get());
+        QVERIFY2(control.listen(m_tmp.filePath(u"run"_s)), qPrintable(control.error()));
 
         // Their questions (may it use the tool?) allowed as they come, in either conversation.
         QString parent;

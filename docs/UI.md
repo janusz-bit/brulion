@@ -1973,7 +1973,10 @@ conversation (docs/EXTENSIONS.md "Chat partners"), or an AI agent of the user's 
   conversation at a time (a second request: `busy`); Cancel (`refused`, `cancelled`), Stop of the
   turn (`stopped`), the turn's end, the agent's call gone, its time (5 minutes by default, at most 15:
   `timeout`) or the notebook closed end it. A script of the user's (the remote control on) names the
-  conversation; its card says "An AI agent". Tests: `tst_secretdrop`, `tst_shell_agents` (`secrets`).
+  conversation; its card says "An AI agent". Tests: `tst_secretdrop`, `tst_shell_agents` (`secrets`;
+  `realAgentAsksForASecret` with a real agent: Claude Code (Haiku) asked through the real
+  brulion-cli, counted the value's characters in a command reading the file, and the value was in
+  no page — 2026-11-28).
 * **A failed turn** (`chatFailure`, `ChatTurn.failure`): the reason in the danger tint ("AI: no
   connection: …", "The AI assistant is off: …", "The chat partner “…” is not running: …"), **Try
   again** (`chatRetry`: the turn again on the page as it is) and ×.
