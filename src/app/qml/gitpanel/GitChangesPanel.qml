@@ -422,7 +422,9 @@ Item {
     function revertTurn(): void {
         if (!panel.turnMode)
             return
-        if (panel.latestTurn)
+        // (A turn that ends at the working tree — the latest, without a snapshot where it ended: back
+        // to its checkpoint; else its own changes undone, the user's later ones kept.)
+        if (panel.turnTarget === "")
             repo.restore(panel.turnId)
         else
             repo.revertBetween(panel.turnBase, panel.turnTarget)
@@ -1135,7 +1137,9 @@ Item {
             }
             BButton {
                 objectName: "gitRevertTo"
-                visible: panel.turnMode && !panel.latestTurn
+                // (The latest turn's "Revert this turn" puts back its checkpoint, unless it ended at a
+                // snapshot of its own: then this does.)
+                visible: panel.turnMode && (!panel.latestTurn || panel.turnTarget !== "")
                 text: qsTr("Revert to before %1…").arg(panel.turnLabel)
                 size: "small"
                 variant: "ghost"
@@ -1553,9 +1557,9 @@ Item {
         subjectIcon: "history"
         message: revertDialog.toBefore
                  ? qsTr("The files go back to how they were before %1: its changes and those of every turn after it are undone.").arg(panel.turnLabel)
-                 : panel.latestTurn || panel.checkpoints.length === 0
+                 : panel.turnTarget === "" || panel.checkpoints.length === 0
                    ? qsTr("The files go back to how they were before the turn: the %n file(s) it changed are put back, files it added are deleted.", "", repo.compareChanges.length)
-                   : qsTr("Only this turn's changes are taken out; what later turns changed stays. If they changed the same lines, nothing is changed.")
+                   : qsTr("Only this turn's changes are taken out; what you or later turns changed after it stays. If they changed the same lines, nothing is changed.")
         detail: qsTr("Commits, the staging area and ignored files stay as they are.")
         confirmText: qsTr("Revert")
         destructive: true

@@ -350,7 +350,8 @@ public:
     /// agent ("" none set up).
     Q_INVOKABLE QString threadPartner() const;
     /// The checkpoints of the thread `path`, oldest first: [{id, at ("yyyy-MM-dd HH:mm"), message
-    /// (the user's message the turn answered, counted from 1)}] — git snapshots of its folder taken
+    /// (the user's message the turn answered, counted from 1), end (the snapshot where the turn ended,
+    /// "" none yet)}] — git snapshots of its folder taken
     /// before each of its agent's turns (gitcli checkpoints: the Changes panel shows what a turn
     /// changed and reverts it). Kept in the notebook's device state ("code/checkpoints"), at most
     /// MaxCheckpoints a thread (older ones dropped from git too). `serial` only makes a binding ask
@@ -991,6 +992,13 @@ private:
     void checkpointThenRun(ChatTurn *t, const QString &folder, int message, const QString &partner,
                            const QVariantList &history, const QString &page);
     void keepCheckpoint(const QString &path, const QString &folder, const QString &id, int message);
+    /// The running turns' checkpoints (path lower-cased → {its id, the folder}): a snapshot where the
+    /// turn ends too (snapshotTurnEnd(): the checkpoint's `end`), so what the user changes between
+    /// two turns is no turn's (docs/CODE-GIT.md "Checkpoints").
+    QHash<QString, std::pair<QString, QString>> m_turnCheckpoints;
+    void snapshotTurnEnd(const QString &path);
+    /// Checkpoint `id` of the thread `path` ended at the snapshot `end`.
+    void keepTurnEnd(const QString &path, const QString &id, const QString &end);
     /// The newest turn's checkpoint the thread's page names (`checkpoint:`; "" none) / sets it.
     QString pageCheckpoint(const QString &path) const;
     void notePageCheckpoint(const QString &path, const QString &id);

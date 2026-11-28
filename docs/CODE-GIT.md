@@ -120,6 +120,10 @@ branches or stash:
 5. `git update-ref refs/brulion/checkpoints/<id> <commit>` — the ref keeps it (and its blobs) from
    `git gc`. An id taken again replaces the ref.
 
+**Where a turn ends** the app takes a second snapshot, `<id>-end` (WorkspaceChats keeps it as the
+checkpoint's `end`; it goes with the checkpoint when that is dropped): a turn's own changes are the two
+snapshots' difference, without what the user changes after it.
+
 Ids are 1–200 characters of `[A-Za-z0-9_-]` with `/`-separated parts; `Client::newCheckpointId()`
 makes 32 random hex digits. The refs are the repository's, shared by all its worktrees (ids must
 be unique across them; random ones are). `checkpoints(folder)` lists the ids,
@@ -300,9 +304,11 @@ entry chosen on a touch screen says why this way too), `openFile(absolutePath, l
   `gitSource_branch` (then `gitBaseButton` → `gitBaseMenu`: `gitBase_<i>`, local and remote-tracking
   branches, "default" marked), `gitSource_commits` (then `gitCommitPick` → `gitCommitMenu`:
   `gitCommitItem_<i>` — subject, short id, when; until one is picked `gitPickCommit`); for a turn its
-  time (`gitTurnLabel`). A turn's own changes are its checkpoint against the next one's (the latest:
-  against the working tree) — changes the user made between two turns count to the turn before
-  them.
+  time (`gitTurnLabel`). A turn's own changes are its checkpoint against the snapshot taken where it
+  ended (its `end`), so what the user changed between two turns is no turn's; a turn without one (an
+  older notebook's, one another device ran) ends at the next turn's checkpoint, the latest at the
+  working tree. "Revert this turn" of a turn with an `end` takes out only its own changes
+  (`revertBetween()`), and `gitRevertTo` is offered for the latest one too.
 * A merge, rebase, cherry-pick, revert or `git am` stopped (`gitOperationBanner`): what it is
   (`gitOperationTitle`), how many files are conflicted (`gitOperationHint`), each conflicted file
   (`gitConflict_<i>`: `gitConflictOurs`, `gitConflictTheirs`, `gitConflictResolved`,
@@ -458,8 +464,6 @@ too), the stashes (`gitStashList`: `gitStash_<i>` with `gitStashApply`, `gitStas
   commit message's first line, its description is typed; the pull request dialog's "Write with AI"
   writes both), and a repository's pull request template or the thread's conversation in the question
   (T3 Code sends them).
-* A turn's changes exclude what the user changed between turns in T3 Code; here they count to the
-  turn before them (the snapshots are of the whole working tree).
 * Hunks of untracked, conflicted or binary files; the hunks of the other sources (a turn, the branch)
   staged or thrown away; single lines of a file that has staged changes (their numbers would be the
   index's: offered while nothing of it is staged).

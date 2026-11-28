@@ -152,6 +152,7 @@ private Q_SLOTS:
     void stashes();
     void linesOfTheDiff();
     void revertAnOlderTurn();
+    void turnsEndAtTheirOwnSnapshot();
 
 private:
     QTemporaryDir m_home;
@@ -1534,6 +1535,27 @@ void TestCodeGit::revertAnOlderTurn()
     QTRY_VERIFY_WITH_TIMEOUT(!finished(actions, u"revertTurn"_s).isEmpty(), Wait);
     QVERIFY2(finished(actions, u"revertTurn"_s).at(1).toBool(), qPrintable(finished(actions, u"revertTurn"_s).at(2).toString()));
     QCOMPARE(repo.read(u"a.txt"_s), QByteArray("1\n2\n3\n4\n5\n6\n7\n8\nDZIEWIĘĆ\n"));
+}
+
+// A turn's own changes end where it ended (its `end` snapshot), not at the next turn: what the user
+// changed between two turns is no turn's. A turn without one (an older notebook, a turn another
+// device ran) ends at the next turn, the latest at the working tree.
+void TestCodeGit::turnsEndAtTheirOwnSnapshot()
+{
+    CodeGit git;
+    const QVariantList checkpoints{QVariantMap{{u"id"_s, u"a1"_s}, {u"end"_s, u"a1-end"_s}, {u"message"_s, 1}},
+                                   QVariantMap{{u"id"_s, u"b2"_s}, {u"message"_s, 2}},
+                                   QVariantMap{{u"id"_s, u"c3"_s}, {u"end"_s, u"../zły"_s}, {u"message"_s, 3}},
+                                   QVariantMap{{u"id"_s, u"d4"_s}, {u"end"_s, u"d4-end"_s}, {u"message"_s, 4}}};
+    const QVariantList rows = git.turnRows(checkpoints);
+    QCOMPARE(rows.size(), 4);
+    const auto target = [&rows](int i) { return rows.at(i).toMap().value(u"target"_s).toString(); };
+    // (The newest first.)
+    QCOMPARE(target(0), gitcli::Client::checkpointRef(u"d4-end"_s));
+    QCOMPARE(target(1), gitcli::Client::checkpointRef(u"d4"_s)); // (an end that is no checkpoint id: the next turn)
+    QCOMPARE(target(2), gitcli::Client::checkpointRef(u"c3"_s));
+    QCOMPARE(target(3), gitcli::Client::checkpointRef(u"a1-end"_s));
+    QCOMPARE(rows.at(3).toMap().value(u"base"_s).toString(), gitcli::Client::checkpointRef(u"a1"_s));
 }
 
 QTEST_GUILESS_MAIN(TestCodeGit)

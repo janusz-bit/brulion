@@ -1711,7 +1711,11 @@ QVariantList CodeGit::turnRows(const QVariantList &checkpoints) const
             continue;
         const int message = c.value(u"message"_s).toInt();
         const int number = message > 0 ? message : int(i) + 1;
-        const QString next = i + 1 < checkpoints.size() ? checkpoints.at(i + 1).toMap().value(u"id"_s).toString() : QString();
+        // (Where it ended, else the next turn's start, else — the latest — the working tree.)
+        const QString end = c.value(u"end"_s).toString();
+        const QString next = gitcli::isValidCheckpointId(end) ? end
+                             : i + 1 < checkpoints.size()     ? checkpoints.at(i + 1).toMap().value(u"id"_s).toString()
+                                                              : QString();
         out.append(QVariantMap{{u"index"_s, int(i)},
                                {u"id"_s, id},
                                {u"number"_s, number},

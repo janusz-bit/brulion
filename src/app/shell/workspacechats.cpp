@@ -933,8 +933,10 @@ void WorkspaceChats::checkpointThenRun(ChatTurn *t, const QString &folder, int m
                 if (!guard || !guard->m_running || guard->m_key != key)
                     return;
                 // (No git there, or a folder git refuses: the turn goes on without one.)
-                if (outcome.ok)
+                if (outcome.ok) {
                     keepCheckpoint(guard->m_path, folder, id, message);
+                    m_turnCheckpoints.insert(guard->m_path.toLower(), {id, folder});
+                }
                 else
                     qCInfo(logging::lcApp) << "No checkpoint of" << folder << ':' << outcome.message;
                 guard->m_status.clear();
@@ -956,7 +958,10 @@ void WorkspaceChats::keepCheckpoint(const QString &path, const QString &folder, 
                             {u"folder"_s, folder}});
     QStringList dropped;
     while (list.size() > MaxCheckpoints) {
-        dropped << list.first().toObject().value(u"id"_s).toString();
+        const QJsonObject oldest = list.first().toObject();
+        dropped << oldest.value(u"id"_s).toString();
+        if (const QString end = oldest.value(u"end"_s).toString(); !end.isEmpty())
+            dropped << end;
         list.removeFirst();
     }
     all.insert(path.toLower(), list);
@@ -967,6 +972,41 @@ void WorkspaceChats::keepCheckpoint(const QString &path, const QString &folder, 
         m_git->dropCheckpoints(folder, dropped, [](const gitcli::Outcome &) { });
     ++m_checkpointSerial;
     Q_EMIT checkpointsChanged();
+}
+
+void WorkspaceChats::snapshotTurnEnd(const QString &path)
+{
+    const auto [id, folder] = m_turnCheckpoints.take(path.toLower());
+    if (id.isEmpty() || !m_git)
+        return;
+    const QString end = id + u"-end"_s;
+    m_git->checkpoint(folder, end, [this, path, id, end](const gitcli::Outcome &outcome) {
+        if (outcome.ok)
+            keepTurnEnd(path, id, end);
+        else
+            qCInfo(logging::lcApp) << "No snapshot where the turn ended:" << outcome.message;
+    });
+}
+
+void WorkspaceChats::keepTurnEnd(const QString &path, const QString &id, const QString &end)
+{
+    LocalStore *store = m_workspace->vault() ? m_workspace->vault()->store() : nullptr;
+    if (!store)
+        return;
+    QJsonObject all = store->get(CheckpointsKey).toObject();
+    QJsonArray list = all.value(path.toLower()).toArray();
+    for (qsizetype i = 0; i < list.size(); ++i) {
+        QJsonObject o = list.at(i).toObject();
+        if (o.value(u"id"_s).toString() != id)
+            continue;
+        o.insert(u"end"_s, end);
+        list.replace(i, o);
+        all.insert(path.toLower(), list);
+        store->set(CheckpointsKey, all);
+        ++m_checkpointSerial;
+        Q_EMIT checkpointsChanged();
+        return;
+    }
 }
 
 QVariantList WorkspaceChats::checkpoints(const QString &path, int serial) const
@@ -983,7 +1023,8 @@ QVariantList WorkspaceChats::checkpoints(const QString &path, int serial) const
             ids << o.value(u"id"_s).toString();
             out << QVariantMap{{u"id"_s, o.value(u"id"_s).toString()},
                                {u"at"_s, o.value(u"at"_s).toString()},
-                               {u"message"_s, o.value(u"message"_s).toInt()}};
+                               {u"message"_s, o.value(u"message"_s).toInt()},
+                               {u"end"_s, o.value(u"end"_s).toString()}};
         }
     }
     // The newest turn's, as the page says (a turn another device of the notebook ran).
@@ -1683,8 +1724,10 @@ void WorkspaceChats::endTurn(ChatTurn *t)
     if (!t->m_key.isEmpty() && m_byKey.value(t->m_key) == t)
         m_byKey.remove(t->m_key);
     t->m_key.clear();
-    if (t->m_running && t->m_remoteHost.isEmpty())
+    if (t->m_running && t->m_remoteHost.isEmpty()) {
         noteEnded(t->m_path);
+        snapshotTurnEnd(t->m_path);
+    }
     t->m_running = false;
     t->m_queued = false;
     t->m_place = 0;

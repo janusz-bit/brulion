@@ -908,6 +908,16 @@ private Q_SLOTS:
                      0);
             // (… and its page names it, for the notebook's other devices.)
             QVERIFY2(ws->read(path).contains(u"checkpoint: "_s + checkpoint), qPrintable(ws->read(path)));
+            // A snapshot where the turn ended too: what the user changes after it is no turn's.
+            QTRY_VERIFY_WITH_TIMEOUT(!chats->checkpoints(path).first().toMap().value(u"end"_s).toString().isEmpty(), 20000);
+            const QString end = chats->checkpoints(path).first().toMap().value(u"end"_s).toString();
+            QVERIFY(writeRaw(folder + u"/Dom.md"_s, "# README żółwia, poprawione\n"));
+            QProcess diff;
+            diff.start(u"git"_s, {u"-C"_s, folder, u"diff"_s, u"--name-only"_s, u"refs/brulion/checkpoints/"_s + checkpoint,
+                                  u"refs/brulion/checkpoints/"_s + end});
+            QVERIFY(diff.waitForFinished(30000));
+            QCOMPARE(diff.readAllStandardOutput(), QByteArray());
+            QVERIFY(writeRaw(folder + u"/Dom.md"_s, "# README żółwia\n"));
         }
         const QString page = ws->read(path);
         QVERIFY2(page.contains(u"project: %1"_s.arg(id)) && page.contains(u"partner: acp:fake"_s), qPrintable(page));
