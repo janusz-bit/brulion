@@ -273,6 +273,8 @@ declare b: {
         inputRules: () -> { { [string]: any } },
         tagStyle: (style: TagStyle) -> (),
         tagStyles: () -> { { [string]: any } },
+        replaceView: (builtin: string, view: string, params: { [string]: any }?) -> (),
+        replacedViews: () -> { { [string]: any } },
     },
 
     -- the views' components
