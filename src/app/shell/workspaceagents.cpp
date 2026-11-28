@@ -10,6 +10,7 @@
 #include "acp/codehost.h"
 #include "chat/chat.h"
 #include "codefiles/viewer.h"
+#include "index/vaultindex.h"
 #include "log/categories.h"
 #include "markdown/encrypted.h"
 #include "markdown/frontmatter.h"
@@ -2615,25 +2616,102 @@ void WorkspaceAgents::followTools(acp::Client *client, const QString &path)
     }
 }
 
-void WorkspaceAgents::settleChanges(const QString &path)
+bool WorkspaceAgents::runsCommand(const QString &path) const
+{
+    const Process *p = m_processes.value(m_turns.value(path));
+    const acp::TurnState *turn = p ? p->client->turn(path) : nullptr;
+    if (p && !turn)
+        turn = p->client->lastTurn(path); // (it just ended)
+    return turn && std::ranges::any_of(turn->tools, [](const acp::ToolCall &call) { return call.kind == u"execute"; });
+}
+
+void WorkspaceAgents::keepBefore(const QString &path, const QString &file, const QString &before, bool existed,
+                                 bool known)
 {
     const auto it = m_tracking.find(path);
-    if (it == m_tracking.end())
+    if (it == m_tracking.end() || file.isEmpty() || file.compare(path, Qt::CaseInsensitive) == 0)
         return;
+    if (std::ranges::any_of(*it, [&file](const FileChange &c) { return c.path == file; }))
+        return;
+    FileChange change;
+    change.path = file;
+    change.before = before;
+    change.existed = existed;
+    change.known = known;
+    it->append(change);
+}
+
+QStringList WorkspaceAgents::commandTurns() const
+{
+    QStringList turns;
+    for (auto it = m_tracking.cbegin(); it != m_tracking.cend(); ++it)
+        if (runsCommand(it.key()))
+            turns << it.key();
+    return turns;
+}
+
+void WorkspaceAgents::keepExternal(const QStringList &turns, const VaultChange &change)
+{
+    // A file as the notebook saw it: a note's text in the index (null when it is not one: not
+    // known); a file made: none.
+    const auto keep = [&](const QString &file, bool existed) {
+        const VaultIndex *index = m_workspace->index();
+        const QString text = existed && index ? index->content(file) : QString();
+        for (const QString &turn : turns)
+            keepBefore(turn, file, text, existed, !existed || !text.isNull());
+    };
+    switch (change.type) {
+    case ChangeType::Created: keep(change.path, false); break;
+    case ChangeType::Renamed:
+        keep(change.oldPath, true);
+        keep(change.path, false);
+        break;
+    default: keep(change.path, true); // Modified, Deleted
+    }
+}
+
+void WorkspaceAgents::notesChanging(const QList<VaultChange> &changes)
+{
+    const QStringList turns = commandTurns();
+    if (turns.isEmpty())
+        return;
+    for (const VaultChange &c : changes)
+        if (c.source == ChangeSource::External)
+            keepExternal(turns, c);
+}
+
+void WorkspaceAgents::lastLook(const QString &path)
+{
     // (The calls' last updates: a file named only when the call ended.)
     if (Process *p = m_processes.value(m_turns.value(path)))
         followTools(p->client, path);
+    // A command's changes the file watcher has not told yet (it waits a moment, and a quick agent
+    // ends its turn first): the notebook looked at now, notesChanging() keeps them.
+    if (runsCommand(path) && m_workspace->vault())
+        m_workspace->vault()->rescan();
+}
+
+std::optional<WorkspaceAgents::FileChange> WorkspaceAgents::settled(FileChange change) const
+{
+    change.exists = QFileInfo::exists(m_workspace->absoluteFilePath(change.path));
+    bool ok = false;
+    change.after = change.exists ? m_workspace->read(change.path, &ok) : QString();
+    if (change.exists && !ok)
+        return std::nullopt;
+    if (change.exists == change.existed && change.after == change.before)
+        return std::nullopt; // (nothing changed in the end)
+    return change;
+}
+
+void WorkspaceAgents::settleChanges(const QString &path)
+{
+    if (!m_tracking.contains(path))
+        return;
+    lastLook(path);
     QList<FileChange> changed;
-    for (FileChange c : m_tracking.take(path)) {
-        c.exists = QFileInfo::exists(m_workspace->absoluteFilePath(c.path));
-        bool ok = false;
-        c.after = c.exists ? m_workspace->read(c.path, &ok) : QString();
-        if (c.exists && !ok)
-            continue;
-        if (c.exists == c.existed && c.after == c.before)
-            continue; // (nothing changed in the end)
-        changed.append(c);
-    }
+    for (const FileChange &c : m_tracking.take(path))
+        if (const std::optional<FileChange> now = settled(c))
+            changed.append(*now);
     if (changed.isEmpty() && !m_changes.contains(path))
         return;
     if (changed.isEmpty())

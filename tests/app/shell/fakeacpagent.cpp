@@ -25,6 +25,10 @@
 //   "… edytuj …"      changes Dom.md by itself, as Claude Code's own Edit does: a pending edit call
 //                     naming the file, then the file changed, then the call completed with its diff:
 //                     "Zmieniono Dom.md."
+//   "… powłoką …"     changes the notebook by a shell command of its own (Claude Code's Bash): an
+//                     execute call naming no file, then "- [ ] Kupić mleko" appended to Dom.md and
+//                     Nowa.md made, the call completed 50 ms later (before the watcher tells):
+//                     "Polecenie wykonane."
 //   "… narzędzia …"   a tool call and no words
 //   "… model …"       "Model: <the model option now>"
 //   "… obrazy …"      "Obrazy: <the prompt's pictures: the file names of its image and resource_link blocks>"
@@ -540,6 +544,28 @@ int main(int argc, char **argv)
                                                                        {u"oldText"_s, u"Zapłacić czynsz"_s},
                                                                        {u"newText"_s, u"Zapłacić czynsz i prąd"_s}}}}});
                 end(u"Zmieniono Dom.md."_s);
+                continue;
+            }
+            if (text.contains(u"powłoką"_s)) {
+                update(session, {{u"sessionUpdate"_s, u"tool_call"_s},
+                                 {u"toolCallId"_s, u"x1"_s},
+                                 {u"title"_s, u"echo '- [ ] Kupić mleko' >> Dom.md"_s},
+                                 {u"kind"_s, u"execute"_s},
+                                 {u"status"_s, u"in_progress"_s}});
+                QThread::msleep(300); // (the client sees the call before the files change)
+                QFile dom(QDir(cwd).filePath(u"Dom.md"_s));
+                if (dom.open(QIODevice::Append))
+                    dom.write("- [ ] Kupić mleko\n");
+                dom.close();
+                QFile made(QDir(cwd).filePath(u"Nowa.md"_s));
+                if (made.open(QIODevice::WriteOnly))
+                    made.write("- nowa\n");
+                made.close();
+                QThread::msleep(50); // (the turn ends before the client's file watcher tells it: a quick agent)
+                update(session, {{u"sessionUpdate"_s, u"tool_call_update"_s},
+                                 {u"toolCallId"_s, u"x1"_s},
+                                 {u"status"_s, u"completed"_s}});
+                end(u"Polecenie wykonane."_s);
                 continue;
             }
             if (text.contains(u"plan"_s)) {

@@ -75,6 +75,7 @@
 #include "acp/acp.h"
 #include "acp/apptunnel.h"
 #include "acp/remote.h"
+#include "types.h"
 
 #include <QHash>
 #include <QJsonArray>
@@ -322,9 +323,15 @@ public:
     /// The files of the notebook the last turn of `path` changed (as T3 Code's turn diffs), each
     /// {path, oldText, newText, existed, exists, known}: `known` false when the text before is not
     /// (the change came before the app saw the call): no undo for it. Followed through the
-    /// agent's tool calls that name files (edit, move, delete) and its fs/write_text_file; kept
-    /// until its next turn starts (in memory). [] none — or the agent is on another computer.
+    /// agent's tool calls that name files (edit, move, delete) and its fs/write_text_file, and
+    /// another program's changes while the turn runs a command (notesChanging()); kept until its
+    /// next turn starts (in memory). [] none — or the agent is on another computer.
     QVariantList changes(const QString &path) const;
+    /// The notebook's files are about to change (Workspace::onVaultChanged, before the index takes
+    /// their new text): another program's changes while a turn runs a command — a shell command of
+    /// the agent names no file (Claude Code's Bash) — are that turn's changes, their text before
+    /// the index's (a note's as the notebook saw it; another file's not known: no undo for it).
+    void notesChanging(const QList<VaultChange> &changes);
     /// Puts each of them back as it was before the turn (a file it made goes to the trash), unless
     /// it changed since: {undone (how many), skipped (their paths)}.
     QVariantMap undoChanges(const QString &path);
@@ -511,6 +518,19 @@ private:
                   bool done = false);
     /// The turn's tool calls so far: their files kept before they change.
     void followTools(acp::Client *client, const QString &path);
+    /// The turn of `path` runs or ran a command (an execute call): another program's changes are its.
+    bool runsCommand(const QString &path) const;
+    /// The tracked conversations whose turn runs a command.
+    QStringList commandTurns() const;
+    /// Another program's `change` kept for each of `turns` (notesChanging()).
+    void keepExternal(const QStringList &turns, const VaultChange &change);
+    /// The turn of `path` ends: its calls' last updates, and the notebook looked at once more.
+    void lastLook(const QString &path);
+    /// `change` as the file is now (`after`, `exists`); none when it is the same as before or unreadable.
+    std::optional<FileChange> settled(FileChange change) const;
+    /// Keeps `file`'s text before (`before`, `existed`, `known`) for the turn of `path`, unless kept
+    /// already (the first sight of a file wins: a call that names it knows better).
+    void keepBefore(const QString &path, const QString &file, const QString &before, bool existed, bool known);
     /// The turn of `path` ended: what it changed, as it is now.
     void settleChanges(const QString &path);
     void terminalRequest(Process *p, const QString &key, const QJsonValue &id, const QString &method,

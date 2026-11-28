@@ -2475,11 +2475,17 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   delete naming it (`locations`, its diff's path: Claude Code changes files with tools of its own,
   never asking the app) or the agent's `fs/write_text_file`; a snapshot that already holds the
   call's change (the app saw the call late) is turned back with the call's diff
-  (`WorkspaceAgents::textBefore()`), or marked "not known before". Undo writes each file back as it
-  was (a file the turn made goes to the trash) unless it changed since — those stay, said in the
-  toast (`undoChanges()`). In memory until the conversation's next turn starts; not for an agent
-  on another computer (its files are there), nor for Brulion's own MCP tools (another process:
-  their writes are in the pages' history).
+  (`WorkspaceAgents::textBefore()`), or marked "not known before". A shell command names no file
+  (Claude Code's Bash, Codex's commands: an execute call): while a turn runs one, another program's
+  changes of the notebook — files made, changed, deleted or renamed — are that turn's, their text
+  before taken from the index before it takes the new one (`WorkspaceAgents::notesChanging()`,
+  called by `Workspace::onVaultChanged()`; a file that is no note: not known before), and the
+  turn's end looks at the notebook once more (`Vault::rescan()`: the file watcher waits a moment,
+  and a quick agent ends its turn first). Undo writes each file back as it was (a file the turn
+  made goes to the trash) unless it changed since — those stay, said in the toast
+  (`undoChanges()`). In memory until the conversation's next turn starts; not for an agent on
+  another computer (its files are there), nor for Brulion's own MCP tools in a turn that runs no
+  command (another process: their writes are in the pages' history).
 * Tests: `tst_acp` (the protocol, the agent played), `tst_shell_agents` (a real Workspace and a real
   program that speaks ACP: `tests/app/shell/fakeacpagent.cpp`; `realAgent` and `realAgentThread` —
   a thread in a real git project, tried with Claude Code and Codex — with a real one,
@@ -2487,7 +2493,10 @@ Codex 2.8 and OpenCode 1.19 (the opt-in test `tst_shell_agents realAgent`,
   `BRULION_REAL_ACP_CHILD`, `BRULION_REAL_ACP_CHILD_OPTION` —: the parent's agent starts a
   sub-conversation with wake through the real brulion-cli and a control socket of the test's own, the
   child answers, the parent is woken and answers with it; tried Claude Code → Codex and Codex →
-  Claude Code on 2026-11-27), `tst_shell_chattools` (the calls in words,
+  Claude Code on 2026-11-27; `realAgentChatFeatures` — a message queued while a turn runs, one
+  steered in, a side chat, a fork, "Edit from here" — and `realAgentUndoesItsChanges` — a file the
+  turn changed with the agent's editing tool or a shell command, put back by Undo —, tried with
+  Claude Code (Haiku) on 2026-11-28; the played agent's shell command: `shellChangesUndone`), `tst_shell_chattools` (the calls in words,
   English and Polish plural forms), the shell self-test's `checkChatDrawings` (the drawings of an
   answer, ChatActivity under each "Tool calls in chat") and `checkCodeMode` (Code mode: a project and
   its thread, the header, the sidebar, the Changes panel, the file picker, find in the thread).

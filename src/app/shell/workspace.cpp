@@ -6,6 +6,7 @@
 #include "indexworkers.h"
 #include "picturesize.h"
 #include "util/unicode.h"
+#include "workspaceagents.h"
 #include "workspacereminders.h"
 #include "workspacesync.h"
 
@@ -727,6 +728,8 @@ void Workspace::onVaultChanged(const QList<VaultChange> &changes)
         }
     }
     m_extensions->notesChanging(changes); // (where they come from, the tasks before: hooks)
+    if (WorkspaceAgents *agents = m_chats->agents()) // (an agent's shell command: its turn's, the text before)
+        agents->notesChanging(changes);
     const int versionBefore = m_index->version();
     const quint64 reporting = m_vault->reportingWrite(); // (0: no async write of an editor)
     {

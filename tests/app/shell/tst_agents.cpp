@@ -1786,6 +1786,41 @@ private Q_SLOTS:
         QVERIFY(chats->changes(path).isEmpty());
     }
 
+    /// Files an agent's shell command changed (it names none: Claude Code's Bash) are the turn's
+    /// changes too — their text before from the index, as the notebook saw it — and Undo puts them
+    /// back; another program's change while a turn runs no command is not the turn's.
+    void shellChangesUndone()
+    {
+        auto ws = open({fake()});
+        WorkspaceChats *chats = ws->chats();
+        const QString dom = ws->read(u"Dom.md"_s);
+        const QString path = chats->send(QString(), u"Proszę powłoką"_s, QString(), {}, u"acp:fake"_s);
+        shell::ChatTurn *turn = chats->turn(path);
+        QTRY_VERIFY_WITH_TIMEOUT(!turn->running(), 20000);
+        QCOMPARE(turn->failure(), QString());
+        QCOMPARE(ws->read(u"Dom.md"_s), dom + u"- [ ] Kupić mleko\n"_s);
+        QVariantMap byPath;
+        for (const QVariant &c : chats->changes(path))
+            byPath.insert(c.toMap().value(u"path"_s).toString(), c);
+        QCOMPARE(byPath.keys(), (QStringList{u"Dom.md"_s, u"Nowa.md"_s}));
+        const QVariantMap changed = byPath.value(u"Dom.md"_s).toMap();
+        QCOMPARE(changed.value(u"oldText"_s).toString(), dom);
+        QVERIFY(changed.value(u"known"_s).toBool() && changed.value(u"existed"_s).toBool());
+        const QVariantMap made = byPath.value(u"Nowa.md"_s).toMap();
+        QVERIFY(!made.value(u"existed"_s).toBool() && made.value(u"exists"_s).toBool());
+        QVERIFY(!chats->undoChanges(path).isEmpty());
+        QCOMPARE(ws->read(u"Dom.md"_s), dom);
+        QTRY_VERIFY(!QFileInfo::exists(ws->absoluteFilePath(u"Nowa.md"_s))); // (to the trash)
+
+        // Another program's change while the turn runs no command: not the turn's.
+        QCOMPARE(chats->send(path, u"Proszę powoli"_s), path);
+        QVERIFY(turn->running());
+        QVERIFY(writeRaw(ws->absoluteFilePath(u"Dom.md"_s), "- [ ] Zmiana z innego programu\n"));
+        QTRY_VERIFY_WITH_TIMEOUT(!turn->running(), 20000);
+        QTRY_VERIFY(ws->read(u"Dom.md"_s).contains(u"innego programu"_s));
+        QVERIFY(chats->changes(path).isEmpty());
+    }
+
     void stop()
     {
         auto ws = open({fake()});
@@ -2097,6 +2132,176 @@ private Q_SLOTS:
         QCOMPARE(turn->failure(), QString());
         QVERIFY(ws->read(path).contains(u"czynsz"_s, Qt::CaseInsensitive));
         qInfo() << "usage:" << chats->agentUsage(path);
+    }
+
+    // The chat's T3 Code features with a real agent, when one is named (BRULION_REAL_ACP_AGENT and
+    // BRULION_REAL_ACP_OPTION as in realAgent(); docs/UI.md "AI chat"): a message queued while a
+    // turn runs goes after it; one steered in stops the turn and is answered; a side chat (/btw)
+    // answers beside the conversation without touching it; "Fork from here" goes on in a session
+    // of its own; "Edit from here" gives the next turn a new session with what is left.
+    void realAgentChatFeatures()
+    {
+        const QString command = qEnvironmentVariable("BRULION_REAL_ACP_AGENT");
+        if (command.isEmpty())
+            QSKIP("no real agent named (BRULION_REAL_ACP_AGENT)");
+        auto ws = open({AgentConfig{u"real"_s, u"Real"_s, command, true}});
+        WorkspaceChats *chats = ws->chats();
+        if (const QString option = qEnvironmentVariable("BRULION_REAL_ACP_OPTION"); option.contains(u'=')) {
+            QSignalSpy checked(chats, &WorkspaceChats::agentChecked);
+            chats->checkAgent(u"real"_s);
+            QTRY_COMPARE_WITH_TIMEOUT(checked.size(), 1, 240000);
+            chats->setAgentOption(QString(), u"acp:real"_s, option.section(u'=', 0, 0), option.section(u'=', 1));
+        }
+        // Its questions (may it edit Dom.md?) allowed as they come, in every conversation.
+        QStringList conversations;
+        QTimer answers;
+        answers.setInterval(200);
+        QObject::connect(&answers, &QTimer::timeout, chats, [&] {
+            for (const QString &p : std::as_const(conversations)) {
+                if (!chats->asking(p))
+                    continue;
+                const QStringList options = chats->questionOptions(p);
+                QString allow = options.value(0);
+                for (const QString &o : options)
+                    if (o.contains(u"allow"_s, Qt::CaseInsensitive) && !o.contains(u"always"_s, Qt::CaseInsensitive)) {
+                        allow = o;
+                        break;
+                    }
+                qInfo() << "asked:" << chats->questionText(p) << "->" << allow;
+                chats->answer(p, allow);
+            }
+        });
+        answers.start();
+        const auto settled = [chats](const QString &p) {
+            return QTest::qWaitFor([&] { return !chats->turn(p)->running() && chats->queued(p).isEmpty(); }, 600000);
+        };
+        const auto said = [chats](const QString &p, const QString &word) {
+            return chats->lastAnswer(p).contains(word, Qt::CaseInsensitive);
+        };
+
+        // A message queued while the first turn runs: answered after it, in a turn of its own.
+        const QString path = chats->send(QString(), u"Wymień po kolei dni tygodnia po polsku, każdy w osobnej linii."_s,
+                                         QString(), {}, u"acp:real"_s);
+        QVERIFY(!path.isEmpty());
+        conversations << path;
+        QVERIFY(chats->turn(path)->running());
+        QVERIFY(chats->queue(path, u"Teraz odpowiedz tylko jednym słowem, wielkimi literami: KOLEJKA"_s));
+        QCOMPARE(chats->queued(path).size(), 1);
+        QVERIFY(settled(path));
+        qInfo().noquote() << ws->read(path);
+        QCOMPARE(chats->turn(path)->failure(), QString());
+        QVERIFY(ws->read(path).contains(u"środa"_s, Qt::CaseInsensitive));
+        QVERIFY2(said(path, u"KOLEJKA"_s), qPrintable(chats->lastAnswer(path)));
+        QCOMPARE(chat::parse(ws->read(path)).messages.size(), 4);
+
+        // Steered in while a long answer is being written: the turn stops, the new message is answered.
+        QCOMPARE(chats->send(path, u"Napisz długi wiersz o Bałtyku, dwanaście zwrotek po cztery wersy."_s), path);
+        QVERIFY(QTest::qWaitFor(
+                [&] { return !chats->turn(path)->partial().isEmpty() || !chats->turn(path)->running(); }, 300000));
+        QVERIFY(chats->steer(path, u"Przestań pisać wiersz. Odpowiedz tylko jednym słowem, wielkimi literami: STER"_s));
+        QVERIFY(settled(path));
+        qInfo().noquote() << ws->read(path).section(u"Bałtyku"_s, 1);
+        QCOMPARE(chats->turn(path)->failure(), QString());
+        QVERIFY2(said(path, u"STER"_s), qPrintable(chats->lastAnswer(path)));
+
+        // A side question (/btw): its own page, answered there; the conversation untouched.
+        const QString before = ws->read(path);
+        const QString side = chats->askAside(path, u"Ile to jest 17 + 25? Odpowiedz samą liczbą."_s);
+        QVERIFY(!side.isEmpty());
+        conversations << side;
+        QCOMPARE(chats->sideOf(side), path);
+        QVERIFY(settled(side));
+        QCOMPARE(chats->turn(side)->failure(), QString());
+        QVERIFY2(said(side, u"42"_s), qPrintable(chats->lastAnswer(side)));
+        QCOMPARE(ws->read(path), before);
+
+        // Fork from the first answer: a copy up to it that goes on in a session of its own.
+        const chat::Conversation c = chat::parse(ws->read(path));
+        const QString forked = chats->fork(path, c.messages.at(1).line);
+        QVERIFY(!forked.isEmpty());
+        conversations << forked;
+        QCOMPARE(chats->forkedFrom(forked), path);
+        QCOMPARE(chats->send(forked, u"Który dzień wymieniłeś jako trzeci? Odpowiedz samą nazwą dnia."_s), forked);
+        QVERIFY(settled(forked));
+        QCOMPARE(chats->turn(forked)->failure(), QString());
+        QVERIFY2(said(forked, u"środa"_s), qPrintable(chats->lastAnswer(forked)));
+        QCOMPARE(ws->read(path), before);
+
+        // Edit from here: the steered message and what came after it out; a new session goes on.
+        const chat::Conversation now = chat::parse(ws->read(path));
+        int steered = -1;
+        for (const chat::Message &m : now.messages)
+            if (m.role == chat::Role::User && m.text.contains(u"STER"_s))
+                steered = m.line;
+        QVERIFY(steered >= 0);
+        QVERIFY(chats->rewind(path, steered).contains(u"STER"_s));
+        QVERIFY(!ws->read(path).contains(u"STER"_s));
+        QCOMPARE(chats->send(path, u"Odpowiedz tylko jednym słowem, wielkimi literami: EDYCJA"_s), path);
+        QVERIFY(settled(path));
+        QCOMPARE(chats->turn(path)->failure(), QString());
+        QVERIFY2(said(path, u"EDYCJA"_s), qPrintable(chats->lastAnswer(path)));
+
+        qInfo() << "usage:" << chats->agentUsage(path);
+    }
+
+    // A file a real agent's turn changed in the notebook is put back by Undo (docs/UI.md "AI agents
+    // (ACP)": a turn's changed files), when one is named (BRULION_REAL_ACP_AGENT, _OPTION): `how`
+    // says how the agent is asked to write — with its own editing tool, or a shell command.
+    void realAgentUndoesItsChanges_data()
+    {
+        QTest::addColumn<QString>("how");
+        QTest::newRow("its editing tool") << u"Użyj swojego narzędzia do edycji plików (nie powłoki)."_s;
+        QTest::newRow("a shell command") << u"Użyj jednego polecenia powłoki (echo z >>), nie narzędzia do edycji."_s;
+    }
+    void realAgentUndoesItsChanges()
+    {
+        QFETCH(QString, how);
+        const QString command = qEnvironmentVariable("BRULION_REAL_ACP_AGENT");
+        if (command.isEmpty())
+            QSKIP("no real agent named (BRULION_REAL_ACP_AGENT)");
+        auto ws = open({AgentConfig{u"real"_s, u"Real"_s, command, true}});
+        WorkspaceChats *chats = ws->chats();
+        if (const QString option = qEnvironmentVariable("BRULION_REAL_ACP_OPTION"); option.contains(u'=')) {
+            QSignalSpy checked(chats, &WorkspaceChats::agentChecked);
+            chats->checkAgent(u"real"_s);
+            QTRY_COMPARE_WITH_TIMEOUT(checked.size(), 1, 240000);
+            chats->setAgentOption(QString(), u"acp:real"_s, option.section(u'=', 0, 0), option.section(u'=', 1));
+        }
+        QString path;
+        QTimer answers;
+        answers.setInterval(200);
+        QObject::connect(&answers, &QTimer::timeout, chats, [&] {
+            if (path.isEmpty() || !chats->asking(path))
+                return;
+            const QStringList options = chats->questionOptions(path);
+            QString allow = options.value(0);
+            for (const QString &o : options)
+                if (o.contains(u"allow"_s, Qt::CaseInsensitive) && !o.contains(u"always"_s, Qt::CaseInsensitive)) {
+                    allow = o;
+                    break;
+                }
+            qInfo() << "asked:" << chats->questionText(path) << "->" << allow;
+            chats->answer(path, allow);
+        });
+        answers.start();
+        const QString dom = ws->read(u"Dom.md"_s);
+        path = chats->send(QString(),
+                           u"Dopisz na końcu pliku Dom.md w folderze, w którym pracujesz, jedną linię: "
+                           u"\"- [ ] Kupić mleko\". "_s
+                                   + how + u" Nie zmieniaj niczego innego i odpowiedz krótko."_s,
+                           QString(), {}, u"acp:real"_s);
+        QVERIFY(!path.isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->turn(path)->running(), 600000);
+        qInfo().noquote() << ws->read(path);
+        QCOMPARE(chats->turn(path)->failure(), QString());
+        QTRY_VERIFY_WITH_TIMEOUT(ws->read(u"Dom.md"_s).contains(u"Kupić mleko"_s), 10000);
+        const QVariantList changed = chats->changes(path);
+        qInfo() << "changes:" << changed;
+        QVERIFY(std::ranges::any_of(changed, [](const QVariant &f) {
+            return f.toMap().value(u"path"_s).toString().endsWith(u"Dom.md"_s);
+        }));
+        qInfo() << "undo:" << chats->undoChanges(path);
+        QTRY_COMPARE_WITH_TIMEOUT(ws->read(u"Dom.md"_s), dom, 10000);
     }
 
     // A real agent's thread in a real git project (docs/CODE.md), when one is named:
