@@ -357,6 +357,18 @@ bool JournalView::makeDay(int day, at::Context<JournalView> &cx)
             });
             return took;
         };
+        // Its drags: the stream's view, the selection going on into the other days.
+        e.viewport = [app, self] {
+            const JournalView *j = app->tryGet<JournalView>(self);
+            return j ? j->viewport() : std::nullopt;
+        };
+        e.selectTo = [app, self, guard](int fixedRow, at::Point p) {
+            bool took = false;
+            app->updateEntity<JournalView>(self, [&](JournalView &j, at::Context<JournalView> &) {
+                took = j.selectAcross(guard.data(), fixedRow, p).has_value();
+            });
+            return took;
+        };
         v.setEmbedding(std::move(e), pc);
         v.setStyle(dayMetrics(day), m_palette);
         v.setKeysActive(keys, pc);
@@ -1035,6 +1047,22 @@ at::AnyElement JournalView::render(at::Window &window, at::Context<JournalView> 
                            .lineHeight(m_metrics.lineHeight)
                            .textColor(m_palette.text)
                            .fontFamily(m_palette.bodyFamily))
+            // A drag of a day's blocks: its moves and its release (the day may be scrolled away).
+            .child(at::canvas([id](at::Rect, at::Window &window, at::App &) {
+                       window.onMouseEvent([id](const at::PlatformInput &input, at::DispatchPhase phase,
+                                                at::Window &w, at::App &app) {
+                           if (phase != at::DispatchPhase::Capture)
+                               return;
+                           bool stop = false;
+                           app.updateEntity<JournalView>(id, [&](JournalView &j, at::Context<JournalView> &) {
+                               stop = j.followDrag(input);
+                           });
+                           if (stop)
+                               w.stopPropagation();
+                       });
+                   })
+                           .absolute()
+                           .size(0))
             // After the frame: the days far from the view go.
             .child(at::canvas([self](at::Rect, at::Window &, at::App &app) {
                        if (self->m_releaseScheduled)
@@ -1271,42 +1299,6 @@ at::AnyElement JournalView::prompt(int day, const DayInfo &info)
                    })
                            .absolute()
                            .inset(0));
-}
-
-// --- A drag across days --------------------------------------------------------------------------
-
-void JournalView::dragAcross(at::Point p)
-{
-    if (!m_stream)
-        return;
-    // The day whose block the mouse pressed, and the day under the pointer now.
-    int from = -1;
-    int fromRow = -1;
-    for (int d : madeDays()) {
-        const int pressed = m_slots[std::size_t(d)].day->page.read(*m_app).pressedRow();
-        if (pressed >= 0) {
-            from = d;
-            fromRow = pressed;
-            break;
-        }
-    }
-    const int to = dayAtY(p.y);
-    if (from < 0 || to < 0 || to == from)
-        return;
-    PageController *target = controller(to);
-    PageController *source = controller(from);
-    if (!target || !source)
-        return;
-    const PageView &view = m_slots[std::size_t(to)].day->page.read(*m_app);
-    int row = view.rowAtY(p.y);
-    if (row < 0)
-        row = to < from ? target->lastVisibleRow() : target->nextVisibleRow(-1);
-    if (row < 0)
-        return;
-    if (m_stream->extendFrom(source, fromRow, target, row))
-        m_slots[std::size_t(from)].day->page.update(*m_app, [](PageView &v, at::Context<PageView> &) {
-            v.markDragSelected();
-        });
 }
 
 } // namespace brulion::editor::atr

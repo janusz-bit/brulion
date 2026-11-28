@@ -227,7 +227,23 @@ private:
     bool pastEdge(PageController *from, bool up, float x, atrament::Context<JournalView> &cx);
     // Today's date by the days' model (its isToday row).
     QString todayDate() const;
+    // --- Drags across days (journaldrag.cpp).
+    // The stream's view (window px, by the last frame) and how far it scrolled since.
+    std::optional<atrament::Rect> viewport() const;
+    float scrolledSinceFrame() const;
+    // The pointer's y held into the view, where the days are now (the last frame's coordinates).
+    float pointerY(atrament::Point p) const;
+    // The day drawn at `y` (else the nearest one drawn; −1: none) and the block of its page at `y`
+    // (above its blocks the first one, below them the last one; −1: none).
+    int dayUnder(float y) const;
+    int blockUnder(int day, float y) const;
+    // A drag selecting from `fromRow` of `from` at window point `p`: over another day the selection
+    // goes on there (whether it changed); nothing over `from`'s own day.
+    std::optional<bool> selectAcross(PageController *from, int fromRow, atrament::Point p);
+    // A mouse's press on a block dragged straight into another day (before its own drag began).
     void dragAcross(atrament::Point p);
+    // A move or a release of a day's drag (PageView::followDrag): whether it was the drag's.
+    bool followDrag(const atrament::PlatformInput &input);
     atrament::AnyElement renderDay(std::size_t row);
     atrament::AnyElement heading(int day, const DayInfo &info);
     atrament::AnyElement prompt(int day, const DayInfo &info);

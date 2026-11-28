@@ -335,6 +335,12 @@ public:
         // ↑ on the first line of the page's first block / ↓ on the last line of its last one, the
         // caret at window x: true when the view around took it (the next day's block edited).
         std::function<bool(bool up, float x)> pastEdge;
+        // The view around in window px: a drag's edge scrolling and the pointer held into it.
+        std::function<std::optional<atrament::Rect>()> viewport;
+        // A drag selecting blocks from row `fixedRow` of this page is at window point `p` (the rows
+        // where they are now): over another page of the view around the selection goes on there —
+        // true; over this one, false (the page selects).
+        std::function<bool(int fixedRow, atrament::Point p)> selectTo;
     };
     void setEmbedding(std::optional<PageEmbedding> embedding, atrament::Context<PageView> &cx);
     bool embedded() const { return m_embedding.has_value(); }
@@ -365,6 +371,12 @@ public:
     // having selected blocks elsewhere (another day): its release edits nothing.
     int pressedRow() const;
     void markDragSelected() { m_dragSelected = true; }
+    // A drag of blocks goes on (or a mouse's press dragged across them), and a mouse's or a finger's
+    // move or release on its way: followed (true: it was the drag's — nothing under it sees it). The
+    // page's drag layer calls it, or — embedded — the view around, which sees the drag's events while
+    // this page is scrolled away.
+    bool dragging() const;
+    bool followDrag(const atrament::PlatformInput &input, atrament::Context<PageView> &cx);
     // The find bar's query the rows tint (tests).
     const QString &findQuery() const { return m_find.query; }
 

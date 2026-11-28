@@ -6948,9 +6948,11 @@ list"; `qml/editor/EditorAtramentJournal.qml`, loaded by JournalsView by its fil
 * **Kept as QML**: the missed reminders, the days' count and "Go to day…" above the days, the empty
   journal's hint below them, a day's rows Atrament does not draw yet (its BlockDelegates, as on a
   page), a zoomed day's breadcrumb — placed over the list.
-* Not yet: the selection's drag scrolling the stream at its edges (the wheel and Shift+click reach
-  farther days), a long day laid out only where it shows (a day is laid out whole, as
-  ContentJournalDay builds all its blocks).
+* **Dragging across days**: a mouse's or a finger's drag selection that leaves its day selects on
+  into the day under the pointer; held at the stream's top or bottom edge it scrolls the stream,
+  the days coming in taking the selection's end — also once the day it began in has scrolled away.
+* Not yet: a long day laid out only where it shows (a day is laid out whole, as ContentJournalDay
+  builds all its blocks).
 
 ### The task list drawn by Atrament
 

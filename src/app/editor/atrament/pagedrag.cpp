@@ -7,7 +7,9 @@
 // out of a parent), and one undo step (PageController::moveSelectionTo). Near the view's top or
 // bottom edge the page scrolls while the drag is held there (atrament::EdgeScroller). While a drag
 // goes on its moves and its release are taken before the rows see them (a capture listener of the
-// drag layer): no hover follows it, its release clicks nothing.
+// drag layer, or of the view around for a page embedded in it: followDrag()): no hover follows it,
+// its release clicks nothing. Embedded (a day of the journal stream), a drag that leaves the page
+// goes on in the view around (PageEmbedding: the selection into the other days).
 #include "pageview.h"
 
 #include "blocklistmodel.h"
@@ -38,6 +40,9 @@ float PageView::scrolledSinceFrame() const
 
 std::optional<at::Rect> PageView::listViewport() const
 {
+    // Embedded: the view around (the page's header may be far out of it, or not drawn at all).
+    if (m_embedding && m_embedding->viewport)
+        return m_embedding->viewport();
     const ForeignFrame *header = edgeFrame(ForeignFrame::Kind::Header);
     if (!header)
         return std::nullopt;
@@ -207,6 +212,11 @@ void PageView::dragUpdate(at::Context<PageView> &)
         const int fixed = m_model->rowOfUid(m_drag.kind == DragKind::Select ? m_dragUid : m_drag.uid);
         if (fixed < 0)
             return;
+        // Over another page of the view around: the selection goes on there.
+        if (m_embedding && m_embedding->selectTo && m_embedding->selectTo(fixed, m_drag.last)) {
+            m_dragFocus = -1;
+            return;
+        }
         const int row = dragRowAt(m_drag.last);
         if (row < 0 || m_model->index(row, 0).data(BlockListModel::ViewRole).toString() == u"frontmatter")
             return;
@@ -343,58 +353,70 @@ void PageView::paintDropLine(DropTarget &t, at::Window &window)
     window.popContentMask();
 }
 
+bool PageView::followDrag(const at::PlatformInput &input, at::Context<PageView> &c)
+{
+    const auto *move = std::get_if<at::MouseMoveEvent>(&input);
+    const auto *up = std::get_if<at::MouseUpEvent>(&input);
+    if (!move && !up)
+        return false;
+    // A mouse's drag selection that dragOver began: followed from here on.
+    if (m_drag.kind == DragKind::None && m_dragSelected) {
+        m_drag.kind = DragKind::Select;
+        m_drag.active = true;
+        m_drag.pointer = at::PointerKind::Mouse;
+    }
+    if (m_drag.kind == DragKind::None)
+        return false;
+    if (move) {
+        // Only the dragging pointer's moves (not a hover Qt Quick makes where a finger is).
+        if (!followsPointer(move->pointer))
+            return false;
+        // A mouse released where the window did not see it: the drag is over.
+        if (move->pointer == at::PointerKind::Mouse && move->pressedButton != at::MouseButton::Left) {
+            dragReleased(true, c);
+            return false;
+        }
+        dragMoved(move->position, c);
+        return m_drag.active;
+    }
+    const bool stop = m_drag.active;
+    // (Where it was let go counts: a last stretch no move showed.)
+    if (m_drag.active && !up->cancelled && !(up->position == m_drag.last)) {
+        m_drag.last = up->position;
+        dragUpdate(c);
+    }
+    dragReleased(up->cancelled, c);
+    return stop;
+}
+
+bool PageView::dragging() const
+{
+    return m_drag.kind != DragKind::None || m_dragSelected;
+}
+
 at::AnyElement PageView::dragLayer()
 {
     // Nothing between drags (no listener, nothing painted).
-    if (m_drag.kind == DragKind::None && !m_dragSelected)
+    if (!dragging())
         return at::div().absolute().size(0);
     PageView *self = this;
     const at::EntityId id = m_selfId;
-    return at::canvas([self, id](at::Rect, at::Window &window, at::App &) {
-               // The drop line where the moved blocks would go (BlockDelegate's text column of their
-               // level, to the column's right edge), cut to the list's view.
+    // Embedded, the view around follows the drag (it goes on while this page is scrolled away).
+    const bool listens = !m_embedding;
+    return at::canvas([self, id, listens](at::Rect, at::Window &window, at::App &) {
+               // The drop line where the moved blocks would go.
                if (self->m_drag.kind == DragKind::Move && self->m_drag.active && self->m_drag.drop)
                    self->paintDropLine(*self->m_drag.drop, window);
+               if (!listens)
+                   return;
                // The drag's moves and its release before anything under it sees them.
                window.onMouseEvent([id](const at::PlatformInput &input, at::DispatchPhase phase, at::Window &w,
                                         at::App &app) {
                    if (phase != at::DispatchPhase::Capture)
                        return;
-                   const auto *move = std::get_if<at::MouseMoveEvent>(&input);
-                   const auto *up = std::get_if<at::MouseUpEvent>(&input);
-                   if (!move && !up)
-                       return;
                    bool stop = false;
                    app.updateEntity<PageView>(id, [&](PageView &v, at::Context<PageView> &c) {
-                       // A mouse's drag selection that dragOver began: followed from here on.
-                       if (v.m_drag.kind == DragKind::None && v.m_dragSelected) {
-                           v.m_drag.kind = DragKind::Select;
-                           v.m_drag.active = true;
-                           v.m_drag.pointer = at::PointerKind::Mouse;
-                       }
-                       if (v.m_drag.kind == DragKind::None)
-                           return;
-                       if (move) {
-                           // Only the dragging pointer's moves (not a hover Qt Quick makes where a
-                           // finger is).
-                           if (!v.followsPointer(move->pointer))
-                               return;
-                           // A mouse released where the window did not see it: the drag is over.
-                           if (move->pointer == at::PointerKind::Mouse && move->pressedButton != at::MouseButton::Left) {
-                               v.dragReleased(true, c);
-                               return;
-                           }
-                           v.dragMoved(move->position, c);
-                           stop = v.m_drag.active;
-                       } else {
-                           stop = v.m_drag.active;
-                           // (Where it was let go counts: a last stretch no move showed.)
-                           if (v.m_drag.active && !up->cancelled && !(up->position == v.m_drag.last)) {
-                               v.m_drag.last = up->position;
-                               v.dragUpdate(c);
-                           }
-                           v.dragReleased(up->cancelled, c);
-                       }
+                       stop = v.followDrag(input, c);
                    });
                    if (stop)
                        w.stopPropagation();

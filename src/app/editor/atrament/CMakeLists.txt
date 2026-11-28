@@ -9,7 +9,7 @@ qt_add_library(brulion_editor_atrament STATIC
     pagelinks.cpp
     pageediting.cpp
     pageembed.cpp
-    journalview.h journalview.cpp
+    journalview.h journalview.cpp journaldrag.cpp
     calcrows.cpp
     rulerows.cpp
     pagepoints.cpp

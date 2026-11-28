@@ -19,12 +19,14 @@
 #include <QStandardItemModel>
 #include <QTest>
 
+#include <chrono>
 #include <memory>
 
 using namespace brulion;
 using namespace brulion::editor;
 using namespace brulion::editor::atr;
 using namespace Qt::StringLiterals;
+using namespace std::chrono_literals;
 namespace at = brulion::atrament;
 
 namespace {
@@ -172,6 +174,29 @@ struct Harness {
         });
         tw.settle();
     }
+    float scrollY()
+    {
+        float y = 0;
+        journal.update(app, [&](JournalView &j, at::Context<JournalView> &) { y = j.handle().scroll().offset.y; });
+        return y;
+    }
+    // The day the stream selection's focus end is in (−1: none).
+    int focusDay()
+    {
+        for (int d = 0; d < view().dayCount(); ++d)
+            if (view().dayInfo(d).path == stream.focusPath())
+                return d;
+        return -1;
+    }
+    // No day drags anything, none edits a block.
+    bool settledAfterDrag()
+    {
+        for (int d : view().madeDays()) {
+            if (page(d)->dragKind() != PageView::DragKind::None || day(d)->editingRow() >= 0)
+                return false;
+        }
+        return true;
+    }
     QString inputText(int d)
     {
         const PageView *p = page(d);
@@ -200,6 +225,8 @@ private Q_SLOTS:
     void enterAtTheBottomKeepsTheBlockInView();
     void tapUnderTheBlocksAddsOne();
     void composedWordKeptWhenAnotherDayIsActivated();
+    void mouseDragAcrossDaysScrollsTheStream();
+    void fingerSelectionAcrossDaysScrolls();
     void zoomShowsTheDaysTop();
 };
 
@@ -586,6 +613,70 @@ void TestAtramentJournal::zoomShowsTheDaysTop()
     const std::optional<at::Rect> row = h.view().rowBounds(1, last);
     QVERIFY(day && row);
     QVERIFY2(day->top() >= -0.5f && row->bottom() <= 700.5f, qPrintable(u"%1, %2"_s.arg(day->top()).arg(row->bottom())));
+}
+
+void TestAtramentJournal::mouseDragAcrossDaysScrollsTheStream()
+{
+    Harness h(14);
+    PageController *first = h.day(1);
+    // A press on day 1's first block dragged to its second one, then into the next day.
+    const at::Point from = h.pointOf(1, 0, 2);
+    h.tw.simulateMouseMove(from);
+    h.tw.simulateMouseDown(from);
+    h.tw.simulateMouseMove(h.pointOf(1, 1, 2), at::MouseButton::Left);
+    QCOMPARE(first->selectionCount(), 2);
+    h.tw.settle();
+    h.tw.simulateMouseMove(h.pointOf(2, 1, 2), at::MouseButton::Left);
+    h.tw.settle();
+    QVERIFY(h.stream.active());
+    QCOMPARE(h.focusDay(), 2);
+    // Held at the view's bottom edge (and past it, out of the window): the stream scrolls, the
+    // selection's end follows into the days that come in.
+    const float before = h.scrollY();
+    h.tw.simulateMouseMove({300, 720}, at::MouseButton::Left);
+    h.tw.advance(800ms);
+    h.tw.settle();
+    QVERIFY2(h.scrollY() > before + 300, qPrintable(QString::number(h.scrollY() - before)));
+    QVERIFY2(h.focusDay() > 3, qPrintable(QString::number(h.focusDay())));
+    QVERIFY(h.stream.active());
+    QVERIFY(!h.dayBounds(1) || h.dayBounds(1)->bottom() < 0); // the day it began in scrolled away
+    // Let go there: the drag ends, nothing is edited, the span stays; nothing scrolls any more.
+    h.tw.simulateMouseUp({300, 720});
+    h.tw.settle();
+    QVERIFY(h.settledAfterDrag());
+    QVERIFY(h.stream.active());
+    const float after = h.scrollY();
+    h.tw.advance(200ms);
+    QCOMPARE(h.scrollY(), after);
+}
+
+void TestAtramentJournal::fingerSelectionAcrossDaysScrolls()
+{
+    Harness h(14);
+    PageController *first = h.day(1);
+    // A finger held on a block: the touch selection mode with it selected (BlockEditor.longPressText).
+    h.view().page(1)->update(h.app, [first](PageView &v, at::Context<PageView> &) {
+        v.onLongPressRow = [first](int row) { first->selectRange(row, row); };
+    });
+    h.tw.simulateTouchDown(h.pointOf(1, 1, 2));
+    h.tw.advance(600ms);
+    QCOMPARE(first->selectedRow(), 1);
+    QCOMPARE(h.page(1)->dragKind(), PageView::DragKind::Extend);
+    // The finger on into the next day, then held at the bottom edge.
+    h.tw.simulateTouchMove(h.pointOf(2, 0, 2));
+    h.tw.settle();
+    QVERIFY(h.stream.active());
+    QCOMPARE(h.focusDay(), 2);
+    const float before = h.scrollY();
+    h.tw.simulateTouchMove({300, 698});
+    h.tw.advance(800ms);
+    h.tw.settle();
+    QVERIFY2(h.scrollY() > before + 300, qPrintable(QString::number(h.scrollY() - before)));
+    QVERIFY2(h.focusDay() > 3, qPrintable(QString::number(h.focusDay())));
+    h.tw.simulateTouchUp({300, 698});
+    h.tw.settle();
+    QVERIFY(h.settledAfterDrag());
+    QVERIFY(h.stream.active());
 }
 
 QTEST_MAIN(TestAtramentJournal)

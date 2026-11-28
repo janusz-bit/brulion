@@ -964,10 +964,22 @@ an item for it and 0 once the item goes: a day's footer, the stream's room under
 the host's); the zoom reveals the day's top to the zoomed block (`JournalView::revealZoom`: the day
 got shorter, what was in view may be past its end). Tested by `tst_atrament_editor_hosting`
 (`headerComesAndGoes`), `tst_atrament_journal` (`zoomShowsTheDaysTop`) and the app's self-test (the
-breadcrumb above the day's blocks, its parent crumb clicked zooming out to it, Back). **Not yet**:
-the edge scrolling of a drag across days, a long day laid out only where it shows, the QML
-stream's span self-test (`tst_content_journals_span_qml`) against this stream, a hosted row's
-delegate showing the active day's editing state while its own day is not active.
+breadcrumb above the day's blocks, its parent crumb clicked zooming out to it, Back). **Drags across
+days** (`journaldrag.cpp`): a day's drag goes on in the stream when it leaves the day — a mouse's
+drag selection and a finger's (a long press, a grip) select on into the day under the pointer
+(`PageEmbedding::selectTo` → `JournalView::selectAcross` → `StreamSelection.extendFrom`, the day
+and block where the days are now: the pointer held into the view, the scroll since the last frame
+added; over the day it began in the page selects itself, which ends a span); held near the stream's
+top or bottom edge it scrolls the stream (`PageEmbedding::viewport`: the stream's view, not the
+page's, whose header may be far away) and the days that scroll in take the selection's end; its
+moves and its release are followed by the stream (a capture listener painted after the days:
+`JournalView::followDrag` → `PageView::followDrag`; an embedded page registers none) so a drag
+whose day scrolled away — no longer laid out, no layer of its own — still ends where it is let go.
+Tested by `tst_atrament_journal` (`mouseDragAcrossDaysScrollsTheStream`,
+`fingerSelectionAcrossDaysScrolls`: they failed before — the day's own drag took the moves into the
+next day and selected inside its own day). **Not yet**: a long day laid out only where it shows,
+the QML stream's span self-test (`tst_content_journals_span_qml`) against this stream, a hosted
+row's delegate showing the active day's editing state while its own day is not active.
 
 ### Steps
 
@@ -1147,8 +1159,8 @@ scrolling, `tst_atrament_editor`) before the next:
    `AtramentView.selectionRect` is where the band is (its rows shown) for the selection's tools.
    Tested by `tests/atrament/editor/tst_atrament_selection` (the selection self-test's checks;
    `tests/atrament/ui/tst_atrament_drag` for the gestures). A mouse's drag from one journal day into
-   another extends the stream's selection ("The journal stream as one list"). Not yet: the journal
-   list's edge scrolling during such a drag, Vim's keys over a selection.
+   another extends the stream's selection, and the edge scrolling scrolls the journal stream ("The
+   journal stream as one list": drags across days). Not yet: Vim's keys over a selection.
 4. **Structure.** Folding, zoom into a block, drag to move, dates and reminders chips, the journal
    — a stream of days as sections of one list (what `JournalDayItem` draws today).
    **Built so far** (2026-11-27): folding (the arrows, step 2's entry), the bullet's zoom, and the
