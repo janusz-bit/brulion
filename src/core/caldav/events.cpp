@@ -373,6 +373,53 @@ QString normalizedColor(QStringView value)
     return names.value(v);
 }
 
+QString participantAddress(const QString &value)
+{
+    const QString v = value.trimmed();
+    if (v.startsWith(u"mailto:"_s, Qt::CaseInsensitive))
+        return v.sliced(7).trimmed().toLower();
+    return v;
+}
+
+Participation participationOf(const QString &partstat)
+{
+    static const QHash<QString, Participation> names = {{u"ACCEPTED"_s, Participation::Accepted},
+                                                        {u"DECLINED"_s, Participation::Declined},
+                                                        {u"TENTATIVE"_s, Participation::Tentative},
+                                                        {u"DELEGATED"_s, Participation::Delegated}};
+    return names.value(partstat.trimmed().toUpper(), Participation::NeedsAction);
+}
+
+namespace {
+
+Participant participantOf(const io::ical::Property &p, int maxTextLength)
+{
+    Participant out;
+    out.address = cut(participantAddress(p.value), MaxAddressLength);
+    out.name = cut(p.param(u"CN"_s).simplified(), maxTextLength); // (the parser unquotes it)
+    out.status = participationOf(p.param(u"PARTSTAT"_s));
+    if (const QString role = p.param(u"ROLE"_s).trimmed().toUpper(); !role.isEmpty())
+        out.role = role;
+    if (const QString kind = p.param(u"CUTYPE"_s).trimmed().toUpper(); !kind.isEmpty())
+        out.kind = kind;
+    return out;
+}
+
+/// ORGANIZER and the ATTENDEEs with an address (at most MaxAttendees) of `c` into `e`.
+void readParticipants(const io::ical::Component &c, Event &e, int maxTextLength)
+{
+    if (const io::ical::Property *o = c.property(u"ORGANIZER"))
+        e.organizer = participantOf(*o, maxTextLength);
+    for (const io::ical::Property &p : c.properties) {
+        if (p.name != u"ATTENDEE" || e.attendees.size() >= MaxAttendees)
+            continue;
+        if (Participant a = participantOf(p, maxTextLength); !a.address.isEmpty())
+            e.attendees.append(std::move(a));
+    }
+}
+
+} // namespace
+
 std::optional<Event> eventFromComponent(const io::ical::Component &c, int maxTextLength)
 {
     Event e;
@@ -438,6 +485,7 @@ std::optional<Event> eventFromComponent(const io::ical::Component &c, int maxTex
         if (alarm.absolute || alarm.relative)
             e.alarms.append(alarm);
     }
+    readParticipants(c, e, maxTextLength);
     return e;
 }
 

@@ -65,6 +65,7 @@ private Q_SLOTS:
     void rdatesAndUntil();
     void daylightSavingOnBothSides();
     void polishText();
+    void attendees();
     void malformed();
     void limits();
     void colors_data();
@@ -433,6 +434,47 @@ void TestCalDavEvents::polishText()
     QCOMPARE(e.location, u"Kraków; ul. Długa 5"_s);
     QCOMPARE(e.categories, (QStringList{u"Praca"_s, u"Ważne"_s}));
     QCOMPARE(e.color, u"#ff6347"_s);
+}
+
+void TestCalDavEvents::attendees()
+{
+    // An invitation: its organizer and the people invited, by address (mailto: in any case, the
+    // address in lower case), name, answer and role; an attendee without an address is left out.
+    const CalendarData data = parseCalendarData(calendar(vevent(
+            u"z"_s, u"DTSTART:20261120T170000Z\r\nSUMMARY:Planowanie\r\n"
+                    u"ORGANIZER;CN=\"Łucja Żółć\":MAILTO:Lucja@Example.PL\r\n"
+                    u"ATTENDEE;CN=Jan Kowalski;PARTSTAT=ACCEPTED;ROLE=CHAIR:mailto:jan@example.pl\r\n"
+                    u"ATTENDEE;PARTSTAT=tentative;RSVP=TRUE:mailto:ola@example.pl\r\n"
+                    u"ATTENDEE;CN=Sala 3;CUTYPE=ROOM;ROLE=NON-PARTICIPANT:mailto:sala3@example.pl\r\n"
+                    u"ATTENDEE;CN=Bez adresu:\r\n"
+                    u"ATTENDEE:urn:uuid:7b7c\r\n"_s)));
+    const Event &e = data.events.first();
+    QCOMPARE(e.organizer.address, u"lucja@example.pl"_s);
+    QCOMPARE(e.organizer.name, u"Łucja Żółć"_s);
+    QCOMPARE(e.attendees.size(), 4);
+    QCOMPARE(e.attendees.at(0).address, u"jan@example.pl"_s);
+    QCOMPARE(e.attendees.at(0).name, u"Jan Kowalski"_s);
+    QCOMPARE(e.attendees.at(0).status, Participation::Accepted);
+    QCOMPARE(e.attendees.at(0).role, u"CHAIR"_s);
+    QCOMPARE(e.attendees.at(1).status, Participation::Tentative);
+    QVERIFY(e.attendees.at(1).name.isEmpty());
+    QCOMPARE(e.attendees.at(1).role, u"REQ-PARTICIPANT"_s); // (the default)
+    QCOMPARE(e.attendees.at(2).kind, u"ROOM"_s);
+    QCOMPARE(e.attendees.at(2).status, Participation::NeedsAction); // (no PARTSTAT)
+    QCOMPARE(e.attendees.at(3).address, u"urn:uuid:7b7c"_s); // (not an e-mail: as written)
+    // A mailing list of 250 invited: the first MaxAttendees kept; an address too long is cut.
+    QString many;
+    for (int i = 0; i < 250; ++i)
+        many += u"ATTENDEE:mailto:osoba%1@example.pl\r\n"_s.arg(i);
+    many += u"ORGANIZER:mailto:"_s + QString(400, u'ż') + u"@example.pl\r\n"_s;
+    const Event &list = parseCalendarData(calendar(vevent(u"l"_s, u"DTSTART:20261120T170000Z\r\n"_s + many))).events.first();
+    QCOMPARE(list.attendees.size(), MaxAttendees);
+    QCOMPARE(list.attendees.last().address, u"osoba199@example.pl"_s);
+    QCOMPARE(list.organizer.address.size(), MaxAddressLength);
+    // Without ORGANIZER and ATTENDEE: no invitation.
+    const Event &plain = parseCalendarData(calendar(vevent(u"p"_s, u"DTSTART:20261120T170000Z\r\n"_s))).events.first();
+    QVERIFY(plain.organizer.address.isEmpty());
+    QVERIFY(plain.attendees.isEmpty());
 }
 
 void TestCalDavEvents::malformed()

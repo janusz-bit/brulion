@@ -30,6 +30,31 @@ struct EventAlarm {
     QString action;     ///< ACTION in upper case ("" when missing)
 };
 
+/// An attendee's answer to an invitation (PARTSTAT, RFC 5545 §3.2.12).
+enum class Participation : quint8 { NeedsAction, Accepted, Declined, Tentative, Delegated };
+
+/// ORGANIZER or ATTENDEE of an event (RFC 5545 §3.8.4.1, §3.8.4.3).
+struct Participant {
+    /// Its calendar address: an e-mail ("mailto:" dropped, in lower case), else the URI as written.
+    QString address;
+    QString name;                                       ///< CN ("" none)
+    Participation status = Participation::NeedsAction; ///< PARTSTAT (an attendee's)
+    QString role = QStringLiteral("REQ-PARTICIPANT");   ///< ROLE in upper case
+    QString kind = QStringLiteral("INDIVIDUAL");        ///< CUTYPE in upper case (ROOM, GROUP …)
+    friend bool operator==(const Participant &, const Participant &) = default;
+};
+
+/// The attendees of one event kept at most (a mailing list invited: the rest left out).
+inline constexpr int MaxAttendees = 200;
+/// A participant's address is cut here (an e-mail address has at most 254 characters).
+inline constexpr int MaxAddressLength = 320;
+
+/// A calendar address as Brulion compares it: "mailto:" dropped and in lower case for an e-mail,
+/// else as written (trimmed).
+QString participantAddress(const QString &value);
+/// PARTSTAT's value (any case; unknown and "" are NeedsAction).
+Participation participationOf(const QString &partstat);
+
 /// One VEVENT: a single event, a recurring series (its master) or an exception of a series (an
 /// override with a RECURRENCE-ID).
 struct Event {
@@ -54,6 +79,8 @@ struct Event {
     int sequence = 0;
     bool transparent = false; ///< TRANSP:TRANSPARENT (free time)
     QList<EventAlarm> alarms;
+    Participant organizer;          ///< ORGANIZER (address "" when the event is no invitation)
+    QList<Participant> attendees;   ///< ATTENDEEs with an address, in their order
 
     bool allDay() const { return !start.time; }
     bool cancelled() const { return status == u"CANCELLED"; }
