@@ -229,6 +229,65 @@ internal object TreeFolder {
       entryJson(after).put("exists", true)
     }
 
+  /**
+   * A write in pieces begun: a part file beside [path] (`.brulion-tmp-<name>`: a name the sync
+   * ignores, paths::isTempFile) made empty and opened for writing, its descriptor detached for the
+   * native side (which writes and closes it). Answers {"fd": n, "part": "<its path>"}. [finishWrite] puts it in [path]'s place,
+   * [abandonWrite] deletes it.
+   */
+  @JvmStatic
+  fun beginWrite(context: Context, uriString: String, path: String): String =
+    answer {
+      val tree = Uri.parse(uriString)
+      val (parentPath, name) = TreeFolderPaths.split(path)
+      if (name.isEmpty()) throw FolderException("failed", "no name: $path")
+      val parent = statEntry(context, tree, parentPath)
+      if (parent == null || !parent.dir) throw FolderException("not-found", "no folder for $path")
+      if (statEntry(context, tree, path)?.dir == true) throw FolderException("failed", "$path is a folder")
+      val part = TreeFolderPaths.join(parentPath, ".brulion-tmp-$name")
+      statEntry(context, tree, part)?.let { stale -> // (one a crash left behind)
+        DocumentsContract.deleteDocument(context.contentResolver, DocumentsContract.buildDocumentUriUsingTree(tree, stale.id))
+        forget(uriString, part)
+      }
+      val uri = create(context, tree, parent, part, TreeFolderPaths.split(part).second, FILE_MIME)
+      val descriptor = context.contentResolver.openFileDescriptor(uri, "w") ?: throw FolderException("failed", "cannot write $part")
+      JSONObject().put("fd", descriptor.detachFd()).put("part", part)
+    }
+
+  /**
+   * The part file of [beginWrite] (all [size] bytes of it) in [path]'s place: renamed over it —
+   * the old file moved aside first and deleted once the part has its name, or put back when the
+   * rename fails — or, from a provider that cannot rename, copied into [path] in pieces and then
+   * deleted. Answers the entry [path] has afterwards, as [write] does.
+   */
+  @JvmStatic
+  fun finishWrite(context: Context, uriString: String, path: String, part: String, size: Long): String =
+    answer {
+      val tree = Uri.parse(uriString)
+      val written = statEntry(context, tree, part) ?: throw FolderException("failed", "$part is gone")
+      if (written.size != size) throw FolderException("failed", "$part: ${written.size} bytes, not $size")
+      val (_, name) = TreeFolderPaths.split(path)
+      val partUri = DocumentsContract.buildDocumentUriUsingTree(tree, written.id)
+      if (!renameInto(context, tree, uriString, path, name, partUri)) copyInto(context, tree, uriString, path, partUri, size)
+      forget(uriString, part)
+      forget(uriString, path)
+      val after = statEntry(context, tree, path) ?: throw FolderException("failed", "$path gone right after it was written")
+      if (after.size != size) throw FolderException("failed", "$path: ${after.size} bytes after writing $size")
+      entryJson(after).put("exists", true)
+    }
+
+  /** The part file of a write given up, deleted (what is already gone is fine). */
+  @JvmStatic
+  fun abandonWrite(context: Context, uriString: String, part: String): String =
+    answer {
+      val tree = Uri.parse(uriString)
+      statEntry(context, tree, part)?.let { entry ->
+        DocumentsContract.deleteDocument(context.contentResolver, DocumentsContract.buildDocumentUriUsingTree(tree, entry.id))
+      }
+      forget(uriString, part)
+      JSONObject()
+    }
+
   @JvmStatic
   fun makeFolder(context: Context, uriString: String, path: String): String =
     answer {
@@ -402,6 +461,63 @@ internal object TreeFolder {
     }
     remember(tree.toString(), path, entry.id)
     return created
+  }
+
+  /** [partUri] renamed to [name] in [path]'s place; false when the provider cannot rename. */
+  private fun renameInto(context: Context, tree: Uri, uriString: String, path: String, name: String, partUri: Uri): Boolean {
+    val resolver = context.contentResolver
+    val existing = statEntry(context, tree, path)
+    var aside: Uri? = null
+    try {
+      if (existing != null) {
+        aside = DocumentsContract.renameDocument(resolver, DocumentsContract.buildDocumentUriUsingTree(tree, existing.id), ".brulion-tmp-old-$name")
+          ?: return false
+        forget(uriString, path)
+      }
+      val renamed = DocumentsContract.renameDocument(resolver, partUri, name)
+      if (renamed == null || queryOne(context, renamed)?.name != name) {
+        renamed?.let { DocumentsContract.renameDocument(resolver, it, ".brulion-tmp-$name") }
+        aside?.let { DocumentsContract.renameDocument(resolver, it, name) }
+        return false
+      }
+      aside?.let { DocumentsContract.deleteDocument(resolver, it) }
+      return true
+    } catch (e: UnsupportedOperationException) {
+      aside?.let { DocumentsContract.renameDocument(resolver, it, name) }
+      return false
+    }
+  }
+
+  /** [partUri]'s bytes copied into [path] (made when missing) in pieces, then [partUri] deleted. */
+  private fun copyInto(context: Context, tree: Uri, uriString: String, path: String, partUri: Uri, size: Long) {
+    val resolver = context.contentResolver
+    val (parentPath, name) = TreeFolderPaths.split(path)
+    val existing = statEntry(context, tree, path)
+    val target =
+      if (existing != null) {
+        DocumentsContract.buildDocumentUriUsingTree(tree, existing.id)
+      } else {
+        val parent = statEntry(context, tree, parentPath) ?: throw FolderException("not-found", "no folder for $path")
+        create(context, tree, parent, path, name, FILE_MIME)
+      }
+    val input = resolver.openInputStream(partUri) ?: throw FolderException("failed", "cannot read the part of $path")
+    val output = resolver.openOutputStream(target, if (existing != null) "wt" else "w") ?: throw FolderException("failed", "cannot write $path")
+    var copied = 0L
+    input.use { from ->
+      output.use { to ->
+        val buffer = ByteArray(256 * 1024)
+        while (true) {
+          val n = from.read(buffer)
+          if (n < 0) break
+          to.write(buffer, 0, n)
+          copied += n
+        }
+        to.flush()
+      }
+    }
+    if (copied != size) throw FolderException("failed", "$path: $copied bytes copied, not $size")
+    DocumentsContract.deleteDocument(resolver, partUri)
+    forget(uriString, path)
   }
 
   private fun queryOne(context: Context, uri: Uri): Entry? =

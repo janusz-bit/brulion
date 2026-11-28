@@ -193,6 +193,67 @@ sync::FolderError SafFolderStorage::readInto(const QString &path, qint64 maxByte
     return sync::readPieces(file, path, maxBytes, sink);
 }
 
+namespace {
+
+/// `piece`s of `source` written to `file` until the end; the bytes written, or nullopt when the
+/// source failed or the file could not take them (`why` says).
+std::optional<qint64> writePieces(QFile &file, const sync::PieceSource &source, QString *why)
+{
+    qint64 total = 0;
+    for (std::optional<QByteArray> piece = source(); !piece || !piece->isEmpty(); piece = source()) {
+        if (!piece) {
+            *why = u"its body could not be read"_s;
+            return std::nullopt;
+        }
+        if (file.write(*piece) != piece->size()) {
+            *why = file.errorString();
+            return std::nullopt;
+        }
+        total += piece->size();
+    }
+    if (!file.flush()) {
+        *why = file.errorString();
+        return std::nullopt;
+    }
+    return total;
+}
+
+} // namespace
+
+sync::FolderStatResult SafFolderStorage::writeFrom(const QString &path, const sync::PieceSource &source)
+{
+    const QJsonObject begun = callPath("beginWrite", m_tree, path);
+    if (const sync::FolderError error = errorOf(begun); error.isError())
+        return {std::nullopt, error};
+    const QString part = begun.value("part"_L1).toString();
+    const int fd = begun.value("fd"_L1).toInt(-1);
+    QFile file;
+    QString why;
+    std::optional<qint64> written;
+    if (fd >= 0 && file.open(fd, QIODevice::WriteOnly, QFileDevice::AutoCloseHandle))
+        written = writePieces(file, source, &why);
+    else
+        why = fd < 0 ? u"no descriptor"_s : file.errorString();
+    file.close();
+    if (!written) {
+        callPath("abandonWrite", m_tree, part); // (nothing of it left behind)
+        return {std::nullopt, sync::FolderError::make(sync::FolderErrorCode::Failed, u"Write %1: %2"_s.arg(path, why))};
+    }
+    const QJniObject context = appContext();
+    const QJniObject answer = QJniObject::callStaticObjectMethod(
+            kClass, "finishWrite", "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;J)Ljava/lang/String;",
+            context.object(), QJniObject::fromString(m_tree).object<jstring>(), QJniObject::fromString(path).object<jstring>(),
+            QJniObject::fromString(part).object<jstring>(), jlong(*written));
+    if (threw() || !answer.isValid()) {
+        callPath("abandonWrite", m_tree, part);
+        return {std::nullopt, sync::FolderError::make(sync::FolderErrorCode::Failed, u"TreeFolder.finishWrite failed"_s)};
+    }
+    const sync::FolderStatResult result = statOf(QJsonDocument::fromJson(answer.toString().toUtf8()).object());
+    if (result.error.isError())
+        callPath("abandonWrite", m_tree, part);
+    return result;
+}
+
 sync::FolderStatResult SafFolderStorage::write(const QString &path, const QByteArray &data)
 {
     const QJniObject context = appContext();

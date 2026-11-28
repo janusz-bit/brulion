@@ -1915,6 +1915,16 @@ if ((DEVICEFOLDER)); then
   check "the note changed in the app reached the folder" wait_for 200 folder_has 'Projekty/Łódź.md' 'dopisane w telefonie'
   check "… its first lines kept" folder_has 'Projekty/Łódź.md' 'rejs po jeziorze'
   app_shot df-6-synced
+  # … and a 6 MiB file put into the app's copy: written into the folder in pieces (a part file
+  # beside it, renamed into place: TreeFolder.beginWrite, finishWrite), byte for byte, no part left.
+  head -c $((6 * 1024 * 1024)) /dev/urandom >"$OUT/upload.bin"
+  upload_sum=$(sha256sum "$OUT/upload.bin" | cut -d' ' -f1)
+  adb push "$OUT/upload.bin" /data/local/tmp/brulion-upload.bin >/dev/null
+  adb shell run-as "$PKG" cp /data/local/tmp/brulion-upload.bin files/Folders/Notatki/assets/upload.bin
+  adb shell rm -f /data/local/tmp/brulion-upload.bin
+  folder_upload_is_whole() { [[ $(adb shell sha256sum /sdcard/Documents/Notatki/assets/upload.bin 2>/dev/null | cut -d' ' -f1) == "$upload_sum" ]]; }
+  check "the 6 MiB file of the app reached the folder, byte for byte" wait_for 200 folder_upload_is_whole
+  check "… and no part file is left beside it" bash -c "! adb shell ls -a /sdcard/Documents/Notatki/assets | grep -q brulion-"
 
   adb logcat -d >"$OUT/device-folder-logcat.txt"
   grep -E 'Folder sync|brulion.sync|BrulionTreeFolder' "$OUT/device-folder-logcat.txt" | tail -n 40 || true

@@ -3284,12 +3284,20 @@ analysis (`detectImporter`, `analyzeCsv`, `runImport` each prepared the input). 
 
 Notes (`isSyncTextPath()`) stay whole: they are merged line by line and kept as merge bases, and
 notebooks hold no note of hundreds of megabytes. Neither does a transport that does not stream —
-the tests' in-memory server unless `Options::streams`, the device folder over Android's document
-provider for uploads (`SafFolderStorage` writes a file whole through `TreeFolder.kt`; it reads one in
-pieces through the document's file descriptor since 2026-11-28, `TreeFolder.openRead`, checked by
-`android-emulator-test.sh --device-folder` with a 6 MiB file): there
-`WebDavClient` hands a whole body to the sink — the vault's side still goes through a staging
-file — and reads an upload whole, as before. Since 2026-11-28 a plain folder of the device
+the tests' in-memory server unless `Options::streams`: there `WebDavClient` hands a whole body to
+the sink — the vault's side still goes through a staging file — and reads an upload whole, as
+before. A folder picked through Android's document provider (`SafFolderStorage`) streams both ways
+since 2026-11-28: a read goes in pieces through the document's file descriptor
+(`TreeFolder.openRead`), a write in pieces through the descriptor of a part file beside the target
+(`.brulion-tmp-<name>`, a name the sync ignores: `TreeFolder.beginWrite`), which `finishWrite`
+renames into place once all its bytes are there — an existing file renamed aside first, deleted
+once the part has its name and put back when the rename fails —, or, from a provider that cannot
+rename (`UnsupportedOperationException` or no answer), copies into the target in pieces of 256 KiB
+and deletes; a source that fails half-way deletes the part and leaves the old file
+(`abandonWrite`). Checked by `android-emulator-test.sh --device-folder` (Android 16's external
+storage provider, which renames): a 6 MiB file both ways byte for byte, no part file left behind, a
+note changed in the app over its old version (the rename aside). The copy for providers without a
+rename is not exercised there: no provider of the emulator lacks it. Since 2026-11-28 a plain folder of the device
 (`LocalFolderStorage`) streams: `FolderStorage::readInto()` / `writeFrom()` read and write a file in
 pieces of 256 KiB (`QSaveFile`: all of it or nothing), `FolderDavTransport` hands each piece over to
 the thread that owns it and waits — one piece in flight —, so the client's sink is called and an

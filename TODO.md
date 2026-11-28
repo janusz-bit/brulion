@@ -383,12 +383,10 @@ done in the repository simply disappears from the list.
   browser's pick is written into its work folder — both are only exercised on the desktop (the
   browser's pick through `prepareRestoreFromBytes`, the document's copy as far as a `content://`
   URI that cannot be read).
-* **Sync and import in bounded memory: what is left** — a folder picked through Android's document
-  provider writes a file whole (`SafFolderStorage` reads in pieces through the document's file
-  descriptor since 2026-11-28; a write in pieces needs a temporary document and a rename, which
-  not every provider has), so an upload of a large file to a picked folder holds it in memory; the
-  memory of a large sync or import on a real phone is not measured yet (docs/PERFORMANCE.md "Sync
-  and import in bounded memory").
+* **Sync and import in bounded memory: what is left** — the memory of a large sync or import on a
+  real phone is not measured yet, and the copy a picked folder's write falls back to where its
+  document provider cannot rename (`TreeFolder.finishWrite`) has not met such a provider (every
+  provider of the emulator renames) (docs/PERFORMANCE.md "Sync and import in bounded memory").
 
 ## Sharing and collaboration
 
