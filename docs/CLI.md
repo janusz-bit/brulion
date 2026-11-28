@@ -1690,6 +1690,10 @@ brulion-cli app changes && brulion-cli app revert          # what changed, and a
   find itself: an agent may not pass its environment on — Codex starts its MCP servers with `HOME`,
   `PATH`, `LANG`, `TMPDIR` … only (codex-rs/rmcp-client: `DEFAULT_ENV_VARS`), without
   `XDG_RUNTIME_DIR`, `XDG_DATA_HOME` or `BRULION_PROFILE`, so its tools would look for another socket.
+  For the same reason the notebook's tools get the app's device state of the notebook in their
+  arguments (`mcp --vault <notebook> --state-dir <its device state>`,
+  `WorkspaceAgents::notesToolsArgs`): the pages' history of their changes and the write lock are
+  the app's, also when it runs with `--profile` or XDG folders of its own.
 * **Security**: a grant is only made for an agent the user marked, only while its program runs,
   and only in the desktop app; the socket keeps its owner-only file and other users' connections
   are refused as before. A granted agent can do what the remote control can — drive the UI, read

@@ -64,11 +64,7 @@ done in the repository simply disappears from the list.
   Gemini CLI (it needs a Google sign-in) and on Windows (a preset's `npx.cmd` through `cmd.exe
   /c`) and macOS; and a try of the other direction, Brulion's assistant as an ACP agent
   (`brulion-cli acp agent`, docs/CLI.md "The assistant in Zed and JetBrains"), in a real Zed and a
-  JetBrains IDE. Codex starts its MCP servers with `HOME`, `PATH`, `LANG` … alone: the app names its
-  socket to Brulion's tools (`BRULION_APP_INSTANCE`), but with `--profile` or XDG folders of its own
-  the notebook tools of a Codex conversation still keep their device state — the pages' history of
-  their changes, the write lock — in the default profile's folder, not the app's (`mcp --vault`
-  without `--state-dir`).
+  JetBrains IDE.
 * **AI agents on another computer changing the app live: on a real phone** — the tunnel is there
   (`acp serve` hands the session's `brulion_app_*` calls to the device's stream, the app answers
   them in process: docs/CLI.md "The app's live tools"), tested between two processes of a desktop;

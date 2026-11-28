@@ -1172,10 +1172,21 @@ std::optional<acp::McpServer> WorkspaceAgents::toolsServer(const AgentConfig &co
     if (program.isEmpty() || (!codeFolder.isEmpty() && !app))
         return std::nullopt;
     acp::McpServer server{u"brulion"_s, program,
-                          codeFolder.isEmpty() ? QStringList{u"mcp"_s, u"--vault"_s, cwd}
-                                               : QStringList{u"mcp"_s, u"--no-notes"_s}};
+                          codeFolder.isEmpty() ? notesToolsArgs(cwd) : QStringList{u"mcp"_s, u"--no-notes"_s}};
     addAppAccess(server, config.name, grant, chatToken);
     return server;
+}
+
+QStringList WorkspaceAgents::notesToolsArgs(const QString &root) const
+{
+    // The app's own device state of the notebook (the pages' history, the write lock), named: an
+    // agent may start its tools with an environment of its own (Codex: HOME, PATH, LANG … alone),
+    // in which brulion-cli would find the default profile's folder instead.
+    QStringList args{u"mcp"_s, u"--vault"_s, root};
+    const Vault *vault = m_workspace ? m_workspace->vault() : nullptr;
+    if (vault && !vault->deviceStatePath().isEmpty() && QDir(vault->rootPath()) == QDir(root))
+        args << u"--state-dir"_s << vault->deviceStatePath();
+    return args;
 }
 
 void WorkspaceAgents::addAppAccess(acp::McpServer &server, const QString &client, const QString &grant,

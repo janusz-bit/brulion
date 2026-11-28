@@ -1480,6 +1480,16 @@ private Q_SLOTS:
         QVERIFY(QFileInfo(server.value(u"command"_s).toString()).isAbsolute());
         QCOMPARE(server.value(u"args"_s).toArray().at(0).toString(), u"mcp"_s);
         QVERIFY(promptOf(logged(u"session/prompt"_s).first()).at(0).toObject().value(u"text"_s).toString().contains(u"MCP"_s));
+        // The notebook's tools keep the app's own device state of it (the pages' history, the write
+        // lock), named in their arguments: an agent may start them with an environment of its own
+        // (Codex: HOME, PATH, LANG … alone), in which brulion-cli would find the default profile's.
+        QStringList args;
+        for (const QJsonValue &a : server.value(u"args"_s).toArray())
+            args << a.toString();
+        const qsizetype state = args.indexOf(u"--state-dir"_s);
+        QVERIFY2(state > 0 && state + 1 < args.size(), qPrintable(args.join(u' ')));
+        QCOMPARE(args.at(state + 1), ws->vault()->deviceStatePath());
+        QCOMPARE(args.at(args.indexOf(u"--vault"_s) + 1), ws->vault()->rootPath());
     }
 
     void permission()

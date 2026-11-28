@@ -454,6 +454,8 @@ private:
     std::optional<acp::McpServer> toolsServer(const AgentConfig &config, const QString &cwd, const QString &codeFolder,
                                               const QString &grant, const QString &chatToken) const;
     /// The arguments and environment of `server` that reach the running app as `client`.
+    /// `mcp --vault root`, with the app's device state of the notebook when `root` is the open one.
+    QStringList notesToolsArgs(const QString &root) const;
     void addAppAccess(acp::McpServer &server, const QString &client, const QString &grant,
                       const QString &chatToken) const;
     /// Where a conversation's agent works when it is a thread of Code mode (docs/CODE.md): its
