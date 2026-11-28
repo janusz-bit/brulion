@@ -1493,8 +1493,27 @@ scrolling, `tst_atrament_editor`) before the next:
      card where nothing plays). Not yet: the volume (MediaControls' own), the transcription's
      progress under a recording, a self-test in the app with a real file (Qt Multimedia
      offscreen).
-   **Not yet** (the QML delegate's rows): Obsidian bases and database views (`view:`, ```base).
-   Nor: BIcon's icons
+   * **Database views** (design, 2026-11-28; the last QML rows of a page): a ```query block with
+     `view:`, a ```base block and a .base embed are DatabaseView.qml (1 500 lines: five layouts,
+     cells edited in place, cards dragged) over ViewResultModel. Drawn by Atrament in steps, each
+     behind MediaKind `Databases` and a layout at a time, the editing handed to the QML view until
+     Atrament's own: (a) **the table, read**: the columns' labels (the sorted one's arrow), the rows'
+     cells as rendered text — a `runsAt(row)` of ViewResultModel next to its HTML `cells`
+     (InlineRenderer::renderRuns with the same context), so links, tags and chips work as in the
+     block's text —, the summaries under the columns, sideways scroll when wider than the column
+     (the tables' horizontal bar), "+" for a new row; a click on an editable cell asks the host to
+     edit it (`onDatabaseCell(row, viewRow, column)`): the row is the QML delegate's while the model
+     is `held` (DatabaseView.editCell(r, c) starts the edit there) and Atrament's again when it is
+     released — one decision, the model's hold, where a row's owner is chosen. (b) the list and the
+     gallery (cards, covers through the picture cache), (c) the board (columns of cards; a drag
+     moves a card between columns through ViewResultModel's edits), (d) the calendar (the month's
+     grid of monthview.h with the rows as pills), (e) the cells edited by Atrament's TextInput, the
+     cell cursor and a multi-cell selection (TODO "Database views: what remains") — then no row
+     of the page is QML's. Tests as the tables' (tst_atrament_tables): a view over a temp notebook's
+     pages (tests/app/editor's FakeEditorHost with a QueryHost), every layout's geometry and
+     requests, the hand-over to QML and back; the self-test AtramentSelfTest's database steps.
+   **Not yet** (the QML delegate's rows): Obsidian bases and database views (`view:`, ```base) —
+   the design above. Nor: BIcon's icons
    for files' chips and the transclusions' headers (Atrament's own glyphs there), an animation's
    loop count (every animation loops), Theme.reducedMotion for the spinner, the pen badge's
    hover look.
