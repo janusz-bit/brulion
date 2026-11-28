@@ -144,6 +144,9 @@ private:
     void askGit(int serial, const QString &id, const QString &action, const acp::RemoteGitRequest &request,
                 const QString &failure, std::function<void(const acp::RemoteGitResult &result)> then);
     void gitFinished(int serial, const QString &action, bool ok, const QString &message, const QString &url = {});
+    /// One request (its endpoint the action): gitDone() with `words` of what git did.
+    int askGitOnce(const QString &id, const acp::RemoteGitRequest &request,
+                   std::function<QString(const acp::RemoteGitResult &result)> words);
 
     std::function<sync::HttpTransport *()> m_transport;
     std::function<QByteArray()> m_load;

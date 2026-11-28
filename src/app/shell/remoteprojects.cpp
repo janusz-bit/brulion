@@ -32,6 +32,14 @@ QString letterOf(const QString &change)
     return u"M"_s;
 }
 
+acp::RemoteGitRequest gitRequestOf(acp::RemoteGitRequest::Kind kind, const QString &worktree)
+{
+    acp::RemoteGitRequest request;
+    request.kind = kind;
+    request.worktree = worktree;
+    return request;
+}
+
 QString baseOf(const QString &url)
 {
     return acp::normalizeRemoteBase(url).toString();
@@ -392,52 +400,48 @@ int RemoteProjects::commit(const QString &id, const QString &worktree, const QSt
     return serial;
 }
 
-int RemoteProjects::push(const QString &id, const QString &worktree)
+int RemoteProjects::askGitOnce(const QString &id, const acp::RemoteGitRequest &request,
+                               std::function<QString(const acp::RemoteGitResult &result)> words)
 {
     const int serial = ++m_serial;
-    acp::RemoteGitRequest request;
-    request.kind = acp::RemoteGitRequest::Kind::Push;
-    request.worktree = worktree;
-    askGit(serial, id, u"push"_s, request, QString(), [this, serial](const acp::RemoteGitResult &p) {
-        gitFinished(serial, u"push"_s, true, tr("Pushed %1 to %2").arg(p.branch, p.remote));
+    const QString action = acp::RemoteGitRequest::endpoint(request.kind);
+    askGit(serial, id, action, request, QString(), [this, serial, action, words](const acp::RemoteGitResult &r) {
+        gitFinished(serial, action, true, words(r), r.url);
     });
     return serial;
+}
+
+int RemoteProjects::push(const QString &id, const QString &worktree)
+{
+    return askGitOnce(id, gitRequestOf(acp::RemoteGitRequest::Kind::Push, worktree),
+                      [](const acp::RemoteGitResult &p) { return tr("Pushed %1 to %2").arg(p.branch, p.remote); });
 }
 
 int RemoteProjects::createPullRequest(const QString &id, const QString &worktree, const QString &title,
                                       const QString &body, const QString &base, bool draft)
 {
-    const int serial = ++m_serial;
-    acp::RemoteGitRequest request;
-    request.kind = acp::RemoteGitRequest::Kind::PullRequest;
-    request.worktree = worktree;
+    acp::RemoteGitRequest request = gitRequestOf(acp::RemoteGitRequest::Kind::PullRequest, worktree);
     request.title = title.trimmed();
     request.body = body;
     request.base = base.trimmed();
     request.draft = draft;
     if (request.problem() == u"bad_title") {
+        const int serial = ++m_serial;
         gitFinished(serial, u"pr"_s, false, tr("A pull request needs a title."));
         return serial;
     }
-    askGit(serial, id, u"pr"_s, request, QString(), [this, serial](const acp::RemoteGitResult &p) {
-        gitFinished(serial, u"pr"_s, true,
-                    p.number > 0 ? tr("Opened pull request #%1").arg(p.number) : tr("Opened the pull request"), p.url);
+    return askGitOnce(id, request, [](const acp::RemoteGitResult &p) {
+        return p.number > 0 ? tr("Opened pull request #%1").arg(p.number) : tr("Opened the pull request");
     });
-    return serial;
 }
 
 int RemoteProjects::revertTurn(const QString &id, const QString &worktree, const QString &checkpoint)
 {
-    const int serial = ++m_serial;
-    acp::RemoteGitRequest request;
-    request.kind = acp::RemoteGitRequest::Kind::Revert;
-    request.worktree = worktree;
+    acp::RemoteGitRequest request = gitRequestOf(acp::RemoteGitRequest::Kind::Revert, worktree);
     request.checkpoint = checkpoint;
-    askGit(serial, id, u"revert"_s, request, QString(), [this, serial](const acp::RemoteGitResult &r) {
-        gitFinished(serial, u"revert"_s, true,
-                    tr("The turn was reverted: %n file(s) put back", "", int(r.restored.size() + r.removed.size())));
+    return askGitOnce(id, request, [](const acp::RemoteGitResult &r) {
+        return tr("The turn was reverted: %n file(s) put back", "", int(r.restored.size() + r.removed.size()));
     });
-    return serial;
 }
 
 } // namespace brulion::shell

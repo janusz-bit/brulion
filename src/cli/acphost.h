@@ -469,6 +469,8 @@ private:
     void diff(const QString &project, const http::Request &request, const http::Reply &reply);
     /// POST projects/<id>/commit | push | pr | revert: git there for a device's thread.
     void gitRequest(const QString &project, const acp::RemoteGitRequest &request, const http::Reply &reply);
+    /// The request in the repository's top level `top`.
+    void gitIn(const QString &top, const acp::RemoteGitRequest &request, const http::Reply &reply);
     void gitCommit(const QString &top, const acp::RemoteGitRequest &request, const http::Reply &reply);
     void gitPush(const QString &top, const http::Reply &reply);
     void gitPullRequest(const QString &top, const acp::RemoteGitRequest &request, const http::Reply &reply);

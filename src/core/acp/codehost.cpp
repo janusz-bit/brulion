@@ -5,6 +5,7 @@
 #include <QJsonDocument>
 
 #include <algorithm>
+#include <array>
 
 using namespace Qt::StringLiterals;
 
@@ -42,27 +43,31 @@ QString queryValue(const QString &value)
 
 /// A path inside a work tree, as git writes it: relative, '/'-separated, no part "", "." or "..",
 /// nothing of .git, no NUL or backslash.
+bool workTreePart(QStringView part)
+{
+    return !part.isEmpty() && part != u"." && part != u".." && part.compare(u".git", Qt::CaseInsensitive) != 0;
+}
+
 bool workTreePath(QStringView path)
 {
-    if (path.isEmpty() || path.size() > MaxRemotePathChars || path.contains(u'\0') || path.contains(u'\\')
-        || QDir::isAbsolutePath(path.toString()))
+    if (path.isEmpty() || path.size() > MaxRemotePathChars || path.contains(u'\0') || path.contains(u'\\'))
         return false;
-    for (const QStringView part : path.tokenize(u'/')) {
-        if (part.isEmpty() || part == u"." || part == u".." || part.compare(u".git", Qt::CaseInsensitive) == 0)
-            return false;
-    }
-    return true;
+    return !QDir::isAbsolutePath(path.toString()) && std::ranges::all_of(path.tokenize(u'/'), workTreePart);
 }
 
 /// A name a branch may have, as far as this side tells (the host asks git's own rule too).
+bool branchChar(QChar c)
+{
+    return c.unicode() > u' ' && c.unicode() != 0x7f && !QStringView(u"~^:?*[\\").contains(c);
+}
+
 bool branchLike(QStringView name)
 {
-    if (name.isEmpty() || name.size() > 250 || name.startsWith(u'-') || name.startsWith(u'/') || name.endsWith(u'/')
-        || name.endsWith(u".lock") || name.contains(u"..") || name.contains(u"@{") || name.contains(u"//"))
+    if (name.isEmpty() || name.size() > 250 || name.startsWith(u'-') || name.startsWith(u'/') || name.endsWith(u'/'))
         return false;
-    return std::ranges::none_of(name, [](QChar c) {
-        return c.unicode() <= u' ' || c.unicode() == 0x7f || QStringView(u"~^:?*[\\").contains(c);
-    });
+    const bool badPart =
+            name.endsWith(u".lock") || name.contains(u"..") || name.contains(u"@{") || name.contains(u"//");
+    return !badPart && std::ranges::all_of(name, branchChar);
 }
 
 /// The strings of a JSON list (at most `max`; what is no text left out).
@@ -366,13 +371,9 @@ void fetchRemoteDiff(sync::HttpTransport *transport, const QUrl &base, const QSt
 
 QString RemoteGitRequest::endpoint(Kind kind)
 {
-    switch (kind) {
-    case Kind::Commit: return u"commit"_s;
-    case Kind::Push: return u"push"_s;
-    case Kind::PullRequest: return u"pr"_s;
-    case Kind::Revert: break;
-    }
-    return u"revert"_s;
+    // (By the kinds' order.)
+    static constexpr std::array<QLatin1StringView, 4> names{"commit"_L1, "push"_L1, "pr"_L1, "revert"_L1};
+    return QString(names.at(std::min<size_t>(size_t(kind), names.size() - 1)));
 }
 
 std::optional<RemoteGitRequest::Kind> RemoteGitRequest::kindOf(QStringView endpoint)
@@ -423,36 +424,73 @@ bool textOf(const QJsonObject &o, QLatin1StringView key, QString *out)
     return v.isString();
 }
 
+/// A text field of a request: its key, where it goes, the error code when it is no text.
+struct TextField {
+    QLatin1StringView key;
+    QString RemoteGitRequest::*member;
+    QLatin1StringView code;
+};
+
+QList<TextField> textFieldsOf(RemoteGitRequest::Kind kind)
+{
+    using Kind = RemoteGitRequest::Kind;
+    QList<TextField> fields{{"worktree"_L1, &RemoteGitRequest::worktree, "bad_worktree"_L1}};
+    if (kind == Kind::Commit)
+        fields.append({"message"_L1, &RemoteGitRequest::message, "bad_message"_L1});
+    else if (kind == Kind::PullRequest)
+        fields << TextField{"title"_L1, &RemoteGitRequest::title, "bad_title"_L1}
+               << TextField{"body"_L1, &RemoteGitRequest::body, "bad_body"_L1}
+               << TextField{"base"_L1, &RemoteGitRequest::base, "bad_base"_L1};
+    else if (kind == Kind::Revert)
+        fields.append({"checkpoint"_L1, &RemoteGitRequest::checkpoint, "bad_checkpoint"_L1});
+    return fields;
+}
+
+/// A commit's `files`: a list of texts, or none; false when it is something else.
+bool readFiles(const QJsonValue &files, QStringList *out)
+{
+    if (!files.isUndefined() && !files.isArray())
+        return false;
+    for (const QJsonValue &f : files.toArray()) {
+        if (!f.isString())
+            return false;
+        out->append(f.toString());
+    }
+    return true;
+}
+
 /// The fields of `o` a request of its kind takes; the code of the first that does not read ("" all do).
 QString readGitFields(const QJsonObject &o, RemoteGitRequest *r)
 {
-    if (!textOf(o, "worktree"_L1, &r->worktree))
-        return u"bad_worktree"_s;
+    for (const TextField &f : textFieldsOf(r->kind)) {
+        if (!textOf(o, f.key, &(r->*f.member)))
+            return QString(f.code);
+    }
     if (!r->worktree.isEmpty() && QDir::isAbsolutePath(r->worktree))
         r->worktree = QDir::cleanPath(r->worktree);
-    using Kind = RemoteGitRequest::Kind;
-    if (r->kind == Kind::Commit) {
-        if (!textOf(o, "message"_L1, &r->message))
-            return u"bad_message"_s;
-        const QJsonValue files = o.value(u"files"_s);
-        if (!files.isUndefined() && !files.isArray())
-            return u"bad_files"_s;
-        for (const QJsonValue &f : files.toArray()) {
-            if (!f.isString())
-                return u"bad_files"_s;
-            r->files.append(f.toString());
-        }
-    } else if (r->kind == Kind::PullRequest) {
-        if (!textOf(o, "title"_L1, &r->title))
-            return u"bad_title"_s;
-        if (!textOf(o, "body"_L1, &r->body))
-            return u"bad_body"_s;
-        if (!textOf(o, "base"_L1, &r->base))
-            return u"bad_base"_s;
-        r->draft = o.value(u"draft"_s).toBool();
-    } else if (r->kind == Kind::Revert && !textOf(o, "checkpoint"_L1, &r->checkpoint)) {
-        return u"bad_checkpoint"_s;
-    }
+    if (r->kind == RemoteGitRequest::Kind::Commit && !readFiles(o.value(u"files"_s), &r->files))
+        return u"bad_files"_s;
+    r->draft = r->kind == RemoteGitRequest::Kind::PullRequest && o.value(u"draft"_s).toBool();
+    return QString();
+}
+
+QString commitProblem(const RemoteGitRequest &r)
+{
+    if (r.message.trimmed().isEmpty() || r.message.size() > MaxCommitMessageChars)
+        return u"bad_message"_s;
+    if (r.files.size() > MaxRemoteChanges || !std::ranges::all_of(r.files, workTreePath))
+        return u"bad_files"_s;
+    return QString();
+}
+
+QString pullRequestProblem(const RemoteGitRequest &r)
+{
+    if (r.title.trimmed().isEmpty() || r.title.size() > MaxPullRequestTitleChars)
+        return u"bad_title"_s;
+    if (r.body.size() > MaxPullRequestBodyChars)
+        return u"bad_body"_s;
+    if (!r.base.isEmpty() && !branchLike(r.base))
+        return u"bad_base"_s;
     return QString();
 }
 
@@ -477,24 +515,9 @@ QString RemoteGitRequest::problem() const
     if (!worktree.isEmpty() && !absolutePath(worktree))
         return u"bad_worktree"_s;
     switch (kind) {
-    case Kind::Commit:
-        if (message.trimmed().isEmpty() || message.size() > MaxCommitMessageChars)
-            return u"bad_message"_s;
-        if (files.size() > MaxRemoteChanges || !std::ranges::all_of(files, workTreePath))
-            return u"bad_files"_s;
-        break;
-    case Kind::PullRequest:
-        if (title.trimmed().isEmpty() || title.size() > MaxPullRequestTitleChars)
-            return u"bad_title"_s;
-        if (body.size() > MaxPullRequestBodyChars)
-            return u"bad_body"_s;
-        if (!base.isEmpty() && !branchLike(base))
-            return u"bad_base"_s;
-        break;
-    case Kind::Revert:
-        if (!isCheckpointId(checkpoint))
-            return u"bad_checkpoint"_s;
-        break;
+    case Kind::Commit: return commitProblem(*this);
+    case Kind::PullRequest: return pullRequestProblem(*this);
+    case Kind::Revert: return isCheckpointId(checkpoint) ? QString() : u"bad_checkpoint"_s;
     case Kind::Push: break;
     }
     return QString();

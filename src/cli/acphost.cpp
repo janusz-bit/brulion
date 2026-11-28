@@ -927,6 +927,28 @@ const PairedDevice *AcpHost::authenticate(const http::Request &request, http::Re
     return refuse(u"This device is not paired (any more)"_s);
 }
 
+namespace {
+
+/// The headers of a request of Code mode's projects: GET projects, POST …/worktrees and the git
+/// requests (a bigger body), GET …/changes and …/diff.
+std::optional<http::Response> projectsHeaders(const QStringList &parts, const QByteArray &method, qint64 *maxBody)
+{
+    if (parts.size() == 1)
+        return method == "GET" ? std::nullopt
+                               : std::optional<http::Response>(apiError(405, u"method"_s, u"Method not allowed"_s));
+    const QString action = parts.size() == 3 ? parts.at(2) : QString();
+    const bool git = acp::RemoteGitRequest::kindOf(action).has_value();
+    const bool post = git || action == u"worktrees";
+    if (!post && action != u"changes" && action != u"diff")
+        return apiError(404, u"not_found"_s, u"Not found"_s);
+    if (method != (post ? "POST"_ba : "GET"_ba))
+        return apiError(405, u"method"_s, u"Method not allowed"_s);
+    *maxBody = git ? acp::MaxRemoteGitBodyBytes : post ? 4096 : 0;
+    return std::nullopt;
+}
+
+} // namespace
+
 std::optional<http::Response> AcpHost::onHeaders(const http::Request &head, qint64 *maxBody)
 {
     *maxBody = 0;
@@ -1015,20 +1037,8 @@ std::optional<http::Response> AcpHost::onHeaders(const http::Request &head, qint
     if (parts.at(0) == u"chats")
         return chatsHeaders(parts, head.method, maxBody);
     // Code mode's projects (acp/codehost.h).
-    if (parts.at(0) == u"projects") {
-        const bool list = parts.size() == 1;
-        const bool git = parts.size() == 3 && acp::RemoteGitRequest::kindOf(parts.at(2)).has_value();
-        const bool action =
-                parts.size() == 3
-                && (git || parts.at(2) == u"worktrees" || parts.at(2) == u"changes" || parts.at(2) == u"diff");
-        if (!list && !action)
-            return apiError(404, u"not_found"_s, u"Not found"_s);
-        const QByteArray method = action && (git || parts.at(2) == u"worktrees") ? "POST"_ba : "GET"_ba;
-        if (head.method != method)
-            return apiError(405, u"method"_s, u"Method not allowed"_s);
-        *maxBody = git ? acp::MaxRemoteGitBodyBytes : method == "POST" ? 4096 : 0;
-        return std::nullopt;
-    }
+    if (parts.at(0) == u"projects")
+        return projectsHeaders(parts, head.method, maxBody);
     return apiError(404, u"not_found"_s, u"Not found"_s);
 }
 
@@ -3126,6 +3136,31 @@ QString gitRefusal(const acp::RemoteGitRequest &request)
     return QString();
 }
 
+/// What a device's commit takes: every change, or the files it named among them (what is no change
+/// of the work tree left out), as the Changes panel's Commit takes them (CodeGit::commitFiles).
+gitcli::CommitRequest commitOf(const acp::RemoteGitRequest &request, const QList<gitcli::FileChange> &changes)
+{
+    const QSet<QString> wanted(request.files.cbegin(), request.files.cend());
+    const auto taken = [&wanted](const gitcli::FileChange &f) {
+        if (f.change == gitcli::Change::Ignored || f.path.endsWith(u'/')) // (a nested repository)
+            return false;
+        return wanted.isEmpty() || wanted.contains(f.path) || wanted.contains(f.oldPath);
+    };
+    gitcli::CommitRequest commit;
+    commit.message = request.message;
+    commit.mode = wanted.isEmpty() ? u"all"_s : u"paths"_s;
+    for (const gitcli::FileChange &f : changes) {
+        if (!taken(f))
+            continue;
+        commit.paths.append(f.path);
+        if (!f.oldPath.isEmpty())
+            commit.paths.append(f.oldPath);
+        if (f.change == gitcli::Change::Untracked)
+            commit.untracked.append(f.path);
+    }
+    return commit;
+}
+
 } // namespace
 
 void AcpHost::gitRequest(const QString &project, const acp::RemoteGitRequest &request, const http::Reply &reply)
@@ -3151,18 +3186,20 @@ void AcpHost::gitRequest(const QString &project, const acp::RemoteGitRequest &re
                                                  u"The project's folder is no git repository"_s));
                              return;
                          }
-                         const QString top = info.topLevel;
-                         self->say(u"a device's %1 in %2"_s.arg(acp::RemoteGitRequest::endpoint(request.kind), top));
-                         switch (request.kind) {
-                         case acp::RemoteGitRequest::Kind::Commit: self->gitCommit(top, request, reply); break;
-                         case acp::RemoteGitRequest::Kind::Push: self->gitPush(top, reply); break;
-                         case acp::RemoteGitRequest::Kind::PullRequest:
-                             self->gitPullRequest(top, request, reply);
-                             break;
-                         case acp::RemoteGitRequest::Kind::Revert: self->gitRevert(top, request, reply); break;
-                         }
+                         self->gitIn(info.topLevel, request, reply);
                      });
                  });
+}
+
+void AcpHost::gitIn(const QString &top, const acp::RemoteGitRequest &request, const http::Reply &reply)
+{
+    say(u"a device's %1 in %2"_s.arg(acp::RemoteGitRequest::endpoint(request.kind), top));
+    switch (request.kind) {
+    case acp::RemoteGitRequest::Kind::Commit: gitCommit(top, request, reply); break;
+    case acp::RemoteGitRequest::Kind::Push: gitPush(top, reply); break;
+    case acp::RemoteGitRequest::Kind::PullRequest: gitPullRequest(top, request, reply); break;
+    case acp::RemoteGitRequest::Kind::Revert: gitRevert(top, request, reply); break;
+    }
 }
 
 void AcpHost::gitCommit(const QString &top, const acp::RemoteGitRequest &request, const http::Reply &reply)
@@ -3175,22 +3212,7 @@ void AcpHost::gitCommit(const QString &top, const acp::RemoteGitRequest &request
             reply.send(gitFailed(s.error));
             return;
         }
-        // Every change, or the files named among them (what is no change of the work tree left out),
-        // as the Changes panel's Commit takes them (CodeGit::commitFiles).
-        const QSet<QString> wanted(request.files.cbegin(), request.files.cend());
-        gitcli::CommitRequest commit;
-        commit.message = request.message;
-        commit.mode = wanted.isEmpty() ? u"all"_s : u"paths"_s;
-        for (const gitcli::FileChange &f : s.changes) {
-            if (f.change == gitcli::Change::Ignored || f.path.endsWith(u'/')
-                || (!wanted.isEmpty() && !wanted.contains(f.path) && !wanted.contains(f.oldPath)))
-                continue;
-            commit.paths.append(f.path);
-            if (!f.oldPath.isEmpty())
-                commit.paths.append(f.oldPath);
-            if (f.change == gitcli::Change::Untracked)
-                commit.untracked.append(f.path);
-        }
+        const gitcli::CommitRequest commit = commitOf(request, s.changes);
         if (commit.paths.isEmpty()) {
             reply.send(apiError(409, u"nothing_to_commit"_s, u"Nothing to commit"_s));
             return;
