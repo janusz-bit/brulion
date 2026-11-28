@@ -251,15 +251,14 @@ private Q_SLOTS:
     {
         if (!m_git)
             QSKIP("no git");
-        // (Local submodules: git refuses the file protocol by default since 2.38.)
-        qputenv("GIT_CONFIG_COUNT", "1");
-        qputenv("GIT_CONFIG_KEY_0", "protocol.file.allow");
-        qputenv("GIT_CONFIG_VALUE_0", "always");
-        auto unset = qScopeGuard([] {
-            qunsetenv("GIT_CONFIG_COUNT");
-            qunsetenv("GIT_CONFIG_KEY_0");
-            qunsetenv("GIT_CONFIG_VALUE_0");
-        });
+        // (Local submodules: git refuses the file protocol to a submodule's own submodules since 2.38
+        // and its security backports — Ubuntu 22.04's 2.34 —, and older ones drop GIT_CONFIG_COUNT for
+        // a submodule's processes: a HOME of the test's own with a .gitconfig reaches every one.)
+        const QString home = fresh(u"dom"_s);
+        QVERIFY(writeFile(home + u"/.gitconfig"_s, "[protocol \"file\"]\n\tallow = always\n"));
+        const QByteArray oldHome = qgetenv("HOME");
+        qputenv("HOME", QFile::encodeName(home));
+        auto unset = qScopeGuard([oldHome] { qputenv("HOME", oldHome); });
         const auto repoWith = [this](const QString &name, const QString &file) {
             const QString r = fresh(name);
             QDir().mkpath(r);
