@@ -3,12 +3,15 @@
 #include "android/safstorage.h"
 
 #include <QCoreApplication>
+#include <QFile>
 #include <QJniEnvironment>
 #include <QJniObject>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLoggingCategory>
+
+#include <unistd.h>
 
 using namespace Qt::StringLiterals;
 
@@ -154,6 +157,40 @@ sync::FolderReadResult SafFolderStorage::read(const QString &path, qint64 maxByt
     if (env.checkAndClearExceptions())
         return {{}, sync::FolderError::make(sync::FolderErrorCode::Failed, u"TreeFolder.read: copy failed"_s)};
     return {std::move(data), {}};
+}
+
+namespace {
+
+/// Why the last TreeFolder call on this thread failed (its lastError()), or `fallback`.
+sync::FolderError lastFolderError(const QString &fallback)
+{
+    const QJniObject why = QJniObject::callStaticObjectMethod(kClass, "lastError", "()Ljava/lang/String;");
+    const QJsonObject answer = why.isValid() ? QJsonDocument::fromJson(why.toString().toUtf8()).object() : QJsonObject();
+    sync::FolderError error = errorOf(answer);
+    return error.isError() ? error : sync::FolderError::make(sync::FolderErrorCode::Failed, fallback);
+}
+
+} // namespace
+
+sync::FolderError SafFolderStorage::readInto(const QString &path, qint64 maxBytes, const sync::PieceSink &sink)
+{
+    const QJniObject context = appContext();
+    if (!context.isValid())
+        return sync::FolderError::make(sync::FolderErrorCode::Unavailable, u"no Android context"_s);
+    const jint fd = QJniObject::callStaticMethod<jint>(
+            kClass, "openRead", "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;J)I", context.object(),
+            QJniObject::fromString(m_tree).object<jstring>(), QJniObject::fromString(path).object<jstring>(),
+            jlong(maxBytes));
+    if (threw())
+        return sync::FolderError::make(sync::FolderErrorCode::Failed, u"TreeFolder.openRead failed"_s);
+    if (fd < 0)
+        return lastFolderError(u"TreeFolder.openRead: no file"_s);
+    QFile file;
+    if (!file.open(int(fd), QIODevice::ReadOnly, QFileDevice::AutoCloseHandle)) {
+        ::close(fd);
+        return sync::FolderError::make(sync::FolderErrorCode::Failed, u"%1: %2"_s.arg(path, file.errorString()));
+    }
+    return sync::readPieces(file, path, maxBytes, sink);
 }
 
 sync::FolderStatResult SafFolderStorage::write(const QString &path, const QByteArray &data)

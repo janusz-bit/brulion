@@ -25,6 +25,10 @@ public:
     sync::FolderStatResult write(const QString &path, const QByteArray &data) override;
     sync::FolderError makeFolder(const QString &path) override;
     sync::FolderError remove(const QString &path) override;
+    /// Reads stream (a file descriptor of the document, read in pieces: TreeFolder.openRead);
+    /// writes still go whole through write() (FolderStorage::writeFrom()).
+    bool streams() const override { return true; }
+    sync::FolderError readInto(const QString &path, qint64 maxBytes, const sync::PieceSink &sink) override;
 
 private:
     QString m_tree;

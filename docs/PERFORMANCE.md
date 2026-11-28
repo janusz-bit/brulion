@@ -3277,7 +3277,9 @@ analysis (`detectImporter`, `analyzeCsv`, `runImport` each prepared the input). 
 Notes (`isSyncTextPath()`) stay whole: they are merged line by line and kept as merge bases, and
 notebooks hold no note of hundreds of megabytes. Neither does a transport that does not stream —
 the tests' in-memory server unless `Options::streams`, the device folder over Android's document
-provider (`SafFolderStorage` reads and writes a file whole through `TreeFolder.kt`): there
+provider for uploads (`SafFolderStorage` writes a file whole through `TreeFolder.kt`; it reads one in
+pieces through the document's file descriptor since 2026-11-28, `TreeFolder.openRead`, checked by
+`android-emulator-test.sh --device-folder` with a 6 MiB file): there
 `WebDavClient` hands a whole body to the sink — the vault's side still goes through a staging
 file — and reads an upload whole, as before. Since 2026-11-28 a plain folder of the device
 (`LocalFolderStorage`) streams: `FolderStorage::readInto()` / `writeFrom()` read and write a file in

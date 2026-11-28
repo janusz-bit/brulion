@@ -378,10 +378,11 @@ done in the repository simply disappears from the list.
   browser's pick through `prepareRestoreFromBytes`, the document's copy as far as a `content://`
   URI that cannot be read).
 * **Sync and import in bounded memory: what is left** — a folder picked through Android's document
-  provider (`SafFolderStorage` over `TreeFolder.kt`) still reads and writes a file whole
-  (`FolderStorage::streams()` false; a plain folder streams since 2026-11-28), so a sync with a
-  picked folder on Android holds a large file in memory; the memory of a large sync or import on a
-  real phone is not measured yet (docs/PERFORMANCE.md "Sync and import in bounded memory").
+  provider writes a file whole (`SafFolderStorage` reads in pieces through the document's file
+  descriptor since 2026-11-28; a write in pieces needs a temporary document and a rename, which
+  not every provider has), so an upload of a large file to a picked folder holds it in memory; the
+  memory of a large sync or import on a real phone is not measured yet (docs/PERFORMANCE.md "Sync
+  and import in bounded memory").
 
 ## Sharing and collaboration
 

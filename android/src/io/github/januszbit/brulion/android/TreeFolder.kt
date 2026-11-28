@@ -172,7 +172,28 @@ internal object TreeFolder {
       null
     }
 
-  /** Why the last [read] on this thread failed (an error answer). */
+  /**
+   * The file opened for reading, as a file descriptor the caller owns and closes (a detached
+   * ParcelFileDescriptor: the native side reads it in pieces, never the whole file through the
+   * JVM), or -1 ([lastError] says why). Checked as [read] checks.
+   */
+  @JvmStatic
+  fun openRead(context: Context, uriString: String, path: String, maxBytes: Long): Int =
+    try {
+      val tree = Uri.parse(uriString)
+      val entry = statEntry(context, tree, path) ?: throw FolderException("not-found", "no file $path")
+      if (entry.dir) throw FolderException("failed", "$path is a folder")
+      if (entry.size > maxBytes) throw FolderException("failed", "$path: ${entry.size} bytes, more than $maxBytes")
+      val uri = DocumentsContract.buildDocumentUriUsingTree(tree, entry.id)
+      val descriptor = context.contentResolver.openFileDescriptor(uri, "r") ?: throw FolderException("failed", "cannot open $path")
+      lastErrorText.remove()
+      descriptor.detachFd()
+    } catch (e: Exception) {
+      lastErrorText.set(failure(e).toString())
+      -1
+    }
+
+  /** Why the last [read] or [openRead] on this thread failed (an error answer). */
   @JvmStatic fun lastError(): String = lastErrorText.get() ?: failure(FolderException("failed", "unknown")).toString()
 
   /** Writes the whole file (its folder must exist); answers the entry it has afterwards. */

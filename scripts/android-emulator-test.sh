@@ -1896,8 +1896,16 @@ if ((DEVICEFOLDER)); then
   # 4. Into the app: a note written into the folder (as Syncthing does) comes in at the next start.
   printf -- '- dopisane na komputerze: żółw\n' >"$OUT/pc.md"
   adb push "$OUT/pc.md" "/sdcard/Documents/Notatki/Z komputera.md" >/dev/null
+  # … and a film of 6 MiB (over the sync's 4 MiB: read from the document in pieces, through its
+  # file descriptor — never whole through the JVM).
+  head -c $((6 * 1024 * 1024)) /dev/urandom >"$OUT/film.mp4"
+  adb shell mkdir -p /sdcard/Documents/Notatki/assets
+  adb push "$OUT/film.mp4" /sdcard/Documents/Notatki/assets/film.mp4 >/dev/null
+  film_sum=$(sha256sum "$OUT/film.mp4" | cut -d' ' -f1)
+  app_film_is_whole() { [[ $(adb shell run-as "$PKG" sha256sum files/Folders/Notatki/assets/film.mp4 2>/dev/null | cut -d' ' -f1) == "$film_sum" ]]; }
   start_app "--locale pl --route $(json_arg '{"view":"sync","tab":"syncthing"}')"
   check "a note written into the folder came in" wait_for 60 app_has 'Z komputera.md' 'żółw'
+  check "… and the 6 MiB film, byte for byte" wait_for 120 app_film_is_whole
   check "the sync center shows the folder" wait_for 30 ui_has 'Folder „Notatki” na tym telefonie'
   app_shot df-5-sync-center
 
