@@ -6997,7 +6997,10 @@ task's box ticks it off (a right-click: its status menu; on an entry with a date
 ↓ / ↑ move a focus ring over the days from the selected one, Enter selects the ringed day. With a
 mouse it also draws the month (`qml/planning/CalendarMonthAtramentGrid.qml` over
 `src/app/views/atrament/monthview.h`) in CalendarMonthGrid's place — the same cells, pills, "+N
-more", week numbers and keys; touch UIs keep the QML grid for its swipe between months.
+more", week numbers and keys; touch UIs keep the QML grid for its swipe between months. The week
+likewise (`qml/planning/CalendarWeekAtramentGrid.qml` over `src/app/views/atrament/weekview.h`): the
+heads with their all-day pills, the hours scrolled to the first entry, the timed entries in their
+lanes, now's line; a right-click on an entry opens its date's menu.
 
 ### Pictures hold their pixels only near the view
 

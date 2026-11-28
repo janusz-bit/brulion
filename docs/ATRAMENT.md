@@ -1737,6 +1737,24 @@ the chrome around them, until the view's route shows no QML item ("No QML in the
    narrow cells' icons, every click and key, the look's map) and the self-test
    `tst_views_qml_atrament_month` (a click, →, PageDown / PageUp, a pill opening its entry). **Not
    yet**: the swipe between months (touch), a pill's tooltip, the gate's measurements.
+5. **Calendar, the week** (2026-11-28; `src/app/views/atrament/weekview.h`,
+   `qml/planning/CalendarWeekAtramentGrid.qml`; mouse UIs as the month). Over the 7 columns each
+   day's weekday and number on its disc (`calendarkeys.h`'s `dayDisc`, shared with the month) and its
+   all-day entries as pills (three rows at most, the third "+N more", which selects the day); the
+   corner's ISO week number opens the week's note. Under them the 24 hours in a scrolled area that
+   opens at the week's first timed entry (CalendarModel.firstHour; applied once the hours are laid
+   out), their lines and labels; the timed entries at their time — 45 minutes tall (at least two
+   pills), an event as long as it lasts (to midnight without an end), side by side in their lanes,
+   cascaded 6 px / 10 px in columns under 80 px (`timedRect`) — with a check or a cross when closed;
+   the selected day's column tinted, a weekend's sunken, now's red line in today's column
+   (DatesHelper.now). A column's or a head's click selects the day, a head's double click opens its
+   note, an entry's click opens it, a right-click its date's menu (PlanningTokenMenu at the
+   pointer); the keys as the month's (`gridKey`). Tested by `tests/atrament/views/tst_atrament_week`
+   (heads, discs, tints, the scroll to the first entry kept within a week, entries' places and
+   lanes, now's line, cascades, every click and the menu, the keys) and the self-test
+   `tst_views_qml_atrament_week` (a head clicked, →, PageDown / PageUp, a double click opening the
+   daily note). **Not yet**: the swipe between weeks (touch), now's line following the clock between
+   redraws, the day panel (QML), the gate's measurements.
 
 ### After the three views
 

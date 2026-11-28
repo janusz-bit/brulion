@@ -63,6 +63,7 @@ FocusScope {
     /// only where Atrament is built), and the self-test's values.
     property Item atramentAgenda: null
     property Item atramentMonth: null
+    property Item atramentWeek: null
     property var selfTestValues: ({})
     /// The agenda has nothing to show (CalendarAgendaList.empty): only today, without entries.
     readonly property bool agendaEmpty: cal.revision >= 0 && cal.rangeStart !== "-"
@@ -146,6 +147,19 @@ FocusScope {
             cal.previous()
         else if (action === "next")
             cal.next()
+    }
+    /// What the week drawn by Atrament asks (views/atrament/weekview.h's actions): the month's, and
+    /// an entry's menu at the pointer.
+    function atramentWeekAction(action: string, args: var): void {
+        if (action !== "menu") {
+            root.atramentMonthAction(action, args)
+            return
+        }
+        monthInfo.map = args
+        const x = 0 + AppController.routeInt(monthInfo.map, "x", 0)
+        const y = 0 + AppController.routeInt(monthInfo.map, "y", 0)
+        const entry = monthInfo.map.entry
+        root.openEntryMenu(entry, root.atramentWeek, x, y)
     }
     function openMonthEntry(date: string, entry: var): void {
         root.openEntry(entry)
@@ -428,7 +442,7 @@ FocusScope {
                     Layout.rightMargin: root.sideBySide ? 0 : Layout.leftMargin
                     Layout.bottomMargin: root.mode === "agenda" || root.stackedDay ? 0 : (Theme.narrow ? 0 : Theme.space2)
                     focus: true
-                    sourceComponent: root.mode === "week" ? weekView
+                    sourceComponent: root.mode === "week" ? (root.agendaAtrament && !root.gridSwipeNeeded ? atramentWeekView : weekView)
                                    : root.mode === "agenda" ? (root.agendaAtrament ? atramentAgendaView : agendaView)
                                    : root.agendaAtrament && !root.gridSwipeNeeded ? atramentMonthView : monthView
                 }
@@ -520,6 +534,36 @@ FocusScope {
                         return
                     root.selfTestValues = { calendarView: root, calendar: cal, list: root.atramentMonth }
                     monthSelfTest.setSource(Qt.resolvedUrl("../dev/MonthAtramentSelfTest.qml"), root.selfTestValues)
+                }
+            }
+        }
+    }
+    // The week drawn by Atrament (as the month: mouse UIs), loaded by file name.
+    Component {
+        id: atramentWeekView
+        FocusScope {
+            focus: true
+            Loader {
+                id: atramentWeekLoader
+                anchors.fill: parent
+                focus: true
+                source: "../planning/CalendarWeekAtramentGrid.qml"
+                onLoaded: {
+                    QmlCall.set(atramentWeekLoader.item, "calendarView", root)
+                    QmlCall.set(atramentWeekLoader.item, "calendar", cal)
+                    QmlCall.set(atramentWeekLoader.item, "viewModel", cal)
+                    root.atramentWeek = atramentWeekLoader.item as Item
+                }
+                Component.onDestruction: root.atramentWeek = null
+            }
+            Loader {
+                id: weekSelfTest
+                active: DevTools.editorScript === "week-atrament-selftest" && root.atramentWeek !== null
+                onActiveChanged: {
+                    if (!weekSelfTest.active)
+                        return
+                    root.selfTestValues = { calendarView: root, calendar: cal, list: root.atramentWeek }
+                    weekSelfTest.setSource(Qt.resolvedUrl("../dev/WeekAtramentSelfTest.qml"), root.selfTestValues)
                 }
             }
         }

@@ -139,8 +139,6 @@ private:
     atrament::AnyElement tracker(int row, Part part) { return m_parts.tracker(row, part, part.kind == Part::Cell); }
     void act(const QString &action, const QVariantMap &args) const;
     bool keyDown(const atrament::KeyDownEvent &e);
-    std::optional<int> moveOf(const QString &key) const;
-    bool pickSelected(bool ctrl) const;
 
     QPointer<QAbstractItemModel> m_model;
     MonthLook m_look;

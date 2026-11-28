@@ -1,5 +1,6 @@
 #include "monthview.h"
 
+#include "calendarkeys.h"
 #include "calendarmodel.h" // (its roles)
 #include "pageicons.h"
 #include "renderedspans.h"
@@ -325,26 +326,12 @@ void MonthView::pills(at::Div &column, int row, const DayData &d, int fitting)
                                         .child(tracker(row, {Part::More})));
 }
 
-// The day's number: today on a red disc, the selected day on a dark one, another month's faint.
+// The day's number on its disc (calendarkeys.h).
 at::AnyElement MonthView::number(const DayData &d)
 {
-    const bool marked = d.isToday || d.isSelected;
-    const at::Color disc = d.isToday ? m_look.today : d.isSelected ? m_look.selected : at::transparent();
-    const at::Color ink = marked ? (d.isToday ? m_look.onToday : m_look.onSelected) : d.inMonth ? m_look.text : m_look.faint;
-    const std::uint16_t weight = marked ? at::FontWeight::Bold : d.inMonth ? at::FontWeight::Medium : at::FontWeight::Normal;
-    return at::div()
-            .size(m_look.disc)
-            .flexShrink0()
-            .roundedFull()
-            .bg(disc)
-            .flexRow()
-            .itemsCenter()
-            .justifyCenter()
-            .textSize(m_look.smallSize)
-            .fontFeatures(u"tnum")
-            .fontWeight(weight)
-            .textColor(ink)
-            .child(at::text(u16View(QString::number(d.day))));
+    const DayDisc look{m_look.today, m_look.onToday, m_look.selected, m_look.onSelected, m_look.text, m_look.faint,
+                       m_look.disc, m_look.smallSize};
+    return dayDisc(look, d.day, d.isToday, d.isSelected, d.inMonth);
 }
 
 // An entry's pill: its variant's colours (an alarm in the reminder's, an event in its calendar's),
@@ -432,45 +419,15 @@ void MonthView::act(const QString &action, const QVariantMap &args) const
         onAction(action, args);
 }
 
-// The month's keys (CalendarMonthGrid's): the selected day moved, another month, Enter.
+// The month's keys (calendarkeys.h).
 bool MonthView::keyDown(const at::KeyDownEvent &e)
 {
-    const at::Keystroke &k = e.keystroke;
-    const QString key = QString::fromStdU16String(std::u16string(k.key));
-    const bool ctrl = k.modifiers.control;
-    if (k.modifiers.any() && !(ctrl && key == u"enter"))
-        return false;
-    if (const std::optional<int> days = moveOf(key)) {
-        act(u"move"_s, {{u"days"_s, *days}});
-        return true;
-    }
-    if (key == u"pageup" || key == u"pagedown") {
-        act(key == u"pageup" ? u"previous"_s : u"next"_s, {});
-        return true;
-    }
-    return key == u"enter" && pickSelected(ctrl);
-}
-
-// How far a key moves the selected day: ± 1, ± 7, to its week's first or last day.
-std::optional<int> MonthView::moveOf(const QString &key) const
-{
-    static const QHash<QString, int> moves{{u"left"_s, -1}, {u"right"_s, 1}, {u"up"_s, -7}, {u"down"_s, 7}};
-    if (moves.contains(key))
-        return moves.value(key);
-    if (key != u"home" && key != u"end")
-        return std::nullopt;
     const int selected = selectedRow();
-    const int inWeek = selected < 0 ? 0 : selected % 7; // (the grid's columns start the week)
-    return key == u"home" ? -inWeek : 6 - inWeek;
-}
-
-// Enter: the selected day picked (Ctrl: its daily note opened); none selected: nothing.
-bool MonthView::pickSelected(bool ctrl) const
-{
-    const DayData d = dayData(selectedRow());
-    if (d.date.isEmpty())
+    // (The grid's columns start the week.)
+    const std::optional<GridKey> asked = gridKey(e.keystroke, selected < 0 ? 0 : selected % 7, dayData(selected).date);
+    if (!asked)
         return false;
-    act(ctrl ? u"open"_s : u"day"_s, {{u"date"_s, d.date}});
+    act(asked->action, asked->args);
     return true;
 }
 
