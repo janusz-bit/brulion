@@ -201,6 +201,13 @@ void TestCodeGit::notARepository()
     QCOMPARE(finished(actions, u"commit"_s).at(1).toBool(), false);
     QTRY_VERIFY_WITH_TIMEOUT(!git.busy(), Wait);
 
+    // The changes since a checkpoint there: answered, with nothing.
+    QSignalSpy since(&git, &CodeGit::changesSinceReady);
+    git.changesSince(u"0123456789abcdef0123456789abcdef01234567"_s);
+    QTRY_COMPARE_WITH_TIMEOUT(since.count(), 1, Wait);
+    QCOMPARE(since.at(0).at(0).toString(), u"0123456789abcdef0123456789abcdef01234567"_s);
+    QVERIFY(since.at(0).at(1).toList().isEmpty());
+
     // `git init` there: the watched folder sees .git appear.
     gitIn(folder.root, {u"init"_s, u"-q"_s});
     QTRY_VERIFY_WITH_TIMEOUT(git.isRepo(), Wait);
