@@ -18,6 +18,8 @@ Read before changing code:
   A change to `b` goes into its reference there and into the documentation notebook's "Extension
   API" page in both languages; `tst_extensions_docs` runs every ```` ```luau ```` example of the
   documentation and fails for a function no reference names.
+* `docs/NOTEBOOK-SETTINGS.md` — the notebook's settings in a note and the interface layout as text
+  (design, and what is built of it).
 * `src/core/types.h` — shared data model. Change only when strictly needed, keep compatible.
 * `TODO.md` — ideas and known gaps, a plain list by category with no order or "in
   progress" marks. Implement an item only when the user asks for it (fully: tests, docs, i18n);

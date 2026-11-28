@@ -130,10 +130,12 @@ done in the repository simply disappears from the list.
 * **A small language for the interface layout (in the style of Typst)** — a text file describing
   what the icon bar, the pages panel, the "More" menu, tabs and the bottom navigation show and in
   what order (icons, labels, groups). Today this is set only in Settings → Appearance → Layout
-  (hidden items, order of the panel's sections, bottom navigation buttons).
+  (hidden items, order of the panel's sections, bottom navigation buttons). Designed in
+  docs/NOTEBOOK-SETTINGS.md "The layout language".
 * **Notebook settings in notes** — the notebook settings stored as a note (a page in the notebook,
   editable like any other and synced together with it) instead of `.brulion/config.json`; to be
-  decided: the format, moving the existing settings, and what stays a device setting.
+  decided — the format, moving the existing settings, what stays a device setting: designed in
+  docs/NOTEBOOK-SETTINGS.md (its "Order of work" says what is built).
 * **Pictures from the internet — check on a real phone.** The Android emulator
   (`scripts/android-emulator-test.sh --web-pictures`) and the Chromium and Firefox browsers
   (`tests/web`, GitHub Actions) check this automatically; a real phone remains

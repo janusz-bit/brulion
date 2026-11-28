@@ -63,6 +63,9 @@ cache (docs/ARCHITECTURE.md); `tst_markdown_model`'s golden digest fails until y
 
 ### `.brulion/config.json`
 
+(The same keys can live in a note, `Notebook settings.md`, edited like any page — the design and
+what is built of it: docs/NOTEBOOK-SETTINGS.md.)
+
 ```json
 {
   "version": 1,
