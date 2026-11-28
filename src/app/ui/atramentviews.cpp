@@ -1,11 +1,14 @@
 // AtramentView's views other than the editor's (docs/ATRAMENT.md "The views in Atrament (M3)"),
 // each a kind of kKinds: `view: "tasks"` — TasksView over the TaskListModel in `viewModel` —,
-// `view: "search"` — SearchResultsView over the SearchResultModel —; their look from `viewLook` and
+// `view: "search"` — SearchResultsView over the SearchResultModel —, `view: "agenda"` — AgendaView
+// over the CalendarModel —; their look from `viewLook` and
 // the item's colours, their rows' requests as `viewAction` (x, y in this item: the Atrament window's
 // coordinates are the item's).
 #include "atramentview.h"
 
 #ifdef BRULION_HAS_ATRAMENT_VIEWS
+#include "agendaview.h"
+#include "calendarmodel.h"
 #include "dateshelper.h"
 #include "searchmodel.h"
 #include "searchview.h"
@@ -32,6 +35,7 @@ struct AtramentView::Views {
     virtual std::optional<at::Rect> partBounds(int row, const QString &part) const = 0;
     virtual int currentRow() const = 0;
     virtual void setCurrentRow(int row) = 0;
+    virtual void showRow(int row) = 0;
 };
 
 #ifdef BRULION_HAS_ATRAMENT_VIEWS
@@ -70,21 +74,53 @@ struct EntityViews final : AtramentView::Views {
     {
         entity.update(app, [row](View &v, at::Context<View> &cx) { v.revealRow(row, cx); });
     }
+    void showRow(int row) override
+    {
+        entity.update(app, [row](View &v, at::Context<View> &cx) {
+            if constexpr (requires { v.showRow(row, cx); })
+                v.showRow(row, cx);
+            else
+                v.revealRow(row, cx);
+        });
+    }
 };
 
-// A daily note's date in words, as the app's QML says it (its DatesHelper).
-std::function<QString(const QString &)> dateWords(QQmlEngine *engine)
+// The app's QML singleton `name` (null: none, or no engine).
+QPointer<QObject> singleton(QQmlEngine *engine, const char *name)
 {
-    QPointer<brulion::ui::DatesHelper> dates = engine ? qobject_cast<brulion::ui::DatesHelper *>(engine->singletonInstance<QObject *>("Brulion", "DatesHelper"))
-                                         : nullptr;
-    return [dates](const QString &date) { return dates ? dates->formatLong(date) : date; };
+    return engine ? engine->singletonInstance<QObject *>("Brulion", name) : nullptr;
+}
+
+// A date in words as the app's QML says it (its DatesHelper): `style` formatLong, formatHuman…
+std::function<QString(const QString &)> dateWords(QQmlEngine *engine, QString (brulion::ui::DatesHelper::*style)(const QString &) const)
+{
+    QPointer<brulion::ui::DatesHelper> dates = qobject_cast<brulion::ui::DatesHelper *>(singleton(engine, "DatesHelper"));
+    return [dates, style](const QString &date) { return dates ? (dates.data()->*style)(date) : date; };
+}
+
+// A daily note's day in short words (Workspace.journalDate, DatesHelper.formatShort; "": not one).
+std::function<QString(const QString &)> journalDayWords(QQmlEngine *engine)
+{
+    const QPointer<QObject> workspace = singleton(engine, "Workspace");
+    const auto shortDate = dateWords(engine, &brulion::ui::DatesHelper::formatShort);
+    return [workspace, shortDate](const QString &path) {
+        QString date;
+        if (workspace)
+            QMetaObject::invokeMethod(workspace.data(), "journalDate", Q_RETURN_ARG(QString, date), Q_ARG(QString, path));
+        return date.isEmpty() ? date : shortDate(date);
+    };
 }
 
 // What a view needs from the app beside its model (its hooks).
 void configure(views::TasksView &, QQmlEngine *) { }
 void configure(views::SearchResultsView &v, QQmlEngine *engine)
 {
-    v.formatDate = dateWords(engine);
+    v.formatDate = dateWords(engine, &brulion::ui::DatesHelper::formatLong);
+}
+void configure(views::AgendaView &v, QQmlEngine *engine)
+{
+    v.formatHuman = dateWords(engine, &brulion::ui::DatesHelper::formatHuman);
+    v.journalDay = journalDayWords(engine);
 }
 
 // A view's kind: its name (AtramentView.view) and how it is made over `viewModel` (null: the model
@@ -105,7 +141,8 @@ struct Kind {
     Maker make;
 };
 const Kind kKinds[] = {{u"tasks", &make<views::TasksView, brulion::planning::TaskListModel>},
-                       {u"search", &make<views::SearchResultsView, brulion::content::SearchResultModel>}};
+                       {u"search", &make<views::SearchResultsView, brulion::content::SearchResultModel>},
+                       {u"agenda", &make<views::AgendaView, brulion::planning::CalendarModel>}};
 
 const Kind *kindNamed(const QString &name)
 {
@@ -171,6 +208,12 @@ void AtramentView::viewRevealRow(int row)
 {
     if (m_views)
         m_views->setCurrentRow(row);
+}
+
+void AtramentView::viewShowRow(int row)
+{
+    if (m_views)
+        m_views->showRow(row);
 }
 
 int AtramentView::viewCurrentRow() const

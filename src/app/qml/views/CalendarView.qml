@@ -53,6 +53,18 @@ FocusScope {
     /// Narrow month view: a compact grid with the selected day's panel below it (phones); the
     /// week view opens the day as a bottom sheet instead.
     readonly property bool stackedDay: !sideBySide && mode === "month"
+    /// The agenda drawn by Atrament (Settings → Editor, AppSettings.viewsAtrament, or
+    /// `--atrament-views`; where Atrament is built): CalendarAgendaAtramentList in
+    /// CalendarAgendaList's place (docs/ATRAMENT.md "The views in Atrament (M3)").
+    readonly property bool agendaAtrament: DeviceInfo.atrament && (AppSettings.viewsAtrament || DevTools.atramentViews)
+    /// The agenda drawn by Atrament once loaded (an AtramentView: the type exists only where
+    /// Atrament is built), and the self-test's values.
+    property Item atramentAgenda: null
+    property var selfTestValues: ({})
+    /// The agenda has nothing to show (CalendarAgendaList.empty): only today, without entries.
+    readonly property bool agendaEmpty: cal.revision >= 0 && cal.rangeStart !== "-"
+                                        && (cal.rowCount() === 0 || (cal.rowCount() === 1 && cal.itemCount === 0
+                                            && cal.data(cal.index(0, 0), CalendarModel.HasJournalRole) !== true))
     property string mode: {
         const m = AppSettings.value("calendar/mode", "month")
         return m === "week" || m === "agenda" ? m : "month"
@@ -84,6 +96,59 @@ FocusScope {
     // line, isTask, status, closed, alarm, date, time, spec, occurrence, rule, priority, … }, read
     // through a typed map.
     MapHolder { id: entryInfo }
+    /// What the agenda drawn by Atrament asks (views/atrament/agendaview.h's actions): what
+    /// CalendarAgendaList's signals do.
+    MapHolder { id: agendaInfo }
+    function atramentAgendaAction(action: string, args: var): void {
+        // (The map through a MapHolder, every value read into a plain value before any call.)
+        agendaInfo.map = args
+        const date = "" + AppController.routeText(agendaInfo.map, "date")
+        const x = 0 + AppController.routeInt(agendaInfo.map, "x", 0)
+        const y = 0 + AppController.routeInt(agendaInfo.map, "y", 0)
+        const entry = agendaInfo.map.entry
+        if (action === "day")
+            root.pickAgendaDay(date)
+        else if (action === "journal")
+            root.openJournal(date)
+        else if (action === "open")
+            root.openEntry(entry)
+        else if (action === "toggle")
+            root.toggleEntry(entry)
+        else if (action === "menu")
+            root.openEntryMenu(entry, root.atramentAgenda, x, y)
+        else if (action === "statusMenu")
+            root.openAgendaStatusMenu(entry, x, y)
+    }
+    /// A day picked in the agenda drawn by Atrament: selected, the list not scrolled to it.
+    function pickAgendaDay(date: string): void {
+        QmlCall.set(root.atramentAgenda, "picking", true)
+        root.showDay(date)
+        QmlCall.set(root.atramentAgenda, "picking", false)
+    }
+    /// The status menu of a task in the agenda drawn by Atrament (TaskBox's TaskStatusMenu), made
+    /// when first opened, and the entry it is for.
+    property TaskStatusMenu agendaStatusMenu: null
+    property var agendaMenuEntry: ({})
+    property string agendaMenuStatus
+    function openAgendaStatusMenu(entry: var, x: int, y: int): void {
+        root.agendaMenuEntry = entry
+        entryInfo.map = entry
+        const status = "" + AppController.routeText(entryInfo.map, "status")
+        root.agendaMenuStatus = status !== "" ? status : "todo"
+        if (root.agendaStatusMenu === null)
+            root.agendaStatusMenu = agendaStatusMenuComponent.createObject(root) as TaskStatusMenu
+        root.agendaStatusMenu.status = root.agendaMenuStatus
+        root.agendaStatusMenu.popup(root.atramentAgenda, x, y)
+    }
+    Component {
+        id: agendaStatusMenuComponent
+        TaskStatusMenu {
+            onStatusChosen: (status) => {
+                if (status !== root.agendaMenuStatus)
+                    root.setEntryStatus(root.agendaMenuEntry, status)
+            }
+        }
+    }
     function openEntry(entry: var): void {
         entryInfo.map = entry
         if (daySheet.opened)
@@ -332,7 +397,8 @@ FocusScope {
                     Layout.rightMargin: root.sideBySide ? 0 : Layout.leftMargin
                     Layout.bottomMargin: root.mode === "agenda" || root.stackedDay ? 0 : (Theme.narrow ? 0 : Theme.space2)
                     focus: true
-                    sourceComponent: root.mode === "week" ? weekView : root.mode === "agenda" ? agendaView : monthView
+                    sourceComponent: root.mode === "week" ? weekView
+                                   : root.mode === "agenda" ? (root.agendaAtrament ? atramentAgendaView : agendaView) : monthView
                 }
                 Rectangle {
                     visible: root.stackedDay
@@ -393,6 +459,48 @@ FocusScope {
             onDayTapped: (date) => root.showDay(date)
             onDayOpened: (date) => root.openJournal(date)
             onItemOpened: (entry) => root.openEntry(entry)
+        }
+    }
+    // Drawn by Atrament (agendaAtrament): loaded by file name — it exists only where Atrament is
+    // built —, CalendarAgendaList's empty state over it.
+    Component {
+        id: atramentAgendaView
+        FocusScope {
+            focus: true
+            Loader {
+                id: atramentAgendaLoader
+                anchors.fill: parent
+                focus: true
+                visible: !root.agendaEmpty
+                source: "../planning/CalendarAgendaAtramentList.qml"
+                onLoaded: {
+                    QmlCall.set(atramentAgendaLoader.item, "calendarView", root)
+                    QmlCall.set(atramentAgendaLoader.item, "calendar", cal)
+                    QmlCall.set(atramentAgendaLoader.item, "viewModel", cal)
+                    root.atramentAgenda = atramentAgendaLoader.item as Item
+                }
+                Component.onDestruction: root.atramentAgenda = null
+            }
+            BEmptyState {
+                anchors.centerIn: parent
+                width: Math.min(parent.width - 2 * Theme.space6, 420)
+                visible: root.agendaEmpty
+                iconName: "calendar"
+                title: qsTranslate("CalendarAgendaList", "Nothing planned in these four weeks")
+                description: qsTranslate("CalendarAgendaList", "Dates (📅, ⏳) and reminders (⏰) from your notes appear here. Choose a day to add a task or a reminder to it.")
+            }
+            // Dev: the self-test of the agenda drawn by Atrament (ctest tst_views_qml_atrament_agenda),
+            // loaded from its file in developer builds only.
+            Loader {
+                id: agendaSelfTest
+                active: DevTools.editorScript === "agenda-atrament-selftest" && root.atramentAgenda !== null
+                onActiveChanged: {
+                    if (!agendaSelfTest.active)
+                        return
+                    root.selfTestValues = { calendarView: root, calendar: cal, list: root.atramentAgenda }
+                    agendaSelfTest.setSource(Qt.resolvedUrl("../dev/AgendaAtramentSelfTest.qml"), root.selfTestValues)
+                }
+            }
         }
     }
     Component {

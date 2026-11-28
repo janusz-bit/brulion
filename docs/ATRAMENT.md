@@ -1674,6 +1674,31 @@ the chrome around them, until the view's route shows no QML item ("No QML in the
    (qml/dev/SearchAtramentSelfTest.qml: a query typed, ↓ in the field, a click opening a result).
    **Not yet**: the field as an Atrament `TextInput` and the recent searches drawn by Atrament (they
    stay QML), a pressed row's background (the delegate's `down`), the gate's measurements.
+3. **Calendar, the agenda** (2026-11-28; `src/app/views/atrament/agendaview.h`,
+   `qml/planning/CalendarAgendaAtramentList.qml`, the same `viewsAtrament`; docs/UI.md "The task
+   list drawn by Atrament"). CalendarView's agenda mode shows the CalendarModel's days as rows of an
+   Atrament list in CalendarAgendaList's place (its empty state stays QML over it): a day's number
+   on its disc (today's red, the selected day's dark, a past day's outlined), its weekday and date
+   with "Today" / formatHuman's one-word "Tomorrow" under it, the "Journal" button of a day with a
+   daily note, its entries as PlanningItemRow shows them — a task's box (`taskbox.h`, shared with
+   Tasks), an event's colour or the entry's icon (a reminder's and an alarm's in their colour), the
+   time, the title on two lines at most (done or past: muted, cancelled: struck out), where it is
+   written ("Journal · 13 Oct", the page, an event's end, calendar and place), the kind of date as a
+   chip in its variant's colours (none on a row narrower than 300 px) — or "Nothing planned." /
+   "Only a journal entry.", and a separator. A header's click picks its day (CalendarView.showDay:
+   the side panel follows), the "Journal" button opens the daily note, an entry's click opens it, a
+   box toggles its task (the undo toast), a right-click on the box its TaskStatusMenu, on an entry
+   with a token its date's PlanningTokenMenu. Keys: ↓ / ↑ from the selected day move the current
+   one (a focus ring), Enter picks it. The list scrolls to the selected day (else today) when the
+   range changes (`viewShowRow`). For screen readers: the days' headers buttons named by their
+   date (", today"), the entries list items named as PlanningItemRow's, a task's box a checkbox.
+   Tested by `tests/atrament/views/tst_atrament_agenda` (discs, every click's and right-click's
+   request, the keys, the chips' colours and narrow rows, a day shown at the top, the model
+   followed, the look's map) and the self-test `tst_views_qml_atrament_agenda`
+   (qml/dev/AgendaAtramentSelfTest.qml: tomorrow's task ticked off in its file by its box, a day
+   picked by its header, ↓ and Enter, the Journal button). **Not yet**: the month and week grids
+   and the day panel (they stay QML), Tab through the entries (their own focus), touch's long press
+   for the menus, the gate's measurements.
 
 ### After the three views
 

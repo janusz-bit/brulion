@@ -292,6 +292,12 @@ done in the repository simply disappears from the list.
   the dialog and the menu; a cell, a TextEdit with the highlighter in place of its TextField. Also
   untried on a real phone: the long press on an edited chip with Android's and GrapheneOS's own
   text selection handles.
+* **A binding loop in the calendar's day panel** — with the side panel about 300 px wide (a
+  1000 px window) a day whose entries include a closed task logs "Binding loop detected for
+  property width" at PlanningItemRow's text column (`qml/planning/PlanningItemRow.qml`): the chip
+  shows only on rows wider than 300 px, so a row at that width likely flips between two layouts as
+  the panel's ColumnLayout settles. Seen by the agenda's self-test (`tst_views_qml_atrament_agenda`
+  runs at 1200 px for now).
 
 ## Capture
 

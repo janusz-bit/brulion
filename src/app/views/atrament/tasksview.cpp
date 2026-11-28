@@ -1,6 +1,7 @@
 #include "tasksview.h"
 
 #include "lookmap.h"
+#include "taskbox.h"
 
 #include "markdown/renderedtext.h"
 #include "pageicons.h"
@@ -271,23 +272,9 @@ at::AnyElement TasksView::taskBox(int row, const RowData &d)
 {
     const TasksView *self = this;
     const QVariantMap args = taskArgs(d);
-    const bool closed = d.closed();
-    const at::Color ink = closed ? m_look.accent : m_look.box;
-    const QString icon = d.status == u"cancelled" ? u"x"_s : u"check"_s;
-    const at::Color background = m_look.background;
-    return at::div()
+    return taskBoxShape(d.status, {m_look.box, m_look.accent, m_look.background})
             .id(u"box")
-            .relative()
-            .size(18)
-            .mt((m_look.lineHeight - 18) / 2)
-            .flexShrink0()
-            .rounded(5)
-            .border(1.5f)
-            .borderColor(ink)
-            .bg(closed ? ink : at::transparent())
-            .cursorPointer()
-            .role(at::Role::CheckBox)
-            .checked(d.status == u"done")
+            .mt((m_look.lineHeight - kTaskBoxSize) / 2)
             .ariaLabel(u16View(d.text))
             .onClick([self, args](const at::ClickEvent &, at::Window &, at::App &) { self->act(u"toggle"_s, args); })
             .onMouseDown(at::MouseButton::Right,
@@ -295,13 +282,6 @@ at::AnyElement TasksView::taskBox(int row, const RowData &d)
                              self->menuAt(u"statusMenu"_s, menu, e.position);
                              w.stopPropagation();
                          })
-            .when(closed,
-                  [icon, background](at::Div &&box) {
-                      return std::move(box).child(at::canvas([icon, background](at::Rect b, at::Window &w, at::App &) {
-                          if (const auto i = editor::atr::pageIcon(icon))
-                              w.paintIcon(*i, b.inset(at::Edges::all(2)), background);
-                      }).absolute().inset(0));
-                  })
             .child(tracker(row, Part::Box));
 }
 

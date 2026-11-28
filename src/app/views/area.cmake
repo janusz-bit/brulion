@@ -10,8 +10,10 @@ if(TARGET brulion_editor_atrament AND TARGET brulion_planning)
     target_link_libraries(brulion PRIVATE brulion_views_atrament)
     target_compile_definitions(brulion PRIVATE BRULION_HAS_ATRAMENT_VIEWS)
     # TasksView loads them by file name where they exist (they name AtramentView).
-    qt_target_qml_sources(brulion QML_FILES qml/planning/TasksAtramentList.qml qml/content/SearchAtramentList.qml)
+    qt_target_qml_sources(brulion QML_FILES qml/planning/TasksAtramentList.qml qml/content/SearchAtramentList.qml
+        qml/planning/CalendarAgendaAtramentList.qml)
     if(BRULION_DEV_QML_ENABLED)
-        qt_target_qml_sources(brulion QML_FILES qml/dev/TasksAtramentSelfTest.qml qml/dev/SearchAtramentSelfTest.qml)
+        qt_target_qml_sources(brulion QML_FILES qml/dev/TasksAtramentSelfTest.qml qml/dev/SearchAtramentSelfTest.qml
+            qml/dev/AgendaAtramentSelfTest.qml)
     endif()
 endif()
