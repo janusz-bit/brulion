@@ -1347,10 +1347,12 @@ are **exercise lines**. A tagged line without children is a workout of one exerc
   `scripts/gym-catalog.py`), with Polish names for the common ones — 879 exercises, about 220
   translated. Its data are resources of the app: `exercises.json` (239 KB, 33 KB compressed) and
   `exercise-instructions.json` (607 KB, 130 KB compressed; read one exercise at a time; the
-  English instructions) and `exercise-instructions-pl.json` (the Polish translation of 144 common
-  exercises, written by hand — `scripts/gym-catalog.py` does not touch it: the same ids, the same
-  number of steps, which `tst_extensions_gym` checks), so the app,
-  the APK and the browser's download grow by about 165 KB (rcc's zlib; measured 2026-11-20). The
+  English instructions) and `exercise-instructions-pl.json` (569 KB, 131 KB compressed: the Polish
+  translation of every exercise's instructions, written by hand in metric units —
+  `scripts/gym-catalog.py` does not touch it: the same ids, the same number of steps, every exercise
+  with English instructions, no inches, feet or pounds, which `tst_extensions_gym` checks), so the
+  app, the APK and the browser's download grow by about 270 KB (rcc's zlib: 165 KB measured
+  2026-11-20 with 144 exercises translated; the rest add 105 KB, gzip -9 on 2026-11-28). The
   exercises' pictures (two of 873 exercises each — where the movement starts and where it ends —,
   about 70 MB) are not bundled: an exercise says how many it has (`pictures`) and the catalog's
   `source.pictures` is the address they are under at the pinned commit
@@ -1373,9 +1375,8 @@ are **exercise lines**. A tagged line without children is a workout of one exerc
 
   (In English `catalog::`, `muscles::`, `secondary-muscles::`, `equipment::`, `category::`,
   `level::`, `## Instructions`; the instructions are free-exercise-db's English. In Polish — the
-  notebook's language for the page, the app's language for the exercise view — the 144 common
-  exercises have Polish instructions and the others show the English ones with a note that they
-  are in English.)
+  notebook's language for the page, the app's language for the exercise view — they are the Polish
+  translation.)
 * **Weigh-ins** (the body weight log): a block tagged `#waga` (`#weight`) in a daily note — its
   weight with `kg`, `lb` or `lbs` (a number alone: the setting's unit), optionally the body fat
   `18 %`, any other words and tags as notes, in any order:

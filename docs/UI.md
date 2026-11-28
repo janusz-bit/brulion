@@ -973,8 +973,7 @@ phone they keep their labels, their icons go first), the rest timer's banner.
   under today's workout, else a new one: `- [ ] [[Wiosłowanie sztangą]] 3×10`, cardio `20 min`,
   stretching `2×30 s`), **Create the exercise's page** (the catalog's properties and instructions:
   docs/SYNTAX.md §5) or the link to it, its sessions (to Progress), the instructions as a numbered
-  list: in a Polish interface the Polish translation of the 144 common exercises, for the rest
-  free-exercise-db's English with the note "Opis po angielsku"; English in an English one.
+  list: in a Polish interface the Polish translation, free-exercise-db's English in an English one.
 * **Start a workout** (the header's button, the palette's "Siłownia: zacznij trening"): asks which
   plan (a page tagged `#plan-treningowy`) and appends it to today's note with progression.
 

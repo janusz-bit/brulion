@@ -56,7 +56,7 @@ Pomiar to zwykły punkt dziennika z tagiem `#waga` (albo `#weight`):
 Masa z `kg` albo `lb` (sama liczba: jednostka z ustawień), opcjonalnie tkanka tłuszczowa w procentach, a pozostałe słowa to notatka. Kilka pomiarów jednego dnia: liczy się ostatni. Szybko zapiszesz go też z palety (**Siłownia: zapisz masę ciała**), a `{{ext:silownia/waga}}` w dowolnej notatce pokaże ostatni pomiar i trend.
 
 ## Katalog ćwiczeń
-**Katalog ćwiczeń** (przycisk w widoku Dziś albo paleta) to ponad 870 ćwiczeń: 51 Brulionu i cała baza free-exercise-db (domena publiczna), popularne z polskimi nazwami. Szukaj po nazwie w dowolnym języku, bez polskich znaków też (`wioslowanie`), i zawężaj mięśniem, sprzętem albo rodzajem. Ćwiczenie pokazuje swoje mięśnie, dwa zdjęcia ruchu (początek i koniec) i opis wykonania (po polsku dla 144 najpopularniejszych ćwiczeń, dla reszty po angielsku); możesz dopisać je do dzisiejszego treningu albo założyć jego stronę:
+**Katalog ćwiczeń** (przycisk w widoku Dziś albo paleta) to ponad 870 ćwiczeń: 51 Brulionu i cała baza free-exercise-db (domena publiczna), popularne z polskimi nazwami. Szukaj po nazwie w dowolnym języku, bez polskich znaków też (`wioslowanie`), i zawężaj mięśniem, sprzętem albo rodzajem. Ćwiczenie pokazuje swoje mięśnie, dwa zdjęcia ruchu (początek i koniec) i opis wykonania (po polsku); możesz dopisać je do dzisiejszego treningu albo założyć jego stronę:
 
 ```markdown
 katalog:: back-squat

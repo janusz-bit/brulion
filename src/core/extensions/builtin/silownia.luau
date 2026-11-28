@@ -21,8 +21,8 @@
 --
 -- The catalog (exercises.json, exercise-instructions.json) is Brulion's 51 exercises and
 -- free-exercise-db's (github.com/yuhonas/free-exercise-db, the Unlicense), made by
--- scripts/gym-catalog.py. exercise-instructions-pl.json is the Polish translation of the common
--- exercises' instructions (the same ids and steps, written by hand); the rest stay English.
+-- scripts/gym-catalog.py. exercise-instructions-pl.json is the Polish translation of all their
+-- instructions (the same ids and steps, in metric units).
 
 type Set = {
     reps: number?,
@@ -83,7 +83,6 @@ local WRITTEN = {
         category = "kategoria",
         level = "poziom",
         instructions = "Wykonanie",
-        instructionsNote = "Opis po angielsku, z free-exercise-db (Unlicense).",
     },
     en = {
         workoutTags = { "workout", "trening" },
@@ -101,7 +100,6 @@ local WRITTEN = {
         category = "category",
         level = "level",
         instructions = "Instructions",
-        instructionsNote = "From free-exercise-db (Unlicense).",
     },
 }
 
@@ -182,7 +180,6 @@ local INTERFACE = {
         secondaryMuscles = "Mięśnie pomocnicze",
         level = "Poziom",
         instructions = "Wykonanie",
-        instructionsEnglish = "Opis po angielsku, z free-exercise-db.",
         pictureStart = "Początek ruchu",
         pictureEnd = "Koniec ruchu",
         picturesSource = "Zdjęcia z free-exercise-db",
@@ -312,7 +309,6 @@ local INTERFACE = {
         secondaryMuscles = "Secondary muscles",
         level = "Level",
         instructions = "Instructions",
-        instructionsEnglish = "",
         pictureStart = "Start",
         pictureEnd = "Finish",
         picturesSource = "Pictures from free-exercise-db",
@@ -1447,21 +1443,14 @@ local function searchCatalog(query: string, filters: Filters): { CatalogItem }
     return found
 end
 
--- An exercise's instructions in `lang`: the Polish translation when there is one (the common
--- exercises have it: exercise-instructions-pl.json), else free-exercise-db's English. The second
--- value tells which language the steps are in.
-local function instructionsOf(id: string, lang: string): ({ string }?, string)
-    if lang == "pl" then
-        local polish = b.data("instructions-pl", id)
-        if type(polish) == "table" and #polish > 0 then
-            return polish :: { string }, "pl"
-        end
+-- An exercise's instructions in `lang`: exercise-instructions-pl.json in Polish (every exercise
+-- with English instructions has them: tst_extensions_gym), else free-exercise-db's English.
+local function instructionsOf(id: string, lang: string): { string }?
+    local steps = b.data(if lang == "pl" then "instructions-pl" else "instructions", id)
+    if type(steps) == "table" and #steps > 0 then
+        return steps :: { string }
     end
-    local english = b.data("instructions", id)
-    if type(english) == "table" and #english > 0 then
-        return english :: { string }, "en"
-    end
-    return nil, "en"
+    return nil
 end
 
 -- An exercise page's text from the catalog (from-catalog, the exercise view's "Create"): its
@@ -1480,15 +1469,11 @@ local function exercisePageText(item: CatalogItem): string
     if item.level then
         table.insert(lines, `{W.level}:: {nameIn(data.levels, item.level :: string, lang)}`)
     end
-    local steps, stepsLang = instructionsOf(item.id, lang)
+    local steps = instructionsOf(item.id, lang)
     if steps ~= nil then
         table.insert(lines, "")
         table.insert(lines, `## {W.instructions}`)
         table.insert(lines, "")
-        if lang == "pl" and stepsLang == "en" then
-            table.insert(lines, W.instructionsNote)
-            table.insert(lines, "")
-        end
         for i, step in steps do
             table.insert(lines, `{i}. {step}`)
         end
@@ -2760,11 +2745,8 @@ local function exerciseView(params: { [string]: any })
     end
     table.insert(items, b.ui.divider())
     table.insert(items, b.ui.heading(T.instructions))
-    local steps, stepsLang = instructionsOf(item.id, b.uiLang())
+    local steps = instructionsOf(item.id, b.uiLang())
     if steps ~= nil then
-        if T.instructionsEnglish ~= "" and stepsLang == "en" then
-            table.insert(items, b.ui.text(T.instructionsEnglish, true))
-        end
         local lines: { string } = {}
         for i, step in steps do
             table.insert(lines, `{i}. {step}`)
