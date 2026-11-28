@@ -109,6 +109,7 @@ constexpr auto kCodeLineNumbers = "editor/codeLineNumbers"_L1;
 constexpr auto kTerminalAtrament = "code/terminalAtrament"_L1;
 constexpr auto kSpellCheck = "spelling/enabled"_L1;
 constexpr auto kEditorAtrament = "editor/atrament"_L1;
+constexpr auto kViewsAtrament = "views/atrament"_L1;
 constexpr auto kTaskStatusHistory = "tasks/statusHistory"_L1;
 constexpr auto kSpellLanguages = "spelling/languages"_L1;
 constexpr auto kSpellWholePage = "spelling/wholePage"_L1;
@@ -1693,6 +1694,17 @@ void AppSettings::setEditorAtrament(bool on)
 {
     if (store(kEditorAtrament, on, editorAtrament()))
         Q_EMIT editorAtramentChanged();
+}
+
+bool AppSettings::viewsAtrament() const
+{
+    return m_settings->value(kViewsAtrament, false).toBool();
+}
+
+void AppSettings::setViewsAtrament(bool on)
+{
+    if (store(kViewsAtrament, on, viewsAtrament()))
+        Q_EMIT viewsAtramentChanged();
 }
 
 bool AppSettings::spellCheck() const

@@ -13,6 +13,7 @@
 #include <QQmlComponent>
 #include <QQmlEngine>
 #include <QString>
+#include <QRectF>
 #include <QVariantMap>
 
 #include <functional>
@@ -118,6 +119,11 @@ class AtramentView : public brulion::atrament::AtramentItem {
     Q_PROPERTY(QString view READ view WRITE setView NOTIFY viewChanged FINAL)
     // "page": the editor's BlockListModel (a PageController's `blocks`), set before the view.
     Q_PROPERTY(QObject *pageModel READ pageModel WRITE setPageModel NOTIFY pageModelChanged FINAL)
+    // A view other than the editor's ("tasks": a TaskListModel; docs/ATRAMENT.md "The views in
+    // Atrament (M3)"), set before the view is shown; its look ("tasks": TasksLook's fields by name —
+    // colours, sizes, uiFamily).
+    Q_PROPERTY(QObject *viewModel READ viewModel WRITE setViewModel NOTIFY viewModelChanged FINAL)
+    Q_PROPERTY(QVariantMap viewLook READ viewLook WRITE setViewLook NOTIFY viewLookChanged FINAL)
     // "page": the editor's look (BlockEditor's metrics and Theme colours).
     Q_PROPERTY(qreal fontSize MEMBER m_fontSize NOTIFY styleChanged FINAL)
     Q_PROPERTY(qreal lineHeight MEMBER m_lineHeight NOTIFY styleChanged FINAL)
@@ -302,6 +308,16 @@ public:
     void setView(const QString &view);
     QObject *pageModel() const { return m_pageModel.data(); }
     void setPageModel(QObject *model);
+    QObject *viewModel() const { return m_viewModel.data(); }
+    void setViewModel(QObject *model);
+    QVariantMap viewLook() const { return m_viewLook; }
+    void setViewLook(const QVariantMap &look);
+    // Where row `row`'s part ("row", "box", "text") of a view other than the editor's was drawn, in
+    // this item (empty: not drawn) — self-tests click there; the row its keys made current (−1:
+    // none); the next frame showing a row.
+    Q_INVOKABLE QRectF viewPartRect(int row, const QString &part) const;
+    Q_INVOKABLE int viewCurrentRow() const;
+    Q_INVOKABLE void viewRevealRow(int row);
     QObject *pageController() const { return m_pageController.data(); }
     void setPageController(QObject *controller);
     qreal contentHeight() const { return m_contentHeight; }
@@ -425,6 +441,11 @@ public:
 Q_SIGNALS:
     void viewChanged();
     void pageModelChanged();
+    void viewModelChanged();
+    void viewLookChanged();
+    // What a row of a view other than the editor's asks ("tasks": views/atrament/tasksview.h's
+    // actions; x, y in this item).
+    void viewAction(const QString &action, const QVariantMap &args);
     // "page": a link of row `row` clicked or tapped (BlockEditor.activateLink), a task's box.
     void linkActivated(int row, const QString &link);
     // The same with the click's place in this item (a date chip's menu opens there).
@@ -583,6 +604,14 @@ private:
     QString m_view;
     bool m_attached = false;
     QPointer<QObject> m_pageModel;
+    // The views other than the editor's (atramentviews.cpp; shared: Views is defined there).
+    struct Views;
+    std::shared_ptr<Views> m_views;
+    QPointer<QObject> m_viewModel;
+    QVariantMap m_viewLook;
+    bool attachOtherView();
+    bool setBeforeView(QPointer<QObject> &slot, QObject *model, const char *what);
+    void applyViewLook();
     // The "page" view's entity (editor/atrament/pageview.h), released after the window closes.
     struct Page;
     std::unique_ptr<Page> m_page;

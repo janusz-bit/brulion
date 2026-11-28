@@ -10,3 +10,7 @@ endforeach()
 if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/editor/CMakeLists.txt AND TARGET brulion_editor_atrament)
     add_subdirectory(editor)
 endif()
+# The app's views drawn by Atrament (src/app/views/atrament).
+if(EXISTS ${CMAKE_CURRENT_SOURCE_DIR}/views/CMakeLists.txt AND TARGET brulion_views_atrament)
+    add_subdirectory(views)
+endif()

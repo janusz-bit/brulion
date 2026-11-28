@@ -1480,21 +1480,22 @@ the chrome around them, until the view's route shows no QML item ("No QML in the
 
 ### Hosting and the setting
 
-* `AppSettings.viewsAtrament` ("Draw the Tasks, Search and Calendar views with Atrament
-  (experimental)", Settings → Advanced, next to the editor's), off by default;
+* `AppSettings.viewsAtrament` ("Draw the task list with Atrament" while only Tasks is drawn —
+  Search and Calendar join it under the same switch —, Settings → Editor, next to the editor's),
+  off by default;
   `--atrament-views` (`DevTools.atramentViews`) turns it on for one run without writing the
   device's setting, as `--atrament-editor` does.
 * `AtramentView { view: "tasks"; viewModel: taskModel }` (likewise `"search"`, `"calendar"`): the
   same QML element as the editor's, with one QObject property for the view's model and one signal,
   `viewAction(action: string, args: var)`, for everything a row asks of its view (`"toggle"`,
   `"open"`, `"tokenMenu"`, `"link"`, `"status"`, `"fold"` …) — one decision in one place, and the
-  editor's 101 properties not grown further. Points the QML needs (a menu's anchor, a self-test's
-  click) come from `viewPoint(part, key)`.
-* Each view reads its model through a typed C++ interface, not roles: `TaskListModel::rowData(i)`
-  returns the row as a struct (the one the roles are made from), so drawing a row converts no
-  QVariant. Model signals (rows inserted, moved, removed, data changed) update a measured `list()`
-  whose rows are keyed by the task's `key` (path:line), so the anchor row stays put when rows above
-  it change (as the journal stream's days do).
+  editor's 101 properties not grown further. Where a row's parts are (a self-test's
+  click) comes from `viewPartRect(row, part)`; menus open at the click's point, in the actions' `x`, `y`.
+* Each view reads a row's roles once into a typed struct (`TasksView::RowData`, from the roles the
+  QML delegates read: one source of truth, the model untouched) and draws from it — only the rows
+  in view are read. Model signals (rows inserted, moved, removed, data changed) update a measured
+  `list()`'s heights (`ModelRows`), each row's element keyed by the task's `key` (path:line), so
+  the anchor row stays put when rows above it change (as the journal stream's days do).
 
 ### Rows
 
@@ -1524,13 +1525,40 @@ the chrome around them, until the view's route shows no QML item ("No QML in the
   rows moving when the model changes with the anchor kept, the chips' menus, the accessibility tree
   (a list, its items, checkboxes with their state). Likewise `tst_atrament_search` and
   `tst_atrament_calendar` as their steps land.
-* The in-app self-test `atramentviewstest` (qml/dev/AtramentViewsSelfTest.qml, ctest
-  `tst_views_qml_atrament[_touch]`): TasksView, SearchView and CalendarView with
-  `--atrament-views`, real clicks and keys on the rows (`viewPoint`), the toggle's toast and undo,
+* The in-app self-test `tasks-atrament-selftest` (qml/dev/TasksAtramentSelfTest.qml, ctest
+  `tst_views_qml_atrament`; Search's and Calendar's as theirs land): TasksView, SearchView and CalendarView with
+  `--atrament-views`, real clicks and keys on the rows (`viewPartRect`), the toggle's toast and undo,
   a token menu, a query typed and a result opened — the QML around the view and the view together.
 * A gate measured as M2's: a 1 000-task view's memory per row, a scroll step's scene and CPU-renderer
   time at 1280 × 800, the time from the route to its first frame, against the QML view
   (`tests/bench/bench_atrament_views`).
+
+### Steps
+
+1. **Tasks** (2026-11-28; `src/app/views/atrament/tasksview.h`, `qml/planning/TasksAtramentList.qml`,
+   `AppSettings.viewsAtrament`, `--atrament-views`; docs/UI.md "The task list drawn by Atrament"). TasksView's rows are Atrament's under the
+   ListView's header (the quick-add field, the filters, the summary stay QML above them; the
+   ListView keeps no rows): a section's header with its count and chevron folds it; a task its box
+   (a click toggles it — TasksView's toggle with its undo toast —, a right-click its status menu,
+   TaskStatusMenu made by TasksView), its text as the model's rich text in rendered spans (links and
+   #tags clickable, a link's menu, at most four lines), its chips (the due date — "…, overdue" in
+   red —, scheduled, "from …", the next reminder, the recurrence, "Waits for: …", progress or the
+   subtasks' count, the clocked time, the priority; a right-click on a date, reminder, recurrence or
+   priority chip opens its token's menu, PlanningTokenMenu) and where it is written, a subtask
+   indented by its depth. Keys: ↓ / ↑ through the tasks (headers skipped), Space toggles, Enter
+   opens. For screen readers: the list, a header a heading (expanded or not), a task's box a
+   checkbox named by its text. The model's changes keep the list's anchor on its row. Tested by
+   `tests/atrament/views/tst_atrament_tasks` (sections and chips drawn, every click's request, the
+   menus at their point, the keys, rows following a filter) and the app's self-test
+   `tst_views_qml_atrament` (qml/dev/TasksAtramentSelfTest.qml: real clicks and keys through the
+   window, the file written). The subtasks' chip folds them ("fold"). The current task gone from
+   the list (ticked off into the folded Done, a filter) leaves the task now at its place current,
+   as a ListView's currentIndex stays (`nearestTask`). `TasksLook::fromMap` reads
+   AtramentView.viewLook; `ModelRows` (views/atrament/modelrows.h) keeps a list's heights with a
+   model's rows. **Not yet**: the "Add date" chip (QuickDateMenu), a tag's page with Ctrl+click, the
+   dependency problem and "Blocks n tasks" chips, a done task's text struck through, the header
+   items drawn by Atrament (they stay QML above the list), touch's long press for the menus, the
+   gate's measurements.
 
 ### After the three views
 

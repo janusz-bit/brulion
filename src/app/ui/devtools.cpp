@@ -79,6 +79,7 @@ DevTools::DevTools(const QStringList &arguments, QObject *parent) : QObject(pare
     m_editor = arguments.contains(u"--editor"_s);
     m_atrament = arguments.contains(u"--atrament"_s);
     m_atramentEditor = arguments.contains(u"--atrament-editor"_s);
+    m_atramentViews = arguments.contains(u"--atrament-views"_s);
     m_editorScript = valueAfter(arguments, u"--editor-script"_s);
     m_screenshot = valueAfter(arguments, u"--screenshot"_s);
     m_dumpLayout = valueAfter(arguments, u"--dump-layout"_s);

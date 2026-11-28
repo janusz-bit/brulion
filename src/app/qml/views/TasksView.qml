@@ -33,6 +33,92 @@ FocusScope {
     readonly property real rowMargin: Math.max(Theme.narrow ? Theme.space2 : Theme.space5,
                                                (list.width - root.maximumWidth - Theme.space2) / 2)
 
+    /// The list's rows drawn by Atrament (Settings → Advanced, AppSettings.viewsAtrament, or
+    /// `--atrament-views`; where Atrament is built): TasksAtramentList under the ListView's header in
+    /// place of its rows (docs/ATRAMENT.md "The views in Atrament (M3)").
+    readonly property bool usesAtrament: DeviceInfo.atrament && (AppSettings.viewsAtrament || DevTools.atramentViews)
+    /// What a row drawn by Atrament asks (views/atrament/tasksview.h's actions): what TasksRow's
+    /// signals do.
+    MapHolder { id: actionInfo }
+    function atramentAction(action: string, args: var): void {
+        // (The map through a MapHolder, every value read into a plain value before any call:
+        // compiled QML reads nothing a call could have changed.)
+        actionInfo.map = args
+        const path = "" + AppController.routeText(actionInfo.map, "path")
+        const line = 0 + AppController.routeInt(actionInfo.map, "line", 0)
+        const text = "" + AppController.routeText(actionInfo.map, "text")
+        const status = "" + AppController.routeText(actionInfo.map, "status")
+        const x = 0 + AppController.routeInt(actionInfo.map, "x", 0)
+        const y = 0 + AppController.routeInt(actionInfo.map, "y", 0)
+        const section = "" + AppController.routeText(actionInfo.map, "section")
+        const key = "" + AppController.routeText(actionInfo.map, "key")
+        const url = "" + AppController.routeText(actionInfo.map, "url")
+        const kind = "" + AppController.routeText(actionInfo.map, "kind")
+        const value = "" + AppController.routeText(actionInfo.map, "value")
+        const alarm = AppController.routeFlag(actionInfo.map, "alarm") === true
+        const rule = "" + AppController.routeText(actionInfo.map, "rule")
+        const priority = "" + AppController.routeText(actionInfo.map, "priority")
+        const running = AppController.routeFlag(actionInfo.map, "clockRunning") === true
+        if (action === "toggle")
+            root.toggle(path, line, text, status)
+        else if (action === "open")
+            AppController.openPage(path, line)
+        else if (action === "toggleSection")
+            taskModel.toggleSection(section)
+        else if (action === "fold")
+            taskModel.toggleSubtasks(key)
+        else if (action === "link")
+            root.activateLink(url, path)
+        else if (action === "linkMenu")
+            root.openAtramentLinkMenu(url, path, x, y)
+        else if (action === "tokenMenu")
+            root.openAtramentTokenMenu(path, line, text, kind, value, alarm, rule, priority, x, y)
+        else if (action === "statusMenu" || action === "menu")
+            root.openAtramentMenu(path, line, text, status, running, x, y)
+    }
+    /// A link's menu and a chip's token menu of a row drawn by Atrament, at (x, y) of the list.
+    function openAtramentLinkMenu(url: string, path: string, x: int, y: int): void {
+        tokenMenu.openLink(url, path, atramentList.item as Item, x, y, true)
+    }
+    function openAtramentTokenMenu(path: string, line: int, text: string, kind: string, value: string, alarm: bool,
+                                   rule: string, priority: string, x: int, y: int): void {
+        root.openTokenMenu(path, line, text, kind, value, alarm, rule, priority, atramentList.item as Item, x, y)
+    }
+    /// The status menu of a task drawn by Atrament (TasksRow's TaskStatusMenu), made when first
+    /// opened, and the task it is for.
+    property TaskStatusMenu atramentMenu: null
+    property string menuPath
+    property int menuLine: 0
+    property string menuText
+    property string menuStatus
+    property bool menuClockRunning: false
+    function openAtramentMenu(path: string, line: int, text: string, status: string, running: bool, x: int, y: int): void {
+        root.menuPath = path
+        root.menuLine = line
+        root.menuText = text
+        root.menuStatus = status !== "" ? status : "todo"
+        root.menuClockRunning = running
+        if (!root.atramentMenu)
+            root.atramentMenu = atramentMenuComponent.createObject(root) as TaskStatusMenu
+        root.atramentMenu.status = root.menuStatus
+        root.atramentMenu.clockRunning = root.menuClockRunning
+        root.atramentMenu.popup(atramentList.item as Item, x, y)
+    }
+    Component {
+        id: atramentMenuComponent
+        TaskStatusMenu {
+            showOpen: true
+            showTaskTools: true
+            onOpenRequested: AppController.openPage(root.menuPath, root.menuLine)
+            onClockRequested: root.toggleClock(root.menuPath, root.menuLine, root.menuText, root.menuClockRunning)
+            onDependencyRequested: root.openDependencyPicker(root.menuPath, root.menuLine, root.menuText)
+            onStatusChosen: (status) => {
+                if (status !== root.menuStatus)
+                    root.setStatus(root.menuPath, root.menuLine, root.menuText, status)
+            }
+        }
+    }
+
     readonly property var rendererPalette: ({
         link: Theme.link, unresolved: Theme.linkMissing, muted: Theme.fgMuted,
         codeBackground: Theme.bgSunken, highlightBackground: Theme.mark,
@@ -226,7 +312,7 @@ FocusScope {
         anchors.fill: parent
         focus: true
         clip: true
-        model: taskModel
+        model: root.usesAtrament ? null : taskModel
         reuseItems: true
         keyNavigationEnabled: true
         boundsBehavior: Flickable.StopAtBounds
@@ -356,6 +442,41 @@ FocusScope {
     }
 
     // Seams to the header's items (the header is created by the ListView).
+    /// The list (its header; its rows unless they are Atrament's) — self-tests.
+    readonly property ListView listView: list
+    // Dev: the self-test of the rows drawn by Atrament (ctest tst_views_qml_atrament), loaded from its
+    // file in developer builds only.
+    Loader {
+        id: atramentSelfTest
+        active: DevTools.editorScript === "tasks-atrament-selftest" && atramentList.item !== null
+        onActiveChanged: {
+            if (!atramentSelfTest.active)
+                return
+            root.selfTestValues = { tasksView: root, model: taskModel, list: atramentList.item }
+            atramentSelfTest.setSource(Qt.resolvedUrl("../dev/TasksAtramentSelfTest.qml"), root.selfTestValues)
+        }
+    }
+    property var selfTestValues: ({})
+    // The rows drawn by Atrament (usesAtrament): under the list's header, loaded by file name — it
+    // exists only where Atrament is built.
+    Loader {
+        id: atramentList
+        active: root.usesAtrament
+        anchors.fill: parent
+        anchors.topMargin: list.headerItem ? list.headerItem.height : 0
+        source: active ? "../planning/TasksAtramentList.qml" : ""
+        onLoaded: {
+            QmlCall.set(atramentList.item, "tasksView", root)
+            QmlCall.set(atramentList.item, "viewModel", taskModel)
+        }
+        Binding {
+            target: atramentList.item
+            property: "sideMargin"
+            value: root.rowMargin
+            when: atramentList.item !== null
+        }
+    }
+
     QtObject {
         id: quickAdd
         property TasksQuickAdd field: null

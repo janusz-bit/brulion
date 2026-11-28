@@ -1274,9 +1274,19 @@ Item {
                 objectName: "settingsEditorAtrament"
                 visible: DeviceInfo.atrament
                 text: qsTr("Draw the editor with Atrament")
-                description: qsTr("Experimental: Brulion's own renderer draws pages instead of Qt. For reading only so far: text is drawn, other blocks are placeholders, and blocks cannot be edited.")
+                description: qsTr("Experimental: Brulion's own renderer draws pages and the journal instead of Qt.")
                 checked: AppSettings.editorAtrament
                 onToggled: AppSettings.editorAtrament = checked
+            }
+            // Experimental: the Tasks view's list drawn by Atrament (docs/ATRAMENT.md "The views in
+            // Atrament (M3)").
+            SettingSwitch {
+                objectName: "settingsViewsAtrament"
+                visible: DeviceInfo.atrament
+                text: qsTr("Draw the task list with Atrament")
+                description: qsTr("Experimental: Brulion's own renderer draws the Tasks view's list instead of Qt.")
+                checked: AppSettings.viewsAtrament
+                onToggled: AppSettings.viewsAtrament = checked
             }
             // Spell checking (docs/UI.md "Spell checking"): only where this device can check.
             SettingSwitch {

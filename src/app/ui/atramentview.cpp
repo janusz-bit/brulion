@@ -844,6 +844,8 @@ void AtramentView::attachView()
         return;
     }
 #endif
+    if (attachOtherView())
+        return;
     qWarning() << "AtramentView: no view named" << m_view;
 }
 
@@ -1178,16 +1180,24 @@ void AtramentView::placeHostedChildren()
 
 void AtramentView::setDaysModel(QObject *model)
 {
-    if (model == m_daysModel)
-        return;
+    if (setBeforeView(m_daysModel, model, "the days' model"))
+        Q_EMIT journalChanged();
+}
+
+// A model the view is made over, set before it is (once it is: a warning, nothing changed); the
+// view made when the item is complete. False when nothing changed.
+bool AtramentView::setBeforeView(QPointer<QObject> &slot, QObject *model, const char *what)
+{
+    if (model == slot)
+        return false;
     if (m_attached) {
-        qWarning() << "AtramentView: the days' model is set before the view; ignoring";
-        return;
+        qWarning() << "AtramentView:" << what << "is set before the view; ignoring";
+        return false;
     }
-    m_daysModel = model;
-    Q_EMIT journalChanged();
+    slot = model;
     if (isComponentComplete())
         attachView();
+    return true;
 }
 
 void AtramentView::setStreamHeader(QQuickItem *item)

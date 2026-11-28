@@ -6948,6 +6948,20 @@ list"; `qml/editor/EditorAtramentJournal.qml`, loaded by JournalsView by its fil
   its edges (the wheel and Shift+click reach farther days), a long day laid out only where it shows
   (a day is laid out whole, as ContentJournalDay builds all its blocks).
 
+### The task list drawn by Atrament
+
+With Settings → Editor → "Draw the task list with Atrament" (`AppSettings.viewsAtrament`,
+experimental, where Atrament is built; `--atrament-views` for the self-tests) the Tasks view's
+sections and tasks are rows of one Atrament list (`qml/planning/TasksAtramentList.qml` over
+`src/app/views/atrament/tasksview.h`, docs/ATRAMENT.md "The views in Atrament (M3)") instead of the
+`ListView` of `TasksRow` delegates; the quick-add field, the filters and the summary stay above it.
+A row looks and acts as `TasksRow`: a click on the box ticks the task off (the undo toast), a
+right-click on the row or its box opens its status menu, on a date, reminder, recurrence or
+priority chip its token's menu, on a link its menu; a click on a `#tag` filters, on another link
+follows it, on the row opens the task's page at its line, on a header folds its section, on the
+subtasks' chip folds them; ↓ / ↑ move through the tasks (headers skipped), Space ticks the current
+one off, Enter opens it — the task now at its place becomes current when it moves into Done.
+
 ### Pictures hold their pixels only near the view
 
 A page created whole has every picture's frame from the start. The frame is cheap; the picture

@@ -249,6 +249,9 @@ class AppSettings : public QObject {
     /// Pages drawn by Atrament (docs/ATRAMENT.md "The block editor in Atrament (M2)"; default off;
     /// where Atrament is built: DeviceInfo.atrament). This device's.
     Q_PROPERTY(bool editorAtrament READ editorAtrament WRITE setEditorAtrament NOTIFY editorAtramentChanged FINAL)
+    /// The Tasks view's rows drawn by Atrament (docs/ATRAMENT.md "The views in Atrament (M3)";
+    /// default off; where Atrament is built). This device's.
+    Q_PROPERTY(bool viewsAtrament READ viewsAtrament WRITE setViewsAtrament NOTIFY viewsAtramentChanged FINAL)
     /// Spell checking in the editor (SpellCheck, docs/UI.md "Spell checking"; default on).
     Q_PROPERTY(bool spellCheck READ spellCheck WRITE setSpellCheck NOTIFY spellCheckChanged FINAL)
     /// Its languages: "auto" (default: the UI language, the system's, English), "pl", "en",
@@ -583,6 +586,8 @@ public:
     void setExportWebPictures(const QString &mode);
     bool editorAtrament() const;
     void setEditorAtrament(bool on);
+    bool viewsAtrament() const;
+    void setViewsAtrament(bool on);
     bool spellCheck() const;
     void setSpellCheck(bool on);
     bool taskStatusHistory() const;
@@ -822,6 +827,7 @@ Q_SIGNALS:
     void terminalAtramentChanged();
     void exportWebPicturesChanged();
     void editorAtramentChanged();
+    void viewsAtramentChanged();
     void spellCheckChanged();
     void taskStatusHistoryChanged();
     void spellLanguagesChanged();
