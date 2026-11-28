@@ -600,5 +600,5 @@ thread's files opening the viewer at their line (`CodeView.openFileInViewer(path
   the AI gives a new thread by itself (its first message's words name it; "Regenerate title" asks),
   T3 Code's in-app browser for
   `previewUrl` (the system's opens it).
-* Rendered Markdown, HTML, PDF and ZIP files in the viewer, mentions of threads and pull requests
+* Rendered HTML, PDF and ZIP files in the viewer, mentions of threads and pull requests
   (docs/CODE-FILES.md "Not done").

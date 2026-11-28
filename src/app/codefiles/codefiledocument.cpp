@@ -4,6 +4,7 @@
 
 #include "codefiles/search.h"
 #include "codefiles/viewer.h"
+#include "io/clipboardhtml.h"
 
 #include <QCryptographicHash>
 #include <QDir>
@@ -401,6 +402,22 @@ void CodeFileDocument::apply(Loaded l)
 bool CodeFileDocument::editable() const
 {
     return m_kind == u"text" && !m_truncated && !m_shape.lossy && !m_hash.isEmpty();
+}
+
+bool CodeFileDocument::renderable() const
+{
+    const QString suffix = QFileInfo(m_path).suffix().toLower();
+    return m_kind == u"text" && (suffix == u"md" || suffix == u"markdown");
+}
+
+QString CodeFileDocument::renderedHtml() const
+{
+    return renderable() ? renderMarkdown(m_lines.join(u'\n')) : QString();
+}
+
+QString CodeFileDocument::renderMarkdown(const QString &markdown)
+{
+    return io::clipboardHtml(markdown);
 }
 
 QString CodeFileDocument::editText() const

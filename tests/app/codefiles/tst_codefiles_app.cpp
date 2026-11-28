@@ -389,6 +389,32 @@ private Q_SLOTS:
         QVERIFY(!changed.isEmpty());
     }
 
+    // A Markdown file rendered (the viewer's "Show rendered"): headings, emphasis, lists and links as
+    // rich text, its raw HTML as text — a note's HTML never runs —, pictures as links (nothing
+    // fetched); other files are not rendered.
+    void markdownRendered()
+    {
+        QTemporaryDir dir;
+        QVERIFY(writeFile(dir.filePath(u"README.md"_s),
+                          "# Żółw\n\nTekst **gruby** i [strona](https://example.com).\n\n"
+                          "<script>alert(1)</script>\n\n![obraz](https://example.com/a.png)\n"));
+        QVERIFY(writeFile(dir.filePath(u"a.txt"_s), "# nie\n"));
+        CodeFileDocument doc;
+        doc.setFolder(dir.path());
+        doc.setPath(u"README.md"_s);
+        QTRY_COMPARE(doc.kind(), u"text"_s);
+        QVERIFY(doc.renderable());
+        const QString html = doc.renderedHtml();
+        QVERIFY2(html.contains(u"<h1"_s) && html.contains(u"Żółw"_s), qPrintable(html));
+        QVERIFY2(html.contains(u"<strong>gruby</strong>"_s), qPrintable(html));
+        QVERIFY2(html.contains(u"href=\"https://example.com\""_s), qPrintable(html));
+        QVERIFY2(!html.contains(u"<script"_s) && html.contains(u"&lt;script&gt;"_s), qPrintable(html));
+        QVERIFY2(!html.contains(u"<img"_s), qPrintable(html));
+        doc.setPath(u"a.txt"_s);
+        QTRY_VERIFY(!doc.renderable());
+        QCOMPARE(doc.renderedHtml(), QString());
+    }
+
     // Find within the file shown (Ctrl+F in the viewer): its matches counted, line by line, with the
     // project search's options; an invalid expression said; cleared.
     void findInFile()

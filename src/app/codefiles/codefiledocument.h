@@ -52,6 +52,8 @@ class CodeFileDocument : public QAbstractListModel {
     Q_PROPERTY(int matchCount READ matchCount NOTIFY findChanged FINAL)
     /// It can be edited here (save()): a text file read whole, valid UTF-8.
     Q_PROPERTY(bool editable READ editable NOTIFY loaded FINAL)
+    /// A Markdown file read (.md, .markdown): renderedHtml() shows it rendered.
+    Q_PROPERTY(bool renderable READ renderable NOTIFY loaded FINAL)
     Q_PROPERTY(QString findError READ findError NOTIFY findChanged FINAL)
 
 public:
@@ -94,6 +96,12 @@ public:
     /// and last break (codefiles::encodeEdited()) —, atomically (QSaveFile), unless the file changed
     /// on disk since it was read; then reads it again. "" saved, else why not.
     Q_INVOKABLE QString save(const QString &text);
+    bool renderable() const;
+    /// A renderable() file as rich text (renderMarkdown()); "" when it is not one.
+    Q_INVOKABLE QString renderedHtml() const;
+    /// `markdown` as rich text for the viewer (pure): the notebook's HTML renderer with everything
+    /// escaped — raw HTML as text —, pictures as links to them (nothing fetched).
+    static QString renderMarkdown(const QString &markdown);
     /// Lines `from` … `to` (1-based, either order, clamped) joined with "\n".
     Q_INVOKABLE QString linesText(int from, int to) const;
     /// One line's text (1-based; "" out of range).

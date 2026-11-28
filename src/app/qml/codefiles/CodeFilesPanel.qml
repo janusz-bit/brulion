@@ -50,8 +50,9 @@ Item {
     })
     /// Find within the file shown (CodeFileFindBar; Ctrl+F in the viewer).
     function openFind(): void {
-        // (Its matches are marked in the lines: a table shows its text meanwhile.)
+        // (Its matches are marked in the lines: a table or a rendered file shows its text meanwhile.)
         panel.asTable = false
+        panel.asRendered = false
         findBar.open = true
         findBar.focusField()
     }
@@ -64,6 +65,14 @@ Item {
     /// A CSV / TSV file shown as a table (CodeFileTable), else as its text.
     property bool asTable: true
     readonly property bool showingTable: table.available && panel.asTable && !panel.editing
+    /// A Markdown file shown rendered (CodeFileDocument.renderedHtml()), else as its text.
+    property bool asRendered: true
+    readonly property bool showingRendered: doc.renderable && panel.asRendered && !panel.editing
+    /// A link of the rendered file: only web addresses open (in the system's browser).
+    function openRenderedLink(url: string): void {
+        if (Js.startsWith(url, "https://") || Js.startsWith(url, "http://"))
+            Qt.openUrlExternally(url)
+    }
 
     // ---- Editing (docs/CODE-FILES.md "Editing") ----------------------------------------------------
     /// The file is being edited (its text in `editor`), and what it had when the edit began.
@@ -100,6 +109,8 @@ Item {
             return
         }
         panel.editing = false
+        // (A line to show: the text, where it is.)
+        panel.asRendered = line <= 0
         const same = path === panel.path
         panel.pendingLine = line
         panel.positionPending = true
@@ -258,6 +269,14 @@ Item {
                 onClicked: panel.asTable = !panel.asTable
             }
             BIconButton {
+                objectName: "codeFilesRenderedToggle"
+                visible: doc.renderable && !panel.editing
+                size: "small"
+                iconName: panel.asRendered ? "file-text" : "eye"
+                label: panel.asRendered ? qsTr("Show as text") : qsTr("Show rendered")
+                onClicked: panel.asRendered = !panel.asRendered
+            }
+            BIconButton {
                 objectName: "codeFilesEdit"
                 visible: !panel.editing
                 size: "small"
@@ -399,11 +418,37 @@ Item {
                     }
                 }
             }
+            // A Markdown file rendered: the notebook's renderer, raw HTML as text, pictures as links.
+            Flickable {
+                id: rendered
+                objectName: "codeFileRendered"
+                anchors.fill: parent
+                visible: panel.showingRendered
+                clip: true
+                contentWidth: width
+                contentHeight: renderedText.implicitHeight + 2 * Theme.space4
+                boundsBehavior: Flickable.StopAtBounds
+                T.ScrollBar.vertical: BScrollBar {}
+                BText {
+                    id: renderedText
+                    x: Theme.space4
+                    y: Theme.space4
+                    width: rendered.width - 2 * Theme.space4
+                    textFormat: Text.RichText
+                    wrapMode: Text.Wrap
+                    linkColor: Theme.link
+                    text: panel.showingRendered ? doc.renderedHtml() : ""
+                    onLinkActivated: (url) => panel.openRenderedLink(url)
+                    HoverHandler {
+                        cursorShape: renderedText.hoveredLink !== "" ? Qt.PointingHandCursor : Qt.ArrowCursor
+                    }
+                }
+            }
             CodeFileView {
                 id: view
                 objectName: "codeFileView"
                 anchors.fill: parent
-                visible: doc.kind === "text" && !panel.editing && !panel.showingTable
+                visible: doc.kind === "text" && !panel.editing && !panel.showingTable && !panel.showingRendered
                 document: doc
                 path: panel.path
                 onCommentRequested: (from, to) => panel.startComment(from, to)

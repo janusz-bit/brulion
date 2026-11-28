@@ -140,6 +140,16 @@ the one of `,`, `;` and tab its first line has most of outside quotes (`,` when 
 `io::parseCsv()` of the lines (RFC 4180: quotes, `""`, a line break inside quotes — one cell, shown on
 one line), at most 10 000 rows, 200 columns and 500 characters a cell (`cut`).
 
+### Rendered Markdown
+
+A Markdown file (`.md`, `.markdown`; `CodeFileDocument.renderable`) is shown **rendered**
+(`codeFileRendered`: `renderedHtml()` → `renderMarkdown()`, the notebook's HTML renderer of
+`io::clipboardHtml()` as rich text) — headings, emphasis, lists, tables, code, links; raw HTML in it is
+text and pictures are links to them, so nothing in a project's file runs or is fetched. A link opens in
+the system's browser when it is an `http(s)` address, nothing else. `codeFilesRenderedToggle` shows its
+text instead and back; a file opened at a line (an agent's link, a search result), Find (Ctrl+F) and
+Edit show the text.
+
 ### Editing
 
 The header's **Edit** (`codeFilesEdit`, a pencil) — for a text file read whole, valid UTF-8
@@ -268,8 +278,7 @@ pages of the notebook.)
 
 ## Not done (yet)
 
-* Rendered views of Markdown, HTML, PDF and ZIP files (here: their text; PDFs and archives as binary
-  files);
+* Rendered views of HTML, PDF and ZIP files (here: their text; PDFs and archives as binary files);
   an editor with the viewer's colours (the edit is plain text).
 * T3 Code's mentions of threads and models, and `#` for pull requests.
 * Review comments as chips in the composer: here they are text.
