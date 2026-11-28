@@ -629,14 +629,15 @@ void TestTerminal::registrySettle()
     QSignalSpy ended(&registry, &TerminalRegistry::settleScriptEnded);
     registry.settle(page, {u"sleep 100"_s}, worktree.path(),
                     {{u"pwd > settled.txt"_s, u"Czyść"_s}, {u"exit 3"_s, u"Zły"_s}});
-    QTRY_VERIFY(devWatched.isNull());
-    // (The idle shell and the stopped dev server gone; the build and the first settle script there.)
-    QVERIFY(thread->sessions().contains(build));
+    // (One at a time: the first runs, the second waits — before the event loop lets either end.)
     QVERIFY(registry.settleRunning());
     QCOMPARE(registry.settleWaiting(), 1);
     // Another thread settled meanwhile waits for its turn.
     registry.settle(u"AI/inny.md"_s, {}, worktree.path(), {{u"true"_s, u"Inny"_s}});
     QCOMPARE(registry.settleWaiting(), 2);
+    QTRY_VERIFY(devWatched.isNull());
+    // (The idle shell and the stopped dev server gone; the build there.)
+    QVERIFY(thread->sessions().contains(build));
     QTRY_COMPARE_WITH_TIMEOUT(ended.size(), 3, Timeout);
     QCOMPARE(ended.at(0), (QVariantList{page, u"Czyść"_s, 0}));
     QCOMPARE(ended.at(1), (QVariantList{page, u"Zły"_s, 3}));
