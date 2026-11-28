@@ -36,6 +36,19 @@ Deletions are held back until you decide when they affect many files at once —
 
 If every note that was synced before suddenly disappears from the notebook folder (a lost memory card, a folder emptied by another program), Brulion pauses sync instead of deleting the notes on the server too: “Sync paused: the notebook folder looks empty”. When the folders are the right ones, **Download the notes from the server** in the Sync center brings them back — that sync works like the very first one: whatever is only on one side is copied to the other, and nothing is deleted anywhere.
 
+### End-to-end encryption
+Under the Nextcloud account, the **End-to-end encryption** card keeps the server from reading the notebook: names and files are encrypted on this device before they are sent, so on the server there are only encrypted names and contents — not even the server's owner can read them. On your devices the notes stay ordinary Markdown files.
+
+1. Save the account first. In the card, keep the proposed folder (e.g. `Notatki (encrypted)`) or give another **new, empty** one, type the notebook's **password** (at least 12 characters; a long phrase is best) and choose **Encrypt on the server**.
+2. Brulion shows the **recovery key** once — 52 letters and digits. Write it down or print it: it opens the notebook when the password is forgotten.
+3. On another device, set up the same account with the same folder, type the password (or the recovery key) in the card and choose **Open the encrypted notebook**. A device without it shows “The server folder is encrypted” and syncs nothing.
+
+- Everything works as before: merging, conflicts, moving folders, large attachments.
+- The old, unencrypted folder stays on the server as it was; delete it in Nextcloud once all your devices use the encrypted one. Every device needs Brulion 0.33 or later.
+- The server still sees how many files there are, their sizes and when they change.
+- Without the password and the recovery key the server's copy cannot be opened — your notes on your devices are not affected.
+- How it works: [[Privacy and encryption#Sync|Privacy and encryption]].
+
 ### Folders
 - An **empty folder** created on one device appears on the server and on the other devices.
 - A **deleted folder** disappears on the other side too, but only when nothing is left in it. A folder holding a note that isn't synced yet, or a file Brulion doesn't sync (e.g. `.git`), stays where it is.

@@ -9,6 +9,8 @@
 #include "log/categories.h"
 #include "log/redact.h"
 #include "devicefolder.h" // src/platform
+#include "sync/encryptingtransport.h"
+#include "sync/encryptionkeys.h"
 #include "sync/foldertransport.h"
 #include "sync/sync.h"
 #include "sync/synchistory.h"
@@ -45,12 +47,6 @@ QString isoOf(const QDateTime &time)
     return time.isValid() ? time.toLocalTime().toString(u"yyyy-MM-ddTHH:mm:ss"_s) : QString();
 }
 
-QString defaultFolder(const QString &folder)
-{
-    const QString f = folder.trimmed();
-    return f.isEmpty() ? u"Brulion"_s : f;
-}
-
 /// `url` (a Syncthing GUI address) names this machine: localhost, 127.0.0.0/8 or ::1.
 bool isLoopbackUrl(const QString &url)
 {
@@ -59,6 +55,12 @@ bool isLoopbackUrl(const QString &url)
 }
 
 } // namespace
+
+QString defaultFolder(const QString &folder)
+{
+    const QString f = folder.trimmed();
+    return f.isEmpty() ? u"Brulion"_s : f;
+}
 
 bool sameNextcloudAccount(const QString &url, const QString &user, const QString &otherUrl, const QString &otherUser)
 {
@@ -360,6 +362,7 @@ void WorkspaceSync::teardown()
     m_scheduler.reset();
     m_engine.reset();
     m_client.reset();
+    m_encrypting.reset();
     m_folderTransport.reset(); // (waits for the folder's operation in progress)
     suspendPdfReaders(false); // (a run abandoned: no runFinished)
     holdReadyIfIdle();
@@ -427,15 +430,30 @@ void WorkspaceSync::rebuild()
         return;
     }
     const QString base = currentDavUrl();
-    m_client = std::make_unique<sync::WebDavClient>(base, m_nextcloud.user.trimmed(), m_nextcloud.password, transport());
+    sync::HttpTransport *toServer = transport();
+    if (m_nextcloud.encrypted) {
+        sync::encryption::Keys keys = sync::encryption::Keys::fromNotebookKey(m_nextcloud.notebookKey);
+        if (!keys.isValid()) {
+            // Encrypted, and this device has no key yet: nothing syncs until setUpEncryption().
+            qCInfo(logging::lcSync).noquote() << u"Nextcloud sync: the server folder is encrypted and this device has "
+                                                 u"no key for it yet"_s;
+            Q_EMIT configurationChanged();
+            Q_EMIT statusChanged();
+            return;
+        }
+        m_encrypting = std::make_unique<sync::EncryptingTransport>(toServer, base, std::move(keys));
+        toServer = m_encrypting.get();
+    }
+    m_client = std::make_unique<sync::WebDavClient>(base, m_nextcloud.user.trimmed(), m_nextcloud.password, toServer);
     startEngine(m_nextcloud.intervalMinutes > 0 ? qint64(m_nextcloud.intervalMinutes) * 60'000 : kDailyMs, 0, true);
     // Which account and folder (never the password): the first lines to look at in a log.
     const QUrl server = QUrl::fromUserInput(m_nextcloud.url.trimmed());
-    qCInfo(logging::lcSync).noquote() << u"Nextcloud sync: user %1 at %2, folder %3, every %4"_s.arg(
+    qCInfo(logging::lcSync).noquote() << u"Nextcloud sync: user %1 at %2, folder %3, every %4%5"_s.arg(
             m_nextcloud.user.trimmed(),
             server.adjusted(QUrl::RemoveUserInfo | QUrl::RemoveQuery | QUrl::RemoveFragment).toString(),
             defaultFolder(m_nextcloud.folder),
-            m_nextcloud.intervalMinutes > 0 ? u"%1 min"_s.arg(m_nextcloud.intervalMinutes) : u"day"_s);
+            m_nextcloud.intervalMinutes > 0 ? u"%1 min"_s.arg(m_nextcloud.intervalMinutes) : u"day"_s,
+            m_encrypting ? u", end-to-end encrypted"_s : QString());
 }
 
 void WorkspaceSync::startEngine(qint64 intervalMs, qint64 debounceMs, bool needsNetwork)
@@ -543,8 +561,15 @@ QString WorkspaceSync::davUrlFor(const QString &url, const QString &user, const 
     return sync::nextcloudDavUrl(url.trimmed(), user.trimmed(), defaultFolder(folder));
 }
 
+bool WorkspaceSync::locked() const
+{
+    return m_vault && !usesDeviceFolder() && m_nextcloud.isComplete() && m_nextcloud.encrypted && !m_encrypting;
+}
+
 QString WorkspaceSync::state() const
 {
+    if (locked())
+        return u"locked"_s;
     if (!m_scheduler)
         return m_vault && folderShared() ? u"error"_s : u"disabled"_s;
     const sync::SyncStatus s = m_scheduler->status();
@@ -645,6 +670,8 @@ QString WorkspaceSync::statusText() const
     } else if (!m_nextcloud.isComplete()) {
         return m_nextcloud.enabled ? tr("Nextcloud is not set up completely") : QString();
     }
+    if (locked())
+        return tr("The server folder is encrypted: enter its password in the sync settings");
     if (!m_scheduler)
         return m_vault && folderShared() ? sharedFolderText() : tr("No notebook open");
     const sync::SyncStatus s = m_scheduler->status();
@@ -886,13 +913,23 @@ void WorkspaceSync::testConnection(const QString &url, const QString &user, cons
     ++m_testing;
     Q_EMIT testingChanged();
     client->test([this, client](const sync::WebDavTestResult &result) {
+        if (result.ok) {
+            // A folder encrypted by another device: never synced without its key.
+            client->stat(QString(sync::encryption::KeyFilePath), [this, client](const sync::StatResult &key) {
+                client->deleteLater();
+                --m_testing;
+                Q_EMIT testingChanged();
+                if (key.entry && !m_nextcloud.encrypted)
+                    Q_EMIT connectionTested(true, tr("Connected. This folder is encrypted: turn on “Encrypt on the "
+                                                     "server” and enter its password."));
+                else
+                    Q_EMIT connectionTested(true, tr("Connected. The folder is ready for syncing."));
+            });
+            return;
+        }
         client->deleteLater();
         --m_testing;
         Q_EMIT testingChanged();
-        if (result.ok) {
-            Q_EMIT connectionTested(true, tr("Connected. The folder is ready for syncing."));
-            return;
-        }
         // A missing folder is created by the first sync: the account works.
         if (result.error.is(sync::WebDavErrorCode::NotFound)) {
             Q_EMIT connectionTested(true, tr("Connected. The folder will be created by the first sync."));

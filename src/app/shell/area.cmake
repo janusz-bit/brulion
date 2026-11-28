@@ -117,6 +117,7 @@ qt_add_library(brulion_shell STATIC
     ${_brulion_shell_dir}/extensionmodels.h ${_brulion_shell_dir}/extensionmodels.cpp
     ${_brulion_shell_dir}/workspacesync.h ${_brulion_shell_dir}/workspacesync.cpp
     ${_brulion_shell_dir}/workspacesyncruns.cpp
+    ${_brulion_shell_dir}/workspacesyncencryption.cpp
     ${_brulion_shell_dir}/workspacegithub.h ${_brulion_shell_dir}/workspacegithub.cpp
     ${_brulion_shell_dir}/workspacecalendars.h ${_brulion_shell_dir}/workspacecalendars.cpp
     ${_brulion_shell_dir}/workspaceintegration.h ${_brulion_shell_dir}/workspaceintegration.cpp

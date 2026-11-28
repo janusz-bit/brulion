@@ -96,6 +96,7 @@ qt_target_qml_sources(brulion QML_FILES
     qml/io/SyncRunDetails.qml
     qml/io/SyncDeletionGuard.qml
     qml/io/NextcloudForm.qml
+    qml/io/SyncEncryptionCard.qml
     qml/io/SyncthingPanel.qml
     qml/io/DeviceFolderPanel.qml
     qml/io/GitHubPanel.qml

@@ -42,6 +42,8 @@ Brulion reads and writes the format of Obsidian's **Meld Encrypt** plugin: the s
 ## Sync
 Encrypted text is ordinary text in the file, so sync merges it like any line: changes in different places of a page merge; when two devices changed the same encrypted text, both versions are kept as a conflict, as for any other line. A whole encrypted page changed on two devices at the same time is kept in both versions (a conflict copy), never mixed. An encrypted page changed on another device with **another** password locks here and is never overwritten — unlock it with the new password.
 
+The whole notebook can also be kept unreadable on the Nextcloud server: [[Sync#End-to-end encryption|End-to-end encryption]]. Every name is encrypted with AES-256-SIV and every file with AES-256-GCM in 64 KiB pieces under a key of its own; the notebook's key is random and is kept on the server sealed with your password (PBKDF2-HMAC-SHA-512, 600 000 rounds) and with the recovery key, and on each device in a file only Brulion may read.
+
 ## App lock
 Settings → **Privacy** → **Set a PIN…** (4 to 16 digits). On a phone you can use the phone's own lock instead: **Use the phone's lock** — your fingerprint, face or the phone's PIN, pattern or password.
 

@@ -1,8 +1,10 @@
 # End-to-end encrypted sync (design)
 
-Status (2026-11-28): design decided; the core is built — the formats, the key file and the
-encrypting transport (core `sync`), tested over the fake WebDAV server. The app's setting, the
-password and recovery dialogs and the guide's page come next (TODO.md "Privacy and security"). This page says what is encrypted, how,
+Status (2026-11-28): design decided and built — the formats, the key file and the encrypting
+transport (core `sync`), the setting in the sync settings (`SyncEncryptionCard`,
+`WorkspaceSync::setUpEncryption()`), the guide's page. Left (TODO.md "Privacy and security"):
+changing the password in the app, the note in the old folder, a sync refusing to start where the
+setting is off but the folder encrypted, turning it off. This page says what is encrypted, how,
 what is not, and why each choice was made. docs/ARCHITECTURE.md "Security" is the overview of
 what protects what; this page is the sync's part of it.
 
@@ -117,9 +119,10 @@ recovery key   32 random bytes, shown once as 52 base32 characters in groups of 
 
 The notebook key, sealed (AES-256-GCM) once with the password key and once with
 HKDF-SHA-256(recovery key, info = "brulion-sync recovery v1"), is kept on the server in the
-notebook's folder as `.brulion-encryption.json` — the one file there whose name and content are
-plain (they reveal nothing without the password or the recovery key). Its presence is what tells a
-device that the folder is encrypted.
+notebook's folder as `.brulion/encryption.json` — the one file there whose name and content are
+plain (they reveal nothing without the password or the recovery key). `.brulion/` is a folder no
+sync lists, so a device that does not encrypt never downloads it; its presence is what tells a
+device that the folder is encrypted (checked once when the sync is set up or changed).
 
 On a device the notebook key is kept where the Nextcloud app password already is: a file of its
 own under the app's `secrets/` folder, readable by the owner only (docs/ARCHITECTURE.md; Brulion
@@ -150,8 +153,10 @@ Encryption is switched on for a sync account by choosing an empty server folder 
 "<folder> (encrypted)"). The first sync uploads every note encrypted, as a first sync into an empty
 folder does today. The old plain folder is left alone — Brulion never deletes it; the settings say
 it is there and that it can be deleted on the server once every device uses the new one — and gets
-a marker `.brulion-moved.json` naming the new folder, so that another device still syncing with the
-old folder stops and asks for the password instead of syncing on in plain text.
+a note, `Brulion — this notebook moved to an encrypted folder.md`, naming the new folder and what
+to do: another device still syncing with the old folder downloads it like any note, and its user
+sees it in the notebook. (A hidden marker that makes such a device stop would need that device to
+know about it — an older version does not.)
 
 Turning it off is the same in reverse: a new plain folder.
 
@@ -173,7 +178,7 @@ guard changes.
 * A notebook without encryption syncs exactly as before: the layer is not in its path.
 * An encrypted folder synced by an older Brulion is a folder of files with strange names to it:
   it would download them as attachments, and nothing on the server can stop it. So the folder gets
-  a plain `README.txt` ("This folder is encrypted by Brulion; open it with Brulion 0.31 or later"),
+  a plain `README.txt` ("This folder is a Brulion notebook encrypted end to end … Brulion 0.33 or later"),
   which the layer hides from newer versions like every name it cannot decrypt, and the setup says
   that every device needs a version that encrypts before the switch.
 * The formats carry a version (the header's byte, the key file's `version`): a later format can be
@@ -197,6 +202,8 @@ core `crypto`: `hkdf()` (RFC 5869), `aescmac`, `aessiv` (RFC 4493, RFC 5297), te
 vectors and checked against OpenSSL. core `sync`: the content format and the names (pure
 functions, tested with fixed keys and nonces), the key file (create, unlock, change the password,
 recover), `EncryptingTransport` (tested over the fake WebDAV server: a whole notebook synced
-between two devices, renames, conflicts, large attachments in pieces, a server that changes,
-cuts or swaps files, foreign files in the folder). The app: the setting in the sync settings, the
-password and the recovery key, the guide's page (en/pl).
+between two devices, renames, conflicts, large attachments in pieces, a server that changes or
+cuts files, foreign files in the folder). The app: `SyncEncryptionCard` in the sync settings
+(the folder, the password, the recovery key shown once), `WorkspaceSync::setUpEncryption()`
+(`tst_shell_workspace_sync_encryption`), the notebook key in `secrets/sync-key-<notebook id>`
+(AppSettings), the guide's "Sync" and "Privacy and encryption" pages (en/pl).

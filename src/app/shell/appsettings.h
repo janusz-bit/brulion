@@ -340,6 +340,11 @@ class AppSettings : public QObject {
     Q_PROPERTY(int syncIntervalMinutes READ syncIntervalMinutes WRITE setSyncIntervalMinutes NOTIFY nextcloudChanged FINAL)
     /// An app password is stored (its value is never exposed to QML).
     Q_PROPERTY(bool hasNextcloudPassword READ hasNextcloudPassword NOTIFY nextcloudPasswordChanged FINAL)
+    /// The current notebook's server folder is end-to-end encrypted (docs/SYNC-ENCRYPTION.md): set
+    /// by WorkspaceSync::setUpEncryption()'s answer, with the notebook key beside it.
+    Q_PROPERTY(bool nextcloudEncrypted READ nextcloudEncrypted WRITE setNextcloudEncrypted NOTIFY nextcloudChanged FINAL)
+    /// This device holds the current notebook's key for its encrypted server folder.
+    Q_PROPERTY(bool hasNextcloudNotebookKey READ hasNextcloudNotebookKey NOTIFY nextcloudChanged FINAL)
 
     // ---- A folder of this device (docs/ANDROID.md "A folder picked in the system's dialog") ----
     // A notebook in the app's own storage kept in sync with a folder of the device — on Android
@@ -688,6 +693,16 @@ public:
     /// The password stored for the app data folder `dataDir`, read without an AppSettings (and so
     /// without touching the settings file): Android's background check, in a process of its own.
     static QString storedNextcloudPassword(const QString &dataDir);
+
+    bool nextcloudEncrypted() const;
+    void setNextcloudEncrypted(bool on);
+    bool hasNextcloudNotebookKey() const;
+    /// The current notebook's key for its encrypted server folder (C++ only; never in QML): 32
+    /// bytes, or empty. Kept like the app password, in its own owner-only file per notebook
+    /// (`<app data>/secrets/sync-key-<notebook id>`).
+    QByteArray nextcloudNotebookKey() const;
+    /// Store it ("" deletes it). Returns false on I/O errors.
+    bool setNextcloudNotebookKey(const QByteArray &key);
 
     /// A notebook's folder of this device.
     struct DeviceFolderLink {

@@ -281,6 +281,11 @@ endif()
 if(TARGET brulion_sync_testsupport)
     brulion_add_test(tst_shell_workspace_sync SOURCES tst_workspace_sync.cpp
         LIBS brulion_shell brulion_sync_testsupport brulion_pdfview)
+    # End-to-end encrypted Nextcloud folders through Workspace.sync and the in-memory server: a
+    # new encrypted notebook, a second device by its password or recovery key, refusals, a
+    # device without the key locked, the connection test.
+    brulion_add_test(tst_shell_workspace_sync_encryption SOURCES tst_workspace_sync_encryption.cpp
+        LIBS brulion_shell brulion_sync_testsupport)
     # Nextcloud per notebook through AppController and the in-memory server: the settings of
     # 0.3.0 and older going to the notebook that was synced (never mixing two notebooks in one
     # server folder), the same notebook through a symlink or a relative path, the start screen.

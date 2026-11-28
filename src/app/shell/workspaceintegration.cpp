@@ -301,6 +301,8 @@ void wireSync(AppController *app)
         n.sharedWith = n.enabled ? settings->nextcloudFolderUser(n.folder) : QString();
         n.intervalMinutes = settings->syncIntervalMinutes();
         n.password = settings->nextcloudPassword();
+        n.encrypted = settings->nextcloudEncrypted();
+        n.notebookKey = n.encrypted ? settings->nextcloudNotebookKey() : QByteArray();
         sync->setDeviceName(settings->value(u"sync/deviceName"_s, QString()).toString());
         sync->setNextcloud(n);
     };
@@ -316,6 +318,14 @@ void wireSync(AppController *app)
         s.url = settings->value(u"sync/syncthingUrl"_s, QString()).toString().trimmed();
         sync->setSyncthing(s);
     };
+    // An encrypted server folder opened or made (WorkspaceSync::setUpEncryption): the notebook
+    // syncs with it from now on, its key kept on this device (owner-only file, never in QML).
+    QObject::connect(sync, &WorkspaceSync::encryptionKeyMade, settings,
+                     [settings](const QString &folder, const QByteArray &key, const QString &) {
+                         settings->setNextcloudFolder(folder);
+                         settings->setNextcloudNotebookKey(key);
+                         settings->setNextcloudEncrypted(true);
+                     });
     applyNextcloud();
     applyDeviceFolder();
     applySyncthing();

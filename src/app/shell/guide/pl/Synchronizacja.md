@@ -36,6 +36,19 @@ Usunięcia są wstrzymywane do Twojej decyzji, gdy dotyczą wielu plików naraz 
 
 Jeśli z folderu notatnika nagle znikną wszystkie wcześniej synchronizowane notatki (zgubiona karta pamięci, folder opróżniony przez inny program), Brulion wstrzymuje synchronizację, zamiast usunąć notatki także na serwerze: „Synchronizacja wstrzymana: folder notatnika wygląda na pusty”. Gdy foldery są właściwe, **Pobierz notatki z serwera** w centrum synchronizacji przywraca je — ta synchronizacja działa jak pierwsza: to, co jest tylko po jednej stronie, trafia na drugą, a nic nigdzie nie jest usuwane.
 
+### Szyfrowanie end-to-end
+Pod kontem Nextcloud karta **Szyfrowanie end-to-end** sprawia, że serwer nie odczyta notatnika: nazwy i pliki są szyfrowane na tym urządzeniu, zanim zostaną wysłane, więc na serwerze leżą tylko zaszyfrowane nazwy i treści — nie odczyta ich nawet właściciel serwera. Na Twoich urządzeniach notatki zostają zwykłymi plikami Markdown.
+
+1. Najpierw zapisz konto. W karcie zostaw proponowany folder (np. `Notatki (zaszyfrowany)`) albo podaj inny **nowy, pusty** folder, wpisz **hasło** notatnika (co najmniej 12 znaków; najlepiej długie zdanie) i wybierz **Szyfruj na serwerze**.
+2. Brulion raz pokaże **klucz odzyskiwania** — 52 litery i cyfry. Zapisz go albo wydrukuj: otwiera notatnik, gdy zapomnisz hasła.
+3. Na innym urządzeniu ustaw to samo konto z tym samym folderem, wpisz w karcie hasło (albo klucz odzyskiwania) i wybierz **Otwórz zaszyfrowany notatnik**. Urządzenie bez niego pokazuje „Folder na serwerze jest zaszyfrowany” i niczego nie synchronizuje.
+
+- Wszystko działa jak wcześniej: scalanie, konflikty, przenoszenie folderów, duże załączniki.
+- Stary, niezaszyfrowany folder zostaje na serwerze bez zmian; usuń go w Nextcloud, gdy wszystkie urządzenia korzystają z zaszyfrowanego. Każde urządzenie potrzebuje Brulionu 0.33 lub nowszego.
+- Serwer nadal widzi, ile jest plików, jakie mają rozmiary i kiedy się zmieniają.
+- Bez hasła i klucza odzyskiwania kopii na serwerze nie da się otworzyć — notatki na Twoich urządzeniach to nie dotyczy.
+- Jak to działa: [[Prywatność i szyfrowanie#Synchronizacja|Prywatność i szyfrowanie]].
+
 ### Foldery
 - **Pusty folder** założony na jednym urządzeniu pojawia się na serwerze i na pozostałych urządzeniach.
 - **Usunięty folder** znika też po drugiej stronie, ale tylko wtedy, gdy nic w nim nie zostało. Folder, w którym jest notatka jeszcze niezsynchronizowana albo plik, którego Brulion nie synchronizuje (np. `.git`), zostaje na swoim miejscu.

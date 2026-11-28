@@ -89,6 +89,11 @@ class SyncHistory;
 class SyncthingClient;
 class WebDavClient;
 class FolderDavTransport;
+class EncryptingTransport;
+struct WebDavError;
+namespace encryption {
+struct NewNotebook;
+}
 class FolderStorage;
 struct SyncReport;
 struct SyncRunRecord;
@@ -109,6 +114,11 @@ struct NextcloudSettings {
     /// Nothing syncs then, neither by itself nor by "Sync now" — the two notebooks' notes would
     /// mix in the folder — until one of them gets another folder or its sync is turned off.
     QString sharedWith;
+    /// The server folder is end-to-end encrypted (docs/SYNC-ENCRYPTION.md): the client reaches
+    /// it through an EncryptingTransport with `notebookKey` (32 bytes; empty: this device has
+    /// no key yet, nothing syncs — locked()).
+    bool encrypted = false;
+    QByteArray notebookKey;
 
     /// Enabled, with a server, a user and a password.
     bool isComplete() const;
@@ -132,6 +142,9 @@ struct SyncthingSettings {
     QString url; ///< empty: the discovered address, else http://127.0.0.1:8384
     friend bool operator==(const SyncthingSettings &, const SyncthingSettings &) = default;
 };
+
+/// The server folder a notebook syncs with: `folder`, or "Brulion" when none is set.
+QString defaultFolder(const QString &folder);
 
 /// Both describe the same Nextcloud account: the same user on the same server (scheme, host,
 /// port and path compared; "https://" is assumed without a scheme). A stored app password is only
@@ -186,6 +199,11 @@ class WorkspaceSync : public QObject {
     Q_PROPERTY(QVariantList pendingDeletions READ pendingDeletions NOTIFY statusChanged FINAL)
     /// testConnection() is running.
     Q_PROPERTY(bool testing READ testing NOTIFY testingChanged FINAL)
+    /// The server folder is encrypted and this device has no key for it: nothing syncs until
+    /// setUpEncryption() opened it.
+    Q_PROPERTY(bool locked READ locked NOTIFY statusChanged FINAL)
+    /// setUpEncryption() is running (a key derivation takes a second or two on a phone).
+    Q_PROPERTY(bool encryptionBusy READ encryptionBusy NOTIFY encryptionBusyChanged FINAL)
     /// Name of this device in conflict copies.
     Q_PROPERTY(QString deviceName READ deviceName NOTIFY configurationChanged FINAL)
     /// The notebook (its folder's name) that syncs with this notebook's server folder too, while
@@ -285,6 +303,8 @@ public:
     bool needsConfirmation() const;
     QVariantList pendingDeletions() const;
     bool testing() const { return m_testing > 0; }
+    bool locked() const;
+    bool encryptionBusy() const { return m_encryptionBusy > 0; }
     QVariantMap syncthingStatus() const { return m_syncthingStatus; }
     QVariantList conflicts() const { return m_conflicts; }
     int conflictCount() const { return int(m_conflicts.size()); }
@@ -331,6 +351,13 @@ public:
                                     const QString &folder);
     /// The WebDAV address for these settings ("" when the server or user is missing).
     Q_INVOKABLE QString davUrlFor(const QString &url, const QString &user, const QString &folder) const;
+    /// End-to-end encryption of this server folder (workspacesyncencryption.cpp): a folder with
+    /// a key file is opened with `secret` — its password or its recovery key —, an empty or
+    /// missing one becomes a new encrypted notebook with `secret` as its password; a folder with
+    /// other files is refused. Answers encryptionKeyMade() or encryptionFailed(). The stored app
+    /// password is used as testConnection() uses it.
+    Q_INVOKABLE void setUpEncryption(const QString &url, const QString &user, const QString &password,
+                                     const QString &folder, const QString &secret);
     /// Ask the Syncthing daemon now.
     Q_INVOKABLE void refreshSyncthing();
     /// Texts of a conflict for BMergeView: { original, copy, title, ours (the original's text),
@@ -389,6 +416,15 @@ Q_SIGNALS:
     void folderSharingFound(const QString &message);
     void liveChanged();
     void historyChanged();
+    void encryptionBusyChanged();
+    /// setUpEncryption() opened or made the encrypted folder: `notebookKey` is to be kept on this
+    /// device (AppSettings), `recoveryKey` shown once — "" when an existing folder was opened.
+    void encryptionKeyMade(const QString &folder, const QByteArray &notebookKey, const QString &recoveryKey);
+    /// The same for the interface: the recovery key to show once ("" when a folder was opened).
+    /// The notebook key never goes to QML.
+    void encryptionReady(const QString &recoveryKey);
+    /// setUpEncryption() could not (translated).
+    void encryptionFailed(const QString &message);
 
 private:
     sync::HttpTransport *transport();
@@ -422,6 +458,15 @@ private:
     /// Why nothing syncs while the folder is shared (translated, names the other notebook).
     QString sharedFolderText() const;
     std::optional<QVariantMap> conflictFor(const QString &copy) const;
+    // workspacesyncencryption.cpp
+    void openEncryptedFolder(sync::WebDavClient *client, const QString &folder, const QByteArray &keyFile,
+                             const QString &secret);
+    void makeIfEmpty(sync::WebDavClient *client, const QString &folder, const QString &password);
+    void makeEncryptedFolder(sync::WebDavClient *client, const QString &folder, const QString &password);
+    void failEncryption(sync::WebDavClient *client, const sync::WebDavError &error);
+    void putKeyFile(sync::WebDavClient *client, const QString &folder,
+                    const std::shared_ptr<sync::encryption::NewNotebook> &notebook);
+    void finishEncryption(sync::WebDavClient *client);
 
     QPointer<Vault> m_vault;
     sync::HttpTransport *m_transport = nullptr;
@@ -431,6 +476,7 @@ private:
     FolderOpener m_folderOpener;
     bool m_folderSynchronous = false;
     QString m_folderNotice; ///< the folder last warned about (not reachable)
+    std::unique_ptr<sync::EncryptingTransport> m_encrypting; ///< before transport() when encrypted
     std::unique_ptr<sync::WebDavClient> m_client;
     std::unique_ptr<sync::SyncEngine> m_engine;
     std::unique_ptr<sync::SyncScheduler> m_scheduler;
@@ -449,6 +495,7 @@ private:
     bool m_discovery = true;
     bool m_appActive = true;
     int m_testing = 0;
+    int m_encryptionBusy = 0;
     QVariantMap m_syncthingStatus;
     QString m_syncthingFolderId;
     QVariantList m_conflicts;

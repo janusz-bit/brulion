@@ -1765,7 +1765,7 @@
 <context>
     <name>SearchView</name>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SearchView.qml" line="286"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="289"/>
         <source>%1 of %n result(s)</source>
         <translation>
             <numerusform>%1 of %n result</numerusform>
@@ -1773,7 +1773,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SearchView.qml" line="287"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="290"/>
         <source>%n result(s)</source>
         <translation>
             <numerusform>%n result</numerusform>
@@ -1781,7 +1781,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SearchView.qml" line="413"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="416"/>
         <source>%n more slide(s) match</source>
         <translation>
             <numerusform>%n more slide matches</numerusform>
@@ -1789,7 +1789,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SearchView.qml" line="414"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="417"/>
         <source>%n more part(s) match</source>
         <translation>
             <numerusform>%n more part matches</numerusform>
@@ -1797,7 +1797,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SearchView.qml" line="417"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="420"/>
         <source>%n more page(s) match</source>
         <translation>
             <numerusform>%n more page matches</numerusform>
@@ -1805,7 +1805,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SearchView.qml" line="552"/>
+        <location filename="../src/app/qml/views/SearchView.qml" line="555"/>
         <source>The filters hide %n result(s).</source>
         <translation>
             <numerusform>The filters hide %n result.</numerusform>
@@ -2343,7 +2343,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/qml/views/SyncView.qml" line="488"/>
+        <location filename="../src/app/qml/views/SyncView.qml" line="489"/>
         <source>%n note(s) with two versions</source>
         <translation>
             <numerusform>%n note with two versions</numerusform>
@@ -3047,7 +3047,7 @@
 <context>
     <name>brulion::shell::WorkspaceAgents</name>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspaceagents.cpp" line="1468"/>
+        <location filename="../src/app/shell/workspaceagents.cpp" line="1479"/>
         <source>%n AI agents are answering…</source>
         <translation>
             <numerusform>%n AI agent is answering…</numerusform>
@@ -3109,7 +3109,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspaceintegration.cpp" line="403"/>
+        <location filename="../src/app/shell/workspaceintegration.cpp" line="413"/>
         <source>%n task(s) changed both here and on the server — see the sync center</source>
         <translation>
             <numerusform>%n task changed both here and on the server — see the sync center</numerusform>
@@ -3117,7 +3117,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspaceintegration.cpp" line="409"/>
+        <location filename="../src/app/shell/workspaceintegration.cpp" line="419"/>
         <source>%n deletion(s) of synced tasks wait for a confirmation in the sync center</source>
         <translation>
             <numerusform>%n deletion of a synced task waits for a confirmation in the sync center</numerusform>
@@ -3297,7 +3297,7 @@
 <context>
     <name>brulion::shell::WorkspaceIntegration</name>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspaceintegration.cpp" line="364"/>
+        <location filename="../src/app/shell/workspaceintegration.cpp" line="374"/>
         <source>%n note(s) changed on two devices at once. Both versions are kept: merge them in the sync center.</source>
         <translation>
             <numerusform>%n note changed on two devices at once. Both versions are kept: merge them in the sync center.</numerusform>
@@ -3308,7 +3308,7 @@
 <context>
     <name>brulion::shell::WorkspaceSync</name>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacesync.cpp" line="620"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="645"/>
         <source>%n file(s) would be deleted. Confirm in the sync center.</source>
         <translation>
             <numerusform>%n file would be deleted. Confirm in the sync center.</numerusform>
@@ -3316,7 +3316,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacesync.cpp" line="618"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="643"/>
         <source>%n file(s) could not be synced.</source>
         <translation>
             <numerusform>%n file could not be synced.</numerusform>
@@ -3324,7 +3324,7 @@
         </translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacesync.cpp" line="975"/>
+        <location filename="../src/app/shell/workspacesync.cpp" line="1012"/>
         <source>Up to date with %n device(s).</source>
         <translation>
             <numerusform>Up to date with %n device.</numerusform>
@@ -3513,6 +3513,14 @@
         <translation>
             <numerusform>%n moved here</numerusform>
             <numerusform>%n moved here</numerusform>
+        </translation>
+    </message>
+    <message numerus="yes">
+        <location filename="../src/app/shell/workspacesyncencryption.cpp" line="134"/>
+        <source>The notebook&apos;s password needs at least %n character(s).</source>
+        <translation>
+            <numerusform>The notebook&apos;s password needs at least %n character.</numerusform>
+            <numerusform>The notebook&apos;s password needs at least %n characters.</numerusform>
         </translation>
     </message>
 </context>

@@ -364,12 +364,15 @@ done in the repository simply disappears from the list.
 
 ## Privacy and security
 
-* **End-to-end encryption of sync: the app** — the design (docs/SYNC-ENCRYPTION.md) and the core
-  (`sync/encryption.h`, `encryptionkeys.h`, `encryptingtransport.h`) are done; left: the setting
-  in the Nextcloud settings (a new empty server folder, the password, the recovery key shown once,
-  unlocking on another device, changing the password), the notebook key in the app's `secrets/`
-  folder, `WorkspaceSync` putting `EncryptingTransport` before the network, the marker in the old
-  folder, i18n and the guide's page (en/pl).
+* **End-to-end encryption of sync: what is left** (docs/SYNC-ENCRYPTION.md; done: the design, the
+  core, the setting with the password and the recovery key in the sync settings, unlocking on
+  another device, a device without the key locked, the guide) — changing the password in the app
+  (`encryption::changePassword()` is there; no dialog yet); the note "this notebook moved to an
+  encrypted folder" written into the old plain folder; a device whose setting says "not
+  encrypted" but whose folder has a key file is told only by "Test connection" — its sync should
+  refuse to start (one PROPFIND before the first run); turning it off (a new plain folder); and a
+  check on real devices: a phone opening a notebook a laptop encrypted, the key derivation's time
+  there (PBKDF2, 600 000 rounds).
 * **App lock and encrypted notes — check on real devices.** Checked automatically: the crypto
   against NIST/RFC vectors, Meld Encrypt's formats against fixtures made with the plugin's code
   (and Brulion's output decrypted by it), no plaintext on disk, the lock's state machine, the

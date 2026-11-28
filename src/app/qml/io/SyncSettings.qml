@@ -131,4 +131,9 @@ ColumnLayout {
         Layout.topMargin: Theme.space2
         visible: !section.sync.deviceFolder
     }
+
+    SyncEncryptionCard {
+        Layout.fillWidth: true
+        visible: !section.sync.deviceFolder && AppSettings.nextcloudEnabled
+    }
 }

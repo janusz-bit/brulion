@@ -2353,6 +2353,50 @@ QString AppSettings::storedNextcloudPassword(const QString &dataDir)
     return in.open(QIODevice::ReadOnly) ? QString::fromUtf8(in.readAll()) : QString();
 }
 
+bool AppSettings::nextcloudEncrypted() const
+{
+    const QString k = notebookKey(currentVault(), u"encrypted");
+    return !k.isEmpty() && m_settings->value(k, false).toBool();
+}
+
+void AppSettings::setNextcloudEncrypted(bool on)
+{
+    if (storeNotebookValue(currentVault(), u"encrypted", on, nextcloudEncrypted()))
+        Q_EMIT nextcloudChanged();
+}
+
+namespace {
+
+QString notebookKeyFileIn(const QString &dataDir, const QString &notebookId)
+{
+    return dataDir + u"/secrets/sync-key-"_s + notebookId;
+}
+
+} // namespace
+
+bool AppSettings::hasNextcloudNotebookKey() const
+{
+    return !nextcloudNotebookKey().isEmpty();
+}
+
+QByteArray AppSettings::nextcloudNotebookKey() const
+{
+    const QString id = notebookId(currentVault());
+    if (id.isEmpty())
+        return {};
+    return QByteArray::fromBase64(readSecretFile(notebookKeyFileIn(m_dataDir, id)).toLatin1());
+}
+
+bool AppSettings::setNextcloudNotebookKey(const QByteArray &key)
+{
+    const QString id = notebookId(currentVault());
+    if (id.isEmpty())
+        return false;
+    const bool ok = writeSecretFile(notebookKeyFileIn(m_dataDir, id), QString::fromLatin1(key.toBase64()));
+    Q_EMIT nextcloudChanged();
+    return ok;
+}
+
 bool AppSettings::hasNextcloudPassword() const
 {
     return QFileInfo(passwordFile()).size() > 0;

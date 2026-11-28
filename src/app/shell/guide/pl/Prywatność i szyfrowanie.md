@@ -42,6 +42,8 @@ Brulion czyta i zapisuje format wtyczki **Meld Encrypt** do Obsidiana: te same n
 ## Synchronizacja
 Zaszyfrowany tekst to zwykły tekst w pliku, więc synchronizacja scala go jak każdy wiersz: zmiany w różnych miejscach strony się scalają; gdy dwa urządzenia zmieniły ten sam zaszyfrowany tekst, obie wersje zostają zachowane jako konflikt, tak jak przy każdym innym wierszu. Cała zaszyfrowana strona zmieniona na dwóch urządzeniach naraz zostaje zachowana w obu wersjach (kopia konfliktu), nigdy wymieszana. Zaszyfrowana strona zmieniona na innym urządzeniu **innym** hasłem blokuje się tutaj i nigdy nie zostanie nadpisana — odblokuj ją nowym hasłem.
 
+Cały notatnik można też zostawić nieczytelny na serwerze Nextcloud: [[Synchronizacja#Szyfrowanie end-to-end|Szyfrowanie end-to-end]]. Każda nazwa jest szyfrowana AES-256-SIV, a każdy plik AES-256-GCM w kawałkach po 64 KiB własnym kluczem; klucz notatnika jest losowy i leży na serwerze zapieczętowany Twoim hasłem (PBKDF2-HMAC-SHA-512, 600 000 rund) oraz kluczem odzyskiwania, a na każdym urządzeniu w pliku, który może czytać tylko Brulion.
+
 ## Blokada aplikacji
 Ustawienia → **Prywatność** → **Ustaw PIN…** (od 4 do 16 cyfr). Na telefonie możesz zamiast tego użyć blokady telefonu: **Użyj blokady telefonu** — odcisku palca, twarzy albo PIN-u, wzoru lub hasła telefonu.
 

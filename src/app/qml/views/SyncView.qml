@@ -438,6 +438,7 @@ FocusScope {
                     }
                 }
                 NextcloudForm { visible: !root.deviceFolder }
+                SyncEncryptionCard { visible: !root.deviceFolder && AppSettings.nextcloudEnabled }
             }
 
             // ---- GitHub -----------------------------------------------------------------------
