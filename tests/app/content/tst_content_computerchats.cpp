@@ -295,7 +295,8 @@ private Q_SLOTS:
         sent = m_computer.take(u"chats/send"_s);
         QVERIFY(sent);
         QCOMPARE(sent->body().value(u"mode"_s).toString(), u"queue"_s);
-        const std::optional<QList<acp::RemotePicture>> there = acp::remotePicturesFromJson(sent->body().value(u"pictures"_s));
+        const std::optional<QList<acp::RemotePicture>> there =
+                acp::remotePicturesFromJson(sent->body().value(u"pictures"_s));
         QVERIFY(there && there->size() == 1);
         QCOMPARE(there->at(0).name, u"zdjęcie żółwia.jpg"_s);
         QVERIFY(there->at(0).data.startsWith("\xff\xd8"));

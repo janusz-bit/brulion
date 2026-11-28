@@ -369,8 +369,9 @@ int main(int argc, char **argv)
                     // (It takes no images: a picture comes as a link to its file.)
                     const QString type = block.value(u"type"_s).toString();
                     if (type == u"image" || type == u"resource_link")
-                        names << (block.value(u"uri"_s).toString().isEmpty() ? u"?"_s
-                                                                             : block.value(u"uri"_s).toString().section(u'/', -1));
+                        names << (block.value(u"uri"_s).toString().isEmpty()
+                                          ? u"?"_s
+                                          : block.value(u"uri"_s).toString().section(u'/', -1));
                 }
                 end(u"Obrazy: "_s + (names.isEmpty() ? u"brak"_s : names.join(u", "_s)));
                 continue;

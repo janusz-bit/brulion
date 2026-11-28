@@ -1776,8 +1776,7 @@ private Q_SLOTS:
         QCOMPARE(heard.last().second,
                  (QJsonObject{{u"path"_s, path}, {u"text"_s, u"Skręć: gęślą jaźń"_s}, {u"mode"_s, u"steer"_s}}));
         err = done([&](auto cb) {
-            acp::sendRemoteChat(m_transport.get(), QUrl(m_base), token, path, u"Potem"_s, acp::SendMode::Queue, {},
-                                cb);
+            acp::sendRemoteChat(m_transport.get(), QUrl(m_base), token, path, u"Potem"_s, acp::SendMode::Queue, {}, cb);
         });
         QVERIFY(!err.failed());
         QCOMPARE(heard.last().second.value(u"mode"_s).toString(), u"queue"_s);

@@ -581,8 +581,9 @@ void ChatControl::sendTo(const QJsonObject &params, const Caller &caller, const 
     const QString mode = params.value(u"mode"_s).toString().toLower();
     const bool queue = params.value(u"queue"_s).toBool() || mode == u"queue";
     if (m_chats->isRunning(path) && mode != u"steer" && !queue)
-        return reply.fail(Busy, u"Its turn runs: wait for it (chatWait), stop it (chatStop) or put the message in line (queue)"_s,
-                          {{u"state"_s, m_chats->stateOf(path)}});
+        return reply.fail(
+                Busy, u"Its turn runs: wait for it (chatWait), stop it (chatStop) or put the message in line (queue)"_s,
+                {{u"state"_s, m_chats->stateOf(path)}});
     const QString parent = m_chats->lineage()->parentOf(path);
     if (!m_chats->isRunning(path) && caller.granted && !parent.isEmpty()
         && m_chats->lineage()->runningChildren(parent) >= ChatLineage::MaxRunningChildren)
@@ -1170,7 +1171,8 @@ void ChatControl::addRunning(acp::RemoteChatDetail &d, const QString &path) cons
     for (qsizetype i = std::max<qsizetype>(0, tools.size() - acp::MaxLiveTools); i < tools.size(); ++i) {
         const QVariantMap m = tools.at(i).toMap();
         const acp::RemoteChatTool tool{m.value(u"title"_s).toString().simplified().left(300),
-                                       m.value(u"status"_s).toString().left(20), m.value(u"kind"_s).toString().left(20)};
+                                       m.value(u"status"_s).toString().left(20),
+                                       m.value(u"kind"_s).toString().left(20)};
         if (!tool.title.isEmpty())
             d.tools.append(tool);
     }
@@ -1308,10 +1310,11 @@ void ChatControl::setOption(const QJsonObject &params, const Caller &caller, con
         ids << option.id;
         if (option.id != id)
             continue;
-        const bool fits = option.boolean ? value == u"true" || value == u"false"
-                                         : std::ranges::any_of(option.choices, [&value](const acp::RemoteChatChoice &c) {
-                                               return c.value == value;
-                                           });
+        const bool fits = option.boolean
+                                  ? value == u"true" || value == u"false"
+                                  : std::ranges::any_of(option.choices, [&value](const acp::RemoteChatChoice &c) {
+                                        return c.value == value;
+                                    });
         if (!fits) {
             QStringList values{u"true"_s, u"false"_s};
             if (!option.boolean) {

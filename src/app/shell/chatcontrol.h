@@ -10,8 +10,8 @@
 // for the phone): those whose turn runs, waits in line or asks, and those that ended within
 // acp::RecentChatMinutes (Workspace::now(); WorkspaceChats::endedSince(): also before the app shared
 // them, or started again), newest activity first, one of them in full (`path`: its answer being
-// written, its tools, plan, question, the messages waiting — held or not —, its agent's options). Its `revision` changes
-// with anything of them — WorkspaceChats' state, questions, queue, agents, a message written, a
+// written, its tools, plan, question, the messages waiting — held or not —, its agent's options).
+// Its `revision` changes with anything of them — WorkspaceChats' state, questions, queue, agents, a message written, a
 // running turn's state, answer, thoughts, tools — at most ten times a second, and never goes back,
 // not even over a restart of the app (it is at least the time in ms since the epoch); a long poll
 // waits for a newer one (`since`), `timeout` ms at most. chatAnswer answers the question a turn waits
@@ -139,8 +139,8 @@ private:
     /// Pictures stored for a message that was not sent: deleted again.
     void dropPictures(const QStringList &pictures);
     /// chatStart's thread once its worktree is known to be the project's.
-    void startThreadNow(const QString &project, const QString &text, const QJsonObject &params,
-                        const QString &partner, const QString &worktree, const QString &branch, const Reply &reply);
+    void startThreadNow(const QString &project, const QString &text, const QJsonObject &params, const QString &partner,
+                        const QString &worktree, const QString &branch, const Reply &reply);
     /// chatSend's message to a turn that runs: steered in, else queued after it.
     void sendWhileRunning(const QString &path, const QString &text, const QStringList &pictures, bool steer,
                           const Reply &reply);

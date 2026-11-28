@@ -14,10 +14,10 @@
 // `app chat answer` (the question a turn waits on) is the user's alone.
 #include "commands_p.h"
 
+#include "acp/appchats.h"
 #include "appmessage.h"
 #include "controlclient.h"
 #include "controlprotocol.h"
-#include "acp/appchats.h"
 #include "extensions/appapi.h"
 #include "notebook/itemref.h"
 #include "singleinstance.h"
@@ -1601,10 +1601,10 @@ void addAppCommands(QList<Command> &out)
                                        "takes. It applies to the conversation's next turn (an agent may take it at "
                                        "once)."));
     out.append(c);
-    c = chatCommandOf(u"app.chat.resume"_s,
-                      QT_TRANSLATE_NOOP("brulion::cli",
-                                        "The messages held after a conversation's turn stopped or failed go on"),
-                      appChatResume, {conversation}, true);
+    c = chatCommandOf(
+            u"app.chat.resume"_s,
+            QT_TRANSLATE_NOOP("brulion::cli", "The messages held after a conversation's turn stopped or failed go on"),
+            appChatResume, {conversation}, true);
     c.help = cliText(QT_TRANSLATE_NOOP("brulion::cli",
                                        "{path, resumed}: the first is sent now, the rest after it; exit 4 not_held "
                                        "when none are held (app chat live --path: detail.held)."));

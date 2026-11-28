@@ -3332,7 +3332,8 @@ private Q_SLOTS:
             QVERIFY(f.open(QIODevice::WriteOnly));
             f.write("\x89PNG\r\n");
         }
-        r = cliLive({u"app"_s, u"chat"_s, u"send"_s, u"AI/Plan"_s, u"Co"_s, u"tu"_s, u"jest?"_s, u"--pictures"_s, photo});
+        r = cliLive(
+                {u"app"_s, u"chat"_s, u"send"_s, u"AI/Plan"_s, u"Co"_s, u"tu"_s, u"jest?"_s, u"--pictures"_s, photo});
         QCOMPARE(r.code, 0);
         QCOMPARE(requests.last().method, u"chatSend"_s);
         const QJsonArray sentPictures = requests.last().params.value(u"pictures"_s).toArray();
@@ -3340,7 +3341,8 @@ private Q_SLOTS:
         QCOMPARE(sentPictures.at(0).toObject().value(u"name"_s).toString(), u"zdjęcie łąki.png"_s);
         QCOMPARE(QByteArray::fromBase64(sentPictures.at(0).toObject().value(u"data"_s).toString().toLatin1()),
                  QByteArray("\x89PNG\r\n"));
-        r = cliLive({u"app"_s, u"chat"_s, u"start"_s, u"Jak"_s, u"na"_s, u"zdjęciu"_s, u"--pictures"_s, photo + u","_s + photo});
+        r = cliLive({u"app"_s, u"chat"_s, u"start"_s, u"Jak"_s, u"na"_s, u"zdjęciu"_s, u"--pictures"_s,
+                     photo + u","_s + photo});
         QCOMPARE(r.code, 0);
         QCOMPARE(requests.last().params.value(u"pictures"_s).toArray().size(), 2);
         const qsizetype askedBefore = requests.size();

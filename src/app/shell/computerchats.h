@@ -110,8 +110,8 @@ public:
     using Done = std::function<void(const QString &error)>;
     /// The next message of `path` (its computer's: the one that lists it) with its pictures (as
     /// prepared for the model), now, queued or steered in.
-    void send(const QString &path, const QString &text, const QList<acp::RemotePicture> &pictures,
-              acp::SendMode mode, Done done);
+    void send(const QString &path, const QString &text, const QList<acp::RemotePicture> &pictures, acp::SendMode mode,
+              Done done);
     /// … to the computer at `url` (a conversation it does not list now: an idle thread of its project).
     void sendTo(const QString &url, const QString &path, const QString &text, const QList<acp::RemotePicture> &pictures,
                 acp::SendMode mode, std::function<void(const acp::RemoteError &error, const QString &words)> done);

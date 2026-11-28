@@ -848,11 +848,11 @@ private Q_SLOTS:
             if (m.chat)
                 chatMethods << m.name;
         }
-        QCOMPARE(chatMethods, (QStringList{u"chats"_s, u"chatRead"_s, u"chatStart"_s, u"chatSend"_s, u"chatOption"_s,
-                                           u"chatResume"_s, u"chatWait"_s,
-                                           u"chatStop"_s, u"chatPartners"_s, u"chatLive"_s, u"chatSchedules"_s,
-                                           u"chatScheduleAdd"_s, u"chatScheduleSet"_s, u"chatScheduleRemove"_s,
-                                           u"chatScheduleRun"_s, u"chatRequestSecret"_s, u"chatNotify"_s}));
+        QCOMPARE(chatMethods,
+                 (QStringList{u"chats"_s, u"chatRead"_s, u"chatStart"_s, u"chatSend"_s, u"chatOption"_s,
+                              u"chatResume"_s, u"chatWait"_s, u"chatStop"_s, u"chatPartners"_s, u"chatLive"_s,
+                              u"chatSchedules"_s, u"chatScheduleAdd"_s, u"chatScheduleSet"_s, u"chatScheduleRemove"_s,
+                              u"chatScheduleRun"_s, u"chatRequestSecret"_s, u"chatNotify"_s}));
         // A secret asked for: its parameters checked before the app sees them.
         r = exchange(script,
                      R"({"id":2,"method":"chatRequestSecret","params":{"label":"Token GitHuba","delivery":"value"}})");

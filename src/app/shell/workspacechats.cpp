@@ -452,9 +452,12 @@ QVariantMap optionRow(const acp::RemoteChatOption &o)
     for (const acp::RemoteChatChoice &c : o.choices)
         choices.append(QVariantMap{
                 {u"value"_s, c.value}, {u"name"_s, c.name}, {u"description"_s, QString()}, {u"group"_s, c.group}});
-    return {{u"id"_s, o.id},           {u"name"_s, o.name},
-            {u"description"_s, o.description}, {u"boolean"_s, o.boolean},
-            {u"current"_s, o.current}, {u"currentName"_s, o.currentName.isEmpty() ? o.current : o.currentName},
+    return {{u"id"_s, o.id},
+            {u"name"_s, o.name},
+            {u"description"_s, o.description},
+            {u"boolean"_s, o.boolean},
+            {u"current"_s, o.current},
+            {u"currentName"_s, o.currentName.isEmpty() ? o.current : o.currentName},
             {u"choices"_s, choices}};
 }
 
@@ -1315,8 +1318,8 @@ QString WorkspaceChats::sendMessage(const QString &path, const QString &text, co
         const QPointer<WorkspaceChats> self(this);
         m_agents->computerChats()->sendTo(
                 url, path, message, *there, acp::SendMode::Now,
-                [self, url, path, message, sent, there, page, partner, parent,
-                 wakes](const acp::RemoteError &error, const QString &words) {
+                [self, url, path, message, sent, there, page, partner, parent, wakes](const acp::RemoteError &error,
+                                                                                      const QString &words) {
                     if (!self)
                         return;
                     self->m_routing.remove(path.toLower());
@@ -3191,7 +3194,7 @@ bool WorkspaceChats::sendToComputer(const QString &path, const QString &text, co
 }
 
 std::optional<QList<acp::RemotePicture>> WorkspaceChats::picturesForComputer(const QStringList &pictures,
-                                                                            const QString &host) const
+                                                                             const QString &host) const
 {
     QList<acp::RemotePicture> out;
     qsizetype total = 0;
@@ -3202,9 +3205,9 @@ std::optional<QList<acp::RemotePicture>> WorkspaceChats::picturesForComputer(con
         if (!image || size > acp::MaxRemotePictureBytes || total + size > acp::MaxRemotePicturesBytes
             || out.size() >= acp::MaxRemotePictures) {
             //: %1: a picture's file name, %2: a computer's name, %3: why (English)
-            Q_EMIT m_workspace->errorOccurred(
-                    tr("%1 cannot go to %2: %3").arg(QFileInfo(picture).fileName(), host,
-                                                      image ? tr("too many or too large pictures") : why));
+            Q_EMIT m_workspace->errorOccurred(tr("%1 cannot go to %2: %3")
+                                                      .arg(QFileInfo(picture).fileName(), host,
+                                                           image ? tr("too many or too large pictures") : why));
             return std::nullopt;
         }
         total += size;

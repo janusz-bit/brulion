@@ -402,13 +402,15 @@ private Q_SLOTS:
         // at most MaxOptionChoices, none twice; options at most MaxLiveOptions.
         QJsonArray choices;
         for (int i = 0; i < MaxOptionChoices + 5; ++i)
-            choices.append(QJsonObject{{u"value"_s, u"m%1"_s.arg(i % (MaxOptionChoices + 2))}, {u"name"_s, u"Model %1"_s.arg(i)}});
+            choices.append(QJsonObject{{u"value"_s, u"m%1"_s.arg(i % (MaxOptionChoices + 2))},
+                                       {u"name"_s, u"Model %1"_s.arg(i)}});
         choices.append(QJsonObject{{u"name"_s, u"bez wartości"_s}});
         QJsonArray options;
         options.append(QJsonObject{{u"name"_s, u"Bez id"_s}, {u"choices"_s, choices}});
         options.append(QJsonObject{{u"id"_s, u"pusta"_s}, {u"name"_s, u"Pusta"_s}});
         for (int i = 0; i < MaxLiveOptions + 3; ++i)
-            options.append(QJsonObject{{u"id"_s, u"o%1"_s.arg(i)}, {u"name"_s, u"Opcja\n%1"_s.arg(i)}, {u"choices"_s, choices}});
+            options.append(QJsonObject{
+                    {u"id"_s, u"o%1"_s.arg(i)}, {u"name"_s, u"Opcja\n%1"_s.arg(i)}, {u"choices"_s, choices}});
         const std::optional<RemoteChatDetail> d = remoteChatDetailFromJson(
                 QJsonObject{{u"path"_s, Path}, {u"state"_s, u"idle"_s}, {u"options"_s, options}});
         QVERIFY(d);
@@ -448,8 +450,9 @@ private Q_SLOTS:
         QTest::newRow("one too large") << QJsonValue(QJsonArray{one(u"a.jpg"_s, big)}) << -1;
         const QString half = QString::fromLatin1(QByteArray(MaxRemotePictureBytes, 'x').toBase64());
         QTest::newRow("two at the limit") << QJsonValue(QJsonArray{one(u"a.jpg"_s, half), one(u"b.jpg"_s, half)}) << 2;
-        QTest::newRow("all too large")
-                << QJsonValue(QJsonArray{one(u"a.jpg"_s, half), one(u"b.jpg"_s, half), one(u"c.jpg"_s, jpeg)}) << -1;
+        QTest::newRow("all too large") << QJsonValue(
+                QJsonArray{one(u"a.jpg"_s, half), one(u"b.jpg"_s, half), one(u"c.jpg"_s, jpeg)})
+                                       << -1;
     }
     void pictures()
     {

@@ -78,10 +78,10 @@
 #endif
 
 #include <QBuffer>
-#include <QImage>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QImage>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -92,8 +92,8 @@
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTemporaryDir>
-#include <QTimer>
 #include <QTest>
+#include <QTimer>
 #include <QUrl>
 
 #include <algorithm>
@@ -2833,7 +2833,8 @@ private Q_SLOTS:
         // A message written meanwhile, held when the turn is stopped: listed held, resumed from here.
         QVERIFY(ask(*control, u"chatSend"_s, {{u"path"_s, path}, {u"text"_s, u"Proszę czekaj"_s}})->ok);
         QTRY_VERIFY_WITH_TIMEOUT(chats->isRunning(path), 20000);
-        QVERIFY(ask(*control, u"chatSend"_s, {{u"path"_s, path}, {u"text"_s, u"Potem jaki model?"_s}, {u"mode"_s, u"queue"_s}})
+        QVERIFY(ask(*control, u"chatSend"_s,
+                    {{u"path"_s, path}, {u"text"_s, u"Potem jaki model?"_s}, {u"mode"_s, u"queue"_s}})
                         ->ok);
         a = ask(*control, u"chatResume"_s, {{u"path"_s, path}});
         QCOMPARE(a->code, u"not_held"_s); // (it waits, not held)
@@ -2860,7 +2861,8 @@ private Q_SLOTS:
         buffer.open(QIODevice::WriteOnly);
         QVERIFY(image.save(&buffer, "PNG"));
         const QJsonArray pictures = acp::toJson(QList<acp::RemotePicture>{{u"paragon.png"_s, png}});
-        a = ask(*control, u"chatSend"_s, {{u"path"_s, path}, {u"text"_s, u"Co widać? obrazy"_s}, {u"pictures"_s, pictures}});
+        a = ask(*control, u"chatSend"_s,
+                {{u"path"_s, path}, {u"text"_s, u"Co widać? obrazy"_s}, {u"pictures"_s, pictures}});
         QVERIFY2(a->ok, qPrintable(a->message));
         QTRY_VERIFY_WITH_TIMEOUT(!chats->isRunning(path), 20000);
         QString page = ws->read(path);
@@ -2878,7 +2880,8 @@ private Q_SLOTS:
                  {u"text"_s, u"x"_s},
                  {u"pictures"_s, QJsonArray{QJsonObject{{u"name"_s, u"skrypt.sh"_s}, {u"data"_s, u"eA=="_s}}}}});
         QCOMPARE(a->code, u"bad_pictures"_s);
-        a = ask(*control, u"chatStart"_s, {{u"text"_s, u"x"_s}, {u"partner"_s, u"acp:fake"_s}, {u"pictures"_s, u"a.png"_s}});
+        a = ask(*control, u"chatStart"_s,
+                {{u"text"_s, u"x"_s}, {u"partner"_s, u"acp:fake"_s}, {u"pictures"_s, u"a.png"_s}});
         QCOMPARE(a->code, u"bad_pictures"_s);
         // A new conversation with a picture.
         a = ask(*control, u"chatStart"_s,

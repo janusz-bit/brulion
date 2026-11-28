@@ -1887,11 +1887,9 @@ std::optional<QString> queryValue(const http::Request &request, const QString &n
 
 } // namespace
 
-std::optional<http::Response> AcpHost::chatsHeaders(const QStringList &parts, const QByteArray &method,
-                                                    qint64 *maxBody)
+std::optional<http::Response> AcpHost::chatsHeaders(const QStringList &parts, const QByteArray &method, qint64 *maxBody)
 {
-    static const QStringList actions{u"send"_s,   u"start"_s,  u"stop"_s,
-                                     u"answer"_s, u"option"_s, u"resume"_s};
+    static const QStringList actions{u"send"_s, u"start"_s, u"stop"_s, u"answer"_s, u"option"_s, u"resume"_s};
     const bool list = parts.size() == 1;
     const bool page = parts.size() == 2 && parts.at(1) == u"page";
     const bool action = parts.size() == 2 && actions.contains(parts.at(1));
@@ -2056,7 +2054,8 @@ http::Response pathAnswer(const QString &path, const QJsonObject &result, const 
 std::optional<QJsonArray> picturesOf(const QJsonObject &body, http::Response *refusal)
 {
     QString why;
-    const std::optional<QList<acp::RemotePicture>> pictures = acp::remotePicturesFromJson(body.value(u"pictures"_s), &why);
+    const std::optional<QList<acp::RemotePicture>> pictures =
+            acp::remotePicturesFromJson(body.value(u"pictures"_s), &why);
     if (!pictures) {
         *refusal = apiError(400, u"bad_pictures"_s, why);
         return std::nullopt;

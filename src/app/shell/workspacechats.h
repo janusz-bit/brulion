@@ -921,7 +921,8 @@ private:
     /// `pictures` (vault paths) as a computer's app takes them: prepared for the model
     /// (Workspace::aiPicture, as this device's turn would send them) within acp's limits; nullopt
     /// when one cannot be (said in a toast naming `host`).
-    std::optional<QList<acp::RemotePicture>> picturesForComputer(const QStringList &pictures, const QString &host) const;
+    std::optional<QList<acp::RemotePicture>> picturesForComputer(const QStringList &pictures,
+                                                                 const QString &host) const;
     /// The pictures of a message the computer took: this device's copies deleted (that computer
     /// stored its own, which come with the notebook's sync).
     void sentThere(const QStringList &pictures);

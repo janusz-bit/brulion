@@ -226,8 +226,8 @@ std::optional<RemoteChatOption> remoteChatOptionFromJson(const QJsonObject &o)
     for (const QJsonValue &v : o.value(u"choices"_s).toArray()) {
         const QJsonObject c = v.toObject();
         RemoteChatChoice choice{line(c, "value"_L1), line(c, "name"_L1), line(c, "group"_L1)};
-        const bool twice = std::ranges::any_of(option.choices,
-                                               [&choice](const RemoteChatChoice &k) { return k.value == choice.value; });
+        const bool twice = std::ranges::any_of(
+                option.choices, [&choice](const RemoteChatChoice &k) { return k.value == choice.value; });
         if (choice.value.isEmpty() || twice)
             continue;
         if (choice.name.isEmpty())
@@ -273,8 +273,8 @@ std::optional<RemotePicture> pictureFromJson(const QJsonValue &value, QString *w
         *why = u"a picture's data is base64 of %1 bytes at most"_s.arg(MaxRemotePictureBytes);
         return std::nullopt;
     }
-    const auto decoded = QByteArray::fromBase64Encoding(data.toString().toLatin1(),
-                                                        QByteArray::AbortOnBase64DecodingErrors);
+    const auto decoded =
+            QByteArray::fromBase64Encoding(data.toString().toLatin1(), QByteArray::AbortOnBase64DecodingErrors);
     if (!decoded || decoded.decoded.isEmpty() || decoded.decoded.size() > MaxRemotePictureBytes) {
         *why = u"a picture's data is base64 of its bytes, %1 at most"_s.arg(MaxRemotePictureBytes);
         return std::nullopt;
@@ -506,7 +506,6 @@ void startRemoteThread(sync::HttpTransport *transport, const QUrl &base, const Q
                         done(e.failed() ? QString() : path, e);
                     });
 }
-
 
 void stopRemoteChat(sync::HttpTransport *transport, const QUrl &base, const QString &token, const QString &path,
                     std::function<void(const RemoteError &)> done)
