@@ -303,6 +303,8 @@ private Q_SLOTS:
         QTest::newRow("a backtick in a closed comment") << u"a %% x ` y %% dalej ‸"_s << false;
         QTest::newRow("a link destination from the start") << u"](cel ‸"_s << true;
         QTest::newRow("the very start") << u"‸`kod` dalej"_s << false;
+        QTest::newRow("a one-letter code span closed") << u"`a` dalej ‸"_s << false;
+        QTest::newRow("right after a formula's opening $") << u"$‸x$ dalej"_s << true;
     }
     void sourceProtected()
     {
