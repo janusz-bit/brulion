@@ -2772,24 +2772,7 @@ BlockTagStyle BlockListModel::tagStyleOf(const markdown::BlockEntry &e) const
 {
     if (!m_host)
         return {};
-    const QHash<QString, BlockTagStyle> &styles = m_host->tagStyles();
-    if (styles.isEmpty() || e.kind == BlockKind::Code || e.kind == BlockKind::Frontmatter || e.kind == BlockKind::Html
-        || e.kind == BlockKind::Rule)
-        return {};
-    for (const markdown::TagSpan &tag : markdown::findTags(e.body)) {
-        // The tag itself, else its parents (`#projekt/dom` by the style of `projekt`).
-        QString name = tag.name.toLower();
-        while (!name.isEmpty()) {
-            const auto it = styles.constFind(name);
-            if (it != styles.cend())
-                return *it;
-            const qsizetype slash = name.lastIndexOf(u'/');
-            if (slash < 0)
-                break;
-            name.truncate(slash);
-        }
-    }
-    return {};
+    return markdown::tagStyleOf(e.kind, e.body, m_host->tagStyles()).value_or(BlockTagStyle{});
 }
 
 void BlockListModel::followTagStyles()

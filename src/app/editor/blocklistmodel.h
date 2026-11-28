@@ -80,6 +80,7 @@
 #include "calc/calclocale.h"
 #include "markdown/blockdocument.h"
 #include "markdown/inlinerenderer.h"
+#include "markdown/tagstyle.h"
 #include "markdown/taskdeps.h"
 #include "spell/spellwords.h"
 
@@ -106,7 +107,7 @@ class Scope;
 
 namespace brulion::editor {
 
-struct BlockTagStyle;
+using BlockTagStyle = markdown::TagStyle; ///< (editorhost.h)
 class SpellCheck;
 
 class BlockListModel : public QAbstractListModel {

@@ -16,6 +16,7 @@ brulion_add_core_module(markdown
         frontmatter.h frontmatter_p.h frontmatter.cpp
         highlight.h highlight.cpp
         inline.h inline_p.h inline.cpp
+        tagstyle.h tagstyle.cpp
         inlineexpr.h inlineexpr.cpp
         inlinerenderer.h inlinerenderer.cpp
         journal.h journal.cpp

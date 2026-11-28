@@ -9,6 +9,7 @@
 #include "inputrules.h"
 #include "markdown/inline.h"
 #include "markdown/inlinerenderer.h"
+#include "markdown/tagstyle.h"
 #include "picturesize.h"
 
 #include <QCoreApplication>
@@ -54,14 +55,8 @@ inline QVariantMap pageIconMap(const markdown::PageIcon &icon)
 }
 
 /// How blocks carrying a tag are drawn (an extension's b.app.tagStyle; docs/UI.md "Styles of
-/// blocks by tag"): a tint of the theme ("accent", "success", "danger", "warning", "info",
-/// "neutral") or a colour "#rrggbb", as a background and / or a bar at the block's left edge.
-struct BlockTagStyle {
-    QString tint;
-    bool fill = true;
-    bool bar = true;
-    bool operator==(const BlockTagStyle &other) const = default;
-};
+/// blocks by tag"): core's markdown::TagStyle, which the exports draw too.
+using BlockTagStyle = markdown::TagStyle;
 
 } // namespace editor
 
