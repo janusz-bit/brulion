@@ -2308,6 +2308,168 @@ private Q_SLOTS:
         QVERIFY(lastServerEnv().contains(u"BRULION_APP_CHAT_TOKEN"_s));
         QVERIFY(!agentRead(u"session/new"_s).last().value(u"params"_s).toObject().contains(u"_meta"_s));
     }
+
+    void codeGit()
+    {
+        // A device's thread commits, pushes, opens a pull request (a fake gh) and reverts its turn
+        // in the project's folder here — through the project's git, with every refusal.
+#ifndef FAKE_GH
+        QSKIP("no fake gh in this build");
+#else
+        QFile::remove(m_agentLog);
+        const QString repo = m_tmp.filePath(u"Kod żółwia"_s);
+        QVERIFY(gitRepo(repo));
+        for (const QStringList &c : {QStringList{u"user.name"_s, u"Ala"_s}, QStringList{u"user.email"_s, u"ala@example.com"_s},
+                                     QStringList{u"commit.gpgsign"_s, u"false"_s}})
+            QCOMPARE(git(repo, QStringList{u"config"_s} + c), 0);
+        const QString bare = m_tmp.filePath(u"zdalne żółwia.git"_s);
+        QCOMPARE(QProcess::execute(u"git"_s, {u"init"_s, u"-q"_s, u"--bare"_s, bare}), 0);
+        QCOMPARE(git(repo, {u"remote"_s, u"add"_s, u"origin"_s, bare}), 0);
+        const QString plain = m_tmp.filePath(u"bez gita"_s);
+        QVERIFY(QDir().mkpath(plain));
+        const QString file = m_tmp.filePath(u"projekty-git.json"_s);
+        writeFile(file, acp::hostProjectsJson({{u"kod"_s, u"Kod żółwia"_s, repo, QString()},
+                                               {u"bez-gita"_s, u"Bez gita"_s, plain, QString()}}));
+        const QString ghArgs = m_tmp.filePath(u"gh-argumenty"_s);
+        qputenv("FAKE_GH_ARGS", ghArgs.toUtf8());
+        qputenv("FAKE_GH_MODE", "ok");
+        auto unset = qScopeGuard([] {
+            qunsetenv("FAKE_GH_ARGS");
+            qunsetenv("FAKE_GH_MODE");
+        });
+        AcpHostOptions o = projectOptions(file);
+        o.ghProgram = QString::fromUtf8(FAKE_GH);
+        startHost(*m_ctx, o);
+        const QString token = pair();
+        const auto post = [&](const QString &endpoint, const QJsonObject &body, const QString &project = u"kod"_s) {
+            return http("POST", u"projects/%1/%2"_s.arg(project, endpoint), QJsonDocument(body).toJson(), bearer(token));
+        };
+        const auto codeOf = [](const HttpResult &r) { return r.json.value(u"error"_s).toObject().value(u"code"_s).toString(); };
+        const auto device = [&](const acp::RemoteGitRequest &request) {
+            std::pair<acp::RemoteGitResult, acp::RemoteError> out;
+            bool done = false;
+            acp::remoteGit(m_transport.get(), QUrl(m_base), token, u"kod"_s, request,
+                           [&](const acp::RemoteGitResult &r, const acp::RemoteError &e) {
+                               out = {r, e};
+                               done = true;
+                           });
+            [&] { QTRY_VERIFY_WITH_TIMEOUT(done, kTimeoutMs); }();
+            return out;
+        };
+        const auto out = [&repo](const QStringList &args) {
+            QProcess p;
+            p.start(u"git"_s, QStringList{u"-C"_s, repo} + args);
+            p.waitForFinished(30000);
+            return QString::fromUtf8(p.readAllStandardOutput()).trimmed();
+        };
+        writeFile(repo + u"/Nowy żółw.md"_s, "- nowy\n");
+        writeFile(repo + u"/Dom.md"_s, "# README żółwia\n- zmiana\n");
+
+        // Refused before git is asked: a message that is empty, files out of the work tree, the
+        // wrong method, no device, an unknown project, a folder that is no worktree, no repository.
+        HttpResult r = post(u"commit"_s, {{u"message"_s, u"  \n "_s}});
+        QCOMPARE(r.status, 400);
+        QCOMPARE(codeOf(r), u"bad_message"_s);
+        QCOMPARE(codeOf(post(u"commit"_s, {{u"message"_s, u"x"_s}, {u"files"_s, QJsonArray{u"../obcy"_s}}})), u"bad_files"_s);
+        QCOMPARE(codeOf(post(u"commit"_s, {{u"message"_s, u"x"_s}, {u"files"_s, QJsonArray{u".git/config"_s}}})), u"bad_files"_s);
+        QCOMPARE(codeOf(post(u"pr"_s, {{u"title"_s, u"t"_s}, {u"base"_s, u"a..b"_s}})), u"bad_base"_s);
+        QCOMPARE(codeOf(post(u"revert"_s, {{u"checkpoint"_s, u"../x"_s}})), u"bad_checkpoint"_s);
+        QCOMPARE(http("POST", u"projects/kod/push"_s, "[]", bearer(token)).status, 400);
+        QCOMPARE(http("GET", u"projects/kod/commit"_s, {}, bearer(token)).status, 405);
+        QCOMPARE(http("POST", u"projects/kod/push"_s, "{}").status, 401);
+        QCOMPARE(post(u"push"_s, {}, u"brak"_s).status, 404);
+        r = post(u"commit"_s, {{u"message"_s, u"x"_s}, {u"worktree"_s, m_vault}});
+        QCOMPARE(r.status, 403);
+        QCOMPARE(codeOf(r), u"not_a_worktree"_s);
+        QCOMPARE(codeOf(post(u"commit"_s, {{u"message"_s, u"x"_s}}, u"bez-gita"_s)), u"not_a_repository"_s);
+        QCOMPARE(out({u"rev-list"_s, u"--count"_s, u"HEAD"_s}), u"1"_s); // (nothing committed)
+
+        // A commit of one file: only it; the other change stays.
+        r = post(u"commit"_s, {{u"message"_s, u"Nowy żółw\n\nOd telefonu"_s}, {u"files"_s, QJsonArray{u"Nowy żółw.md"_s}}});
+        QCOMPARE(r.status, 200);
+        QCOMPARE(r.json.value(u"branch"_s).toString(), u"main"_s);
+        QCOMPARE(r.json.value(u"commit"_s).toString(), out({u"rev-parse"_s, u"HEAD"_s}));
+        QCOMPARE(out({u"log"_s, u"-1"_s, u"--format=%s"_s}), u"Nowy żółw"_s);
+        QCOMPARE(out({u"status"_s, u"--porcelain"_s}), u"M Dom.md"_s);
+        // Files that are no change: nothing to commit.
+        QCOMPARE(codeOf(post(u"commit"_s, {{u"message"_s, u"x"_s}, {u"files"_s, QJsonArray{u"Nie ma.md"_s}}})),
+                 u"nothing_to_commit"_s);
+        // Every change, through the device's side.
+        acp::RemoteGitRequest commit;
+        commit.message = u"Reszta zmian"_s;
+        auto [committed, error] = device(commit);
+        QVERIFY2(!error.failed(), qPrintable(error.detail));
+        QCOMPARE(committed.branch, u"main"_s);
+        QCOMPARE(out({u"status"_s, u"--porcelain"_s}), QString());
+        std::tie(committed, error) = device(commit);
+        QCOMPARE(error.code, u"nothing_to_commit"_s);
+
+        // Pushed: the upstream set (origin), the remote has the commit.
+        r = post(u"push"_s, {});
+        QCOMPARE(r.status, 200);
+        QCOMPARE(r.json.value(u"branch"_s).toString(), u"main"_s);
+        QCOMPARE(r.json.value(u"remote"_s).toString(), u"origin"_s);
+        QProcess remoteHead;
+        remoteHead.start(u"git"_s, {u"-C"_s, bare, u"rev-parse"_s, u"main"_s});
+        QVERIFY(remoteHead.waitForFinished(30000));
+        QCOMPARE(QString::fromUtf8(remoteHead.readAllStandardOutput()).trimmed(), out({u"rev-parse"_s, u"HEAD"_s}));
+
+        // A pull request through gh there (pushed first), into a base.
+        QCOMPARE(git(repo, {u"switch"_s, u"-q"_s, u"-c"_s, u"brulion/rabat"_s}), 0);
+        writeFile(repo + u"/Rabat.md"_s, "- 10%\n");
+        commit.message = u"Rabat"_s;
+        QVERIFY(!device(commit).second.failed());
+        acp::RemoteGitRequest pr;
+        pr.kind = acp::RemoteGitRequest::Kind::PullRequest;
+        pr.title = u"Rabat dla żółwia"_s;
+        pr.body = u"Opis z telefonu"_s;
+        pr.base = u"main"_s;
+        pr.draft = true;
+        auto [opened, prError] = device(pr);
+        QVERIFY2(!prError.failed(), qPrintable(prError.detail));
+        QCOMPARE(opened.url, u"https://github.com/ja/repo/pull/17"_s);
+        QCOMPARE(opened.number, 17);
+        QCOMPARE(opened.branch, u"brulion/rabat"_s);
+        QFile args(ghArgs);
+        QVERIFY(args.open(QIODevice::ReadOnly));
+        const QList<QByteArray> ghSaid = args.readAll().split('\0');
+        QVERIFY(ghSaid.contains("Rabat dla żółwia"));
+        QVERIFY(ghSaid.contains("Opis z telefonu"));
+        QVERIFY(ghSaid.contains("--draft"));
+        QVERIFY(ghSaid.contains("brulion/rabat")); // (--head)
+        QCOMPARE(ghSaid.value(ghSaid.indexOf("--base") + 1), "main"_ba);
+        remoteHead.start(u"git"_s, {u"-C"_s, bare, u"rev-parse"_s, u"brulion/rabat"_s});
+        QVERIFY(remoteHead.waitForFinished(30000));
+        QCOMPARE(QString::fromUtf8(remoteHead.readAllStandardOutput()).trimmed(), out({u"rev-parse"_s, u"HEAD"_s}));
+        // gh refusing: the device hears why.
+        qputenv("FAKE_GH_MODE", "signed-out");
+        std::tie(opened, prError) = device(pr);
+        QCOMPARE(prError.code, u"git_failed"_s);
+        QVERIFY2(prError.detail.contains(u"gh auth login"_s), qPrintable(prError.detail));
+        qputenv("FAKE_GH_MODE", "ok");
+
+        // A turn reverted: the files back as its checkpoint has them.
+        std::unique_ptr<Talk> t = talk(token);
+        const acp::CodeSession code{u"kod"_s, QString(), QString()};
+        QFile::remove(m_vault + u"/Od agenta.md"_s);
+        QCOMPARE(askCode(*t, u"AI/Kod.md"_s, u"zapisz"_s, code), u"Zapisano przez klienta; poza notatnikiem: -32602"_s);
+        QVERIFY(QFile::exists(repo + u"/Od agenta.md"_s));
+        QVERIFY(!t->checkpoints.isEmpty());
+        const QString checkpoint = t->checkpoints.last().second.id;
+        acp::RemoteGitRequest revert;
+        revert.kind = acp::RemoteGitRequest::Kind::Revert;
+        revert.checkpoint = checkpoint;
+        auto [reverted, revertError] = device(revert);
+        QVERIFY2(!revertError.failed(), qPrintable(revertError.detail));
+        QCOMPARE(reverted.removed, QStringList{u"Od agenta.md"_s});
+        QVERIFY(!QFile::exists(repo + u"/Od agenta.md"_s));
+        QCOMPARE(out({u"status"_s, u"--porcelain"_s}), QString());
+        // A checkpoint the repository has not: git's refusal.
+        revert.checkpoint = u"abc123"_s;
+        std::tie(reverted, revertError) = device(revert);
+        QCOMPARE(revertError.status, 409);
+#endif
+    }
 };
 
 QTEST_GUILESS_MAIN(TestCliAcpHost)

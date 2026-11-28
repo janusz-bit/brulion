@@ -53,7 +53,8 @@ set_tests_properties(tst_cli_import PROPERTIES TIMEOUT ${_cli_import_timeout})
 # notebook synced with an in-memory Nextcloud (tests/core/sync) before and after a turn, the app's
 # live tools for the agent tunnelled to the device (the real brulion-cli mcp the agent starts), and
 # Code mode's threads in a project's folder or worktree (--projects; real git in temporary
-# repositories): checkpoints, worktrees, changes, and every refusal.
+# repositories): checkpoints, worktrees, changes, a device's commit, push (to a local bare repository),
+# pull request (the fake gh) and a turn reverted, and every refusal.
 qt_add_executable(cli_fake_acp_agent ${PROJECT_SOURCE_DIR}/tests/app/shell/fakeacpagent.cpp)
 target_link_libraries(cli_fake_acp_agent PRIVATE Qt6::Core)
 brulion_set_warnings(cli_fake_acp_agent)
@@ -62,6 +63,11 @@ brulion_add_test(tst_cli_acp_host SOURCES tst_cli_acp_host.cpp
 target_compile_definitions(tst_cli_acp_host PRIVATE FAKE_ACP_AGENT="$<TARGET_FILE:cli_fake_acp_agent>"
     BRULION_CLI="$<TARGET_FILE:brulion-cli>")
 add_dependencies(tst_cli_acp_host cli_fake_acp_agent brulion-cli)
+# A device's pull request goes through gh there: the fake gh of tests/core/gitcli.
+if(TARGET fake_gh)
+    add_dependencies(tst_cli_acp_host fake_gh)
+    target_compile_definitions(tst_cli_acp_host PRIVATE FAKE_GH="$<TARGET_FILE:fake_gh>")
+endif()
 math(EXPR _acp_host_timeout "300 * ${BRULION_TEST_SLOWDOWN}")
 set_tests_properties(tst_cli_acp_host PROPERTIES TIMEOUT ${_acp_host_timeout})
 

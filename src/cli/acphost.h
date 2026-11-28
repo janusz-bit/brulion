@@ -50,8 +50,10 @@
 //   with a git checkpoint taken before each prompt reaches the agent (the prompt waits for it),
 //   told to the device (`_brulion/checkpoint`) and kept with the turn. A device may also make a
 //   worktree of a project for a new thread (POST projects/<id>/worktrees) and read the changes
-//   since a checkpoint (GET projects/<id>/changes, …/diff). A worktree a device names is taken only
-//   under the project's worktrees root or when `git worktree list` of the project lists it.
+//   since a checkpoint (GET projects/<id>/changes, …/diff), commit, push, open a pull request (gh
+//   here) and revert a turn there (POST projects/<id>/commit | push | pr | revert). A worktree a
+//   device names is taken only under the project's worktrees root or when `git worktree list` of
+//   the project lists it.
 //
 // * The app's own conversations (core acp/appchats.h; the desktop app's agent sharing starts this
 //   server with a grant of its own: BRULION_APP_SOCKET and BRULION_APP_SHARE_TOKEN in its
@@ -289,6 +291,8 @@ struct AcpHostOptions {
     QString projectsFile;
     /// git for the threads' checkpoints, worktrees and changes ("" the one on PATH).
     QString gitProgram;
+    /// The GitHub CLI for a device's pull requests ("" the one on PATH).
+    QString ghProgram;
     /// The checkpoints a thread's session keeps here at most (the older ones' refs dropped).
     int maxCheckpoints = 30;
     /// A device that answers the app's calls gets them from its sessions' tools (the tunnel,
@@ -463,6 +467,12 @@ private:
     void createWorktree(const QString &project, const http::Request &request, const http::Reply &reply);
     void changes(const QString &project, const http::Request &request, const http::Reply &reply);
     void diff(const QString &project, const http::Request &request, const http::Reply &reply);
+    /// POST projects/<id>/commit | push | pr | revert: git there for a device's thread.
+    void gitRequest(const QString &project, const acp::RemoteGitRequest &request, const http::Reply &reply);
+    void gitCommit(const QString &top, const acp::RemoteGitRequest &request, const http::Reply &reply);
+    void gitPush(const QString &top, const http::Reply &reply);
+    void gitPullRequest(const QString &top, const acp::RemoteGitRequest &request, const http::Reply &reply);
+    void gitRevert(const QString &top, const acp::RemoteGitRequest &request, const http::Reply &reply);
     /// A thread's session request of `s` (its CodeSession taken out): held until its place is known,
     /// then rewritten for it — or refused to the device.
     void codeSessionRequest(Stream *s, const QJsonObject &message, const std::optional<acp::CodeSession> &code,

@@ -1017,14 +1017,15 @@ std::optional<http::Response> AcpHost::onHeaders(const http::Request &head, qint
     // Code mode's projects (acp/codehost.h).
     if (parts.at(0) == u"projects") {
         const bool list = parts.size() == 1;
+        const bool git = parts.size() == 3 && acp::RemoteGitRequest::kindOf(parts.at(2)).has_value();
         const bool action = parts.size() == 3
-                            && (parts.at(2) == u"worktrees" || parts.at(2) == u"changes" || parts.at(2) == u"diff");
+                            && (git || parts.at(2) == u"worktrees" || parts.at(2) == u"changes" || parts.at(2) == u"diff");
         if (!list && !action)
             return apiError(404, u"not_found"_s, u"Not found"_s);
-        const QByteArray method = action && parts.at(2) == u"worktrees" ? "POST"_ba : "GET"_ba;
+        const QByteArray method = action && (git || parts.at(2) == u"worktrees") ? "POST"_ba : "GET"_ba;
         if (head.method != method)
             return apiError(405, u"method"_s, u"Method not allowed"_s);
-        *maxBody = method == "POST" ? 4096 : 0;
+        *maxBody = git ? acp::MaxRemoteGitBodyBytes : method == "POST" ? 4096 : 0;
         return std::nullopt;
     }
     return apiError(404, u"not_found"_s, u"Not found"_s);
@@ -2705,6 +2706,8 @@ gitcli::Client *AcpHost::git()
         m_git = std::make_unique<gitcli::Client>();
         if (!m_options.gitProgram.isEmpty())
             m_git->setGitProgram(m_options.gitProgram);
+        if (!m_options.ghProgram.isEmpty())
+            m_git->setGhProgram(m_options.ghProgram);
     }
     return m_git.get();
 }
@@ -2909,6 +2912,17 @@ void AcpHost::projectsRequest(const QStringList &parts, const http::Request &req
         return;
     }
     const QString project = parts.at(1);
+    if (const std::optional<acp::RemoteGitRequest::Kind> kind = acp::RemoteGitRequest::kindOf(parts.at(2))) {
+        QString code;
+        const QJsonDocument doc = QJsonDocument::fromJson(request.body);
+        const std::optional<acp::RemoteGitRequest> asked =
+                acp::RemoteGitRequest::fromJson(*kind, doc.isObject() ? QJsonValue(doc.object()) : QJsonValue(), &code);
+        if (!asked)
+            reply.send(apiError(400, code, u"The request does not read (%1)"_s.arg(code)));
+        else
+            gitRequest(project, *asked, reply);
+        return;
+    }
     if (parts.at(2) == u"worktrees")
         createWorktree(project, request, reply);
     else if (parts.at(2) == u"changes")
@@ -3075,6 +3089,209 @@ void AcpHost::diff(const QString &project, const http::Request &request, const h
                                                                           {u"tooLarge"_s, t.tooLarge}}));
                      });
                  });
+}
+
+// ---- Git there for a device's thread (POST projects/<id>/commit | push | pr | revert) --------------
+
+namespace {
+
+http::Response gitFailed(const QString &message)
+{
+    return apiError(409, u"git_failed"_s, message.left(1000));
+}
+
+http::Response gitAnswer(const acp::RemoteGitResult &result)
+{
+    return http::Response::json(200, result.toJson());
+}
+
+/// The remote of a branch's upstream ("origin/main" of "main" → "origin"; a remote's name may hold
+/// a slash).
+QString remoteOfUpstream(const QString &upstream, const QString &branch)
+{
+    if (!branch.isEmpty() && upstream.endsWith(u'/' + branch))
+        return upstream.chopped(branch.size() + 1);
+    return upstream.section(u'/', 0, 0);
+}
+
+/// What git says first of a request the device's side let through: a file or a base git's own
+/// rules refuse ("" none).
+QString gitRefusal(const acp::RemoteGitRequest &request)
+{
+    if (!std::ranges::all_of(request.files, [](const QString &f) { return gitcli::isSafeRelativePath(f); }))
+        return u"bad_files"_s;
+    if (!request.base.isEmpty() && !gitcli::isValidBranchName(request.base))
+        return u"bad_base"_s;
+    return QString();
+}
+
+} // namespace
+
+void AcpHost::gitRequest(const QString &project, const acp::RemoteGitRequest &request, const http::Reply &reply)
+{
+    if (const QString code = gitRefusal(request); !code.isEmpty()) {
+        reply.send(apiError(400, code, u"That is no path of the project or no branch"_s));
+        return;
+    }
+    QPointer<AcpHost> self(this);
+    requestPlace(project, request.worktree,
+                 [self, request, reply](const CodePlace &place, const http::Response &refusal) {
+                     if (!self)
+                         return;
+                     if (place.folder.isEmpty()) {
+                         reply.send(refusal);
+                         return;
+                     }
+                     self->git()->repository(place.folder, [self, request, reply](const gitcli::RepoInfo &info) {
+                         if (!self)
+                             return;
+                         if (!info.isRepo || info.bare || info.topLevel.isEmpty()) {
+                             reply.send(apiError(409, u"not_a_repository"_s,
+                                                 u"The project's folder is no git repository"_s));
+                             return;
+                         }
+                         const QString top = info.topLevel;
+                         self->say(u"a device's %1 in %2"_s.arg(acp::RemoteGitRequest::endpoint(request.kind), top));
+                         switch (request.kind) {
+                         case acp::RemoteGitRequest::Kind::Commit:
+                             self->gitCommit(top, request, reply);
+                             break;
+                         case acp::RemoteGitRequest::Kind::Push:
+                             self->gitPush(top, reply);
+                             break;
+                         case acp::RemoteGitRequest::Kind::PullRequest:
+                             self->gitPullRequest(top, request, reply);
+                             break;
+                         case acp::RemoteGitRequest::Kind::Revert:
+                             self->gitRevert(top, request, reply);
+                             break;
+                         }
+                     });
+                 });
+}
+
+void AcpHost::gitCommit(const QString &top, const acp::RemoteGitRequest &request, const http::Reply &reply)
+{
+    QPointer<AcpHost> self(this);
+    git()->status(top, [self, top, request, reply](const gitcli::StatusReport &s) {
+        if (!self)
+            return;
+        if (!s.ok) {
+            reply.send(gitFailed(s.error));
+            return;
+        }
+        // Every change, or the files named among them (what is no change of the work tree left out),
+        // as the Changes panel's Commit takes them (CodeGit::commitFiles).
+        const QSet<QString> wanted(request.files.cbegin(), request.files.cend());
+        gitcli::CommitRequest commit;
+        commit.message = request.message;
+        commit.mode = wanted.isEmpty() ? u"all"_s : u"paths"_s;
+        for (const gitcli::FileChange &f : s.changes) {
+            if (f.change == gitcli::Change::Ignored || f.path.endsWith(u'/')
+                || (!wanted.isEmpty() && !wanted.contains(f.path) && !wanted.contains(f.oldPath)))
+                continue;
+            commit.paths.append(f.path);
+            if (!f.oldPath.isEmpty())
+                commit.paths.append(f.oldPath);
+            if (f.change == gitcli::Change::Untracked)
+                commit.untracked.append(f.path);
+        }
+        if (commit.paths.isEmpty()) {
+            reply.send(apiError(409, u"nothing_to_commit"_s, u"Nothing to commit"_s));
+            return;
+        }
+        const QString branch = s.status.branch.detached ? QString() : s.status.branch.head;
+        self->git()->commit(top, commit, [reply, branch](const gitcli::Outcome &o) {
+            if (!o.ok) {
+                reply.send(gitFailed(o.message));
+                return;
+            }
+            acp::RemoteGitResult r;
+            r.message = o.message;
+            r.commit = o.value;
+            r.branch = branch;
+            reply.send(gitAnswer(r));
+        });
+    });
+}
+
+void AcpHost::gitPush(const QString &top, const http::Reply &reply)
+{
+    QPointer<AcpHost> self(this);
+    git()->push(top, [self, top, reply](const gitcli::Outcome &pushed) {
+        if (!self)
+            return;
+        if (!pushed.ok) {
+            reply.send(gitFailed(pushed.message));
+            return;
+        }
+        self->git()->status(top, [reply, pushed](const gitcli::StatusReport &s) {
+            acp::RemoteGitResult r;
+            r.message = pushed.message;
+            r.branch = s.status.branch.head;
+            r.remote = remoteOfUpstream(s.status.branch.upstream, r.branch);
+            reply.send(gitAnswer(r));
+        });
+    });
+}
+
+void AcpHost::gitPullRequest(const QString &top, const acp::RemoteGitRequest &request, const http::Reply &reply)
+{
+    // (As the Changes panel's Create PR: the branch pushed first — GitHub needs its commits —, from
+    // a fork into the upstream repository.)
+    QPointer<AcpHost> self(this);
+    git()->push(top, [self, top, request, reply](const gitcli::Outcome &pushed) {
+        if (!self)
+            return;
+        if (!pushed.ok) {
+            reply.send(apiError(409, u"push_failed"_s, pushed.message.left(1000)));
+            return;
+        }
+        self->git()->status(top, [self, top, request, reply](const gitcli::StatusReport &s) {
+            if (!self)
+                return;
+            const QString head = s.status.branch.head;
+            self->git()->pullRequestTarget(top, head, [self, top, request, reply, head](const gitcli::ForkTarget &fork) {
+                if (!self)
+                    return;
+                gitcli::PullRequest pr;
+                pr.title = request.title.trimmed();
+                pr.body = request.body;
+                pr.draft = request.draft;
+                pr.base = request.base;
+                pr.head = fork.head.isEmpty() ? head : fork.head;
+                pr.repo = fork.repo;
+                self->git()->createPullRequest(top, pr, [reply, head](const gitcli::Outcome &o) {
+                    if (!o.ok) {
+                        reply.send(gitFailed(o.message));
+                        return;
+                    }
+                    acp::RemoteGitResult r;
+                    r.message = o.message;
+                    r.branch = head;
+                    r.url = o.url;
+                    r.number = acp::pullRequestNumber(o.url);
+                    reply.send(gitAnswer(r));
+                });
+            });
+        });
+    });
+}
+
+void AcpHost::gitRevert(const QString &top, const acp::RemoteGitRequest &request, const http::Reply &reply)
+{
+    git()->restore(top, request.checkpoint, [reply](const gitcli::RestoreReport &report) {
+        if (!report.ok) {
+            reply.send(gitFailed(report.error));
+            return;
+        }
+        acp::RemoteGitResult r;
+        r.message = u"Put back %1 files, deleted %2"_s.arg(report.restored.size()).arg(report.removed.size());
+        r.restored = report.restored.mid(0, acp::MaxRemoteChanges);
+        r.removed = report.removed.mid(0, acp::MaxRemoteChanges);
+        r.kept = report.kept.mid(0, acp::MaxRemoteChanges);
+        reply.send(gitAnswer(r));
+    });
 }
 
 void AcpHost::deliver(Stream *s, const QJsonObject &message)
