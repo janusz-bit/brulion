@@ -153,6 +153,20 @@ private Q_SLOTS:
         QCOMPARE(config.value(u"weeklyFileFormat"_s).toString(), u"yyyy-'W'ww"_s);
         QCOMPARE(config.value(u"defaultReminderTime"_s).toString(), u"09:00"_s);
         QCOMPARE(config.value(u"themePage"_s).toString(), QString()); // no theme page picked
+        // The flashcards' settings, the notes' review algorithm with them (Settings → Flashcards).
+        VaultConfig eased;
+        eased.flashcards.baseEase = 300;
+        eased.flashcards.easyBonus = 1.5;
+        eased.flashcards.lapsesIntervalChange = 0.7;
+        eased.flashcards.maxNoteInterval = 365;
+        eased.flashcards.loadBalance = false;
+        const QJsonObject fc = vaultConfigJson(eased).value(u"flashcards"_s).toObject();
+        QCOMPARE(fc.value(u"baseEase"_s).toInt(), 300);
+        QCOMPARE(fc.value(u"easyBonus"_s).toDouble(), 1.5);
+        QCOMPARE(fc.value(u"lapsesIntervalChange"_s).toDouble(), 0.7);
+        QCOMPARE(fc.value(u"maxNoteInterval"_s).toInt(), 365);
+        QCOMPARE(fc.value(u"loadBalance"_s).toBool(true), false);
+        QCOMPARE(config.value(u"flashcards"_s).toObject().value(u"loadBalance"_s).toBool(false), true);
         ScheduledNotification n;
         n.id = u"x"_s;
         n.at = QDateTime(QDate(2026, 10, 15), QTime(9, 0));

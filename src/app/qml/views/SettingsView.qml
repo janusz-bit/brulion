@@ -1855,6 +1855,60 @@ Item {
                         accessibleName: qsTr("Tags of notes to review")
                     }
                 }
+                // The plugin's note-review algorithm (docs/SYNTAX.md §15 "Notes to review").
+                ShellSettingRow {
+                    visible: AppSettings.flashcardsEnabled
+                    title: qsTr("Base ease of notes")
+                    description: qsTr("A new note's ease, as in the Spaced Repetition plugin (130–1000; 250). Kept in this notebook.")
+                    FlashcardsField {
+                        objectName: "flashcardsBaseEaseSetting"
+                        key: "baseEase"
+                        placeholderText: "250"
+                        accessibleName: qsTr("Base ease of notes")
+                    }
+                }
+                ShellSettingRow {
+                    visible: AppSettings.flashcardsEnabled
+                    title: qsTr("Easy bonus")
+                    description: qsTr("How much longer a note waits after Easy than after Good (1–5; 1.3). Kept in this notebook.")
+                    FlashcardsField {
+                        objectName: "flashcardsEasyBonusSetting"
+                        key: "easyBonus"
+                        placeholderText: "1.3"
+                        accessibleName: qsTr("Easy bonus")
+                    }
+                }
+                ShellSettingRow {
+                    visible: AppSettings.flashcardsEnabled
+                    title: qsTr("Interval after Hard")
+                    description: qsTr("A note's interval is multiplied by this after Hard (0.1–1; 0.5). Kept in this notebook.")
+                    FlashcardsField {
+                        objectName: "flashcardsHardFactorSetting"
+                        key: "lapsesIntervalChange"
+                        placeholderText: "0.5"
+                        accessibleName: qsTr("Interval after Hard")
+                    }
+                }
+                ShellSettingRow {
+                    visible: AppSettings.flashcardsEnabled
+                    title: qsTr("Longest interval of notes")
+                    description: qsTr("In days (1–36525; a hundred years). Kept in this notebook.")
+                    FlashcardsField {
+                        objectName: "flashcardsMaxIntervalSetting"
+                        key: "maxNoteInterval"
+                        placeholderText: "36525"
+                        accessibleName: qsTr("Longest interval of notes")
+                    }
+                }
+                SettingSwitch {
+                    objectName: "flashcardsLoadBalanceSetting"
+                    visible: AppSettings.flashcardsEnabled
+                    text: qsTr("Balance the notes' review days")
+                    description: qsTr("A note's next review moves to the quietest day near it, as the plugin's load balancing does. Kept in this notebook.")
+                    checked: AppController.routeFlag(Workspace.config.flashcards, "loadBalance")
+                    enabled: Workspace.isOpen
+                    onToggled: Workspace.setConfig({ flashcards: { loadBalance: checked } })
+                }
                 BuiltinSourceRow {
                     objectName: "flashcardsSourceSetting"
                     visible: AppSettings.flashcardsEnabled

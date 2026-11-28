@@ -421,7 +421,12 @@ QJsonObject vaultConfigJson(const VaultConfig &c)
                          {u"clozeBold"_s, c.flashcards.clozeBold},
                          {u"clozeCurly"_s, c.flashcards.clozeCurly},
                          {u"foldersAsDecks"_s, c.flashcards.foldersAsDecks},
-                         {u"reviewTags"_s, c.flashcards.reviewTags.join(u", "_s)}}},
+                         {u"reviewTags"_s, c.flashcards.reviewTags.join(u", "_s)},
+                         {u"baseEase"_s, c.flashcards.baseEase},
+                         {u"easyBonus"_s, c.flashcards.easyBonus},
+                         {u"lapsesIntervalChange"_s, c.flashcards.lapsesIntervalChange},
+                         {u"maxNoteInterval"_s, c.flashcards.maxNoteInterval},
+                         {u"loadBalance"_s, c.flashcards.loadBalance}}},
             {u"themePage"_s, c.themePage}};
 }
 

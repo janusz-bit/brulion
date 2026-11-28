@@ -26,6 +26,7 @@
 #include "extensions/notebookhost.h"
 #include "index/vaultindex.h"
 #include "vault/vault.h"
+#include "vault/vaultconfig.h"
 
 #include <QDir>
 #include <QElapsedTimer>
@@ -964,6 +965,17 @@ private Q_SLOTS:
         QTest::newRow("cap") << u"easy"_s << 30000.0 << 250.0 << 0.0 << QVariantMap{} << empty << 36525.0 << 270.0;
         QTest::newRow("a hard factor") << u"hard"_s << 10.0 << 250.0 << 0.0 << QVariantMap{} << QVariantMap{{u"lapsesIntervalChange"_s, 0.8}, {u"histogram"_s, QVariantMap{}}}
                                        << 8.0 << 230.0;
+        // The algorithm from the notebook's config (.brulion/config.json "flashcards", as the app and
+        // brulion-cli hand it over): a larger easy bonus, no load balancing.
+        FlashcardsConfig notebook;
+        notebook.easyBonus = 2;
+        notebook.loadBalance = false;
+        QTest::newRow("the notebook's easy bonus") << u"easy"_s << 1.0 << 250.0 << 0.0 << QVariantMap{}
+                                                   << flashcardsSettings(notebook) << 5.4 << 270.0;
+        notebook = FlashcardsConfig{};
+        notebook.maxNoteInterval = 30;
+        QTest::newRow("the notebook's cap") << u"easy"_s << 300.0 << 250.0 << 0.0 << QVariantMap{}
+                                            << flashcardsSettings(notebook) << 30.0 << 270.0;
         QTest::newRow("grades by number") << u"3"_s << 10.0 << 250.0 << 0.0 << QVariantMap{} << empty << 25.0 << 250.0;
         QTest::newRow("grades in Polish") << u"łatwe"_s << 1.0 << 250.0 << 0.0 << QVariantMap{} << empty << 4.0 << 270.0;
     }

@@ -65,7 +65,7 @@ sr-ease: 250
 ---
 ```
 
-`sr-due` to dzień, w którym notatka wraca, `sr-interval` — dni między dwiema ostatnimi powtórkami, `sr-ease` — jak łatwa jest dla Ciebie notatka (250 = 2,5×; Łatwe podnosi, Trudne obniża). Wtyczka lekko rozkłada notatki na kolejne dni, żeby sto notatek powtórzonych jednego dnia nie wróciło wszystkie naraz.
+`sr-due` to dzień, w którym notatka wraca, `sr-interval` — dni między dwiema ostatnimi powtórkami, `sr-ease` — jak łatwa jest dla Ciebie notatka (250 = 2,5×; Łatwe podnosi, Trudne obniża). Wtyczka lekko rozkłada notatki na kolejne dni, żeby sto notatek powtórzonych jednego dnia nie wróciło wszystkie naraz. Te liczby — bazowa łatwość, premia za „łatwe”, odstęp po „trudne”, najdłuższy odstęp i rozkładanie na dni — to ustawienia notatnika: *Ustawienia → Rozszerzenia → Fiszki*, jak we wtyczce.
 
 ## Gdzie zapisują się powtórki
 Po powtórce wiersz fiszki dostaje na końcu komentarz — niewidoczny w Brulionie, w trybie czytania Obsidiana i w Logsequ:

@@ -467,6 +467,12 @@ private Q_SLOTS:
         QVERIFY(!fc.clozeCurly);
         QVERIFY(!fc.foldersAsDecks);
         QVERIFY(fc.reviewTags.isEmpty()); // #review
+        // The plugin's note-review algorithm, with its defaults.
+        QCOMPARE(fc.baseEase, 250);
+        QCOMPARE(fc.easyBonus, 1.3);
+        QCOMPARE(fc.lapsesIntervalChange, 0.5);
+        QCOMPARE(fc.maxNoteInterval, 36525);
+        QVERIFY(fc.loadBalance);
         // Nothing of it in a file that never set it.
         QVERIFY(!serializeVaultConfig(parsed.config, parsed.raw).contains("flashcards"));
         QVERIFY(!vaultConfigToJson(parsed.config).contains(u"flashcards"_s));
@@ -511,6 +517,16 @@ private Q_SLOTS:
                                                << u"reviewTags"_s << u"nauka,żółw"_s;
         QTest::newRow("review tags that are none") << R"({"flashcards":{"reviewTags":5}})"_ba << 1 << u"reviewTags"_s
                                                    << QString();
+        QTest::newRow("the algorithm") << R"({"flashcards":{"baseEase":300,"easyBonus":1.5,"lapsesIntervalChange":0.8,"maxNoteInterval":365,"loadBalance":false}})"_ba
+                                       << 0 << u"algorithm"_s << u"300,1.5,0.8,365,false"_s;
+        QTest::newRow("the algorithm at its limits") << R"({"flashcards":{"baseEase":130,"easyBonus":5,"lapsesIntervalChange":0.1,"maxNoteInterval":1}})"_ba
+                                                     << 0 << u"algorithm"_s << u"130,5,0.1,1,true"_s;
+        QTest::newRow("the algorithm out of range") << R"({"flashcards":{"baseEase":129,"easyBonus":0.9,"lapsesIntervalChange":1.1,"maxNoteInterval":36526}})"_ba
+                                                    << 4 << u"algorithm"_s << u"250,1.3,0.5,36525,true"_s;
+        QTest::newRow("the algorithm in words") << R"({"flashcards":{"baseEase":"dużo","loadBalance":"tak"}})"_ba << 2
+                                                << u"algorithm"_s << u"250,1.3,0.5,36525,true"_s;
+        QTest::newRow("a fraction of a whole ease") << R"({"flashcards":{"baseEase":250.5}})"_ba << 1 << u"algorithm"_s
+                                                    << u"250,1.3,0.5,36525,true"_s;
     }
     void flashcardsParse()
     {
@@ -541,6 +557,11 @@ private Q_SLOTS:
             got = flag(fc.foldersAsDecks);
         else if (field == u"reviewTags"_s)
             got = fc.reviewTags.join(u',');
+        else if (field == u"algorithm"_s)
+            got = QStringList{QString::number(fc.baseEase), QString::number(fc.easyBonus),
+                              QString::number(fc.lapsesIntervalChange), QString::number(fc.maxNoteInterval),
+                              flag(fc.loadBalance)}
+                          .join(u',');
         QCOMPARE(got, expected);
     }
 
@@ -556,6 +577,9 @@ private Q_SLOTS:
         fc.clozeBold = true;
         fc.foldersAsDecks = true;
         fc.reviewTags = {u"powtórka"_s};
+        fc.baseEase = 230;
+        fc.easyBonus = 1.2;
+        fc.loadBalance = false;
         // A key of a newer version stays, and so does everything else of the file.
         const ParsedVaultConfig old =
                 parseVaultConfig(R"({"flashcards":{"przyszłość":[1,2],"clozeCurly":true},"inne":"żółw"})"_ba);
@@ -570,6 +594,11 @@ private Q_SLOTS:
         QCOMPARE(parsed.raw.value(u"inne"_s).toString(), u"żółw"_s);
         QVERIFY(!o.contains(u"singleLineReversedSeparator"_s)); // the default is not written
         QVERIFY(!o.contains(u"clozeCurly"_s));
+        QCOMPARE(o.value(u"baseEase"_s).toInt(), 230);
+        QCOMPARE(o.value(u"easyBonus"_s).toDouble(), 1.2);
+        QCOMPARE(o.value(u"loadBalance"_s).toBool(true), false);
+        QVERIFY(!o.contains(u"lapsesIntervalChange"_s)); // the defaults are not written
+        QVERIFY(!o.contains(u"maxNoteInterval"_s));
         QCOMPARE(parsed.config.flashcards.reviewTags, QStringList{u"powtórka"_s});
         QCOMPARE(o.value(u"reviewTags"_s).toArray(), QJsonArray{u"powtórka"_s});
         QCOMPARE(o.value(u"multilineSeparator"_s).toString(), QString()); // "off" is written
@@ -604,6 +633,12 @@ private Q_SLOTS:
         VaultConfig reviewed;
         reviewed.flashcards.reviewTags = {u"x"_s};
         QVERIFY(!sameVaultConfig(reviewed, VaultConfig{}));
+        VaultConfig eased;
+        eased.flashcards.lapsesIntervalChange = 0.7;
+        QVERIFY(!sameVaultConfig(eased, VaultConfig{}));
+        eased = VaultConfig{};
+        eased.flashcards.maxNoteInterval = 30;
+        QVERIFY(!sameVaultConfig(eased, VaultConfig{}));
     }
 
     void flashcardsApplyAndSettings()
@@ -638,6 +673,33 @@ private Q_SLOTS:
         QVERIFY(applyFlashcardsConfig(c, {{u"reviewTags"_s, QString()}}));
         QVERIFY(c.reviewTags.isEmpty());
         QVERIFY(!applyFlashcardsConfig(c, {{u"reviewTags"_s, 5}}));
+        // The note-review algorithm: numbers in their ranges (an integer ease and interval), a flag.
+        QVERIFY(applyFlashcardsConfig(c, {{u"baseEase"_s, 280}, {u"easyBonus"_s, 1.6}, {u"lapsesIntervalChange"_s, 0.4},
+                                          {u"maxNoteInterval"_s, 3650}, {u"loadBalance"_s, false}}));
+        QCOMPARE(c.baseEase, 280);
+        QCOMPARE(c.easyBonus, 1.6);
+        QCOMPARE(c.lapsesIntervalChange, 0.4);
+        QCOMPARE(c.maxNoteInterval, 3650);
+        QVERIFY(!c.loadBalance);
+        const QVariantMap algorithm = flashcardsSettings(c);
+        QCOMPARE(algorithm.value(u"baseEase"_s).toInt(), 280);
+        QCOMPARE(algorithm.value(u"easyBonus"_s).toDouble(), 1.6);
+        QCOMPARE(algorithm.value(u"lapsesIntervalChange"_s).toDouble(), 0.4);
+        QCOMPARE(algorithm.value(u"maxNoteInterval"_s).toInt(), 3650);
+        QCOMPARE(algorithm.value(u"loadBalance"_s).toBool(), false);
+        const FlashcardsConfig eased = c;
+        QVERIFY(!applyFlashcardsConfig(c, {{u"baseEase"_s, 1001}}));
+        QVERIFY(!applyFlashcardsConfig(c, {{u"easyBonus"_s, u"dużo"_s}}));
+        QVERIFY(!applyFlashcardsConfig(c, {{u"maxNoteInterval"_s, 0}}));
+        QVERIFY(!applyFlashcardsConfig(c, {{u"loadBalance"_s, 1}}));
+        QVERIFY(!applyFlashcardsConfig(c, {{u"baseEase"_s, true}}));
+        QVERIFY(!applyFlashcardsConfig(c, {{u"clozeBold"_s, u"true"_s}}));
+        QVERIFY(c == eased);
+        // A number as a settings field types it: a dot or a comma.
+        QVERIFY(applyFlashcardsConfig(c, {{u"easyBonus"_s, u" 1,45 "_s}, {u"baseEase"_s, u"260"_s}}));
+        QCOMPARE(c.easyBonus, 1.45);
+        QCOMPARE(c.baseEase, 260);
+        QVERIFY(!applyFlashcardsConfig(c, {{u"baseEase"_s, u"260,5"_s}}));
         QCOMPARE(normalizeFlashcardTags({u"#Żółw"_s, u"  "_s, u"#"_s, u"a b"_s, u"żółw"_s}), (QStringList{u"żółw"_s}));
     }
 

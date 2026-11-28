@@ -2973,6 +2973,11 @@ property of the notes).
 | Cloze kinds (`clozeHighlights`, `clozeBold`, `clozeCurly`) | on · off · off | which text makes a line a cloze: `==answer==`, `**answer**` and `{{answer}}`, each also numbered with a hint, `==1;;answer;;hint==` (the same for the other two). Anki's `{{c1::answer::hint}}` always do. Code spans, an unclosed or empty one are text; `{{cloze …}}` (Logseq's) and Anki's are no curly cloze. Numbered and not numbered ones follow one rule (a paragraph that numbers some asks only those) |
 | Folders as decks (`foldersAsDecks`) | off | as the plugin's "Convert folders to decks and subdecks": **every** note in a folder (not the notebook's root) is read for cards — tagged or not — and each of its cards is in the deck of the note's folder, `Nauka/Hiszpański` → `#nauka/hiszpański` (lower case, as tags; its sub-folders are sub-decks), **whatever its tags say** (the plugin's rule: the folder replaces the tags, a tag at the start of a card is only left out of its text). A note outside any folder keeps its tags' decks (unlike the plugin, which would give it none). The decks "by tag" are then the folders, drawn without a `#`; the review log's pages (`Fiszki/Powtórki …`, `Flashcards/Reviews …`) are no cards |
 | Tags of notes to review (`reviewTags`) | `review` | the notes with one of them are reviewed as a whole (below, "Notes to review"); the plugin's "Note review tags" |
+| Base ease of notes (`baseEase`) | 250 | a new note's ease, a whole number 130–1000 (below, "Notes to review": Scheduling) |
+| Easy bonus (`easyBonus`) | 1.3 | Easy's extra factor of a note's interval, 1–5 |
+| Interval after Hard (`lapsesIntervalChange`) | 0.5 | Hard's factor of a note's interval, 0.1–1 |
+| Longest interval of notes (`maxNoteInterval`) | 36525 | days, a whole number 1–36525 |
+| Load balancing of notes (`loadBalance`) | on | a note's next review moves to the quietest day near it (and its interval keeps no decimal) |
 
 A property line (`key:: value`) is no card whatever the separators are. The editor draws only
 Anki's `{{c1::…}}` clozes as highlights (a bold or curly cloze is plain bold text or braces there).
@@ -3015,8 +3020,9 @@ sr-ease: 250
   There is no daily limit for notes. The review log (`Fiszki/Powtórki …`) is not written for them.
 * **Scheduling** (`osrSchedule`, ported with its tests; defaults of the plugin: base ease 250, easy
   bonus 1.3, hard factor 0.5, at most 36525 days, load balancing on; the extension takes them as the
-  options `baseEase`, `easyBonus`, `lapsesIntervalChange`, `maxNoteInterval` and `loadBalance`, which the
-  notebook's settings do not set). The last interval and ease are
+  options `baseEase`, `easyBonus`, `lapsesIntervalChange`, `maxNoteInterval` and `loadBalance`, kept
+  per notebook in `.brulion/config.json` "flashcards" — "Settings of the cards" above). The last
+  interval and ease are
   the note's own — a new note starts from interval 1 and ease 250 —, *late* is the whole days since
   its due day (0 when not yet due):
 

@@ -9,6 +9,7 @@
 #include <QJsonValue>
 #include <QRegularExpression>
 
+#include <algorithm>
 #include <cmath>
 #include <optional>
 
@@ -49,6 +50,83 @@ constexpr auto kFcBold = "clozeBold"_L1;
 constexpr auto kFcCurly = "clozeCurly"_L1;
 constexpr auto kFcFolders = "foldersAsDecks"_L1;
 constexpr auto kFcReviewTags = "reviewTags"_L1;
+constexpr auto kFcLoadBalance = "loadBalance"_L1;
+
+/// A number of the note-review algorithm: its key, range and whether it is a whole number, read
+/// from and written to its field (an int or a double of FlashcardsConfig).
+struct AlgorithmNumber {
+    QLatin1StringView key;
+    double min;
+    double max;
+    int FlashcardsConfig::*whole = nullptr;
+    double FlashcardsConfig::*real = nullptr;
+
+    double get(const FlashcardsConfig &c) const { return whole ? double(c.*whole) : c.*real; }
+    void set(FlashcardsConfig &c, double v) const
+    {
+        if (whole)
+            c.*whole = int(v);
+        else
+            c.*real = v;
+    }
+    /// `v` as this number: a JSON number in the range (whole when it must be), else nullopt.
+    std::optional<double> parse(const QJsonValue &v) const
+    {
+        if (!v.isDouble())
+            return std::nullopt;
+        const double n = v.toDouble();
+        if (n < min || n > max || (whole && n != std::floor(n)))
+            return std::nullopt;
+        return n;
+    }
+};
+
+const AlgorithmNumber AlgorithmNumbers[] = {
+        {"baseEase"_L1, 130, 1000, &FlashcardsConfig::baseEase, nullptr},
+        {"easyBonus"_L1, 1, 5, nullptr, &FlashcardsConfig::easyBonus},
+        {"lapsesIntervalChange"_L1, 0.1, 1, nullptr, &FlashcardsConfig::lapsesIntervalChange},
+        {"maxNoteInterval"_L1, 1, 36525, &FlashcardsConfig::maxNoteInterval, nullptr},
+};
+
+/// The flashcard settings of each kind, by their keys: one place for reading, writing and
+/// applying them.
+struct TagKey {
+    QLatin1StringView key;
+    QStringList FlashcardsConfig::*field;
+};
+const TagKey TagKeys[] = {{kFcTags, &FlashcardsConfig::tags}, {kFcReviewTags, &FlashcardsConfig::reviewTags}};
+struct TextKey {
+    QLatin1StringView key;
+    QString FlashcardsConfig::*field;
+    bool trim;
+};
+const TextKey TextKeys[] = {
+        {kFcSingle, &FlashcardsConfig::singleLineSeparator, false},
+        {kFcSingleReversed, &FlashcardsConfig::singleLineReversedSeparator, false},
+        {kFcMulti, &FlashcardsConfig::multilineSeparator, true},
+        {kFcMultiReversed, &FlashcardsConfig::multilineReversedSeparator, true},
+        {kFcEndMarker, &FlashcardsConfig::multilineEndMarker, true},
+};
+struct FlagKey {
+    QLatin1StringView key;
+    bool FlashcardsConfig::*field;
+};
+const FlagKey FlagKeys[] = {
+        {kFcHighlights, &FlashcardsConfig::clozeHighlights}, {kFcBold, &FlashcardsConfig::clozeBold},
+        {kFcCurly, &FlashcardsConfig::clozeCurly},           {kFcFolders, &FlashcardsConfig::foldersAsDecks},
+        {kFcLoadBalance, &FlashcardsConfig::loadBalance},
+};
+
+/// The entry of `table` for `key`, or nullptr.
+template<typename Table>
+auto entryOf(const Table &table, QStringView key) -> decltype(&table[0])
+{
+    for (const auto &e : table) {
+        if (e.key == key)
+            return &e;
+    }
+    return nullptr;
+}
 
 std::optional<QString> pathValue(const QJsonValue &v)
 {
@@ -164,6 +242,36 @@ std::optional<QStringList> tagsValue(const QJsonValue &v)
     return normalizeFlashcardTags(raw);
 }
 
+/// The value `v` of the flashcard setting `key` into `fc`: true, false when it is no such value
+/// (the default stays), nullopt for a key this version does not know (kept in the file).
+std::optional<bool> readFlashcardKey(FlashcardsConfig &fc, QStringView key, const QJsonValue &v)
+{
+    if (const TagKey *t = entryOf(TagKeys, key)) {
+        const auto tags = tagsValue(v);
+        if (tags)
+            fc.*(t->field) = *tags;
+        return tags.has_value();
+    }
+    if (const TextKey *t = entryOf(TextKeys, key)) {
+        const auto value = separatorValue(v, t->trim);
+        if (value)
+            fc.*(t->field) = *value;
+        return value.has_value();
+    }
+    if (const FlagKey *f = entryOf(FlagKeys, key)) {
+        if (v.isBool())
+            fc.*(f->field) = v.toBool();
+        return v.isBool();
+    }
+    if (const AlgorithmNumber *n = entryOf(AlgorithmNumbers, key)) {
+        const auto value = n->parse(v);
+        if (value)
+            n->set(fc, *value);
+        return value.has_value();
+    }
+    return std::nullopt;
+}
+
 /// The "flashcards" object into `out.config.flashcards`; an invalid value is a warning and the default.
 void mergeFlashcards(ParsedVaultConfig &out)
 {
@@ -175,46 +283,23 @@ void mergeFlashcards(ParsedVaultConfig &out)
         return;
     }
     const QJsonObject o = it->toObject();
-    FlashcardsConfig &fc = out.config.flashcards;
-    const auto text = [&](QLatin1StringView key, QString FlashcardsConfig::*field, bool trim) {
-        const auto v = o.constFind(key);
-        if (v == o.constEnd())
-            return;
-        if (const auto value = separatorValue(*v, trim))
-            fc.*field = *value;
-        else
-            out.warnings.append(u"Invalid value for \"%1.%2\": %3"_s.arg(kFlashcards, key, compactJson(*v)));
-    };
-    const auto flag = [&](QLatin1StringView key, bool FlashcardsConfig::*field) {
-        const auto v = o.constFind(key);
-        if (v == o.constEnd())
-            return;
-        if (v->isBool())
-            fc.*field = v->toBool();
-        else
-            out.warnings.append(u"Invalid value for \"%1.%2\": %3"_s.arg(kFlashcards, key, compactJson(*v)));
-    };
-    if (const auto v = o.constFind(kFcTags); v != o.constEnd()) {
-        if (const auto tags = tagsValue(*v))
-            fc.tags = *tags;
-        else
-            out.warnings.append(u"Invalid value for \"%1.%2\": %3"_s.arg(kFlashcards, kFcTags, compactJson(*v)));
+    for (auto v = o.constBegin(); v != o.constEnd(); ++v) {
+        if (readFlashcardKey(out.config.flashcards, v.key(), *v) == false)
+            out.warnings.append(u"Invalid value for \"%1.%2\": %3"_s.arg(kFlashcards, v.key(), compactJson(*v)));
     }
-    if (const auto v = o.constFind(kFcReviewTags); v != o.constEnd()) {
-        if (const auto tags = tagsValue(*v))
-            fc.reviewTags = *tags;
-        else
-            out.warnings.append(u"Invalid value for \"%1.%2\": %3"_s.arg(kFlashcards, kFcReviewTags, compactJson(*v)));
+}
+
+/// The flags and the algorithm's numbers of `c` that differ from `d` into `o`.
+void insertChangedFlagsAndNumbers(QJsonObject &o, const FlashcardsConfig &c, const FlashcardsConfig &d)
+{
+    for (const FlagKey &f : FlagKeys) {
+        if (c.*(f.field) != d.*(f.field))
+            o.insert(f.key, c.*(f.field));
     }
-    text(kFcSingle, &FlashcardsConfig::singleLineSeparator, false);
-    text(kFcSingleReversed, &FlashcardsConfig::singleLineReversedSeparator, false);
-    text(kFcMulti, &FlashcardsConfig::multilineSeparator, true);
-    text(kFcMultiReversed, &FlashcardsConfig::multilineReversedSeparator, true);
-    text(kFcEndMarker, &FlashcardsConfig::multilineEndMarker, true);
-    flag(kFcHighlights, &FlashcardsConfig::clozeHighlights);
-    flag(kFcBold, &FlashcardsConfig::clozeBold);
-    flag(kFcCurly, &FlashcardsConfig::clozeCurly);
-    flag(kFcFolders, &FlashcardsConfig::foldersAsDecks);
+    for (const AlgorithmNumber &n : AlgorithmNumbers) {
+        if (n.get(c) != n.get(d))
+            o.insert(n.key, n.get(c));
+    }
 }
 
 /// The values of `c` that differ from the defaults, as the "flashcards" object (empty: none).
@@ -222,29 +307,32 @@ QJsonObject flashcardsObject(const FlashcardsConfig &c)
 {
     const FlashcardsConfig d;
     QJsonObject o;
-    if (const QStringList tags = normalizeFlashcardTags(c.tags); !tags.isEmpty())
-        o.insert(kFcTags, QJsonArray::fromStringList(tags));
-    if (const QStringList reviewTags = normalizeFlashcardTags(c.reviewTags); !reviewTags.isEmpty())
-        o.insert(kFcReviewTags, QJsonArray::fromStringList(reviewTags));
-    const auto text = [&](QLatin1StringView key, const QString &value, const QString &def, bool trim) {
-        const auto ok = separatorValue(value, trim);
-        if (ok && *ok != def)
-            o.insert(key, *ok);
-    };
-    text(kFcSingle, c.singleLineSeparator, d.singleLineSeparator, false);
-    text(kFcSingleReversed, c.singleLineReversedSeparator, d.singleLineReversedSeparator, false);
-    text(kFcMulti, c.multilineSeparator, d.multilineSeparator, true);
-    text(kFcMultiReversed, c.multilineReversedSeparator, d.multilineReversedSeparator, true);
-    text(kFcEndMarker, c.multilineEndMarker, d.multilineEndMarker, true);
-    if (c.clozeHighlights != d.clozeHighlights)
-        o.insert(kFcHighlights, c.clozeHighlights);
-    if (c.clozeBold != d.clozeBold)
-        o.insert(kFcBold, c.clozeBold);
-    if (c.clozeCurly != d.clozeCurly)
-        o.insert(kFcCurly, c.clozeCurly);
-    if (c.foldersAsDecks != d.foldersAsDecks)
-        o.insert(kFcFolders, c.foldersAsDecks);
+    for (const TagKey &t : TagKeys) {
+        if (const QStringList tags = normalizeFlashcardTags(c.*(t.field)); !tags.isEmpty())
+            o.insert(t.key, QJsonArray::fromStringList(tags));
+    }
+    for (const TextKey &t : TextKeys) {
+        const auto ok = separatorValue(c.*(t.field), t.trim);
+        if (ok && *ok != d.*(t.field))
+            o.insert(t.key, *ok);
+    }
+    insertChangedFlagsAndNumbers(o, c, d);
     return o;
+}
+
+/// `key` is a flashcard setting of this version (one it writes, or leaves out at its default).
+bool isFlashcardKey(QStringView key)
+{
+    return entryOf(TagKeys, key) || entryOf(TextKeys, key) || entryOf(FlagKeys, key) || entryOf(AlgorithmNumbers, key);
+}
+
+/// The keys of a file's "flashcards" object this version does not know (a newer one's), kept as
+/// they are.
+QJsonObject unknownFlashcardKeys(QJsonObject fc)
+{
+    for (auto key = fc.begin(); key != fc.end();)
+        key = isFlashcardKey(key.key()) ? fc.erase(key) : std::next(key);
+    return fc;
 }
 
 /// 1, the only version so far.
@@ -371,10 +459,7 @@ QByteArray serializeVaultConfig(const VaultConfig &config, const QJsonObject &ra
     const QJsonObject mine = flashcardsObject(config.flashcards);
     const auto there = raw.constFind(kFlashcards);
     if (there == raw.constEnd() || there->isObject()) {
-        QJsonObject fc = there == raw.constEnd() ? QJsonObject() : there->toObject();
-        for (const QLatin1StringView key : {kFcTags, kFcSingle, kFcSingleReversed, kFcMulti, kFcMultiReversed,
-                                            kFcEndMarker, kFcHighlights, kFcBold, kFcCurly, kFcFolders, kFcReviewTags})
-            fc.remove(key);
+        QJsonObject fc = unknownFlashcardKeys(there == raw.constEnd() ? QJsonObject() : there->toObject());
         for (auto it = mine.constBegin(); it != mine.constEnd(); ++it)
             fc.insert(it.key(), it.value());
         if (fc.isEmpty())
@@ -414,55 +499,55 @@ QStringList normalizeFlashcardTags(const QStringList &tags)
     return out;
 }
 
+namespace {
+
+/// `v` as a number: a number, or a text of one as a settings field types it ("1,3" or "1.3").
+std::optional<double> numberOf(const QVariant &v)
+{
+    const int type = v.metaType().id();
+    if (type == QMetaType::Int || type == QMetaType::LongLong || type == QMetaType::Double)
+        return v.toDouble();
+    if (type != QMetaType::QString)
+        return std::nullopt;
+    bool ok = false;
+    const double n = v.toString().trimmed().replace(u',', u'.').toDouble(&ok);
+    return ok ? std::optional<double>(n) : std::nullopt;
+}
+
+/// `v` as the tags setting `t` of `c` (a text "a, b" or a list); false when it is neither.
+bool applyTags(FlashcardsConfig &c, const TagKey &t, const QVariant &v)
+{
+    const int type = v.metaType().id();
+    if (type != QMetaType::QString && type != QMetaType::QStringList)
+        return false;
+    const auto tags = tagsValue(type == QMetaType::QString ? QJsonValue(v.toString())
+                                                           : QJsonValue(QJsonArray::fromStringList(v.toStringList())));
+    if (tags)
+        c.*(t.field) = *tags;
+    return tags.has_value();
+}
+
+/// `v` as the setting `key` of `c` (QML's and the command line's values: texts, flags, numbers or
+/// their texts); false when `key` is none or `v` is no value of it.
+bool applyFlashcardKey(FlashcardsConfig &c, QStringView key, const QVariant &v)
+{
+    if (const TagKey *t = entryOf(TagKeys, key))
+        return applyTags(c, *t, v);
+    if (entryOf(TextKeys, key))
+        return v.metaType().id() == QMetaType::QString && readFlashcardKey(c, key, QJsonValue(v.toString())) == true;
+    if (entryOf(FlagKeys, key))
+        return v.metaType().id() == QMetaType::Bool && readFlashcardKey(c, key, QJsonValue(v.toBool())) == true;
+    const std::optional<double> number = numberOf(v);
+    return entryOf(AlgorithmNumbers, key) && number && readFlashcardKey(c, key, QJsonValue(*number)) == true;
+}
+
+} // namespace
+
 bool applyFlashcardsConfig(FlashcardsConfig &config, const QVariantMap &values)
 {
     FlashcardsConfig c = config;
     for (auto it = values.cbegin(); it != values.cend(); ++it) {
-        const QString &key = it.key();
-        const QVariant &v = it.value();
-        const auto text = [&](QString FlashcardsConfig::*field, bool trim) {
-            if (v.metaType().id() != QMetaType::QString)
-                return false;
-            const auto value = separatorValue(v.toString(), trim);
-            if (value)
-                c.*field = *value;
-            return value.has_value();
-        };
-        const auto flag = [&](bool FlashcardsConfig::*field) {
-            if (v.metaType().id() != QMetaType::Bool)
-                return false;
-            c.*field = v.toBool();
-            return true;
-        };
-        bool ok = false;
-        if (key == kFcTags || key == kFcReviewTags) {
-            if (v.metaType().id() == QMetaType::QString || v.metaType().id() == QMetaType::QStringList) {
-                const auto tags = tagsValue(v.metaType().id() == QMetaType::QString
-                                                    ? QJsonValue(v.toString())
-                                                    : QJsonValue(QJsonArray::fromStringList(v.toStringList())));
-                ok = tags.has_value();
-                if (ok)
-                    (key == kFcTags ? c.tags : c.reviewTags) = *tags;
-            }
-        } else if (key == kFcSingle)
-            ok = text(&FlashcardsConfig::singleLineSeparator, false);
-        else if (key == kFcSingleReversed)
-            ok = text(&FlashcardsConfig::singleLineReversedSeparator, false);
-        else if (key == kFcMulti)
-            ok = text(&FlashcardsConfig::multilineSeparator, true);
-        else if (key == kFcMultiReversed)
-            ok = text(&FlashcardsConfig::multilineReversedSeparator, true);
-        else if (key == kFcEndMarker)
-            ok = text(&FlashcardsConfig::multilineEndMarker, true);
-        else if (key == kFcHighlights)
-            ok = flag(&FlashcardsConfig::clozeHighlights);
-        else if (key == kFcBold)
-            ok = flag(&FlashcardsConfig::clozeBold);
-        else if (key == kFcCurly)
-            ok = flag(&FlashcardsConfig::clozeCurly);
-        else if (key == kFcFolders)
-            ok = flag(&FlashcardsConfig::foldersAsDecks);
-        if (!ok)
+        if (!applyFlashcardKey(c, it.key(), it.value()))
             return false;
     }
     config = c;
@@ -479,7 +564,10 @@ QVariantMap flashcardsSettings(const FlashcardsConfig &c)
                   {u"clozeHighlights"_s, c.clozeHighlights},
                   {u"clozeBold"_s, c.clozeBold},
                   {u"clozeCurly"_s, c.clozeCurly},
-                  {u"foldersAsDecks"_s, c.foldersAsDecks}};
+                  {u"foldersAsDecks"_s, c.foldersAsDecks},
+                  {u"loadBalance"_s, c.loadBalance}};
+    for (const AlgorithmNumber &n : AlgorithmNumbers)
+        m.insert(n.key, n.get(c));
     if (const QStringList tags = normalizeFlashcardTags(c.tags); !tags.isEmpty())
         m.insert(u"tags"_s, tags.join(u", "_s));
     if (const QStringList reviewTags = normalizeFlashcardTags(c.reviewTags); !reviewTags.isEmpty())

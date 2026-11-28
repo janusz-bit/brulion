@@ -274,9 +274,8 @@ done in the repository simply disappears from the list.
   occlusion, typing the answer, and a session checked by hand on a real phone and tablet. The
   plugin's whole-note reviews (`#review`, `sr-due:` …) are there (docs/SYNTAX.md §15 "Notes to
   review"); missing from them: the plugin's link weighting of a new note's ease, its tags and
-  folders to ignore for notes, "open a random note" and "open the next note after a review", the
-  algorithm's settings (base ease, easy bonus …) in the notebook's config, and the notes' review
-  checked on a real phone.
+  folders to ignore for notes, "open a random note" and "open the next note after a review", and the
+  notes' review checked on a real phone.
 
 ## Tasks and calendar
 

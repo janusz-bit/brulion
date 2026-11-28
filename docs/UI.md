@@ -997,8 +997,10 @@ page; the icon `layers`): cards written in notes and scheduled with FSRS (docs/S
   device's value stays what a notebook without tags shows and uses), the card separators (single-line
   and both ways, multi-line and both ways — an empty field switches one off), the end of a
   multi-line card, switches for clozes from `==highlights==`, `**bold**` and `{{curly}}` text and
-  for **Folders as decks**, the **tags of notes to review** ("review"; `flashcards.reviewTags`), and the
-  code as a page ("Edit the code"). A field follows the config (a
+  for **Folders as decks**, the **tags of notes to review** ("review"; `flashcards.reviewTags`), the
+  notes' review algorithm — **Base ease of notes**, **Easy bonus**, **Interval after Hard**, **Longest
+  interval of notes** (number fields: a dot or a comma; a value out of its range is refused under
+  the field) and **Balance the notes' review days** —, and the code as a page ("Edit the code"). A field follows the config (a
   sync's change shows) and saves when editing finishes. `AppController` gives the extension both
   with every view, action and command: `WorkspaceExtensions::setFlashcardSettings` (`withSettings`)
   gets the device's map with the notebook's keys over it, again on `Workspace::configChanged`.

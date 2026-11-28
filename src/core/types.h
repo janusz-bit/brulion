@@ -566,6 +566,12 @@ struct FlashcardsConfig {
     bool clozeCurly = false;     ///< `{{answer}}`
     bool foldersAsDecks = false; ///< a card's deck is its note's folder
     QStringList reviewTags;      ///< the tags of notes reviewed as a whole, as `tags`; empty: "review"
+    // The plugin's note-review algorithm (§15 "Notes to review"), its names and defaults:
+    int baseEase = 250;                ///< a new note's ease (130 … 1000)
+    double easyBonus = 1.3;            ///< Easy's extra factor (1 … 5)
+    double lapsesIntervalChange = 0.5; ///< Hard's factor of the interval (0.1 … 1)
+    int maxNoteInterval = 36525;       ///< days (1 … 36525)
+    bool loadBalance = true;           ///< a due day moved to a quieter one nearby
 
     friend bool operator==(const FlashcardsConfig &, const FlashcardsConfig &) = default;
 };

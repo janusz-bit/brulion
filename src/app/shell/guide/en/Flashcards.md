@@ -65,7 +65,7 @@ sr-ease: 250
 ---
 ```
 
-`sr-due` is the day the note comes back, `sr-interval` the days between the last two reviews, `sr-ease` how easy the note is for you (250 = 2.5×; Easy raises it, Hard lowers it). The plugin spreads the notes over the days a little, so a hundred notes reviewed on one day do not all return on one day.
+`sr-due` is the day the note comes back, `sr-interval` the days between the last two reviews, `sr-ease` how easy the note is for you (250 = 2.5×; Easy raises it, Hard lowers it). The plugin spreads the notes over the days a little, so a hundred notes reviewed on one day do not all return on one day. These numbers — the base ease, the Easy bonus, the interval after Hard, the longest interval and the spreading — are settings of the notebook: *Settings → Extensions → Flashcards*, as in the plugin.
 
 ## Where the reviews are saved
 After a review, the card's line gets a comment at its end — invisible in Brulion, in Obsidian's reading view and in Logseq:
