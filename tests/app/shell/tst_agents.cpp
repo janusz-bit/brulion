@@ -68,6 +68,8 @@
 #include "workspaceagents.h"
 #include "workspacechats.h"
 
+#include "../fakeaiserver.h"
+
 #include "acp/appchats.h"
 #include "agentusage.h"
 #include "chat/chat.h"
@@ -855,6 +857,41 @@ private Q_SLOTS:
     // Code mode (docs/CODE.md): a thread of a project — its page names the project, no journal line,
     // its session in the project's folder with the app's tools but not the notebook's, its own
     // context; the project's files read and written there; a worktree that is gone fails the turn.
+    // A new thread named by the AI by itself (T3 Code's), when the AI of Settings → Extensions → AI is
+    // set up: its first message asked about, its page renamed — the running turn following it.
+    void codeThreadTitledByTheAi()
+    {
+        auto ws = open({fake(true)});
+        FakeAiServer server;
+        server.answers = {u"Przegląd projektu żółwia"_s};
+        brulion::ai::Settings settings;
+        settings.provider = u"openai"_s;
+        settings.baseUrl = server.url();
+        settings.model = u"fake"_s;
+        ws->extensions()->setAi(settings);
+        WorkspaceChats *chats = ws->chats();
+        const QString folder = m_tmp.filePath(u"Tytuł %1"_s.arg(m_n));
+        QVERIFY(writeRaw(folder + u"/Dom.md"_s, "# README\n"));
+        const QString id = ws->projects()->add(folder);
+        QSignalSpy titled(chats, &WorkspaceChats::titleRegenerated);
+        const QString path = chats->startThread(id, u"Wyjaśnij projekt"_s);
+        QVERIFY(!path.isEmpty());
+        QTRY_COMPARE_WITH_TIMEOUT(titled.size(), 1, 20000);
+        QCOMPARE(titled.at(0).at(2).toString(), u"renamed"_s);
+        const QString renamed = titled.at(0).at(1).toString();
+        QVERIFY2(renamed.endsWith(u" Przegląd projektu żółwia.md"_s), qPrintable(renamed));
+        QVERIFY(server.requests.first().value(u"messages"_s).toArray().last().toObject().value(u"content"_s)
+                        .toString().contains(u"Wyjaśnij projekt"_s));
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->turn(renamed)->running(), 20000);
+        QVERIFY2(ws->read(renamed).contains(u"🤖"_s), qPrintable(ws->read(renamed)));
+        // Without the AI: no question, the name the message gives.
+        ws->extensions()->setAi({});
+        const QString plain = chats->startThread(id, u"Drugi wątek"_s);
+        QTRY_VERIFY_WITH_TIMEOUT(!chats->turn(plain)->running(), 20000);
+        QCOMPARE(titled.size(), 1);
+        QCOMPARE(server.requests.size(), 1);
+    }
+
     void codeThreads()
     {
         if (!toolsThere())

@@ -282,6 +282,9 @@ WorkspaceChats::WorkspaceChats(Workspace *workspace, WorkspaceExtensions *extens
             other->deleteLater();
         t->m_path = to;
         m_turns.insert(to.toLower(), t);
+        // (Its checkpoint's snapshot where it ends: of the page as it is named then.)
+        if (m_turnCheckpoints.contains(from.toLower()))
+            m_turnCheckpoints.insert(to.toLower(), m_turnCheckpoints.take(from.toLower()));
         Q_EMIT t->stateChanged();
         Q_EMIT stateChanged();
     });
@@ -902,7 +905,11 @@ QString WorkspaceChats::startThread(const QString &project, const QString &text,
         return {};
     }
     const ThreadPlace place{project, worktree.trimmed(), branch.trimmed(), pullRequest.simplified().left(200)};
-    return sendMessage(QString(), text, QString(), pictures, who, QString(), QString(), &place);
+    const QString path = sendMessage(QString(), text, QString(), pictures, who, QString(), QString(), &place);
+    // (T3 Code's: the AI names a new thread by itself, when it is set up; the turn follows the page.)
+    if (!path.isEmpty() && canRegenerateTitles())
+        regenerateTitle(path);
+    return path;
 }
 
 namespace {

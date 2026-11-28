@@ -320,7 +320,7 @@ endif()
 qt_add_executable(fake_acp_agent fakeacpagent.cpp)
 target_link_libraries(fake_acp_agent PRIVATE Qt6::Core)
 brulion_set_warnings(fake_acp_agent)
-brulion_add_test(tst_shell_agents SOURCES tst_agents.cpp LIBS brulion_shell)
+brulion_add_test(tst_shell_agents SOURCES tst_agents.cpp ../fakeaiserver.h LIBS brulion_shell)
 target_compile_definitions(tst_shell_agents PRIVATE FAKE_ACP_AGENT="$<TARGET_FILE:fake_acp_agent>")
 add_dependencies(tst_shell_agents fake_acp_agent)
 # The real agents' wake (realAgentWakesParent): a control socket of the test's own (src/ipc, desktop).

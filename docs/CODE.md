@@ -285,7 +285,10 @@ sub-conversations, scheduled conversations, notifications, unread marks, search.
   the page with its date kept (`rename()`): `titleRegenerated(path, newPath, "renamed" | "unchanged" |
   "failed", message)` — the same name is kept, a page renamed or gone meanwhile, a name another
   conversation has and the AI's failure say why. One question of a thread at a time
-  (`regeneratingTitle(path, titleSerial)`); closing the notebook stops them.
+  (`regeneratingTitle(path, titleSerial)`); closing the notebook stops them. **A new thread** is
+  named so by itself (T3 Code's): `startThread()` asks right after its first message, when the AI is
+  set up — the message's words name the page meanwhile, and its running turn, queue and checkpoint
+  follow the rename.
 * **Files dropped on a thread's row** (T3 Code's "Drop files onto a thread"; CodeThreadRow's
   `codeThreadDrop`): the thread opens and they go into its message — `CodeProjects::dropOnThread(path,
   folder, urls)` keeps them (`codefiles::droppedFiles()`: pictures apart, the others named — `@path`
@@ -609,9 +612,6 @@ thread's files opening the viewer at their line (`CodeView.openFileInViewer(path
   made from nothing (`git init` with a README, a GitHub repository published for it), copying a
   project's ignored files (`.env`) to a clone on another computer, cloning on a computer that shares
   its agents from the phone.
-* A title
-  the AI gives a new thread by itself (its first message's words name it; "Regenerate title" asks),
-  T3 Code's in-app browser for
-  `previewUrl` (the system's opens it).
+* T3 Code's in-app browser for `previewUrl` (the system's opens it).
 * Rendered HTML and PDF files in the viewer, mentions of threads and pull requests
   (docs/CODE-FILES.md "Not done").
