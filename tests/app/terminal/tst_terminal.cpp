@@ -39,6 +39,8 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include "testtiming.h"
+
 using namespace Qt::StringLiterals;
 using brulion::terminal::TerminalGroup;
 using brulion::terminal::TerminalRegistry;
@@ -48,7 +50,9 @@ using brulion::terminal::TerminalView;
 
 namespace {
 
-constexpr int Timeout = 15000 * BRULION_TEST_SLOWDOWN;
+// A shell's start, output and exit: work the tests are not about — kRoomyMs (testtiming.h). On
+// CI's Windows runner a missing command's PowerShell took 16.35 s to exit, past the 15 s this was.
+constexpr int Timeout = brulion::test::kRoomyMs;
 
 QString screenText(const TerminalSession &session)
 {
