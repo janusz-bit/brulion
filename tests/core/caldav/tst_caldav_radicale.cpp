@@ -13,6 +13,7 @@
 
 #include <QDir>
 #include <QTemporaryDir>
+#include <QRegularExpression>
 #include <QTest>
 
 using namespace brulion;
@@ -123,6 +124,30 @@ void TestCalDavRadicale::discoveryAndTwoWaySync()
     QVERIFY(joined.contains("SUMMARY:Kupić żółty ser i masło"));
     QVERIFY(joined.contains("SUMMARY:Zadzwonić do Łucji"));
     QVERIFY(joined.contains("DUE;TZID="));
+
+    // Another app moves the call under the cheese (RELATED-TO on the server): the line follows.
+    const RemoteResource *cheese = nullptr;
+    const RemoteResource *call = nullptr;
+    for (const RemoteResource &r : *data)
+        (r.data.contains("SUMMARY:Zadzwonić do Łucji") ? call : cheese) = &r;
+    QVERIFY(cheese && call);
+    const QRegularExpression uidLine(u"\r?\nUID:([^\r\n]+)"_s);
+    const QString cheeseUid = uidLine.match(QString::fromUtf8(cheese->data)).captured(1);
+    QVERIFY(!cheeseUid.isEmpty());
+    QByteArray moved = call->data;
+    const QByteArray relation = "RELATED-TO;RELTYPE=PARENT:" + cheeseUid.toUtf8() + "\r\nEND:VTODO";
+    moved.replace(QByteArray("END:VTODO"), relation);
+    std::optional<WriteResult> written;
+    client.put(call->path, moved, call->etag, [&written](const WriteResult &w) { written = w; });
+    QTRY_VERIFY_WITH_TIMEOUT(written.has_value(), 20'000);
+    QVERIFY2(!written->error.isError(), qPrintable(written->error.message));
+    report = run();
+    QVERIFY2(!report.error.isError(), qPrintable(report.error.message));
+    const QString nested = vault.readText(entry.taskPage);
+    QVERIFY2(nested.contains(QRegularExpression(u"- \\[ \\] Kupić żółty ser i masło[^\n]*\n\t- \\[ \\] Zadzwonić do Łucji"_s)),
+             qPrintable(nested));
+    report = run();
+    QCOMPARE(report.uploaded + report.downloaded, 0);
 }
 
 std::optional<CalendarInfo> TestCalDavRadicale::calendarNamed(sync::HttpTransport *transport, const QString &name,
