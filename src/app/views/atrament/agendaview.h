@@ -24,6 +24,7 @@
 // time, title, kind and place.
 #pragma once
 
+#include "lookmap.h"
 #include "modelrows.h"
 #include "partrecorder.h"
 #include "ui/atrament.h"
@@ -73,13 +74,9 @@ struct AgendaLook {
     float entryMarker = 24; // an entry's first column: its box, icon or colour (touch: Theme.touchTarget)
     float rowHeight = 34;  // an entry's least height (Theme.listItemHeight)
     float chipMinWidth = 300; // a row narrower than this shows no chip (PlanningItemRow)
-    // A chip's colours by its variant (Theme.chipBg / chipFg: "due", "overdue", "scheduled",
-    // "reminder", "alarm", "done", "event", "neutral"); a variant missing: "neutral"'s.
-    struct ChipColors {
-        atrament::Color background = atrament::rgba(0x8c959f1f);
-        atrament::Color text = atrament::rgb(0x57606a);
-    };
-    std::map<QString, ChipColors> chips;
+    // A chip's colours by its variant (lookmap.h).
+    using ChipColors = atr::ChipColors;
+    ChipMap chips;
     std::u16string uiFamily;
 
     ChipColors chip(const QString &variant) const;
@@ -181,7 +178,6 @@ private:
     int keysDay() const;
     bool moveCurrent(int step, atrament::Context<AgendaView> &cx);
     bool pickCurrent() const;
-    int rowWhere(int role, const QVariant &value) const;
 
     QPointer<QAbstractItemModel> m_model;
     atrament::EntityId m_id;

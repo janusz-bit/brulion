@@ -8,6 +8,7 @@ qt_add_library(brulion_views_atrament STATIC
     tasksview.h tasksview.cpp
     searchview.h searchview.cpp
     agendaview.h agendaview.cpp
+    monthview.h monthview.cpp
     taskbox.h taskbox.cpp
     lookmap.h
     partrecorder.h

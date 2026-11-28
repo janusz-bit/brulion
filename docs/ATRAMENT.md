@@ -1714,9 +1714,29 @@ the chrome around them, until the view's route shows no QML item ("No QML in the
    request, the keys, the chips' colours and narrow rows, a day shown at the top, the model
    followed, the look's map) and the self-test `tst_views_qml_atrament_agenda`
    (qml/dev/AgendaAtramentSelfTest.qml: tomorrow's task ticked off in its file by its box, a day
-   picked by its header, ↓ and Enter, the Journal button). **Not yet**: the month and week grids
-   and the day panel (they stay QML), Tab through the entries (their own focus), touch's long press
-   for the menus, the gate's measurements.
+   picked by its header, ↓ and Enter, the Journal button). **Not yet**: the week grid and the day
+   panel (they stay QML), Tab through the entries (their own focus), touch's long press for the
+   menus, the gate's measurements.
+4. **Calendar, the month** (2026-11-28; `src/app/views/atrament/monthview.h`,
+   `qml/planning/CalendarMonthAtramentGrid.qml`, the same `viewsAtrament`; mouse UIs — touch UIs keep
+   CalendarMonthGrid, whose swipe between months Atrament's grid has not yet). The 42 days of the
+   CalendarModel as 6 weeks × 7 days filling the view: the weekday names (`weekdays` from
+   DatesHelper, a weekend's faint), the ISO week numbers (a weekly note's in the accent; a click opens
+   the week's note), each day's number on a disc (today's red, the selected day's dark, another
+   month's faint), a daily note's book, the day's entries as pills in their variants' colours — open
+   ones first, the time in bold in cells ≥ 104 px, a done one's check, a cancelled one's cross, an
+   alarm's clock, a series' repeat, an event in its calendar's colour with its stripe — and "+N more"
+   when they do not all fit (as many as the cell's height holds: `pillsFitting`), a narrow cell
+   (< 72 px) an icon per kind of open entry in its colour. A click selects the day (the side panel
+   follows), a double click opens its daily note, a pill's click its entry; the keys as
+   CalendarMonthGrid's (← → ↑ ↓, Home, End, PageUp, PageDown, Enter, Ctrl+Enter) through
+   `viewAction("move" / "previous" / "next" / "day" / "open")`, the selected day ringed while the grid
+   has the focus. For screen readers: a table of cells named by their date, "today", their entries
+   and a journal; pills buttons named by their time, title and state. Tested by
+   `tests/atrament/views/tst_atrament_month` (the grid's geometry, names, discs, pills and "+N more",
+   narrow cells' icons, every click and key, the look's map) and the self-test
+   `tst_views_qml_atrament_month` (a click, →, PageDown / PageUp, a pill opening its entry). **Not
+   yet**: the swipe between months (touch), a pill's tooltip, the gate's measurements.
 
 ### After the three views
 

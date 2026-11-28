@@ -1,7 +1,7 @@
 // AtramentView's views other than the editor's (docs/ATRAMENT.md "The views in Atrament (M3)"),
 // each a kind of kKinds: `view: "tasks"` — TasksView over the TaskListModel in `viewModel` —,
 // `view: "search"` — SearchResultsView over the SearchResultModel —, `view: "agenda"` — AgendaView
-// over the CalendarModel —; their look from `viewLook` and
+// over the CalendarModel —, `view: "month"` — MonthView over it —; their look from `viewLook` and
 // the item's colours, their rows' requests as `viewAction` (x, y in this item: the Atrament window's
 // coordinates are the item's).
 #include "atramentview.h"
@@ -10,6 +10,7 @@
 #include "agendaview.h"
 #include "calendarmodel.h"
 #include "dateshelper.h"
+#include "monthview.h"
 #include "searchmodel.h"
 #include "searchview.h"
 #include "tasklistmodel.h"
@@ -117,6 +118,7 @@ void configure(views::SearchResultsView &v, QQmlEngine *engine)
 {
     v.formatDate = dateWords(engine, &brulion::ui::DatesHelper::formatLong);
 }
+void configure(views::MonthView &, QQmlEngine *) { }
 void configure(views::AgendaView &v, QQmlEngine *engine)
 {
     v.formatHuman = dateWords(engine, &brulion::ui::DatesHelper::formatHuman);
@@ -142,7 +144,8 @@ struct Kind {
 };
 const Kind kKinds[] = {{u"tasks", &make<views::TasksView, brulion::planning::TaskListModel>},
                        {u"search", &make<views::SearchResultsView, brulion::content::SearchResultModel>},
-                       {u"agenda", &make<views::AgendaView, brulion::planning::CalendarModel>}};
+                       {u"agenda", &make<views::AgendaView, brulion::planning::CalendarModel>},
+                       {u"month", &make<views::MonthView, brulion::planning::CalendarModel>}};
 
 const Kind *kindNamed(const QString &name)
 {

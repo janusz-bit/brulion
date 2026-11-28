@@ -70,22 +70,13 @@ constexpr SizeField<AgendaLook> kSizes[] = {
 
 AgendaLook::ChipColors AgendaLook::chip(const QString &variant) const
 {
-    const auto it = chips.find(variant);
-    if (it != chips.end())
-        return it->second;
-    const auto neutral = chips.find(u"neutral"_s);
-    return neutral != chips.end() ? neutral->second : ChipColors{};
+    return chipOf(chips, variant);
 }
 
 AgendaLook AgendaLook::fromMap(const QVariantMap &look)
 {
     AgendaLook t = lookFrom(look, kColors, kSizes);
-    const QVariantMap chips = look.value(u"chips"_s).toMap();
-    for (auto it = chips.cbegin(); it != chips.cend(); ++it) {
-        const QVariantMap c = it.value().toMap();
-        const ChipColors fallback;
-        t.chips[it.key()] = {colorAt(c, u"background"_s, fallback.background), colorAt(c, u"text"_s, fallback.text)};
-    }
+    t.chips = chipsFrom(look.value(u"chips"_s));
     return t;
 }
 
@@ -145,8 +136,7 @@ AgendaView::Part AgendaView::partNamed(const QString &name)
 {
     static const QHash<QString, Part::Kind> kinds{
             {u"header"_s, Part::Header}, {u"journal"_s, Part::Journal}, {u"entry"_s, Part::Entry}, {u"box"_s, Part::Box}};
-    const QStringList words = name.split(u' ');
-    return {kinds.value(words.value(0), Part::Day), words.value(1).toInt()};
+    return partFromName<Part>(name, kinds, Part::Day);
 }
 
 AgendaView::AgendaView(at::Context<AgendaView> &cx, QAbstractItemModel *model)
@@ -183,24 +173,14 @@ AgendaView::RowData AgendaView::rowData(int row) const
     return d;
 }
 
-// The first row whose `role` is `value` (−1: none).
-int AgendaView::rowWhere(int role, const QVariant &value) const
-{
-    const int count = m_model ? m_model->rowCount() : 0;
-    for (int r = 0; r < count; ++r)
-        if (m_model->index(r, 0).data(role) == value)
-            return r;
-    return -1;
-}
-
 int AgendaView::rowOfDate(const QString &date) const
 {
-    return date.isEmpty() ? -1 : rowWhere(CalendarModel::DateRole, date);
+    return date.isEmpty() ? -1 : rowWhere(m_model, CalendarModel::DateRole, date);
 }
 
 int AgendaView::selectedRow() const
 {
-    return rowWhere(CalendarModel::IsSelectedRole, true);
+    return rowWhere(m_model, CalendarModel::IsSelectedRole, true);
 }
 
 QString AgendaView::relativeWords(const RowData &d) const

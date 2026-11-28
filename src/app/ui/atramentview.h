@@ -127,7 +127,7 @@ class AtramentView : public brulion::atrament::AtramentItem {
     // "page": the editor's BlockListModel (a PageController's `blocks`), set before the view.
     Q_PROPERTY(QObject *pageModel READ pageModel WRITE setPageModel NOTIFY pageModelChanged FINAL)
     // A view other than the editor's ("tasks": a TaskListModel, "search": a SearchResultModel,
-    // "agenda": a CalendarModel; docs/ATRAMENT.md "The views in Atrament (M3)"), set before the view
+    // "agenda" and "month": a CalendarModel; docs/ATRAMENT.md "The views in Atrament (M3)"), set before the view
     // is shown; its look (TasksLook's, SearchLook's, AgendaLook's fields by name — colours, sizes,
     // uiFamily).
     Q_PROPERTY(QObject *viewModel READ viewModel WRITE setViewModel NOTIFY viewModelChanged FINAL)
@@ -464,7 +464,8 @@ Q_SIGNALS:
     void viewModelChanged();
     void viewLookChanged();
     // What a row of a view other than the editor's asks ("tasks": views/atrament/tasksview.h's
-    // actions, "search": searchview.h's, "agenda": agendaview.h's; x, y in this item).
+    // actions, "search": searchview.h's, "agenda": agendaview.h's, "month": monthview.h's; x, y in
+    // this item).
     void viewAction(const QString &action, const QVariantMap &args);
     // "page": a link of row `row` clicked or tapped (BlockEditor.activateLink), a task's box.
     void linkActivated(int row, const QString &link);

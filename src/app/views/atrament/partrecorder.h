@@ -5,6 +5,10 @@
 
 #include "ui/atrament.h"
 
+#include <QHash>
+#include <QString>
+#include <QStringList>
+
 #include <optional>
 #include <vector>
 
@@ -51,5 +55,14 @@ private:
     std::vector<Drawn> m_drawn;
     int m_rows = 0;
 };
+
+// A part by its name, "<kind> <index>" ("pill 2"; the index 0 when none), by the kinds' names;
+// a name not among them: `fallback`.
+template<class Part>
+Part partFromName(const QString &name, const QHash<QString, typename Part::Kind> &kinds, typename Part::Kind fallback)
+{
+    const QStringList words = name.split(u' ');
+    return {kinds.value(words.value(0), fallback), words.value(1).toInt()};
+}
 
 } // namespace brulion::views::atr

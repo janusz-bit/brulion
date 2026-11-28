@@ -2878,13 +2878,13 @@
     </message>
     <message>
         <location filename="../src/app/qml/planning/CalendarAgendaList.qml" line="321"/>
-        <location filename="../src/app/qml/views/CalendarView.qml" line="489"/>
+        <location filename="../src/app/qml/views/CalendarView.qml" line="552"/>
         <source>Nothing planned in these four weeks</source>
         <translation>Nic nie zaplanowano na te cztery tygodnie</translation>
     </message>
     <message>
         <location filename="../src/app/qml/planning/CalendarAgendaList.qml" line="322"/>
-        <location filename="../src/app/qml/views/CalendarView.qml" line="490"/>
+        <location filename="../src/app/qml/views/CalendarView.qml" line="553"/>
         <source>Dates (📅, ⏳) and reminders (⏰) from your notes appear here. Choose a day to add a task or a reminder to it.</source>
         <translation>Tu pojawiają się daty (📅, ⏳) i przypomnienia (⏰) z Twoich notatek. Wybierz dzień, aby dodać do niego zadanie lub przypomnienie.</translation>
     </message>
@@ -3373,77 +3373,77 @@
         <translation>Kalendarz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/CalendarView.qml" line="170"/>
+        <location filename="../src/app/qml/views/CalendarView.qml" line="201"/>
         <source>Task reopened</source>
         <translation>Zadanie ponownie otwarte</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/CalendarView.qml" line="170"/>
+        <location filename="../src/app/qml/views/CalendarView.qml" line="201"/>
         <source>Task done</source>
         <translation>Zadanie zrobione</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/CalendarView.qml" line="164"/>
+        <location filename="../src/app/qml/views/CalendarView.qml" line="195"/>
         <source>Undo</source>
         <translation>Cofnij</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/CalendarView.qml" line="175"/>
+        <location filename="../src/app/qml/views/CalendarView.qml" line="206"/>
         <source>Status changed</source>
         <translation>Zmieniono status</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/CalendarView.qml" line="220"/>
+        <location filename="../src/app/qml/views/CalendarView.qml" line="251"/>
         <source>The journal could not be saved.</source>
         <translation>Nie udało się zapisać dziennika.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/CalendarView.qml" line="223"/>
+        <location filename="../src/app/qml/views/CalendarView.qml" line="254"/>
         <source>Open</source>
         <translation>Otwórz</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/CalendarView.qml" line="550"/>
+        <location filename="../src/app/qml/views/CalendarView.qml" line="613"/>
         <source>Task added to the journal of %1</source>
         <translation>Dodano zadanie do dziennika (%1)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/CalendarView.qml" line="581"/>
+        <location filename="../src/app/qml/views/CalendarView.qml" line="644"/>
         <source>Problem</source>
         <translation>Problem</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/CalendarView.qml" line="593"/>
+        <location filename="../src/app/qml/views/CalendarView.qml" line="656"/>
         <source>New event…</source>
         <translation>Nowe wydarzenie…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/CalendarView.qml" line="599"/>
+        <location filename="../src/app/qml/views/CalendarView.qml" line="662"/>
         <source>Refresh calendars</source>
         <translation>Odśwież kalendarze</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/CalendarView.qml" line="605"/>
+        <location filename="../src/app/qml/views/CalendarView.qml" line="668"/>
         <source>Manage calendars…</source>
         <translation>Zarządzaj kalendarzami…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/CalendarView.qml" line="606"/>
+        <location filename="../src/app/qml/views/CalendarView.qml" line="669"/>
         <source>Add a calendar…</source>
         <translation>Dodaj kalendarz…</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/CalendarView.qml" line="616"/>
+        <location filename="../src/app/qml/views/CalendarView.qml" line="679"/>
         <source>Written in the journal of %1</source>
         <translation>Zapisano w dzienniku (%1)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/CalendarView.qml" line="232"/>
+        <location filename="../src/app/qml/views/CalendarView.qml" line="263"/>
         <source>Reminder set for %1</source>
         <translation>Ustawiono przypomnienie na %1</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/views/CalendarView.qml" line="566"/>
+        <location filename="../src/app/qml/views/CalendarView.qml" line="629"/>
         <source>Reminder</source>
         <translation>Przypomnienie</translation>
     </message>
@@ -19950,25 +19950,25 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <translation>trwa dalej</translation>
     </message>
     <message>
-        <location filename="../src/app/views/atrament/agendaview.cpp" line="121"/>
+        <location filename="../src/app/views/atrament/agendaview.cpp" line="112"/>
         <location filename="../src/app/qml/planning/PlanningItemRow.qml" line="79"/>
         <source>Overdue</source>
         <translation>Zaległe</translation>
     </message>
     <message>
-        <location filename="../src/app/views/atrament/agendaview.cpp" line="122"/>
+        <location filename="../src/app/views/atrament/agendaview.cpp" line="113"/>
         <location filename="../src/app/qml/planning/PlanningItemRow.qml" line="80"/>
         <source>Alarm</source>
         <translation>Alarm</translation>
     </message>
     <message>
-        <location filename="../src/app/views/atrament/agendaview.cpp" line="123"/>
+        <location filename="../src/app/views/atrament/agendaview.cpp" line="114"/>
         <location filename="../src/app/qml/planning/PlanningItemRow.qml" line="81"/>
         <source>Reminder</source>
         <translation>Przypomnienie</translation>
     </message>
     <message>
-        <location filename="../src/app/views/atrament/agendaview.cpp" line="124"/>
+        <location filename="../src/app/views/atrament/agendaview.cpp" line="115"/>
         <location filename="../src/app/qml/planning/PlanningItemRow.qml" line="82"/>
         <source>Scheduled</source>
         <translation>Zaplanowane</translation>
@@ -19984,19 +19984,19 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <translation>Zakończone</translation>
     </message>
     <message>
-        <location filename="../src/app/views/atrament/agendaview.cpp" line="125"/>
+        <location filename="../src/app/views/atrament/agendaview.cpp" line="116"/>
         <location filename="../src/app/qml/planning/PlanningItemRow.qml" line="86"/>
         <source>Due</source>
         <translation>Termin</translation>
     </message>
     <message>
-        <location filename="../src/app/views/atrament/agendaview.cpp" line="126"/>
+        <location filename="../src/app/views/atrament/agendaview.cpp" line="117"/>
         <location filename="../src/app/qml/planning/PlanningItemRow.qml" line="87"/>
         <source>Starts</source>
         <translation>Początek</translation>
     </message>
     <message>
-        <location filename="../src/app/views/atrament/agendaview.cpp" line="127"/>
+        <location filename="../src/app/views/atrament/agendaview.cpp" line="118"/>
         <location filename="../src/app/qml/planning/PlanningItemRow.qml" line="88"/>
         <source>Journal</source>
         <translation>Dziennik</translation>
@@ -23117,6 +23117,16 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <translation>Każda zmiana jest zapisywana z godziną, a „W toku” uruchamia licznik czasu zadania.</translation>
     </message>
     <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1286"/>
+        <source>Draw the task list, search results and calendar with Atrament</source>
+        <translation>Rysuj listę zadań, wyniki wyszukiwania i kalendarz Atramentem</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/views/SettingsView.qml" line="1287"/>
+        <source>Experimental: Brulion&apos;s own renderer draws the Tasks view&apos;s list, the search results and the calendar&apos;s month and agenda instead of Qt.</source>
+        <translation>Eksperymentalne: listę w widoku Zadania, wyniki wyszukiwania oraz miesiąc i agendę kalendarza rysuje własny renderer Brulionu zamiast Qt.</translation>
+    </message>
+    <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="1295"/>
         <source>Check spelling</source>
         <translation>Sprawdzaj pisownię</translation>
@@ -24080,16 +24090,6 @@ Trafia tu też print() Twoich rozszerzeń.</translation>
         <location filename="../src/app/qml/views/SettingsView.qml" line="1277"/>
         <source>Experimental: Brulion&apos;s own renderer draws pages and the journal instead of Qt.</source>
         <translation>Eksperymentalne: strony i dziennik rysuje własny renderer Brulionu zamiast Qt.</translation>
-    </message>
-    <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1286"/>
-        <source>Draw the task list, search results and agenda with Atrament</source>
-        <translation>Rysuj listę zadań, wyniki wyszukiwania i agendę Atramentem</translation>
-    </message>
-    <message>
-        <location filename="../src/app/qml/views/SettingsView.qml" line="1287"/>
-        <source>Experimental: Brulion&apos;s own renderer draws the Tasks view&apos;s list, the search results and the calendar&apos;s agenda instead of Qt.</source>
-        <translation>Eksperymentalne: listę w widoku Zadania, wyniki wyszukiwania i agendę kalendarza rysuje własny renderer Brulionu zamiast Qt.</translation>
     </message>
     <message>
         <location filename="../src/app/qml/views/SettingsView.qml" line="1395"/>

@@ -6965,7 +6965,7 @@ list"; `qml/editor/EditorAtramentJournal.qml`, loaded by JournalsView by its fil
 
 ### The task list drawn by Atrament
 
-With Settings → Editor → "Draw the task list, search results and agenda with Atrament" (`AppSettings.viewsAtrament`,
+With Settings → Editor → "Draw the task list, search results and calendar with Atrament" (`AppSettings.viewsAtrament`,
 experimental, where Atrament is built; `--atrament-views` for the self-tests) the Tasks view's
 sections and tasks are rows of one Atrament list (`qml/planning/TasksAtramentList.qml` over
 `src/app/views/atrament/tasksview.h`, docs/ATRAMENT.md "The views in Atrament (M3)") instead of the
@@ -6991,7 +6991,10 @@ And it draws the Calendar's agenda (`qml/planning/CalendarAgendaAtramentList.qml
 the day panel staying QML: each day its disc, date and "Journal" button, its entries as
 `PlanningItemRow` shows them; a click on a day's header selects it, on an entry opens it, on a
 task's box ticks it off (a right-click: its status menu; on an entry with a date: its date's menu);
-↓ / ↑ move a focus ring over the days from the selected one, Enter selects the ringed day.
+↓ / ↑ move a focus ring over the days from the selected one, Enter selects the ringed day. With a
+mouse it also draws the month (`qml/planning/CalendarMonthAtramentGrid.qml` over
+`src/app/views/atrament/monthview.h`) in CalendarMonthGrid's place — the same cells, pills, "+N
+more", week numbers and keys; touch UIs keep the QML grid for its swipe between months.
 
 ### Pictures hold their pixels only near the view
 

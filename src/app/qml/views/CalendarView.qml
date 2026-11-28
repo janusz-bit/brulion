@@ -57,9 +57,12 @@ FocusScope {
     /// `--atrament-views`; where Atrament is built): CalendarAgendaAtramentList in
     /// CalendarAgendaList's place (docs/ATRAMENT.md "The views in Atrament (M3)").
     readonly property bool agendaAtrament: DeviceInfo.atrament && (AppSettings.viewsAtrament || DevTools.atramentViews)
-    /// The agenda drawn by Atrament once loaded (an AtramentView: the type exists only where
-    /// Atrament is built), and the self-test's values.
+    /// The month's swipe between months (touch UIs): only CalendarMonthGrid has it.
+    readonly property bool gridSwipeNeeded: Theme.touchUi
+    /// The agenda (and the month) drawn by Atrament once loaded (an AtramentView: the type exists
+    /// only where Atrament is built), and the self-test's values.
     property Item atramentAgenda: null
+    property Item atramentMonth: null
     property var selfTestValues: ({})
     /// The agenda has nothing to show (CalendarAgendaList.empty): only today, without entries.
     readonly property bool agendaEmpty: cal.revision >= 0 && cal.rangeStart !== "-"
@@ -120,6 +123,34 @@ FocusScope {
             root.openAgendaStatusMenu(entry, x, y)
     }
     /// A day picked in the agenda drawn by Atrament: selected, the list not scrolled to it.
+    /// What the month drawn by Atrament asks (views/atrament/monthview.h's actions): what
+    /// CalendarMonthGrid's signals and keys do.
+    MapHolder { id: monthInfo }
+    function atramentMonthAction(action: string, args: var): void {
+        monthInfo.map = args
+        const date = "" + AppController.routeText(monthInfo.map, "date")
+        const monday = "" + AppController.routeText(monthInfo.map, "monday")
+        const days = 0 + AppController.routeInt(monthInfo.map, "days", 0)
+        const entry = monthInfo.map.entry
+        if (action === "day")
+            root.showDay(date)
+        else if (action === "entry")
+            root.openMonthEntry(date, entry)
+        else if (action === "open")
+            root.openJournal(date)
+        else if (action === "week")
+            root.openPeriodNote("week", monday)
+        else if (action === "move")
+            cal.moveAnchor(days)
+        else if (action === "previous")
+            cal.previous()
+        else if (action === "next")
+            cal.next()
+    }
+    function openMonthEntry(date: string, entry: var): void {
+        root.openEntry(entry)
+        cal.anchorDate = date
+    }
     function pickAgendaDay(date: string): void {
         QmlCall.set(root.atramentAgenda, "picking", true)
         root.showDay(date)
@@ -398,7 +429,8 @@ FocusScope {
                     Layout.bottomMargin: root.mode === "agenda" || root.stackedDay ? 0 : (Theme.narrow ? 0 : Theme.space2)
                     focus: true
                     sourceComponent: root.mode === "week" ? weekView
-                                   : root.mode === "agenda" ? (root.agendaAtrament ? atramentAgendaView : agendaView) : monthView
+                                   : root.mode === "agenda" ? (root.agendaAtrament ? atramentAgendaView : agendaView)
+                                   : root.agendaAtrament && !root.gridSwipeNeeded ? atramentMonthView : monthView
                 }
                 Rectangle {
                     visible: root.stackedDay
@@ -459,6 +491,37 @@ FocusScope {
             onDayTapped: (date) => root.showDay(date)
             onDayOpened: (date) => root.openJournal(date)
             onItemOpened: (entry) => root.openEntry(entry)
+        }
+    }
+    // The month drawn by Atrament (agendaAtrament; not where the grid swipes between months: touch
+    // UIs keep CalendarMonthGrid), loaded by file name.
+    Component {
+        id: atramentMonthView
+        FocusScope {
+            focus: true
+            Loader {
+                id: atramentMonthLoader
+                anchors.fill: parent
+                focus: true
+                source: "../planning/CalendarMonthAtramentGrid.qml"
+                onLoaded: {
+                    QmlCall.set(atramentMonthLoader.item, "calendarView", root)
+                    QmlCall.set(atramentMonthLoader.item, "calendar", cal)
+                    QmlCall.set(atramentMonthLoader.item, "viewModel", cal)
+                    root.atramentMonth = atramentMonthLoader.item as Item
+                }
+                Component.onDestruction: root.atramentMonth = null
+            }
+            Loader {
+                id: monthSelfTest
+                active: DevTools.editorScript === "month-atrament-selftest" && root.atramentMonth !== null
+                onActiveChanged: {
+                    if (!monthSelfTest.active)
+                        return
+                    root.selfTestValues = { calendarView: root, calendar: cal, list: root.atramentMonth }
+                    monthSelfTest.setSource(Qt.resolvedUrl("../dev/MonthAtramentSelfTest.qml"), root.selfTestValues)
+                }
+            }
         }
     }
     // Drawn by Atrament (agendaAtrament): loaded by file name — it exists only where Atrament is

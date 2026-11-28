@@ -7,6 +7,8 @@ brulion_add_test(tst_atrament_search SOURCES tst_atrament_search.cpp LIBS brulio
 target_compile_definitions(tst_atrament_search PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 brulion_add_test(tst_atrament_agenda SOURCES tst_atrament_agenda.cpp LIBS brulion_views_atrament Qt6::Gui)
 target_compile_definitions(tst_atrament_agenda PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
+brulion_add_test(tst_atrament_month SOURCES tst_atrament_month.cpp LIBS brulion_views_atrament Qt6::Gui)
+target_compile_definitions(tst_atrament_month PRIVATE BRULION_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 
 # The Tasks view's rows drawn by Atrament in the real app (`--atrament-views`,
 # qml/dev/TasksAtramentSelfTest.qml): a task's box ticking it off and on in its file, its status
@@ -48,5 +50,18 @@ if(TARGET brulion AND BRULION_DEV_QML_ENABLED AND NOT ANDROID AND NOT EMSCRIPTEN
     set_tests_properties(tst_views_qml_atrament_agenda PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${BRULION_TEST_QML_IMPORT_PATH};XDG_DATA_HOME=${_agenda_home}/data;XDG_CONFIG_HOME=${_agenda_home}/config;XDG_CACHE_HOME=${_agenda_home}/cache;XDG_STATE_HOME=${_agenda_home}/state${_agenda_profile}"
         FIXTURES_REQUIRED views_agenda_atrament_home TIMEOUT 300 PROCESSORS 2
+        FAIL_REGULAR_EXPRESSION "SELFTEST FAIL;TypeError;ReferenceError;Binding loop detected")
+    # The Calendar's month drawn by Atrament (qml/dev/MonthAtramentSelfTest.qml): a day selected by
+    # a click, →, PageDown / PageUp, a pill opening its entry.
+    set(_month_home ${CMAKE_CURRENT_BINARY_DIR}/views-month-atrament-home)
+    brulion_test_profile(_month_profile views-month-atrament)
+    add_test(NAME tst_views_qml_atrament_month_home COMMAND ${CMAKE_COMMAND} -E rm -rf ${_month_home} ${_month_profile_DIRS})
+    set_tests_properties(tst_views_qml_atrament_month_home PROPERTIES FIXTURES_SETUP views_month_atrament_home)
+    add_test(NAME tst_views_qml_atrament_month
+        COMMAND brulion --demo --route "{\"view\":\"calendar\",\"mode\":\"month\"}" --editor-script month-atrament-selftest
+            --atrament-views --no-single-instance --size 1200x800 --now "2026-10-14 10:00" --locale pl)
+    set_tests_properties(tst_views_qml_atrament_month PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen;QT_QUICK_BACKEND=software;QT_FORCE_STDERR_LOGGING=1;QML_IMPORT_PATH=${BRULION_TEST_QML_IMPORT_PATH};XDG_DATA_HOME=${_month_home}/data;XDG_CONFIG_HOME=${_month_home}/config;XDG_CACHE_HOME=${_month_home}/cache;XDG_STATE_HOME=${_month_home}/state${_month_profile}"
+        FIXTURES_REQUIRED views_month_atrament_home TIMEOUT 300 PROCESSORS 2
         FAIL_REGULAR_EXPRESSION "SELFTEST FAIL;TypeError;ReferenceError;Binding loop detected")
 endif()

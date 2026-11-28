@@ -9,6 +9,7 @@
 #include <QVariantMap>
 
 #include <cstddef>
+#include <map>
 #include <utility>
 
 namespace brulion::views::atr {
@@ -29,6 +30,36 @@ template<class Look>
 using ColorField = std::pair<const char *, atrament::Color Look::*>;
 template<class Look>
 using SizeField = std::pair<const char *, float Look::*>;
+
+// A chip's (a pill's) colours by its variant (Theme.chipBg / chipFg): "due", "overdue", "scheduled",
+// "reminder", "alarm", "done", "event", "neutral"; a variant missing: "neutral"'s.
+struct ChipColors {
+    atrament::Color background = atrament::rgba(0x8c959f1f);
+    atrament::Color text = atrament::rgb(0x57606a);
+};
+using ChipMap = std::map<QString, ChipColors>;
+
+// A look's `chips`: variant → {background, text}.
+inline ChipMap chipsFrom(const QVariant &chips)
+{
+    ChipMap out;
+    const QVariantMap map = chips.toMap();
+    for (auto it = map.cbegin(); it != map.cend(); ++it) {
+        const QVariantMap c = it.value().toMap();
+        const ChipColors fallback;
+        out[it.key()] = {colorAt(c, QStringLiteral("background"), fallback.background),
+                         colorAt(c, QStringLiteral("text"), fallback.text)};
+    }
+    return out;
+}
+
+inline ChipColors chipOf(const ChipMap &chips, const QString &variant)
+{
+    auto it = chips.find(variant);
+    if (it == chips.end())
+        it = chips.find(QStringLiteral("neutral"));
+    return it != chips.end() ? it->second : ChipColors{};
+}
 
 // `Look` from the map: its tables' fields, its uiFamily; the rest its defaults.
 template<class Look, std::size_t C, std::size_t S>

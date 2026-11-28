@@ -18,6 +18,16 @@
 
 namespace brulion::views::atr {
 
+// The first row of `model` whose `role` is `value` (−1: none, no model).
+inline int rowWhere(const QAbstractItemModel *model, int role, const QVariant &value)
+{
+    const int count = model ? model->rowCount() : 0;
+    for (int r = 0; r < count; ++r)
+        if (model->index(r, 0).data(role) == value)
+            return r;
+    return -1;
+}
+
 class ModelRows {
 public:
     explicit ModelRows(float estimate)
