@@ -759,6 +759,7 @@ void TestCodeGit::commitPushAndPullRequest()
     git.setWritesPullRequests(true);
     QSignalSpy toWrite(&git, &CodeGit::pullRequestToWrite);
     repo.write(u"c.txt"_s, "c\n");
+    git.refresh(); // (not left to the folder's watcher, which a busy machine may let pass)
     QTRY_VERIFY_WITH_TIMEOUT(git.changeCount() == 1, Wait);
     actions.clear();
     git.commitFiles(u"Trzeci\n\nTreść"_s, {u"c.txt"_s}, QString(), true, true, QString(), QString(), false, u"main"_s);
@@ -772,6 +773,7 @@ void TestCodeGit::commitPushAndPullRequest()
     QCOMPARE(QString::fromUtf8(written.value(3)), u"Tytuł od AI"_s);
     QVERIFY2(QString::fromUtf8(written.value(5)).startsWith(u"## Summary"_s), written.value(5).constData());
     repo.write(u"d.txt"_s, "d\n");
+    git.refresh(); // (not left to the folder's watcher, which a busy machine may let pass)
     QTRY_VERIFY_WITH_TIMEOUT(git.changeCount() == 1, Wait);
     actions.clear();
     git.commitFiles(u"Czwarty"_s, {u"d.txt"_s}, QString(), true, true, QString(), QString(), false, u"main"_s);
