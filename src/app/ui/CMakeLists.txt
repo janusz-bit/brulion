@@ -137,6 +137,19 @@ target_link_libraries(brulion_ui_memory PUBLIC Qt6::Core Qt6::Gui Qt6::Quick PRI
 qt_extract_metatypes(brulion_ui_memory)
 brulion_set_warnings(brulion_ui_memory)
 
+# brulion_ui_viewport — ViewportObservers (viewportobservers.h): once a frame the empty texts of a
+# window stop observing its viewport, so that a scroll step no longer walks the item tree down to
+# every one of them (docs/PERFORMANCE.md "Scrolling: empty texts no longer walked"). Qt Quick's
+# private item data (Qt6::QuickPrivate: which paths Qt walks); a static library so that
+# tests/app/viewport drives it with an offscreen window without the app; main() installs it.
+find_package(Qt6 REQUIRED COMPONENTS QuickPrivate)
+qt_add_library(brulion_ui_viewport STATIC
+    viewportobservers.h viewportobservers.cpp
+)
+target_include_directories(brulion_ui_viewport PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(brulion_ui_viewport PUBLIC Qt6::Core Qt6::Gui Qt6::Quick PRIVATE Qt6::QuickPrivate)
+brulion_set_warnings(brulion_ui_viewport)
+
 # brulion_ui_qmlcall — QmlCall and QmlValue (qmlcall.h): a function of a QML object called, and a
 # property read, written or followed, by name — for QML made from its file when first used and
 # reached through a base type (docs/UI.md "QML files loaded when first used"). QtCore + QtQml; a

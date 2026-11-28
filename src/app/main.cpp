@@ -12,6 +12,7 @@
 #include "ui/memorypolicy.h" // what is kept for speed, and let go of while the app is away (MemoryPolicy)
 #include "ui/qmlshutdown.h" // the QML gone before the engine and the application object at quit
 #include "ui/smoothscroll.h" // the wheel and the scroll bars scroll like a web browser (SmoothScroll)
+#include "ui/viewportobservers.h" // empty texts stop making every scroll step walk the page
 #include "ui/uifonts.h" // the bundled text fonts (Inter, Literata, JetBrains Mono)
 #include "ui/uiscale.h" // the interface scale ("Interface size", "Automatic" by the screen)
 
@@ -418,6 +419,8 @@ int main(int argc, char *argv[])
     brulion::ui::GestureInsets gestureInsets;
     // The mouse wheel moves every Flickable like a browser's smooth scrolling (smoothscroll.h).
     brulion::ui::SmoothScroll::instance();
+    // An empty Text no longer makes every scroll step walk the page down to it (viewportobservers.h).
+    brulion::ui::ViewportObservers::instance();
     // Memory the app frees — a page left, pictures out of reach of the view, the index built —
     // goes back to the system once it is quiet (memorykeeper.h).
     brulion::ui::MemoryKeeper *memoryKeeper = brulion::ui::MemoryKeeper::instance();

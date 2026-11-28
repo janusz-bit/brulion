@@ -1026,7 +1026,7 @@ private:
     }
 
     /// BENCH_VIEWPORT_OBSERVERS=1: the items with QQuickItem::ItemObservesViewport, by class (and
-    /// name; "(hidden)": not visible — they count too). While a scrolled view has one below it,
+    /// name, "@file.qml:line" where it is declared; "(hidden)": not visible — they count too). While a scrolled view has one below it,
     /// every scroll step walks the item tree from the view down to it
     /// (QQuickItemPrivate::transformChanged; docs/PERFORMANCE.md "Pitfalls").
     QJsonObject viewportObservers()
@@ -1037,6 +1037,8 @@ private:
                 QString key = QString::fromLatin1(it->metaObject()->className());
                 if (!it->objectName().isEmpty())
                     key += u'#' + it->objectName();
+                if (const QString site = qmlSiteOf(it); !site.isEmpty())
+                    key += u" @"_s + site;
                 if (!it->isVisible())
                     key += u" (hidden)"_s;
                 ++counts[key];

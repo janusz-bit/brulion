@@ -500,13 +500,6 @@ Details in docs/PERFORMANCE.md, "Next steps":
   read-only data the loader relocates (2.8 MB of tables that qmlcachegen's code points into)
   is private to every process; fewer allocator arenas (2–8 MB less private memory, but the index
   of 10 000 notes took 15 % longer to load in the one run tried);
-* **Scrolling: empty texts make every scroll step walk the page** — a `Text` whose text was never
-  set keeps Qt's `ItemObservesViewport` flag ("until its size is known"), so each scroll step
-  walks from the list down to every such item (`QQuickItemPrivate::transformChanged`: 60 % of the
-  GUI thread's instructions while a page of forty photos scrolls, measured 2026-11-24; a block row
-  has at least one, a picture's frame three). `--env BENCH_VIEWPORT_OBSERVERS=1` of
-  tests/bench/app lists them; clearing the flag on empty texts (or not creating them) would take
-  that walk away — not tried yet;
 * **File dialogs — check by hand**: Windows (Open/Save in import, export, "Image…" and the event
   log), AppImage in a real GNOME and KDE session (the portal dialog; without a desktop session
   checked only with xdg-desktop-portal-gtk under Xvfb), Android with Google Drive (import and

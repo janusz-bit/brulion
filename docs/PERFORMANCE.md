@@ -3449,7 +3449,8 @@ thumbnails were kept after their toast or notebook had gone.
 Found on the way, not changed here (TODO.md): a photo turned by its EXIF orientation is shown as
 stored in notes and the picture view; and 60 % of the GUI thread's instructions while that album
 scrolls go into `QQuickItemPrivate::transformChanged` walking from the list to every empty `Text`
-of its rows — in `main` as now ("Pitfalls" below).
+of its rows — in `main` as now ("Pitfalls" below; gone since "Scrolling: empty texts no longer
+walked", 2026-11-28).
 
 Reproduce: tests/bench/app/README.md, scenario `pictures`. Guards: `tests/app/memory`
 (`tst_near_view`, `tst_memory_keeper`), `tests/platform/tst_processmemory`, the shell self-test's
@@ -3664,6 +3665,40 @@ Reproduce: tests/bench/app/README.md, scenario `memory`. Guards: `tst_memory_pol
 `tst_attachmentindexer` (`ocrLibraryLookedForWhenAsked`), `tst_ui_fonts` (`storedAsTheyAre`),
 `tst_qmlcall`, `tst_vault_contentcache`, `bench_index:memory` (limits.csv: 158 MiB at 10 000
 notes), the shell self-test's "0b" and "0d".
+
+### Scrolling: empty texts no longer walked (2026-11-28)
+
+A `Text` starts with Qt's `ItemObservesViewport` flag "until its size is known" and drops it when
+its text is set — but setting the text it already has returns early, so a `Text` whose text stays
+empty keeps it for good ("Pitfalls" below). Every scroll step then walks the item tree from the
+moved list down to each such item (`QQuickItemPrivate::transformChanged`, which follows the paths
+that lead to an observer and switches the others off). The app had 63–68 of them in a window at any
+time — `BListItem`'s empty secondary line in every menu row, `EmbedView`'s picture captions,
+`BlockText`'s placeholders, `BButton`'s empty labels, the Vim status line —, and a block row has at
+least one. Now `ViewportObservers` (src/app/ui/viewportobservers.h, installed by `main()`) looks once
+a frame (`QQuickWindow::afterAnimating`) along the same paths Qt walks: an empty `Text` lets go of
+the flag, a path with no observer left is switched off as Qt does. A text or text edit of more than
+10 000 characters keeps it — they draw only their lines in view. One place for every `Text` of the
+app, no QML changed; `BRULION_VIEWPORT_OBSERVERS=0` switches it off for A/B runs.
+
+| | before (`BRULION_VIEWPORT_OBSERVERS=0`) | now |
+|---|---|---|
+| items observing the viewport in the window (`BENCH_VIEWPORT_OBSERVERS=1`, every mark of `pictures`) | 63–68 | 5 (Qt Quick Controls' own: the window's content control, the overlay, the drawer) |
+| one scroll step of a 300-row page with an empty text and an empty caption per row (`tst_viewport_observers -perf -perfcounter instructions:u`, `scrollStep`) | 348 362 instructions | 52 562 (−85 %) |
+| the album of 40 photos scrolled (`page-scroll`, `BENCH_PAGE=Album.md`, 80 notches down and 80 up): GUI instructions per frame, median of 3 (min–max) | 1.43 M (1.37–1.54) | 0.54 M (0.52–0.69), −62 % |
+| … the whole scroll (frames differ with the machine's load) | 542 M (400–796) | 213 M (181–225) |
+| … `QQuickItemPrivate::transformChanged`, self (perf `instructions:u`) | 17–18 % | below the top twelve |
+
+Measured on the x86_64 machine (16 cores) while other sessions built and tested (load average
+34–80): instruction counts, runs of the two settings interleaved, the same Release binary
+(`-g1`, Clang), Xvfb (llvmpipe, `LP_NUM_THREADS=1`). The QtTest numbers are of a Debug build — the
+step itself is Qt's (Release) code.
+
+Reproduce: `tests/app/viewport` (`tst_viewport_observers`: the behaviour and `scrollStep`), the
+probe's `--env BENCH_VIEWPORT_OBSERVERS=1` (now with each observer's QML file and line), and
+`EVENT=instructions:u PERIOD=1000000 tests/bench/app/perf-scenario.sh … --scenario page-scroll --env
+BENCH_PAGE=Album.md [--env BRULION_VIEWPORT_OBSERVERS=0]` with `perf-slice.py --window
+'mark:scroll_start..scroll_counters_end'`.
 
 ### Atrament's block editor against M2's gate (2026-11-27)
 
@@ -4026,8 +4061,10 @@ steps, 1 MB L2 cache) shows k up to 1.27 for linear code, hence its limit of 1.5
   `ItemObservesViewport` "until its size is known" and drops it in `setText()` — which returns
   early for the text it already has, the empty one. While a scrolled view has such an item below
   it, every scroll step walks the item tree from the view down to it
-  (`QQuickItemPrivate::transformChanged`). `--env BENCH_VIEWPORT_OBSERVERS=1` lists the observers
-  at every memory mark of a run.
+  (`QQuickItemPrivate::transformChanged`). `ViewportObservers` takes the flag off once a frame
+  ("Scrolling: empty texts no longer walked"); an item of C++ that sets the flag on purpose keeps
+  it. `--env BENCH_VIEWPORT_OBSERVERS=1` lists the observers, with their QML file and line, at
+  every memory mark of a run.
 * **`scroll_insns_M` subtracts the idle rate of the half second before the scroll**: when one
   build is still busy then (loading a page's pictures), its number comes out small. Check with
   `perf-scenario.sh` and the window `mark:scroll_start..scroll_counters_end`.

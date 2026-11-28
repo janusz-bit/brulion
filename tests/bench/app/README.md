@@ -171,8 +171,10 @@ nix develop -c nix shell nixpkgs#xvfb nixpkgs#perf -c env CUR=build-rel/src/app/
   QT_LOGGING_RULES=brulion.memory.debug=true` logs every time memory is given back, how much and
   how long it took, `brulion.nearview.debug=true` every picture that comes within reach or leaves.
   `--env BENCH_VIEWPORT_OBSERVERS=1` (any scenario) adds to every memory mark the items that
-  observe the viewport, by class — while a scrolled view has one below it, every scroll step walks
-  the item tree down to it (docs/PERFORMANCE.md "Pitfalls").
+  observe the viewport, by class and the QML file and line they are declared at — while a scrolled
+  view has one below it, every scroll step walks the item tree down to it (docs/PERFORMANCE.md
+  "Pitfalls"); `--env BRULION_VIEWPORT_OBSERVERS=0` leaves the empty texts as Qt makes them (the A/B
+  of "Scrolling: empty texts no longer walked").
 * `memory` (any notebook; docs/PERFORMANCE.md "Memory: only what is in use"): what the app holds
   at each step of a session — `mem:ready`, `mem:settled`, `mem:start` (`BENCH_SETTLE_MS`, 15 s,
   after the start has settled: with whatever the app builds ahead, without what only the start

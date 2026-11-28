@@ -145,7 +145,7 @@ set_source_files_properties(qml/theme/Theme.qml qml/components/LinkPreviews.qml 
 target_include_directories(brulion PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/ui)
 target_link_libraries(brulion PRIVATE brulion_ui_helpers brulion_ui_touch brulion_ui_smoothscroll brulion_ui_scroll brulion_ui_icons brulion_ui_network brulion_ui_fonts
     brulion_ui_files brulion_ui_layoutdump brulion_ui_scale brulion_ui_shutdown brulion_ui_memory
-    brulion_ui_qmlcall)
+    brulion_ui_qmlcall brulion_ui_viewport)
 # Lucide icons (assets/icons, ISC licence) as :/icons/<name>.svg, used by BIcon (through
 # image://bicon/…, ui/iconprovider.h); the logo as
 # :/images/logo.svg.
