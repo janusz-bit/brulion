@@ -184,6 +184,25 @@ private Q_SLOTS:
         }
     }
 
+    // The vault's side of the index loader (docs/PERFORMANCE.md L1b, L1c): every note read away
+    // from the vault's thread (Vault::readDetached, outside the measurement), then adoptRead() of
+    // each on this one — the bookkeeping the GUI thread does for 10 000 notes while a notebook loads.
+    void adoptReads_data() { rescanUnchanged_data(); }
+    void adoptReads()
+    {
+        QFETCH(int, notes);
+        Vault vault(vaultOnDisk(notes), QString());
+        QVERIFY(vault.open());
+        QList<DetachedRead> reads;
+        for (const FileStat &file : vault.markdownFiles())
+            reads.append(Vault::readDetached(file.path, vault.absolutePath(file.path)));
+        QCOMPARE(reads.size(), qsizetype(notes));
+        QBENCHMARK_ONCE {
+            for (const DetachedRead &read : std::as_const(reads))
+                vault.adoptRead(read);
+        }
+    }
+
     // 1000 files changed by another program while the app was in the background, then rescan().
     void rescanAfterExternalChanges()
     {

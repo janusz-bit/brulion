@@ -2812,9 +2812,41 @@ quiet window (Next steps). `prepare` does more now — the keys and plans (`make
 **What is left on the GUI thread** (2.19 G, cold, branch): the merge 0.81 G (the relinks' lookups,
 the maps' inserts, freeing what the workers allocated), the Journal's delegates created while it
 fills (first content, not repeated), `JournalListModel::refresh` 0.24 G, the vault's bookkeeping of
-the workers' reads (`Vault::adoptRead` 0.09 G, mostly `isTracked()` of each path — could move to
-`readDetached()` on the worker). A name change still makes every visible editor render all its rows
+the workers' reads (`Vault::adoptRead` 0.09 G, mostly `isTracked()` of each path — moved to
+`readDetached()` on the worker on 2026-11-28: "L1c, first part"). A name change still makes every visible editor render all its rows
 again (`BlockListModel::followIndex()`); while loading that now happens at most four times a second.
+
+### L1c, first part: the Journal and the vault's bookkeeping off the loading (2026-11-28)
+
+**Where the GUI thread's time went now** (the 10 000-note bench vault, a cold index, Release
+`-O3 -g1`, one `perf record -e instructions:u` run with DWARF call chains, `vault_open` → `ready`;
+the desktop at load 24–42): 1.95 G instructions — L1b's 2.09 G. The merge (`updatePrepared`) 25 %,
+of it the relinks 10.7 % (journals come first; their links resolve as the pages arrive); the
+Journal's delegates 9 %; `JournalListModel::refresh` 4.2 %; `Vault::adoptRead` 6.5 %.
+
+**What changed.**
+
+* **The Journal's days only for daily notes.** Every notification while loading said "names
+  changed" (notes arriving), and a list's rows were computed again whenever names changed. A list
+  now says whether names matter to it (`WorkspaceListModel::affectedByNames()`); the Journal's do
+  not — its days follow the daily notes, which it tells by path (`journalDateFromPath`) among the
+  changed notes, the added, removed and renamed ones included (`tst_content_models`
+  `journalsSkipChangesOfOtherNotes`). In the same profile: `JournalListModel::refresh` 82 M → 14 M
+  instructions, the GUI thread from `vault_open` to `ready` 1.95 G → 1.72 / 1.78 G (two runs).
+* **The vault's checks of a detached read on the reader's thread.** `Vault::adoptRead` checked each
+  path (`paths::normalize`, `isTracked()`: the ignored-name checks of a Polish name fold its case),
+  validated the bytes as UTF-8 again for the cache (`ContentCache::put`) and converted the local time
+  of "now" (mktime) for each note. `readDetached()` now normalizes the path and decides
+  `DetachedRead::tracked` and `textEncodesBack` on the worker; the vault's clock gives ms since the
+  epoch without a time zone when it is the system's (`VaultPrivate::nowMs()`). The new core row
+  `bench_vault adoptReads` (10 000 notes adopted, one P-core, `-perfcounter instructions:u`, three
+  runs each, alternated): **2.01 → 1.24 × 10⁸** instructions (−39 %).
+
+Left for L1c: the relinks (a source's links walked once per arriving key: batching a loader step's
+keys walks each source once), timing it all in a quiet window, the Pi and the browser. (A profile of
+the app on main after 2026-11-28's Code mode commits no longer fits the `vault_open` → `ready`
+window: the notebook opens before that mark now, so the next measurement needs the probe's marks
+looked at first.)
 
 ### Z10 stage A2: a journal day as one item (2026-11-18)
 
@@ -3873,7 +3905,7 @@ The L-items of the October 2026 performance plan, with the numbers they should m
 
 | # | change | expected |
 |---|---|---|
-| L1c | (L1b done on 2026-11-18, above) time it in a quiet window — `startup-big` and the `bench_index` loader rows, `mergePrepared` —, the browser's cold load (`wasm-bench.mjs`: was +11–16 % to "ready", 30 %–2.5× more draws since journals come first; the 250 ms notifications should take most of that back), the Pi and the Android emulator (L1/L2/L1b not measured there yet); then `Vault::adoptRead`'s per-path checks on the worker (`readDetached()`), a name change that renders only the rows whose links it touches | laptop 10k index ready → 0.6 s; Pi ≤ 6 s cold, ≤ 3 s warm |
+| L1c | (L1b done on 2026-11-18, above; the Journal and `adoptRead` on 2026-11-28, "L1c, first part") time it in a quiet window — `startup-big` and the `bench_index` loader rows, `mergePrepared` —, the browser's cold load (`wasm-bench.mjs`: was +11–16 % to "ready", 30 %–2.5× more draws since journals come first; the 250 ms notifications should take most of that back), the Pi and the Android emulator (L1/L2/L1b not measured there yet); then the relinks batched per loader step, a name change that renders only the rows whose links it touches | laptop 10k index ready → 0.6 s; Pi ≤ 6 s cold, ≤ 3 s warm |
 | Z10-A2b | a drawn journal day without its `BlockEditor` until its rows are made (or the line probes shared by the stream), then the day item on by default after measuring a phone (`tests/app/perf/android-scroll.sh`, the Pixel) and the screen readers; rich blocks hosted by stage C draw the 12–40 % of days that keep their rows | GUI instructions per drawn 12-block day 56 M → ~20 M |
 | L5b | measure undo / redo on the Pi (`bench-matrix.sh` typing on the 5000-block outline, Release) and record the `blockDocOps` 5000 blocks undo+redo baseline in `pi.csv` (`perf-check.sh -u` in a quiet window; until then the Pi's check skips the row) | Pi undo 214 ms → < 50 ms |
 | L3b | measure the after-a-save fan-out on the Pi (`bench_reminders` afterEdit, small profile) and ratchet its `pi.csv` row (`perf-check.sh -m pi -u` in a quiet window; the row now measures the cached path, so the old 963 ms baseline only passes it loosely) | Pi 0.95 s → < 0.2 s |

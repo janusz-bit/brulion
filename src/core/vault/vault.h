@@ -230,8 +230,10 @@ struct VaultScanStatus {
 
 /// A text file read away from the vault's thread (see Vault::readDetached()).
 struct DetachedRead {
-    VaultPath path;
+    VaultPath path; ///< normalized (paths::normalize)
     bool ok = false;
+    bool tracked = false;         ///< vaultutil::isTracked(path): adoptRead() takes only such a read in
+    bool textEncodesBack = false; ///< `text` encodes back to `bytes` (a BOM aside): cached as the text
     std::optional<FileStat> statBefore; ///< taken right before reading
     QByteArray bytes;
     QString hash;  ///< FNV-1a 64 of the bytes (hex), as the vault keeps it

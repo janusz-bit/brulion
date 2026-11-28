@@ -171,7 +171,11 @@ public:
     void put(const VaultPath &path, const QByteArray &bytes);
     /// `bytes` and the text they decode to (vaultutil::decodeUtf8()): kept as the text when
     /// encoding it gives the bytes back. `key`: text::fnv1a64() of the bytes.
-    void put(const VaultPath &path, const QByteArray &bytes, const QString &text, quint64 key);
+    /// `encodesBack`: encodesBack(bytes, text), when the caller knows it (a read on another thread).
+    void put(const VaultPath &path, const QByteArray &bytes, const QString &text, quint64 key,
+             std::optional<bool> encodesBack = std::nullopt);
+    /// Does `text` encode back to `bytes` (a BOM aside)? Then the cache keeps the text alone.
+    static bool encodesBack(const QByteArray &bytes, const QString &text);
     struct Item;
     /// Take the entry of `path` out (a rename puts it back under the new path with restore()).
     std::optional<Item> take(const VaultPath &path);
@@ -261,7 +265,7 @@ public:
     /// `text`: what the bytes decode to (vaultutil::decodeUtf8()), as the reader got it — kept
     /// instead of the bytes (ContentCache).
     void rememberContent(const VaultPath &path, const QByteArray &bytes, bool asText = false, const QString &hash = {},
-                         const QString *text = nullptr);
+                         const QString *text = nullptr, std::optional<bool> encodesBack = std::nullopt);
     /// At most `limit` bytes (vaultutil::readContent()); `ok` is false for anything else.
     QByteArray readDisk(const VaultPath &path, qint64 limit, bool *ok) const;
     /// `text` (optional): set to the bytes decoded (vaultutil::decodeUtf8()) when the read succeeds.
@@ -270,7 +274,7 @@ public:
     static QString readFailure(const vaultutil::ContentRead &read);
     /// The bookkeeping after reading a tracked file (readFile(), Vault::adoptRead()).
     void takeRead(const VaultPath &path, const std::optional<FileStat> &before, const QByteArray &bytes, bool asText,
-                  const QString &hash, const QString *text = nullptr);
+                  const QString &hash, const QString *text = nullptr, std::optional<bool> encodesBack = std::nullopt);
     /// `stat` (the file's, just recorded with its content) as written by the vault itself
     /// (`ownWrite`: its stamp is now) or found (its stamp may be old): unsettled while its time is
     /// coarse and recent — `fineStamp` when the caller knows, else fineMtime() asked.
@@ -344,6 +348,9 @@ public:
     VaultPath create(const VaultPath &path, const QByteArray &bytes, ChangeSource source, bool asText,
                      const StagedContent *staged = nullptr);
     QDateTime now() const;
+    /// now() in ms since the epoch — without a local time's conversion (mktime) for the system's
+    /// clock: a read adopted while a notebook loads asks it for each note.
+    qint64 nowMs() const;
     /// open(): removes the leftovers of interrupted own writes (DiskListing::leftovers, History's).
     void removeLeftovers(const QStringList &rels);
 
@@ -450,6 +457,7 @@ public:
     bool isOpen = false;
     QString error;
     std::function<QDateTime()> clock;
+    bool systemClock = true; ///< `clock` is the system's: nowMs() asks the system for UTC ms (no time zone)
     QString historyReason; ///< Vault::setHistoryReason(): reason of own writes' snapshots ("" = source)
     std::function<QString(const QString &)> storageProbe; ///< see Vault::setStorageProbe()
 

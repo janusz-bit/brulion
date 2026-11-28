@@ -193,18 +193,25 @@ void ContentCache::put(const VaultPath &path, const QByteArray &bytes)
     insert(path, std::move(item));
 }
 
-void ContentCache::put(const VaultPath &path, const QByteArray &bytes, const QString &text, quint64 key)
+bool ContentCache::encodesBack(const QByteArray &bytes, const QString &text)
 {
     const bool bom = bytes.startsWith(vaultutil::utf8Bom());
     const QByteArrayView body = bom ? QByteArrayView(bytes).sliced(3) : QByteArrayView(bytes);
     // Valid UTF-8 decodes and encodes back to itself — but for a second BOM, which
     // QString::fromUtf8() drops too; the text's length is a cheap check that `text` is what the
     // bytes decode to.
-    if (bytes.size() > kMaxItemBytes || text.size() > body.size() || (text.isEmpty() != body.isEmpty())
-        || body.startsWith(vaultutil::utf8Bom()) || !body.isValidUtf8()) {
+    return text.size() <= body.size() && text.isEmpty() == body.isEmpty() && !body.startsWith(vaultutil::utf8Bom())
+           && body.isValidUtf8();
+}
+
+void ContentCache::put(const VaultPath &path, const QByteArray &bytes, const QString &text, quint64 key,
+                       std::optional<bool> encodesBack)
+{
+    if (bytes.size() > kMaxItemBytes || !encodesBack.value_or(ContentCache::encodesBack(bytes, text))) {
         put(path, bytes);
         return;
     }
+    const bool bom = bytes.startsWith(vaultutil::utf8Bom());
     Item item;
     item.text = text;
     item.key = key;
@@ -503,6 +510,11 @@ QDateTime VaultPrivate::now() const
     return clock();
 }
 
+qint64 VaultPrivate::nowMs() const
+{
+    return systemClock ? QDateTime::currentMSecsSinceEpoch() : clock().toMSecsSinceEpoch();
+}
+
 // ---------------------------------------------------------------------------------------------
 // VaultPrivate: known entries
 // ---------------------------------------------------------------------------------------------
@@ -758,7 +770,7 @@ bool VaultPrivate::comparesContent(const FileStat &stat) const
 }
 
 void VaultPrivate::rememberContent(const VaultPath &path, const QByteArray &bytes, bool asText, const QString &hash,
-                                   const QString *text)
+                                   const QString *text, std::optional<bool> encodesBack)
 {
     const QString &known = *hashes.insert(path, hash.isEmpty() ? text::fnv1a64Hex(bytes) : hash);
     if (bytes.startsWith(vaultutil::utf8Bom()))
@@ -768,7 +780,7 @@ void VaultPrivate::rememberContent(const VaultPath &path, const QByteArray &byte
     if (!asText && !isTextual(path))
         return;
     if (text)
-        contents.put(path, bytes, *text, known.toULongLong(nullptr, 16));
+        contents.put(path, bytes, *text, known.toULongLong(nullptr, 16), encodesBack);
     else
         contents.put(path, bytes);
 }
@@ -832,7 +844,7 @@ QByteArray VaultPrivate::readFile(const VaultPath &path, bool asText, bool *ok, 
 }
 
 void VaultPrivate::takeRead(const VaultPath &path, const std::optional<FileStat> &before, const QByteArray &bytes,
-                            bool asText, const QString &hash, const QString *text)
+                            bool asText, const QString &hash, const QString *text, std::optional<bool> encodesBack)
 {
     const auto known = files.constFind(path);
     if (known == files.cend() || !before || !sameStat(*before, *known)) {
@@ -844,7 +856,7 @@ void VaultPrivate::takeRead(const VaultPath &path, const std::optional<FileStat>
         scheduleCheck(path);
     } else {
         const bool sameAsKnown = hashes.value(path) == hash;
-        rememberContent(path, bytes, asText, hash, text);
+        rememberContent(path, bytes, asText, hash, text, encodesBack);
         if (sameAsKnown && unsettled.contains(path))
             settleIfDue(path);
         else
@@ -855,7 +867,7 @@ void VaultPrivate::takeRead(const VaultPath &path, const std::optional<FileStat>
 void VaultPrivate::noteUnsettled(const FileStat &stat, bool ownWrite, std::optional<bool> fineStamp)
 {
     const VaultPath &path = stat.path;
-    const qint64 nowMs = now().toMSecsSinceEpoch();
+    const qint64 nowMs = VaultPrivate::nowMs();
     // Only what listings compare by content (a binary file's verification would report it
     // modified each time). Another program's write is recent by its own stamp (whose clock may be
     // a network server's: off by more than kSettleMs, such a write is not caught here).
@@ -880,7 +892,7 @@ void VaultPrivate::settleIfDue(const VaultPath &path)
 {
     // A comparison after the tick has passed saw any write of that tick; later ones move the stamp.
     if (const auto it = unsettled.constFind(path);
-        it != unsettled.cend() && now().toMSecsSinceEpoch() - *it >= vaultutil::kSettleMs)
+        it != unsettled.cend() && nowMs() - *it >= vaultutil::kSettleMs)
         unsettled.erase(it);
 }
 
@@ -1146,7 +1158,7 @@ void VaultPrivate::removeLeftovers(const QStringList &rels)
     // leaves the file behind: the vault ignores it, sync and backups leave it out, but it takes
     // space and shows in file managers. Only those found while listing the vault's own folders
     // (links it does not follow are never entered) and old enough (vaultutil::removeLeftoverTemp()).
-    const qint64 nowMs = now().toMSecsSinceEpoch();
+    const qint64 nowMs = VaultPrivate::nowMs();
     int removed = 0;
     for (const QString &rel : rels) {
         if (vaultutil::removeLeftoverTemp(absOfDiskRel(rel), nowMs))
@@ -1560,7 +1572,10 @@ QString Vault::readText(const VaultPath &path, bool *ok)
 DetachedRead Vault::readDetached(const VaultPath &path, const QString &absolutePath)
 {
     DetachedRead out;
-    out.path = path;
+    // (The checks of each path and of the text, here on the reader's thread: adoptRead() on the
+    // vault's takes them — 10 000 of them while a notebook loads.)
+    out.path = paths::normalize(path);
+    out.tracked = !out.path.isEmpty() && vaultutil::isTracked(out.path);
     const QFileInfo info(absolutePath);
     if (info.isFile())
         out.statBefore = statOf(info, path);
@@ -1573,13 +1588,14 @@ DetachedRead Vault::readDetached(const VaultPath &path, const QString &absoluteP
     out.bytes = std::move(read.bytes);
     out.hash = text::fnv1a64Hex(out.bytes);
     out.text = vaultutil::decodeUtf8(out.bytes);
+    out.textEncodesBack = ContentCache::encodesBack(out.bytes, out.text);
     return out;
 }
 
 void Vault::adoptRead(const DetachedRead &read)
 {
     d->settleWrites();
-    const VaultPath path = paths::normalize(read.path);
+    const VaultPath &path = read.path; // (normalized by readDetached())
     if (!d->requireOpen() || path.isEmpty())
         return;
     if (!read.ok) {
@@ -1588,8 +1604,8 @@ void Vault::adoptRead(const DetachedRead &read)
             d->scheduleCheck(path); // gone behind our back
         return;
     }
-    if (vaultutil::isTracked(path))
-        d->takeRead(path, read.statBefore, read.bytes, true, read.hash, &read.text);
+    if (read.tracked)
+        d->takeRead(path, read.statBefore, read.bytes, true, read.hash, &read.text, read.textEncodesBack);
 }
 
 QByteArray Vault::readBinary(const VaultPath &path, bool *ok)
@@ -1836,6 +1852,7 @@ QString Vault::historyReason() const
 
 void Vault::setClock(std::function<QDateTime()> clock)
 {
+    d->systemClock = !clock;
     d->clock = clock ? std::move(clock) : std::function<QDateTime()>(systemNow);
     if (d->history)
         d->history->setClock(d->clock);

@@ -317,7 +317,7 @@ bool Vault::remove(const VaultPath &path, ChangeSource source)
         ok = d->fail(tr("Cannot move %1 to the trash").arg(p));
     if (ok) {
         d->store->set(VaultPrivate::trashKey(target),
-                      QJsonObject{{u"original"_s, p}, {u"deletedAt"_s, d->now().toMSecsSinceEpoch()}});
+                      QJsonObject{{u"original"_s, p}, {u"deletedAt"_s, d->nowMs()}});
         changes += d->forgetTree(p, source);
     }
     d->finish(changes);

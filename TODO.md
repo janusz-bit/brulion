@@ -456,9 +456,10 @@ Details in docs/PERFORMANCE.md, "Next steps":
   (docs/PERFORMANCE.md "Built ahead"; the desktop's stalls while they are built in "Measured on
   the desktop", 2026-11-28): start-up time, frame times while they are built and memory on a phone
   and a Raspberry Pi;
-* faster merging of ready notes into the index on the UI thread, less view refreshing during
-  loading (in the browser the first load without a ready index takes 11–16 % longer than before
-  wave 5) and measuring indexing on a Raspberry Pi and a phone (L1b);
+* faster merging of ready notes into the index on the UI thread (the relinks: a source's links
+  walked once per arriving key), the browser's first load without a ready index (11–16 % longer
+  than before wave 5) and measuring indexing on a Raspberry Pi and a phone (L1c; the Journal and
+  the vault's bookkeeping left the loading on 2026-11-28, docs/PERFORMANCE.md "L1c, first part");
 * measuring the refresh of lists after saving (tasks, calendar, reminders, queries) on a Raspberry
   Pi (before the change 0.95 s, target < 0.2 s) and lowering its baseline row in
   tests/bench/baselines/pi.csv (L3b);
