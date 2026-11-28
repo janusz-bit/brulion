@@ -661,9 +661,10 @@ WebDavError WebDavClient::check(const HttpResponse &response, const QByteArray &
     }
     if (std::ranges::find(ok, response.status) != ok.end())
         return {};
-    return WebDavError::fromStatus(response.status,
-                                   u"%1 %2 failed: HTTP %3"_s.arg(QString::fromLatin1(method), url, QString::number(response.status)),
-                                   url);
+    QString message = u"%1 %2 failed: HTTP %3"_s.arg(QString::fromLatin1(method), url, QString::number(response.status));
+    if (!response.reason.isEmpty())
+        message += u" ("_s + response.reason + u')';
+    return WebDavError::fromStatus(response.status, message, url);
 }
 
 WebDavError WebDavClient::mkcolResult(const HttpResponse &response, const QString &url) const

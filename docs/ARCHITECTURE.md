@@ -900,6 +900,9 @@ What protects what (docs/UI.md "Encrypted notes", "App lock"; docs/SYNTAX.md §1
   note's text out (also those Android's background check arms), Android's window is kept out of the
   recent apps (Android 13+) or FLAG_SECURE, and the widgets show a placeholder. The phone's own
   check is the framework's BiometricPrompt (Android 10+; biometrics or the screen lock).
+* **The sync server** can be kept from reading a notebook: end-to-end encrypted sync
+  (docs/SYNC-ENCRYPTION.md — the notebook plain on the devices, every name and file encrypted on
+  the server by `EncryptingTransport`, AES-256-SIV names and AES-256-GCM contents in chunks).
 * **Not protected**: someone with access to the running, unlocked app (or its process memory);
   file names, folders, hints and the size of encrypted text; a weak password (PBKDF2 slows guessing,
   it does not stop it). Meld Encrypt's implementation and Brulion's have not been audited.

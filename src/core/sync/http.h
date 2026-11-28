@@ -106,6 +106,10 @@ struct HttpResponse {
     /// networkError says so — who does not ask sees a failed request, never a cut answer.
     bool tooLarge = false;
     QByteArray protocol;                   ///< "h2" / "http/1.1" when the transport knows it
+    /// Why a layer before the server (EncryptingTransport) answered in its place (English, no
+    /// secret): it goes into the error's message ("… failed: HTTP 400 (the name is too long to
+    /// encrypt)"). Empty for a server's answer.
+    QString reason;
 
     /// Value of a response header (any case), empty when absent.
     QByteArray header(QByteArrayView name) const;

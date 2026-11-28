@@ -364,9 +364,12 @@ done in the repository simply disappears from the list.
 
 ## Privacy and security
 
-* **End-to-end encryption of sync** — files on the Nextcloud or WebDAV server unreadable without
-  the user's password (Joplin, SiYuan, Logseq, Anytype, Obsidian Sync); to be decided: fitting the
-  "plain files" principle, the key on devices, recovery and merging conflicts.
+* **End-to-end encryption of sync: the app** — the design (docs/SYNC-ENCRYPTION.md) and the core
+  (`sync/encryption.h`, `encryptionkeys.h`, `encryptingtransport.h`) are done; left: the setting
+  in the Nextcloud settings (a new empty server folder, the password, the recovery key shown once,
+  unlocking on another device, changing the password), the notebook key in the app's `secrets/`
+  folder, `WorkspaceSync` putting `EncryptingTransport` before the network, the marker in the old
+  folder, i18n and the guide's page (en/pl).
 * **App lock and encrypted notes — check on real devices.** Checked automatically: the crypto
   against NIST/RFC vectors, Meld Encrypt's formats against fixtures made with the plugin's code
   (and Brulion's output decrypted by it), no plaintext on disk, the lock's state machine, the

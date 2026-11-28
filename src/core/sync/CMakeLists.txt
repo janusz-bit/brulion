@@ -4,7 +4,8 @@
 # copies, .stignore).
 # Public headers: sync.h (overview), http.h, errors.h, url.h, davxml.h, webdavclient.h, diff.h,
 # merge.h, conflicts.h, synctypes.h, syncengine.h, scheduler.h, syncthing.h, synchistory.h,
-# folderstorage.h, foldertransport.h.
+# folderstorage.h, foldertransport.h, encryption.h, encryptionkeys.h and encryptingtransport.h (the
+# end-to-end encrypted sync: formats, key file, the layer before the server).
 # Internal (*_p.h): request sending, job pool, one engine run, shared helpers.
 brulion_add_core_module(sync
     SOURCES
@@ -13,6 +14,9 @@ brulion_add_core_module(sync
         conflicts.h conflicts.cpp
         davxml.h davxml.cpp
         diff.h diff.cpp
+        encryption.h encryption.cpp
+        encryptionkeys.h encryptionkeys.cpp
+        encryptingtransport.h encryptingtransport.cpp
         errors.h errors.cpp
         folderstorage.h folderstorage.cpp
         foldertransport.h foldertransport.cpp
@@ -29,5 +33,5 @@ brulion_add_core_module(sync
         request_p.h request.cpp
         syncrun_p.h syncrun.cpp syncfolders.cpp
         util_p.h util.cpp
-    DEPS util text vault log drawing canvas
+    DEPS util text vault log drawing canvas crypto
     QT Network)

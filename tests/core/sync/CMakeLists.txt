@@ -6,7 +6,7 @@ target_include_directories(brulion_sync_testsupport PUBLIC ${CMAKE_CURRENT_SOURC
 brulion_set_warnings(brulion_sync_testsupport)
 
 foreach(_t url xml diff merge cardmerge webdav engine devices scheduler syncthing massdelete history secrets folders processes
-        folder streamed)
+        folder streamed encryption encryption_keys encrypted)
     brulion_add_test(tst_sync_${_t} SOURCES tst_sync_${_t}.cpp LIBS brulion_sync_testsupport)
 endforeach()
 

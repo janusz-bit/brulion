@@ -129,6 +129,8 @@ struct DeviceOptions {
     /// in pieces) in the "_streamed" runs of the tests (BRULION_TEST_SYNC_STREAM).
     qint64 streamAbove = -1;
     bool open = true;
+    /// The client's transport instead of the server itself (a layer around it: encryption).
+    brulion::sync::HttpTransport *transport = nullptr;
 };
 
 /// One device: a vault in a temporary folder, its WebDAV client and sync engine.
@@ -152,7 +154,8 @@ public:
                          [this](const QList<VaultChange> &c) { changes += c; });
         store = std::make_unique<LocalStore>(QString());
         client = std::make_unique<WebDavClient>(server.url(options.folder), server.options().username,
-                                                server.options().password, &server);
+                                                server.options().password,
+                                                options.transport ? options.transport : &server);
         engine = std::make_unique<SyncEngine>(vault.get(), client.get(), store.get(), deviceName);
         engine->setClock(clock->fn());
         if (options.concurrency > 0)
