@@ -1871,6 +1871,9 @@ private Q_SLOTS:
         auto ws = open({fake()});
         WorkspaceChats *chats = ws->chats();
         const QString dom = ws->read(u"Dom.md"_s);
+        const QString old = u"- stara notatka z ąę\n"_s;
+        QVERIFY(ws->write(u"Stara.md"_s, old));
+        QTRY_VERIFY(ws->index()->content(u"Stara.md"_s) == old);
         const QString path = chats->send(QString(), u"Proszę powłoką"_s, QString(), {}, u"acp:fake"_s);
         shell::ChatTurn *turn = chats->turn(path);
         QTRY_VERIFY_WITH_TIMEOUT(!turn->running(), 20000);
@@ -1879,7 +1882,12 @@ private Q_SLOTS:
         QVariantMap byPath;
         for (const QVariant &c : chats->changes(path))
             byPath.insert(c.toMap().value(u"path"_s).toString(), c);
-        QCOMPARE(byPath.keys(), (QStringList{u"Dom.md"_s, u"Nowa.md"_s}));
+        QCOMPARE(byPath.keys(), (QStringList{u"Dom.md"_s, u"Nowa.md"_s, u"Przeniesiona.md"_s, u"Stara.md"_s}));
+        // Renamed: the old name had its text, the new one was not there.
+        const QVariantMap renamedFrom = byPath.value(u"Stara.md"_s).toMap();
+        QCOMPARE(renamedFrom.value(u"oldText"_s).toString(), old);
+        QVERIFY(renamedFrom.value(u"existed"_s).toBool() && !renamedFrom.value(u"exists"_s).toBool());
+        QVERIFY(!byPath.value(u"Przeniesiona.md"_s).toMap().value(u"existed"_s).toBool());
         const QVariantMap changed = byPath.value(u"Dom.md"_s).toMap();
         QCOMPARE(changed.value(u"oldText"_s).toString(), dom);
         QVERIFY(changed.value(u"known"_s).toBool() && changed.value(u"existed"_s).toBool());
@@ -1888,6 +1896,8 @@ private Q_SLOTS:
         QVERIFY(!chats->undoChanges(path).isEmpty());
         QCOMPARE(ws->read(u"Dom.md"_s), dom);
         QTRY_VERIFY(!QFileInfo::exists(ws->absoluteFilePath(u"Nowa.md"_s))); // (to the trash)
+        QCOMPARE(ws->read(u"Stara.md"_s), old);
+        QTRY_VERIFY(!QFileInfo::exists(ws->absoluteFilePath(u"Przeniesiona.md"_s)));
 
         // Another program's change while the turn runs no command: not the turn's.
         QCOMPARE(chats->send(path, u"Proszę powoli"_s), path);

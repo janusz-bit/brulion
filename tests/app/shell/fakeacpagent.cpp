@@ -26,8 +26,9 @@
 //                     naming the file, then the file changed, then the call completed with its diff:
 //                     "Zmieniono Dom.md."
 //   "… powłoką …"     changes the notebook by a shell command of its own (Claude Code's Bash): an
-//                     execute call naming no file, then "- [ ] Kupić mleko" appended to Dom.md and
-//                     Nowa.md made, the call completed 50 ms later (before the watcher tells):
+//                     execute call naming no file, then "- [ ] Kupić mleko" appended to Dom.md,
+//                     Nowa.md made and Stara.md (when there is one) renamed Przeniesiona.md, the call
+//                     completed 50 ms later (before the watcher tells):
 //                     "Polecenie wykonane."
 //   "… narzędzia …"   a tool call and no words
 //   "… model …"       "Model: <the model option now>"
@@ -561,6 +562,7 @@ int main(int argc, char **argv)
                 if (made.open(QIODevice::WriteOnly))
                     made.write("- nowa\n");
                 made.close();
+                QFile::rename(QDir(cwd).filePath(u"Stara.md"_s), QDir(cwd).filePath(u"Przeniesiona.md"_s));
                 QThread::msleep(50); // (the turn ends before the client's file watcher tells it: a quick agent)
                 update(session, {{u"sessionUpdate"_s, u"tool_call_update"_s},
                                  {u"toolCallId"_s, u"x1"_s},
