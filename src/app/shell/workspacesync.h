@@ -358,6 +358,10 @@ public:
     /// password is used as testConnection() uses it.
     Q_INVOKABLE void setUpEncryption(const QString &url, const QString &user, const QString &password,
                                      const QString &folder, const QString &secret);
+    /// A new password for the encrypted folder of the current settings (this device holds its
+    /// key): its key file sealed again, nothing else encrypted again — the recovery key stays.
+    /// Answers encryptionPasswordChanged() or encryptionFailed().
+    Q_INVOKABLE void changeEncryptionPassword(const QString &newPassword);
     /// Ask the Syncthing daemon now.
     Q_INVOKABLE void refreshSyncthing();
     /// Texts of a conflict for BMergeView: { original, copy, title, ours (the original's text),
@@ -423,6 +427,8 @@ Q_SIGNALS:
     /// The same for the interface: the recovery key to show once ("" when a folder was opened).
     /// The notebook key never goes to QML.
     void encryptionReady(const QString &recoveryKey);
+    /// changeEncryptionPassword() is done.
+    void encryptionPasswordChanged();
     /// setUpEncryption() could not (translated).
     void encryptionFailed(const QString &message);
 

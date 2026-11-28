@@ -3,6 +3,7 @@
 // notebook. The key derivation runs on a pool thread (PBKDF2: up to two seconds on a phone).
 #include "workspacesync.h"
 
+#include "crypto/secure.h"
 #include "log/categories.h"
 #include "sync/encryptionkeys.h"
 #include "sync/sync.h"
@@ -174,6 +175,52 @@ void WorkspaceSync::putKeyFile(sync::WebDavClient *client, const QString &folder
                                     Q_EMIT encryptionReady(notebook->recoveryKey);
                                 });
                             });
+}
+
+void WorkspaceSync::changeEncryptionPassword(const QString &newPassword)
+{
+    if (!m_nextcloud.isComplete() || !m_nextcloud.encrypted || m_nextcloud.notebookKey.isEmpty()) {
+        Q_EMIT encryptionFailed(tr("This device holds no key of an encrypted folder."));
+        return;
+    }
+    if (!encryption::isPasswordAcceptable(newPassword)) {
+        Q_EMIT encryptionFailed(tr("The notebook's password needs at least %n character(s).", nullptr,
+                                   encryption::MinPasswordLength));
+        return;
+    }
+    auto *client = new sync::WebDavClient(currentDavUrl(), m_nextcloud.user.trimmed(), m_nextcloud.password,
+                                          transport(), this);
+    ++m_encryptionBusy;
+    Q_EMIT encryptionBusyChanged();
+    const crypto::SecureBytes key(m_nextcloud.notebookKey);
+    client->get(QString(encryption::KeyFilePath), {}, [this, client, key, newPassword](const sync::GetResult &got) {
+        if (got.error.isError()) {
+            failEncryption(client, got.error);
+            return;
+        }
+        offThread<std::optional<QByteArray>>(
+                this, [keyFile = got.data, key, newPassword] { return encryption::changePassword(keyFile, key, newPassword); },
+                [this, client, etag = got.etag](std::optional<QByteArray> changed) {
+                    if (!changed) {
+                        finishEncryption(client);
+                        Q_EMIT encryptionFailed(tr("This device's key does not belong to the folder's key file."));
+                        return;
+                    }
+                    sync::PutOptions sameVersion;
+                    sameVersion.ifMatch = etag; // (another device's change in between is never overwritten)
+                    client->put(QString(encryption::KeyFilePath), *changed, sameVersion,
+                                [this, client](const sync::PutResult &put) {
+                                    if (put.error.isError()) {
+                                        failEncryption(client, put.error);
+                                        return;
+                                    }
+                                    finishEncryption(client);
+                                    qCInfo(logging::lcSync).noquote()
+                                            << u"Nextcloud sync: the encrypted folder's password was changed"_s;
+                                    Q_EMIT encryptionPasswordChanged();
+                                });
+                });
+    });
 }
 
 void WorkspaceSync::finishEncryption(sync::WebDavClient *client)

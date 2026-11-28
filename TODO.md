@@ -366,8 +366,8 @@ done in the repository simply disappears from the list.
 
 * **End-to-end encryption of sync: what is left** (docs/SYNC-ENCRYPTION.md; done: the design, the
   core, the setting with the password and the recovery key in the sync settings, unlocking on
-  another device, a device without the key locked, the guide) — changing the password in the app
-  (`encryption::changePassword()` is there; no dialog yet); the note "this notebook moved to an
+  another device, a device without the key locked, changing the password, the guide) — the note
+  "this notebook moved to an
   encrypted folder" written into the old plain folder; a device whose setting says "not
   encrypted" but whose folder has a key file is told only by "Test connection" — its sync should
   refuse to start (one PROPFIND before the first run); turning it off (a new plain folder); and a

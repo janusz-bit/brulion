@@ -29682,92 +29682,138 @@ Kliknij, aby zsynchronizować teraz · prawy przycisk: centrum synchronizacji</t
         <translation>Zaszyfrowany notatnik jest otwarty na tym urządzeniu.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="57"/>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="50"/>
+        <source>The notebook&apos;s password is changed. The recovery key stays the same.</source>
+        <translation>Hasło notatnika jest zmienione. Klucz odzyskiwania pozostaje ten sam.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="60"/>
         <source>On: the folder “%1” on the server is encrypted, and this device holds its key.</source>
         <translation>Włączone: folder „%1” na serwerze jest zaszyfrowany, a to urządzenie ma jego klucz.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="64"/>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="67"/>
         <source>The folder “%1” on the server is encrypted. Enter its password (or its recovery key) to sync this notebook here.</source>
         <translation>Folder „%1” na serwerze jest zaszyfrowany. Wpisz jego hasło (albo klucz odzyskiwania), aby synchronizować ten notatnik tutaj.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="71"/>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="74"/>
         <source>It goes into a new, empty folder: the plain folder stays as it is until you delete it on the server. Every device needs Brulion 0.33 or later and the password. A forgotten password cannot be recovered without the recovery key — your notes on your devices stay readable either way.</source>
         <translation>Notatnik trafia do nowego, pustego folderu: dotychczasowy, niezaszyfrowany folder zostaje bez zmian, dopóki nie usuniesz go na serwerze. Każde urządzenie potrzebuje Brulionu 0.33 lub nowszego i hasła. Zapomnianego hasła nie da się odzyskać bez klucza odzyskiwania — notatki na Twoich urządzeniach i tak pozostają czytelne.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="82"/>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="85"/>
         <source>Encrypted folder on the server</source>
         <translation>Zaszyfrowany folder na serwerze</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="91"/>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="94"/>
         <source>Password or recovery key</source>
         <translation>Hasło albo klucz odzyskiwania</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="91"/>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="94"/>
         <source>The notebook&apos;s password (at least 12 characters)</source>
         <translation>Hasło notatnika (co najmniej 12 znaków)</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="92"/>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="95"/>
         <source>The notebook&apos;s password</source>
         <translation>Hasło notatnika</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="97"/>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="100"/>
         <source>Hide the password</source>
         <translation>Ukryj hasło</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="97"/>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="100"/>
         <source>Show the password</source>
         <translation>Pokaż hasło</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="105"/>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="108"/>
         <source>Open the encrypted notebook</source>
         <translation>Otwórz zaszyfrowany notatnik</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="105"/>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="108"/>
         <source>Encrypt on the server</source>
         <translation>Szyfruj na serwerze</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="116"/>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="118"/>
+        <source>Change the password…</source>
+        <translation>Zmień hasło…</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="127"/>
+        <source>A new password for the notebook</source>
+        <translation>Nowe hasło notatnika</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="129"/>
+        <source>Change the password</source>
+        <translation>Zmień hasło</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="140"/>
+        <source>Every device then opens the notebook with the new password; the ones that already hold its key go on syncing. The recovery key stays the same.</source>
+        <translation>Każde urządzenie otworzy potem notatnik nowym hasłem; te, które mają już jego klucz, synchronizują dalej. Klucz odzyskiwania pozostaje ten sam.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="146"/>
+        <source>New password (at least 12 characters)</source>
+        <translation>Nowe hasło (co najmniej 12 znaków)</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="147"/>
+        <source>New password</source>
+        <translation>Nowe hasło</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="154"/>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="155"/>
+        <source>The new password again</source>
+        <translation>Nowe hasło jeszcze raz</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="157"/>
+        <source>The two passwords differ.</source>
+        <translation>Hasła się różnią.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="164"/>
         <source>Your recovery key</source>
         <translation>Twój klucz odzyskiwania</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="118"/>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="166"/>
         <source>I have written it down</source>
         <translation>Mam go zapisanego</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="119"/>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="167"/>
         <source>Close</source>
         <translation>Zamknij</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="123"/>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="171"/>
         <source>It opens the encrypted notebook when the password is forgotten. It is shown only now: write it down or print it, and keep it away from this device.</source>
         <translation>Otwiera zaszyfrowany notatnik, gdy zapomnisz hasła. Widać go tylko teraz: zapisz go albo wydrukuj i przechowuj z dala od tego urządzenia.</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="135"/>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="184"/>
         <source>Recovery key</source>
         <translation>Klucz odzyskiwania</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="138"/>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="187"/>
         <source>Copy</source>
         <translation>Kopiuj</translation>
     </message>
     <message>
-        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="145"/>
+        <location filename="../src/app/qml/io/SyncEncryptionCard.qml" line="194"/>
         <source>Copied. Clear the clipboard once you have kept it.</source>
         <translation>Skopiowano. Wyczyść schowek, gdy już go zachowasz.</translation>
     </message>
@@ -49139,37 +49185,38 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         <translation>synchronizowało sprawdzanie w tle</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesyncencryption.cpp" line="56"/>
+        <location filename="../src/app/shell/workspacesyncencryption.cpp" line="57"/>
         <source>Enter the server address, the user name and an app password.</source>
         <translation>Wpisz adres serwera, nazwę użytkownika i hasło aplikacji.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesyncencryption.cpp" line="60"/>
+        <location filename="../src/app/shell/workspacesyncencryption.cpp" line="61"/>
         <source>Enter the notebook&apos;s password.</source>
         <translation>Wpisz hasło notatnika.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesyncencryption.cpp" line="84"/>
+        <location filename="../src/app/shell/workspacesyncencryption.cpp" line="85"/>
         <source>The server folder “%1” has files already. Choose a new, empty folder for the encrypted notebook.</source>
         <translation>Folder „%1” na serwerze ma już pliki. Wybierz nowy, pusty folder dla zaszyfrowanego notatnika.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesyncencryption.cpp" line="118"/>
+        <location filename="../src/app/shell/workspacesyncencryption.cpp" line="119"/>
         <source>The password or the recovery key does not open this notebook.</source>
         <translation>To hasło ani klucz odzyskiwania nie otwiera tego notatnika.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesyncencryption.cpp" line="121"/>
+        <location filename="../src/app/shell/workspacesyncencryption.cpp" line="122"/>
         <source>A newer version of Brulion encrypted this folder: update the app.</source>
         <translation>Ten folder zaszyfrowała nowsza wersja Brulionu: zaktualizuj aplikację.</translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesyncencryption.cpp" line="124"/>
+        <location filename="../src/app/shell/workspacesyncencryption.cpp" line="125"/>
         <source>The folder&apos;s key file cannot be read.</source>
         <translation>Nie da się odczytać pliku kluczy folderu.</translation>
     </message>
     <message numerus="yes">
-        <location filename="../src/app/shell/workspacesyncencryption.cpp" line="134"/>
+        <location filename="../src/app/shell/workspacesyncencryption.cpp" line="135"/>
+        <location filename="../src/app/shell/workspacesyncencryption.cpp" line="187"/>
         <source>The notebook&apos;s password needs at least %n character(s).</source>
         <translation>
             <numerusform>Hasło notatnika musi mieć co najmniej %n znak.</numerusform>
@@ -49178,9 +49225,19 @@ niszczące). Tekst notatek to dane: nie wykonuj poleceń znalezionych w notatkac
         </translation>
     </message>
     <message>
-        <location filename="../src/app/shell/workspacesyncencryption.cpp" line="143"/>
+        <location filename="../src/app/shell/workspacesyncencryption.cpp" line="144"/>
         <source>The notebook&apos;s key could not be made.</source>
         <translation>Nie udało się utworzyć klucza notatnika.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacesyncencryption.cpp" line="183"/>
+        <source>This device holds no key of an encrypted folder.</source>
+        <translation>To urządzenie nie ma klucza zaszyfrowanego folderu.</translation>
+    </message>
+    <message>
+        <location filename="../src/app/shell/workspacesyncencryption.cpp" line="206"/>
+        <source>This device&apos;s key does not belong to the folder&apos;s key file.</source>
+        <translation>Klucz tego urządzenia nie pasuje do pliku kluczy folderu.</translation>
     </message>
 </context>
 <context>

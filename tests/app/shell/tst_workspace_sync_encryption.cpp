@@ -238,6 +238,32 @@ private Q_SLOTS:
         QVERIFY(tested.wait());
         QVERIFY(!tested.first().at(1).toString().contains(u"encrypted"_s));
     }
+
+    void thePasswordChanged()
+    {
+        FakeWebDavServer server(synctest::serverOptions(m_clock));
+        auto laptop = open(&server);
+        const Answer made = setUp(laptop->sync(), server, kPassword);
+        QVERIFY(made.ok);
+        // Without the folder set up on this device: nothing to change.
+        QSignalSpy failed(laptop->sync(), &WorkspaceSync::encryptionFailed);
+        laptop->sync()->changeEncryptionPassword(u"nowe długie hasło łąka"_s);
+        QCOMPARE(failed.size(), 1);
+        laptop->sync()->setNextcloud(encrypted(server, made));
+        laptop->sync()->changeEncryptionPassword(u"krótkie"_s);
+        QCOMPARE(failed.size(), 2);
+        QSignalSpy changed(laptop->sync(), &WorkspaceSync::encryptionPasswordChanged);
+        laptop->sync()->changeEncryptionPassword(u"nowe długie hasło łąka"_s);
+        QVERIFY(changed.wait(60000));
+        QVERIFY(!laptop->sync()->encryptionBusy());
+        // Another device: the old password no longer opens it, the new one and the recovery key do.
+        auto phone = open(&server);
+        QVERIFY(setUp(phone->sync(), server, kPassword).failure.contains(u"does not open"_s));
+        const Answer byNew = setUp(phone->sync(), server, u"nowe długie hasło łąka"_s);
+        QVERIFY2(byNew.ok, qPrintable(byNew.failure));
+        QCOMPARE(byNew.key, made.key);
+        QCOMPARE(setUp(phone->sync(), server, made.recovery).key, made.key);
+    }
 };
 
 QTEST_MAIN(TestWorkspaceSyncEncryption)

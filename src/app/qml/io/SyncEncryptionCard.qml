@@ -46,6 +46,9 @@ IoCard {
                 AppController.toast(qsTr("The encrypted notebook is open on this device."), "success")
             }
         }
+        function onEncryptionPasswordChanged(): void {
+            AppController.toast(qsTr("The notebook's password is changed. The recovery key stays the same."), "success")
+        }
         function onEncryptionFailed(message: string): void {
             AppController.toast(message, "error")
         }
@@ -108,6 +111,51 @@ IoCard {
         busy: card.busy
         enabled: !card.busy && secretField.text !== ""
         onClicked: card.start()
+    }
+
+    BButton {
+        visible: card.encrypted && card.hasKey
+        text: qsTr("Change the password…")
+        iconName: "key-round"
+        size: "small"
+        busy: card.busy
+        onClicked: passwordDialog.open()
+    }
+
+    BDialog {
+        id: passwordDialog
+        title: qsTr("A new password for the notebook")
+        iconName: "key-round"
+        acceptText: qsTr("Change the password")
+        acceptEnabled: newPassword.text.length >= 12 && newPassword.text === repeatedPassword.text
+        initialFocusItem: newPassword
+        onAccepted: Workspace.sync.changeEncryptionPassword(newPassword.text)
+        onClosed: {
+            newPassword.text = ""
+            repeatedPassword.text = ""
+        }
+        BText {
+            Layout.fillWidth: true
+            wrapMode: Text.Wrap
+            text: qsTr("Every device then opens the notebook with the new password; the ones that already hold its key go on syncing. The recovery key stays the same.")
+        }
+        BTextField {
+            id: newPassword
+            Layout.fillWidth: true
+            echoMode: TextInput.Password
+            placeholderText: qsTr("New password (at least 12 characters)")
+            accessibleName: qsTr("New password")
+            inputMethodHints: Qt.ImhSensitiveData | Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText | Qt.ImhHiddenText
+        }
+        BTextField {
+            id: repeatedPassword
+            Layout.fillWidth: true
+            echoMode: TextInput.Password
+            placeholderText: qsTr("The new password again")
+            accessibleName: qsTr("The new password again")
+            inputMethodHints: Qt.ImhSensitiveData | Qt.ImhNoAutoUppercase | Qt.ImhNoPredictiveText | Qt.ImhHiddenText
+            errorText: text !== "" && text !== newPassword.text ? qsTr("The two passwords differ.") : ""
+        }
     }
 
     BDialog {

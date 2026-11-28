@@ -44,6 +44,7 @@ Under the Nextcloud account, the **End-to-end encryption** card keeps the server
 3. On another device, set up the same account with the same folder, type the password (or the recovery key) in the card and choose **Open the encrypted notebook**. A device without it shows “The server folder is encrypted” and syncs nothing.
 
 - Everything works as before: merging, conflicts, moving folders, large attachments.
+- **Change the password…** in the card seals the notebook's key with a new password; nothing is encrypted again, the devices that already hold the key go on syncing, and the recovery key stays the same.
 - The old, unencrypted folder stays on the server as it was; delete it in Nextcloud once all your devices use the encrypted one. Every device needs Brulion 0.33 or later.
 - The server still sees how many files there are, their sizes and when they change.
 - Without the password and the recovery key the server's copy cannot be opened — your notes on your devices are not affected.
