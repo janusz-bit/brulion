@@ -1,5 +1,7 @@
 #include "appsettings.h"
 
+#include "uilayout/uilayout.h"
+
 #include "workspaceagents.h"
 
 #include "workspacegithub.h"
@@ -56,6 +58,7 @@ constexpr auto kDensity = "ui/density"_L1;
 constexpr auto kSidebarHidden = "ui/sidebar/hidden"_L1;
 constexpr auto kSidebarSections = "ui/sidebar/sections"_L1;
 constexpr auto kBottomNavTabs = "ui/bottomNav/tabs"_L1;
+constexpr auto kRailOrder = "ui/rail/order"_L1;
 constexpr auto kCaptureButton = "ui/captureButton"_L1;
 constexpr auto kRailExpands = "ui/rail/expands"_L1;
 constexpr auto kGym = "extensions/silownia"_L1;
@@ -456,6 +459,109 @@ QStringList AppSettings::bottomNavViews()
 QStringList AppSettings::defaultBottomNavTabs()
 {
     return {u"journals"_s, u"allPages"_s, u"search"_s, u"tasks"_s, u"calendar"_s};
+}
+
+namespace {
+/// The icon bar's views in the app's own order and groups ("|" between them).
+QStringList defaultRail()
+{
+    return {u"journals"_s, u"calendar"_s, u"tasks"_s, u"|"_s, u"habits"_s, u"gym"_s, u"flashcards"_s, u"|"_s,
+            u"allPages"_s, u"tags"_s, u"graph"_s, u"|"_s, u"search"_s};
+}
+QStringList railNames() { return uilayout::defaultVocabulary().value(u"rail"_s); }
+/// `order` cleaned: known views once each, "|" never first, last or twice in a row.
+QStringList cleanRail(const QStringList &order)
+{
+    QStringList out;
+    for (const QString &item : order) {
+        if (item == u"|" ? !out.isEmpty() && out.last() != u"|" : railNames().contains(item) && !out.contains(item))
+            out << item;
+    }
+    if (!out.isEmpty() && out.last() == u"|")
+        out.removeLast();
+    return out;
+}
+} // namespace
+
+QStringList AppSettings::railOrder() const { return cleanRail(storedList(m_settings->value(kRailOrder))); }
+
+void AppSettings::setRailOrder(const QStringList &order)
+{
+    if (store(kRailOrder, cleanRail(order), railOrder()))
+        Q_EMIT railOrderChanged();
+}
+
+QStringList AppSettings::railViews() const
+{
+    const QStringList order = railOrder().isEmpty() ? defaultRail() : railOrder();
+    QStringList out{u"code"_s};
+    for (const QString &item : order + defaultRail())
+        if (item != u"|" && !out.contains(item))
+            out << item;
+    return out;
+}
+
+int AppSettings::railGroup(const QString &view) const
+{
+    const QStringList order = railOrder().isEmpty() ? defaultRail() : railOrder();
+    int group = 0;
+    for (const QString &item : order) {
+        if (item == view)
+            return group;
+        group += item == u"|";
+    }
+    return view == u"code" ? 0 : group + 1;
+}
+
+QString AppSettings::layoutText() const
+{
+    const QStringList hidden = sidebarHidden();
+    const auto marked = [&hidden](const QString &item) { return hidden.contains(item) ? u'-' + item : item; };
+    uilayout::Layout layout;
+    QStringList rail;
+    const QStringList order = railOrder().isEmpty() ? defaultRail() : railOrder();
+    for (const QString &item : order)
+        rail << (item == u"|" ? item : marked(item));
+    // (Those the order leaves out: a group of their own after it.)
+    bool first = true;
+    for (const QString &view : railViews().mid(1)) {
+        if (order.contains(view))
+            continue;
+        if (std::exchange(first, false))
+            rail << u"|"_s;
+        rail << marked(view);
+    }
+    QStringList panel;
+    for (const QString &section : sidebarSections())
+        panel << marked(section);
+    layout.places = {{u"rail"_s, rail}, {u"panel"_s, panel}, {u"bottom"_s, bottomNavTabs()}};
+    return uilayout::print(layout);
+}
+
+QStringList AppSettings::applyLayoutText(const QString &text)
+{
+    const uilayout::Layout layout = uilayout::parse(text);
+    QStringList hidden = sidebarHidden();
+    const auto take = [&hidden](const QStringList &items) {
+        QStringList names;
+        for (const QString &item : items) {
+            const bool off = item.startsWith(u'-');
+            const QString name = off ? item.mid(1) : item;
+            names << name;
+            hidden.removeAll(name);
+            if (off)
+                hidden << name;
+        }
+        return names;
+    };
+    if (const uilayout::Place *rail = layout.place(u"rail"))
+        setRailOrder(take(rail->items));
+    if (const uilayout::Place *panel = layout.place(u"panel"))
+        setSidebarSections(take(panel->items));
+    if (layout.place(u"bottom"))
+        setBottomNavTabs(uilayout::shown(layout, u"bottom", {}));
+    setSidebarHidden(hidden);
+    return layout.warnings;
 }
 
 QString AppSettings::cleanFontFamily(const QString &family)

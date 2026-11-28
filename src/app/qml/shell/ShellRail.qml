@@ -45,9 +45,16 @@ Item {
         { entryView: "graph", entryAlso: "", entryTitle: qsTr("Graph"), entryShort: qsTr("Graph"), entryIcon: "waypoints" },
         { entryView: "search", entryAlso: "", entryTitle: qsTr("Search"), entryShort: qsTr("Search"), entryIcon: "search" }
     ]
-    /// The entries' views in their order (typed, for startsGroup()).
-    readonly property list<string> entryViews: ["code", "journals", "calendar", "tasks", "habits", "gym", "flashcards",
-                                                "allPages", "tags", "graph", "search"]
+    /// The entries' views in their order (typed, for startsGroup()): the settings' (AppSettings.railViews:
+    /// the layout's #rail, docs/NOTEBOOK-SETTINGS.md), "code" first.
+    readonly property list<string> entryViews: AppSettings.railViews
+    /// One field of the entry of `view` ("" none).
+    function entryField(view: string, field: string): string {
+        for (let j = 0; j < rail.entries.length; ++j)
+            if (AppController.routeText(rail.entries[j], "entryView") === view)
+                return AppController.routeText(rail.entries[j], field)
+        return ""
+    }
     readonly property list<var> noRows: []
     /// The extensions' entries as text: made again only when they change.
     readonly property string itemsKey: Workspace.extensions !== null
@@ -94,20 +101,7 @@ Item {
                 && (view !== "flashcards" || AppSettings.flashcardsEnabled)
     }
     function groupOf(view: string): int {
-        switch (view) {
-        case "code":
-        case "journals":
-        case "calendar":
-        case "tasks":
-            return 0
-        case "habits":
-        case "gym":
-        case "flashcards":
-            return 1
-        case "search":
-            return 3
-        }
-        return 2
+        return AppSettings.railGroup(view)
     }
     /// The entry at `index` is the first shown one of its group, after another group's: a line
     /// above it.
@@ -321,15 +315,16 @@ Item {
                     spacing: Theme.space1
 
                     Repeater {
-                        model: rail.entries
+                        model: rail.entryViews
                         delegate: RailButton {
                             id: entry
                             required property int index
-                            required property string entryView
-                            required property string entryAlso
-                            required property string entryTitle
-                            required property string entryIcon
-                            required property string entryShort
+                            required property string modelData
+                            readonly property string entryView: entry.modelData
+                            readonly property string entryAlso: rail.entryField(entry.modelData, "entryAlso")
+                            readonly property string entryTitle: rail.entryField(entry.modelData, "entryTitle")
+                            readonly property string entryIcon: rail.entryField(entry.modelData, "entryIcon")
+                            readonly property string entryShort: rail.entryField(entry.modelData, "entryShort")
                             objectName: "sidebarNav_" + entryView
                             shortName: entryShort
                             // Hidden in the settings: not shown (the layout leaves no gap).

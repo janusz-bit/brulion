@@ -286,6 +286,45 @@ private Q_SLOTS:
         QCOMPARE(s.aiChatAutoArchiveDays(), 0);
     }
 
+    // The layout as text (docs/NOTEBOOK-SETTINGS.md "The layout language"): printed from the
+    // settings, applied back to them — the icon bar's order and groups, hidden entries, the panel's
+    // sections, the bottom bar —; warnings for what does not read, the rest applied.
+    void layoutAsText()
+    {
+        AppSettings s(nextFile(), m_tmp.path());
+        QCOMPARE(s.layoutText(), u"#rail(journals, calendar, tasks, |, habits, gym, flashcards, |, allPages, tags, graph, |, search)\n"
+                                 u"#panel(pages, favorites, recent)\n"
+                                 u"#bottom(journals, allPages, search, tasks, calendar)\n"_s);
+        QCOMPARE(s.railViews().first(), u"code"_s);
+        QCOMPARE(s.railGroup(u"journals"_s), 0);
+        QCOMPARE(s.railGroup(u"gym"_s), 1);
+        QCOMPARE(s.railGroup(u"search"_s), 3);
+        QSignalSpy rail(&s, &AppSettings::railOrderChanged);
+        const QStringList warnings = s.applyLayoutText(u"// mój\n#rail(tasks, journals, |, search, -graph, żółw)\n"
+                                                       u"#panel(recent, -favorites)\n#bottom(tasks, journals, search, calendar, graph)\n"_s);
+        QCOMPARE(warnings, QStringList{u"line 2: “żółw” is no item of rail"_s});
+        QCOMPARE(rail.size(), 1);
+        // (Not written: after them, in the app's order, as they were.)
+        QCOMPARE(s.railViews().mid(0, 5), (QStringList{u"code"_s, u"tasks"_s, u"journals"_s, u"search"_s, u"graph"_s}));
+        QCOMPARE(s.railGroup(u"tasks"_s), 0);
+        QCOMPARE(s.railGroup(u"search"_s), 1);
+        QCOMPARE(s.railGroup(u"calendar"_s), 2);
+        QVERIFY(s.sidebarHidden().contains(u"graph"_s));
+        QVERIFY(s.sidebarHidden().contains(u"favorites"_s));
+        QCOMPARE(s.sidebarSections().mid(0, 2), (QStringList{u"recent"_s, u"favorites"_s}));
+        QCOMPARE(s.bottomNavTabs(), (QStringList{u"tasks"_s, u"journals"_s, u"search"_s, u"calendar"_s, u"graph"_s}));
+        // Printed back: what was applied.
+        QVERIFY(s.layoutText().startsWith(u"#rail(tasks, journals, |, search, -graph, |, calendar"_s));
+        QVERIFY(s.layoutText().contains(u"#panel(recent, -favorites, pages)"_s));
+        // Shown again; a place left out keeps its own.
+        QVERIFY(s.applyLayoutText(u"#rail(graph)"_s).isEmpty());
+        QVERIFY(!s.sidebarHidden().contains(u"graph"_s));
+        QVERIFY(s.sidebarHidden().contains(u"favorites"_s));
+        // The app's own order again.
+        s.setRailOrder({});
+        QCOMPARE(s.railGroup(u"gym"_s), 1);
+    }
+
     void codeModeSettling()
     {
         // "Settle threads untouched for": a week by default (T3 Code's); "Remove the worktrees of

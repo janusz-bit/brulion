@@ -280,6 +280,44 @@ Item {
         }
     }
     // The personal dictionary of spell checking (a device setting: AppSettings.spellingWords).
+    // The layout as text: applied on Apply, what did not read listed under it (the rest applied).
+    BDialog {
+        id: layoutTextDialog
+        objectName: "layoutTextDialog"
+        property list<string> warnings
+        function openWith(text: string): void {
+            layoutTextArea.text = text
+            layoutTextDialog.warnings = []
+            layoutTextDialog.open()
+        }
+        title: qsTr("Layout as text")
+        subtitle: qsTr("#rail(…) the icon bar, #panel(…) the sidebar's sections, #bottom(…) the bottom bar; | ends a group, -name hides one.")
+        iconName: "pencil"
+        acceptText: qsTr("Apply")
+        // (What did not read keeps the dialog open, the rest applied; typing again lets it apply.)
+        acceptEnabled: layoutTextDialog.warnings.length === 0
+        initialFocusItem: layoutTextArea
+        onAcceptRequested: layoutTextDialog.warnings = AppSettings.applyLayoutText(layoutTextArea.text)
+        BTextArea {
+            id: layoutTextArea
+            objectName: "layoutTextArea"
+            Layout.fillWidth: true
+            Layout.preferredHeight: 160
+            monospace: true
+            wrapMode: TextEdit.Wrap
+            accessibleName: qsTr("The layout")
+            onTextChanged: if (layoutTextArea.activeFocus) layoutTextDialog.warnings = []
+        }
+        BText {
+            Layout.fillWidth: true
+            visible: layoutTextDialog.warnings.length > 0
+            text: qsTr("Applied, except:") + "\n" + layoutTextDialog.warnings.join("\n")
+            variant: "small"
+            color: Theme.dangerText
+            wrapMode: Text.Wrap
+        }
+    }
+
     BDialog {
         id: dictionaryDialog
         objectName: "spellDictionaryDialog"
@@ -963,6 +1001,18 @@ Item {
                 heading: qsTr("Layout")
                 note: qsTr("What the sidebar and the phone's navigation show. Hidden views stay in the command palette and their shortcuts.")
 
+                // The same layout as text (docs/NOTEBOOK-SETTINGS.md "The layout language").
+                ShellSettingRow {
+                    title: qsTr("Layout as text")
+                    description: qsTr("The order and groups of the icon bar, the sidebar's sections, the bottom bar — written in a few lines.")
+                    BButton {
+                        objectName: "layoutTextButton"
+                        text: qsTr("Edit as text…")
+                        iconName: "pencil"
+                        size: "small"
+                        onClicked: layoutTextDialog.openWith(AppSettings.layoutText())
+                    }
+                }
                 ShellSettingRow {
                     title: qsTr("Sidebar")
                     description: qsTr("Entries and sections of the sidebar (and the phone's menu).")

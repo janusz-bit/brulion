@@ -79,6 +79,11 @@ class AppSettings : public QObject {
     /// The phone's bottom navigation: exactly five views of bottomNavViews(), nothing else (the
     /// drawer opens from the top bar's ☰, quick capture is the top bar's +).
     Q_PROPERTY(QStringList bottomNavTabs READ bottomNavTabs WRITE setBottomNavTabs NOTIFY bottomNavTabsChanged FINAL)
+    /// The icon bar's order with "|" between its groups (key `ui/rail/order`; the layout language's
+    /// `#rail`, docs/NOTEBOOK-SETTINGS.md); empty: the app's own order and groups.
+    Q_PROPERTY(QStringList railOrder READ railOrder WRITE setRailOrder NOTIFY railOrderChanged FINAL)
+    /// The icon bar's views in order ("code" first, then railOrder's, then those it leaves out).
+    Q_PROPERTY(QStringList railViews READ railViews NOTIFY railOrderChanged FINAL)
     /// Quick capture's + on the top bar of phones and narrow windows (wide ones always show it).
     Q_PROPERTY(bool captureButtonShown READ captureButtonShown WRITE setCaptureButtonShown NOTIFY
                        captureButtonShownChanged FINAL)
@@ -388,6 +393,17 @@ public:
     /// Calendar).
     static QStringList bottomNavViews();
     static QStringList defaultBottomNavTabs();
+    QStringList railOrder() const;
+    void setRailOrder(const QStringList &order);
+    QStringList railViews() const;
+    /// The group of the icon bar `view` is in (0 the first; the app's own when railOrder is empty;
+    /// a view railOrder leaves out: after its groups).
+    Q_INVOKABLE int railGroup(const QString &view) const;
+    /// The layout set here as the layout language's text (#rail, #panel, #bottom).
+    Q_INVOKABLE QString layoutText() const;
+    /// `text` (the layout language) applied to these settings — the places it writes; what does not
+    /// read is left out: the warnings (uilayout::parse()).
+    Q_INVOKABLE QStringList applyLayoutText(const QString &text);
     /// A font family name as stored: trimmed; "" for one longer than 128 characters or with
     /// control characters (settings files come from anywhere).
     static QString cleanFontFamily(const QString &family);
@@ -761,6 +777,7 @@ Q_SIGNALS:
     void sidebarHiddenChanged();
     void sidebarSectionsChanged();
     void bottomNavTabsChanged();
+    void railOrderChanged();
     void captureButtonShownChanged();
     void railExpandsChanged();
     void gymEnabledChanged();

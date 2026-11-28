@@ -127,11 +127,11 @@ done in the repository simply disappears from the list.
 * **Gym: next steps** — Polish instructions for the rest of the exercises (the 144 common ones
   have them; the other free-exercise-db's stay English); the exercises' pictures checked on a real phone; the rest timer's notification with the
   app closed checked on a real phone (the emulator's test passes) and on a desktop that quit (nothing can show it there: a scheduled notification of the system?).
-* **A small language for the interface layout (in the style of Typst)** — a text file describing
-  what the icon bar, the pages panel, the "More" menu, tabs and the bottom navigation show and in
-  what order (icons, labels, groups). Today this is set only in Settings → Appearance → Layout
-  (hidden items, order of the panel's sections, bottom navigation buttons). Designed in
-  docs/NOTEBOOK-SETTINGS.md "The layout language".
+* **A small language for the interface layout: what is still missing** — the icon bar's order and
+  groups, the pages panel's sections and the bottom bar are written as text in Settings → Appearance →
+  Layout → "Edit as text…" (docs/NOTEBOOK-SETTINGS.md "The layout language"); missing: the notebook's
+  own layout (a `brulion-layout` block of the settings note, "Use the notebook's layout"), the "More"
+  menu's contents and the tabs as places.
 
 * **Pictures from the internet — check on a real phone.** The Android emulator
   (`scripts/android-emulator-test.sh --web-pictures`) and the Chromium and Firefox browsers

@@ -120,5 +120,11 @@ item hidden where it would be by default.
 4. **(done)** Core `uilayout` (`src/core/uilayout/`, `tst_uilayout`): `parse()` with warnings,
    `print()` (read back the same), `blockOf()` (a note's first ` ```brulion-layout ` block, ``` or ~~~,
    CRLF), `shown()`.
-5. The app's layout from a `LayoutSpec` (rail, panel, more, bottom, tabs), "Edit as text", "Use the
-   notebook's layout".
+5. **(done)** The app's layout from the text: `AppSettings.layoutText()` prints the settings' layout,
+   `applyLayoutText()` sets them from a text (the icon bar's order and groups — `railOrder`, key
+   `ui/rail/order`; `railViews`, `railGroup()` order and group ShellRail —, `sidebarHidden`,
+   `sidebarSections`, `bottomNavTabs`) and returns the warnings; Settings → Appearance → Layout → "Edit
+   as text…" (`layoutTextDialog`: applied on Apply, what did not read listed under it, the rest
+   applied).
+6. The notebook's layout: "Use the notebook's layout" (a device setting) applying the settings note's
+   ` ```brulion-layout ` block (`uilayout::blockOf()`) when it changes.
