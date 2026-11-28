@@ -1379,7 +1379,12 @@ kept the screen on, and an answer the app lost came only when Brulion ran again)
   live extensions, the window's items, screenshots as pictures —, while it runs: during a turn the
   service above keeps it running with the screen off, and once Android ended it the computer fails
   the calls at once. The top bar's Live chip shows what changed ("Claude Code on raspberry-pi-4") and
-  undoes it. Tried on the desktop and in CI; on a real phone it is still to be tried.
+  undoes it. A screenshot needs the window on screen: behind another app or with the screen off
+  Android's window has no surface, and the call fails at once (`not_ready`, reason
+  `not_visible`) — before, the grab waited for a frame that never came and held the whole app,
+  the agent's stream too, until Brulion was in front again. Tried on the desktop, in CI and on the
+  emulator (`scripts/android-emulator-test.sh --remote-agent`: in front, behind the home screen and
+  with the screen off); on a real phone over a mobile network it is still to be tried.
 * **Tested** by `scripts/android-emulator-test.sh` (the bridge self-test, last): the service in the
   foreground with type dataSync, its notification on the channel `agents`, the self-test's ticks
   going on while Qt says the app is suspended (sent home), **Zatrzymaj** reaching C++, the service
@@ -2490,6 +2495,37 @@ loading QML (so that the tap that started the app reaches the UI); as long as no
   verified 2026-11-27 (Android 16). The capture code from before (0.32.0's, with the FileProvider
   fixed) fails the four checks after the kill — no photo in the notebook, one left in the cache, no
   words and no pictures in the field — besides the two about the record it did not keep.
+* The AI chat on a phone (the same debuggable APK; the host's `python3`):
+  ```sh
+  scripts/android-emulator-test.sh --chat
+  ```
+  The sample notebook with the assistant switched on (it is off by default) and an
+  OpenAI-compatible server of the test's own on the host (10.0.2.2, answering after 8 s; its
+  requests in `chat-requests.jsonl`), both written into the app's settings file. A message sent and
+  the app sent behind the home screen at once: the request reaches the server, the answer comes as
+  the app's notification (`AndroidNotifier::showMessage`; the shade pulled down for
+  `ch-2-shade.png`), the chat's list shows it under the conversation and the conversation shows it
+  when the app is back. `/btw` with a question: the side chat's pane opens in place of the
+  conversation (a phone's width), its answer there, and Back closes it — the conversation and its
+  field again. Screenshots `ch-*.png`; 18 checks, verified 2026-11-28 (Android 16).
+* An AI agent on another computer driving the app (the same debuggable APK; the host's
+  `brulion-cli` and the tests' fake ACP agent, `BRULION_EMULATOR_CLI` and
+  `BRULION_EMULATOR_ACP_AGENT`):
+  ```sh
+  scripts/android-emulator-test.sh --remote-agent
+  ```
+  `brulion-cli acp serve` on the host's loopback (10.0.2.2 for the emulator) with the fake agent
+  of `tests/app/shell/fakeacpagent.cpp`; the app pairs by the link of `acp pair` ("Sparuj": the
+  host lists the device), its agent gets "Let it change the app while it runs", and three prompt
+  links sent to it make it call the app's live tools through the server's tunnel, answered in
+  process ([An AI agent on another computer](#an-ai-agent-on-another-computer)): with the app in
+  front the list of its tools, its state and a screenshot (written on the host, the phone's
+  1080×2400) and Luau's type checker on the phone (`b.checkExtension` through `brulion_app_eval`:
+  "Key 'raed' not found…", line 5); behind the home screen and with the screen off its state, and
+  the screenshot refused at once as not on screen; no call waits for an answer that never comes.
+  The app's data is cleared first (an earlier run's conversations would count), and a prompt
+  counts as sent once the agent on the host has it. Screenshots `ra-*.png`, the conversation
+  `ra-conversation.md`, the server's log `ra-serve.log`.
 * Folders, links and tags with a real finger (the same debuggable APK):
   ```sh
   scripts/android-emulator-test.sh --folders

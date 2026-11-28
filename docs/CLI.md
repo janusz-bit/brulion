@@ -1274,6 +1274,9 @@ and the conversation's chat), this server carries the calls (`src/core/acp/apptu
   the app in the background, the device asleep or offline); at most 4 calls of a stream wait at once
   (`busy`); a device that lost its stream fails them at once (`not_ready`, `device_gone`); a call is
   1 MiB at most, an answer 12 MiB. `quit` is refused (`refused`): an agent here never ends the app.
+  A screenshot while Android's window has no surface — Brulion behind another app, the screen off —
+  fails at once (`not_ready`, `details.reason: "not_visible"`): a grab then waited for a frame that
+  never came and held the whole app, the agent's stream too, until it was in front again.
 * **A screenshot** comes back as the picture itself (`png`, base64, 8 MiB at most — the device
   halves a bigger one): this server writes it where the tool asked (an absolute `.png` in a folder
   that exists here) or into its runtime folder (`brulion-screenshots/`), and the tool hands it to the

@@ -66,6 +66,7 @@
 #include <functional>
 #include <memory>
 
+class QImage;
 class QMetaProperty;
 class QQmlApplicationEngine;
 class QQuickItem;
@@ -151,6 +152,9 @@ private:
     void screenshot(const QJsonObject &params, const ipc::ControlReply &reply);
     /// The window as a PNG in the answer (an in-process grant's screenshot).
     void screenshotData(const ipc::ControlReply &reply);
+    /// The window's picture now; null with `in` failed: no window, one not on screen (not_ready,
+    /// reason not_visible), one that could not be captured.
+    QImage windowPicture(const Input &in) const;
     void find(const QJsonObject &params, const ipc::ControlReply &reply);
     void pointer(const QString &method, const QJsonObject &params, const ipc::ControlReply &reply);
     void drag(const QJsonObject &params, const ipc::ControlReply &reply);

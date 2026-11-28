@@ -44,8 +44,8 @@
 //                     starts the session's MCP server (its command, arguments and environment from
 //                     session/new — Brulion's, given by the app or by acp serve) and calls each tool
 //                     there: "Aplikacja: <the result's envelope> | …" (" [obraz]" after one with a
-//                     picture); the tool "lista" lists its brulion_app_* tools; no server:
-//                     "Aplikacja: brak serwera"
+//                     picture); the tool "lista" lists its brulion_app_* tools, "pauza {"ms": N}"
+//                     waits N ms and says nothing; no server: "Aplikacja: brak serwera"
 //   anything else     a thought, then "Odpowiedź na: <the message>" in two chunks
 //
 // After each session/new it offers slash commands and says how much of its context is used.
@@ -173,6 +173,10 @@ QString callTools(const QJsonObject &config, const QString &calls)
             continue;
         }
         const QJsonObject arguments = QJsonDocument::fromJson(call.section(u' ', 1).trimmed().toUtf8()).object();
+        if (tool == u"pauza") { // pauza {"ms": N}: a while before the next call (the device goes away meanwhile)
+            QThread::msleep(static_cast<unsigned long>(arguments.value(u"ms"_s).toInt()));
+            continue;
+        }
         send({{u"jsonrpc"_s, u"2.0"_s},
               {u"id"_s, id},
               {u"method"_s, u"tools/call"_s},

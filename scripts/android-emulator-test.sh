@@ -209,6 +209,23 @@
 # Screenshots la-*.png.
 # Pictures are not looked at here (ctest's tst_ai_llama and tst_ai_localplugin do that with the
 # same code on the desktop).
+# With --chat instead: the AI chat on a phone (docs/UI.md "AI chat") — the sample notebook with the
+# assistant on an OpenAI-compatible server of the test's own on the host (10.0.2.2, answering after
+# 8 s; its requests in chat-requests.jsonl), set in the app's settings file. A message sent and the
+# app sent behind the home screen at once: its answer comes as Android's notification of the app
+# (AndroidNotifier::showMessage, the answer's words in it), and the conversation shows it when the
+# app is back. "/btw" with a question: the side chat's pane opens in place of the conversation (a
+# phone's width), answered there, and Back closes it — the conversation again. Screenshots ch-*.png.
+# With --remote-agent instead: an AI agent on another computer driving the app on the phone
+# (docs/CLI.md "The app's live tools") — `brulion-cli acp serve` on the host (the emulator reaches it
+# at 10.0.2.2) with the tests' fake ACP agent (tests/app/shell/fakeacpagent.cpp); the app pairs by
+# the `acp pair` link (brulion://pair, "Pair" tapped: the host lists the device), its agent gets
+# "Let it change the app while it runs", and three prompt links sent to it make it call the app's
+# live tools through acp serve's tunnel — the app's state and a screenshot of its window (written on
+# the host, the phone's size) with the app in front, behind the home screen (the agent's foreground
+# service and its notification while the call waits) and with the screen off; the conversation
+# keeps each answer. Needs the host's brulion-cli and the fake agent (BRULION_EMULATOR_CLI,
+# BRULION_EMULATOR_ACP_AGENT). Screenshots ra-*.png.
 # With --lock instead: the app lock (docs/ANDROID.md "App lock", docs/UI.md "App lock") — Settings →
 # Privacy ("Prywatność"): "Set a PIN…" with the on-screen keyboard (no FLAG_SECURE while the lock is
 # off or unlocked); the next start is locked (the lock screen's keypad, nothing of the notes in the
@@ -248,6 +265,8 @@
 #        scripts/android-emulator-test.sh --relaunch [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --local-ai [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --lock [DEBUG_APP_APK]
+#        scripts/android-emulator-test.sh --chat [DEBUG_APP_APK]
+#        scripts/android-emulator-test.sh --remote-agent [DEBUG_APP_APK]
 #        scripts/android-emulator-test.sh --web-keyboard [SITE_DIR]   (default dist-wasm)
 #   default: dist-android/brulion-<version>-x86_64.apk, dist-android/brulion-selftest-<version>-x86_64.apk
 # Environment (optional):
@@ -258,6 +277,8 @@
 #   BRULION_EMULATOR_PORT    console port (default 5584; adb serial emulator-<port>; 5554-5584:
 #                            the emulator warns that adb may not work with others)
 #   BRULION_EMULATOR_OUT     logs and screenshots (default dist-android/emulator-test)
+#   BRULION_EMULATOR_PACKAGE the app's package (default io.github.januszbit.brulion; an APK built
+#                            with BRULION_ANDROID_ID_SUFFIX=.test: io.github.januszbit.brulion.test)
 #   BRULION_EMULATOR_BOOT_SECONDS  how long the emulator may take to come up (default 120; a busy
 #                            machine's cold boot takes longer)
 #   BRULION_EMULATOR_GPU     the emulator's -gpu mode (default swangle_indirect)
@@ -269,6 +290,9 @@
 #                            default, which the app keeps when its files are there and nothing
 #                            was chosen (LocalAi::keptChoice)
 #   BRULION_LOCAL_PROJECTOR  --local-ai: its picture part (mmproj-LFM3-VL-2B-Q8_0.gguf)
+#   BRULION_EMULATOR_CLI     --remote-agent: the host's brulion-cli (default build/src/cli/brulion-cli)
+#   BRULION_EMULATOR_ACP_AGENT --remote-agent: the fake ACP agent (default
+#                            build/tests/cli/cli_fake_acp_agent: ctest's tst_cli_acp_host builds it)
 #   BRULION_WEBPICTURE_HTTPS --web-pictures: the public https picture (default: Google's logo)
 #   BRULION_WEBPICTURE_PORT  --web-pictures: the host's port of the http picture (default 8765)
 #   BRULION_WEB_PORT         --web-keyboard: the host's port of the site (default 8123)
@@ -320,6 +344,8 @@ PDF=0
 RELAUNCH=0
 LOCALAI=0
 LOCK=0
+CHAT=0
+REMOTEAGENT=0
 WEBKEYBOARD=0
 if [[ ${1:-} == --keyboard ]]; then
   KEYBOARD=1
@@ -372,6 +398,12 @@ elif [[ ${1:-} == --local-ai ]]; then
 elif [[ ${1:-} == --lock ]]; then
   LOCK=1
   shift
+elif [[ ${1:-} == --chat ]]; then
+  CHAT=1
+  shift
+elif [[ ${1:-} == --remote-agent ]]; then
+  REMOTEAGENT=1
+  shift
 elif [[ ${1:-} == --web-pictures ]]; then
   WEBPICTURES=1
   shift
@@ -388,9 +420,17 @@ else
   ((DEVICEFOLDER)) && APP_APK=${1:-dist-android/brulion-$VERSION-x86_64-play.apk}
   SELFTEST_APK=${2:-dist-android/brulion-selftest-$VERSION-x86_64.apk}
   [[ -f $APP_APK ]] || die "$APP_APK not found (build it: BRULION_ANDROID_ABIS=x86_64 BRULION_ANDROID_SELFTEST=1 scripts/android-build.sh)"
-  ((KEYBOARD || SELECTION || CAMERA || FOLDERS || SHARE || AUTOMATION || WIDGETS || WEBPICTURES || DONE || BACKGROUND || DRAWING || STYLUS || PICKERS || DEVICEFOLDER || PDF || RELAUNCH || LOCALAI || LOCK)) ||
+  ((KEYBOARD || SELECTION || CAMERA || FOLDERS || SHARE || AUTOMATION || WIDGETS || WEBPICTURES || DONE || BACKGROUND || DRAWING || STYLUS || PICKERS || DEVICEFOLDER || PDF || RELAUNCH || LOCALAI || LOCK || CHAT || REMOTEAGENT)) ||
     [[ -f $SELFTEST_APK ]] ||
     die "$SELFTEST_APK not found"
+fi
+if ((REMOTEAGENT)); then
+  RA_CLI=${BRULION_EMULATOR_CLI:-build/src/cli/brulion-cli}
+  RA_AGENT=${BRULION_EMULATOR_ACP_AGENT:-build/tests/cli/cli_fake_acp_agent}
+  [[ -x $RA_CLI && -x $RA_AGENT ]] ||
+    die "--remote-agent needs the host's brulion-cli and the fake ACP agent: BRULION_EMULATOR_CLI, BRULION_EMULATOR_ACP_AGENT (scripts/dev-build.sh brulion-cli cli_fake_acp_agent)"
+  RA_CLI=$(realpath "$RA_CLI")
+  RA_AGENT=$(realpath "$RA_AGENT")
 fi
 if ((LOCALAI)); then
   LOCAL_MODEL=${BRULION_LOCAL_MODEL:-}
@@ -405,7 +445,7 @@ PORT=${BRULION_EMULATOR_PORT:-5584}
 BOOT_SECONDS=${BRULION_EMULATOR_BOOT_SECONDS:-120}
 SERIAL=emulator-$PORT
 OUT=${BRULION_EMULATOR_OUT:-dist-android/emulator-test}
-PKG=io.github.januszbit.brulion
+PKG=${BRULION_EMULATOR_PACKAGE:-io.github.januszbit.brulion}
 # The app for Google Play has a package of its own; the code's namespace (the activity's class) stays.
 ((DEVICEFOLDER)) && PKG=io.github.januszbit.brulion.play
 ACTIVITY=$PKG/io.github.januszbit.brulion.android.BrulionActivity
@@ -440,7 +480,23 @@ if [[ ! -f $ANDROID_AVD_HOME/$AVD.ini ]]; then
   echo no | sh "$avdmanager" create avd --force -n "$AVD" -k "$IMAGE" -d pixel_6 >/dev/null
 fi
 
-adb() { "$SDK/platform-tools/adb" -s "$SERIAL" "$@"; }
+# A busy host lets the emulator's adb connection drop for a moment: the command fails with "device
+# offline" (or the device "not found") without having run, and `set -e` ended a whole run there
+# (--chat, 2026-11-28). It waits for the device then (a minute at most) and runs once more, twice.
+ADB_ERR="$OUT/adb-error.txt"
+adb() {
+  local try rc
+  for try in 1 2 3; do
+    rc=0
+    "$SDK/platform-tools/adb" -s "$SERIAL" "$@" 2>"$ADB_ERR" || rc=$?
+    if ((rc == 0)) || ! grep -q -E "device offline|device '[^']*' not found" "$ADB_ERR" || ((try == 3)); then
+      cat "$ADB_ERR" >&2
+      return "$rc"
+    fi
+    echo "    adb: the device went offline ($*): waiting for it" >&2
+    timeout 60 "$SDK/platform-tools/adb" -s "$SERIAL" wait-for-device 2>/dev/null || true
+  done
+}
 emulator=("$SDK/emulator/emulator")
 if [[ -e /etc/NIXOS ]] && command -v steam-run >/dev/null; then emulator=(steam-run "${emulator[@]}"); fi
 
@@ -475,7 +531,7 @@ watchdog_pid=""
 cleanup() {
   [[ -z $watchdog_pid ]] || kill "$watchdog_pid" 2>/dev/null || true
   [[ -z $http_pid ]] || kill "$http_pid" 2>/dev/null || true
-  adb emu kill >/dev/null 2>&1 || true
+  "$SDK/platform-tools/adb" -s "$SERIAL" emu kill >/dev/null 2>&1 || true # (not adb(): nothing to wait for)
   sleep 3
   [[ -z $emulator_pid ]] || kill "$emulator_pid" 2>/dev/null || true
 }
@@ -1278,6 +1334,296 @@ if ((CAMERA)); then
   exit 0
 fi
 
+# --- the AI chat on a phone (--chat) ---------------------------------------------------------------
+
+CH_PORT=8794
+CH_ANSWER='Odpowiedź z serwera testowego'
+ch_server() { # an OpenAI-compatible chat API on the host, answering after 8 s (the emulator: 10.0.2.2)
+  cat >"$OUT/chat-fake-ai.py" <<'PY'
+import http.server, json, sys, time
+port, delay, log = int(sys.argv[1]), float(sys.argv[2]), sys.argv[3]
+ANSWER = "Odpowiedź z serwera testowego."
+class Handler(http.server.BaseHTTPRequestHandler):
+    def log_message(self, *args): pass
+    def reply(self, kind, body):
+        self.send_response(200)
+        self.send_header("Content-Type", kind)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+    def do_GET(self):
+        self.reply("application/json", json.dumps({"data": [{"id": "fake", "object": "model"}]}).encode())
+    def do_POST(self):
+        body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
+        with open(log, "a", encoding="utf-8") as f:
+            f.write(json.dumps(body, ensure_ascii=False)[:4000] + "\n")
+        time.sleep(delay)
+        if body.get("stream"):
+            self.send_response(200)
+            self.send_header("Content-Type", "text/event-stream")
+            self.end_headers()
+            for word in ANSWER.split(" "):
+                chunk = {"id": "c", "object": "chat.completion.chunk", "model": "fake",
+                         "choices": [{"index": 0, "delta": {"content": word + " "}}]}
+                self.wfile.write(b"data: " + json.dumps(chunk).encode() + b"\n\n")
+                self.wfile.flush()
+            last = {"id": "c", "object": "chat.completion.chunk", "model": "fake",
+                    "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}]}
+            self.wfile.write(b"data: " + json.dumps(last).encode() + b"\n\ndata: [DONE]\n\n")
+        else:
+            done = {"id": "c", "object": "chat.completion", "model": "fake",
+                    "choices": [{"index": 0, "message": {"role": "assistant", "content": ANSWER},
+                                 "finish_reason": "stop"}]}
+            self.reply("application/json", json.dumps(done).encode())
+http.server.ThreadingHTTPServer(("127.0.0.1", port), Handler).serve_forever()
+PY
+  : >"$OUT/chat-requests.jsonl"
+  python3 "$OUT/chat-fake-ai.py" "$CH_PORT" 8 "$OUT/chat-requests.jsonl" &
+  CH_SERVER=$!
+  trap 'kill $CH_SERVER 2>/dev/null || true; cleanup' EXIT
+}
+ch_ini() { # the app's settings file (QSettings' INI in the app's storage), "" none yet
+  adb shell run-as "$PKG" find . -name '*.ini' 2>/dev/null | tr -d '\r' | grep -v -i cache | head -n 1
+}
+ch_has_ini() { [[ -n $(ch_ini) ]]; }
+ch_notified() { # the app's notification with the answer's words
+  local dump
+  dump=$(adb shell dumpsys notification --noredact | tr -d '\r')
+  [[ $dump == *"pkg=$PKG"* && $dump == *"$CH_ANSWER"* ]]
+}
+ch_requests() { grep -c . "$OUT/chat-requests.jsonl" || true; }
+ch_side_gone() { ! ui_has 'Rozmowa poboczna'; } # the pane's name (ChatSidePane: "Side chat")
+ch_side_answered() { # the side chat's pane with its answer ("AI: …", no time as in a conversation's
+  # "AI 11:56: …"), in place of the conversation (its message gone)
+  ui_has "AI: $CH_ANSWER\\." && ui_lacks 'Ty [0-9:]+: Powiedz cos dobrego'
+}
+ch_asked() { [[ $(ch_requests) -ge $1 ]]; } # <count>: so many requests at least
+if ((CHAT)); then
+  info "Chat: $APP_APK on ${SCREEN_W}x$SCREEN_H, density $DENSITY, API $android_api"
+  # A clean app: an earlier run's conversation would be on the list already.
+  adb shell pm clear "$PKG" >/dev/null 2>&1 || true
+  adb install -r -g "$APP_APK" >/dev/null
+  adb shell run-as "$PKG" true 2>/dev/null || die "$APP_APK is not debuggable (BRULION_ANDROID_BUILD_TYPE=Debug)"
+  ch_server
+  # A first start writes the settings file; the assistant (off by default) and its server go into it
+  # while the app is stopped.
+  start_app '--demo --locale pl --route chat'
+  check "the app is running" wait_for 30 running
+  check "the app wrote its settings" wait_for 60 ch_has_ini
+  adb shell am force-stop "$PKG"
+  ini=$(ch_ini)
+  info "settings: $ini"
+  printf '\n[extensions]\nasystent=true\n\n[ai]\nprovider=openai\nbaseUrl=http://10.0.2.2:%s/v1\nmodel=fake\n' \
+    "$CH_PORT" >"$OUT/chat-ai.ini"
+  adb push "$OUT/chat-ai.ini" /data/local/tmp/brulion-chat-ai.ini >/dev/null
+  adb shell chmod 644 /data/local/tmp/brulion-chat-ai.ini
+  adb shell run-as "$PKG" sh -c "'cat /data/local/tmp/brulion-chat-ai.ini >> \"$ini\"'"
+  adb shell run-as "$PKG" cat "$ini" >"$OUT/chat-settings.ini"
+  check "the assistant and its server are in the settings" grep -q "^baseUrl=http://10.0.2.2:$CH_PORT/v1" \
+    "$OUT/chat-settings.ini"
+  adb wait-for-device
+  start_app '--demo --locale pl --route chat'
+  wait_for 30 running || start_app '--demo --locale pl --route chat' # (a busy emulator went offline a moment)
+  check "the app is running again" wait_for 30 running
+  check "the chat's list is on screen" wait_for 30 ui_has 'Nowa rozmowa'
+  ui_tap 'Nowa rozmowa' last
+  ui_tap 'Wiadomość do AI'
+  adb shell input text 'Powiedz%scos%sdobrego'
+  sleep 1
+  app_shot ch-1-field
+  ui_tap 'Wyślij' last
+  sleep 3
+  app_shot ch-1b-sent
+  adb logcat -d | grep -E 'brulion\.(ai|app|chat|net)' >"$OUT/chat-after-send.txt" || true
+  # Behind the home screen at once: the answer comes as a notification.
+  adb shell input keyevent KEYCODE_HOME
+  check "the message reached the server" wait_for 30 ch_asked 1
+  check "the answer is a notification of the app" wait_for 60 ch_notified
+  adb shell dumpsys notification --noredact >"$OUT/chat-notifications.txt"
+  adb shell cmd statusbar expand-notifications >/dev/null 2>&1 || true
+  sleep 2
+  adb shell screencap -p /sdcard/ch-2-shade.png && adb pull /sdcard/ch-2-shade.png "$OUT/" >/dev/null || true
+  adb shell cmd statusbar collapse >/dev/null 2>&1 || true
+  start_app '--demo --locale pl --route chat'
+  check "Brulion is in front again" wait_for 20 running
+  # The list's row: the conversation's title, then its last answer ("…, 🤖 Odpowiedź…").
+  check "the chat's list shows the answer" wait_for 30 ui_has "Powiedz cos dobrego, .*$CH_ANSWER\\."
+  ui_tap 'Powiedz cos dobrego, .*' first 4
+  check "the conversation shows the answer" wait_for 30 ui_has "AI [0-9:]+: $CH_ANSWER\\."
+  app_shot ch-3-answer
+  # A side question: its pane in place of the conversation, Back closes it.
+  ui_tap 'Wiadomość do AI'
+  adb shell input text '/btw%sIle%sto%s2+2'
+  sleep 1
+  ui_tap 'Wyślij' last
+  check "the side chat's pane opens" wait_for 30 ui_has 'Rozmowa poboczna'
+  check "the side question reached the server" wait_for 30 ch_asked 2
+  sleep 10
+  app_shot ch-4-side
+  check "the side chat's answer is in its pane" wait_for 30 ch_side_answered
+  adb shell input keyevent KEYCODE_BACK
+  check "Back closes the side chat's pane" wait_for 20 ch_side_gone
+  check "the conversation is there again" wait_for 20 ui_has 'Wiadomość do AI'
+  app_shot ch-5-back
+  check "the app is still running" running
+  adb logcat -d >"$OUT/chat-logcat.txt"
+  check "no crash" bash -c "! grep -E 'FATAL EXCEPTION|Fatal signal' '$OUT/chat-logcat.txt'"
+  check "no QML errors" bash -c "! grep -E 'TypeError|ReferenceError|Binding loop detected' '$OUT/chat-logcat.txt'"
+  echo "logs and screenshots: $(cd "$OUT" && pwd)"
+  ((failures == 0)) || die "$failures check(s) failed"
+  echo "all checks passed"
+  exit 0
+fi
+
+# --- an AI agent on another computer driving the app (--remote-agent) ----------------------------
+
+RA_PORT=8795
+RA_NAME='Udawany agent'
+ra_cli() { "$RA_CLI" --vault "$OUT/ra-notes" "$@"; } # the host's notebook of the agents
+ra_host() { # acp serve on the host's loopback, which is 10.0.2.2 for the emulator
+  rm -rf "$OUT/ra-notes" "$OUT/ra-state.json"
+  mkdir -p "$OUT/ra-notes"
+  printf '# Strona komputera\n\nNotatka z domowego serwera.\n' >"$OUT/ra-notes/Strona komputera.md"
+  # (The program itself in the background, not ra_cli's subshell: the trap's kill must reach it.)
+  FAKE_ACP_LOG="$OUT/ra-agent.log" "$RA_CLI" --vault "$OUT/ra-notes" acp serve --agent "fake:$RA_NAME=$RA_AGENT" --listen 127.0.0.1 \
+    --port "$RA_PORT" --public-url "http://10.0.2.2:$RA_PORT" --allow-http --state-file "$OUT/ra-state.json" \
+    >"$OUT/ra-serve.log" 2>&1 &
+  RA_SERVER=$!
+  trap 'kill $RA_SERVER 2>/dev/null || true; cleanup' EXIT
+}
+ra_logcat() { # room for the whole run's log (the emulator's buffer kept its last 2 MB: minutes)
+  adb logcat -G 16M >/dev/null 2>&1 || true
+  adb logcat -c
+}
+ra_up() { curl -s -o /dev/null "http://127.0.0.1:$RA_PORT/acp/v1/info"; }
+ra_paired() { # the host lists one device
+  [[ $(ra_cli acp clients --state-file "$OUT/ra-state.json" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)["result"]["devices"]))') == 1 ]]
+}
+ra_settings() { adb shell run-as "$PKG" cat ./files/settings/Brulion/Brulion.ini 2>/dev/null | tr -d '\r'; }
+ra_kept() { ra_settings | grep -q -F "$RA_NAME"; } # the paired agent among the app's agents
+ra_app_access() { ra_settings | grep -q -F -e '\"app\":true' -e '"app":true'; } # the agent's row has "app": true
+ra_chat() { # the AI chat's conversations in the phone's notebook (the AI folder's pages)
+  adb shell run-as "$PKG" find files -path "'*/AI/*'" -name "'*.md'" -exec cat {} + 2>/dev/null | tr -d '\r'
+}
+ra_answers() { ra_chat | grep -c 'Aplikacja: ' || true; } # the agent's answers with the app's tools
+ra_answered() { [[ $(ra_answers) -ge $1 ]]; } # <count>
+# <count>: so many answers of the app's state / screenshots refused as not on screen (ra-conversation.md)
+ra_states() { [[ $(grep -o '"command":"app.state","ok":true' "$OUT/ra-conversation.md" | wc -l) -ge $1 ]]; }
+ra_refused() { [[ $(grep -o '"code":"not_ready","details":{[^}]*"reason":"not_visible"' "$OUT/ra-conversation.md" | wc -l) -ge $1 ]]; }
+ra_png() { # <file> <expected width> <expected height>: a PNG of the phone's window (or half of it)
+  python3 - "$@" <<'PY'
+import struct, sys
+path, w, h = sys.argv[1], int(sys.argv[2]), int(sys.argv[3])
+try:
+    data = open(path, "rb").read(32)
+except OSError:
+    sys.exit(1)
+ok = data[:8] == b"\x89PNG\r\n\x1a\n"
+width, height = struct.unpack(">II", data[16:24]) if ok else (0, 0)
+print(f"    {path}: {width}x{height}")
+sys.exit(0 if ok and (width, height) in ((w, h), (w // 2, h // 2)) else 1)
+PY
+}
+# An extension page whose function calls b.raed (called at once it would stop the page loading),
+# checked in the app on the phone (`b.checkExtension`: its `types`, Luau's Analysis against
+# b.d.luau: "Key 'raed' not found in table …", line 5). Single quotes: the JSON's \" and \n reach the agent.
+# shellcheck disable=SC2016 # (the backquotes are the page's code fence, not a command)
+RA_TYPES='aplikacja brulion_app_eval {"code": "local r = b.checkExtension(\"Próba typów\", [=[---\ntags: [extension]\n---\n```luau\nlocal function later() return b.raed(1) end\n```\n]=]) return r.types"}'
+ra_prompts() { grep -c '"method":"session/prompt"' "$OUT/ra-agent.log" 2>/dev/null || true; } # the agent heard
+ra_prompt() { # <prompt>: a prompt link to the paired agent, its field filled; Send, until the agent
+  # on the host has the prompt (a busy emulator let a tap land while the keyboard came up)
+  local link before _
+  before=$(ra_prompts)
+  link=$(python3 -c 'import sys, urllib.parse as u; print("brulion://chat?prompt=" + u.quote(sys.argv[1], safe="") + "&partner=" + u.quote(sys.argv[2], safe=""))' "$1" "$RA_NAME")
+  adb shell am start -a android.intent.action.VIEW -d "'$link'" >/dev/null
+  wait_for 30 ui_has 'Ten prompt przyszedł z linku.*' || true # (the note above a link's prompt)
+  for _ in 1 2 3; do
+    ui_tap 'Wyślij' last 0 || true
+    wait_for 15 ra_heard "$before" && return 0
+  done
+  echo "    the prompt was not sent"
+  return 1
+}
+ra_heard() { [[ $(ra_prompts) -gt $1 ]]; } # <count before>: the agent got one more prompt
+if ((REMOTEAGENT)); then
+  info "Remote agent: $APP_APK on ${SCREEN_W}x$SCREEN_H, density $DENSITY, API $android_api"
+  # A clean app: an earlier run's conversations and pairing would count among this one's.
+  adb shell pm clear "$PKG" >/dev/null 2>&1 || true
+  adb install -r -g "$APP_APK" >/dev/null
+  adb shell run-as "$PKG" true 2>/dev/null || die "$APP_APK is not debuggable (BRULION_ANDROID_BUILD_TYPE=Debug)"
+  ra_host
+  ra_logcat
+  check "acp serve answers on the host" wait_for 30 ra_up
+  start_app '--demo --locale pl --route journals'
+  check "the app is running" wait_for 30 running
+  # 1. Pairing by the link of `acp pair` (what the QR code holds).
+  link=$(ra_cli acp pair --state-file "$OUT/ra-state.json" | python3 -c 'import json,sys; print(json.load(sys.stdin)["result"]["link"])')
+  info "pairing link: $link"
+  adb shell am start -a android.intent.action.VIEW -d "'$link'" >/dev/null
+  check "the pairing dialog is filled in" wait_for 30 ui_has 'Sparuj'
+  app_shot ra-1-pair
+  ui_tap 'Sparuj' last 4
+  check "the host lists the phone" wait_for 30 ra_paired
+  check "the app keeps the agent" wait_for 20 ra_kept
+  # 2. Its live tools: "Let it change the app while it runs".
+  ui_tap 'Edytuj…' last
+  ui_tap 'Pozwól mu zmieniać działającą aplikację.*' first 1
+  app_shot ra-2-agent
+  ui_tap 'Zapisz' last
+  check "the agent may change the app" wait_for 10 ra_app_access
+  # 3. In front: the app's state and a screenshot of its window, written on the host.
+  check "the prompt is sent to the agent" ra_prompt "aplikacja lista && brulion_app_state {} && brulion_app_screenshot {\"path\": \"$OUT/ra-front.png\"}"
+  check "the agent answered with the app in front" wait_for 90 ra_answered 1
+  app_shot ra-3-front
+  ra_chat >"$OUT/ra-conversation.md"
+  check "… with the app's live tools" grep -q 'Aplikacja: .*brulion_app_state' "$OUT/ra-conversation.md"
+  check "… and its state" grep -q '"ok":true,"result":{.*"ready":true' "$OUT/ra-conversation.md"
+  check "the screenshot is the phone's window" ra_png "$OUT/ra-front.png" "$SCREEN_W" "$SCREEN_H"
+  # Luau's type checker on the phone: the agent's eval of b.checkExtension on a page that calls b.raed.
+  check "the prompt is sent to the agent" ra_prompt "$RA_TYPES"
+  check "the agent checked an extension on the phone" wait_for 90 ra_answered 2
+  ra_chat >"$OUT/ra-conversation.md"
+  check "… Luau's type checker found b.raed (line 5)" \
+    grep -q '"kind":"type","line":5,"message":"[^"]*raed' "$OUT/ra-conversation.md"
+  # 4. Behind the home screen while the agent works: its foreground service keeps the app answering.
+  # (The agent works 20 s first, its calls coming well after the app went behind.) What Android shows
+  # meanwhile is kept for a look (the agent's service and its notification): ra-*.txt.
+  check "the prompt is sent to the agent" ra_prompt "aplikacja pauza {\"ms\": 20000} && brulion_app_state {} && brulion_app_screenshot {\"path\": \"$OUT/ra-away.png\"}"
+  adb shell input keyevent KEYCODE_HOME
+  sleep 10
+  adb shell dumpsys notification --noredact >"$OUT/ra-notifications.txt"
+  adb shell dumpsys activity services "$PKG" >"$OUT/ra-services.txt" 2>&1 || true
+  check "the agent answered with the app behind" wait_for 90 ra_answered 3
+  ra_chat >"$OUT/ra-conversation.md"
+  check "… the app's state from behind" ra_states 2
+  # No surface behind the home screen: refused at once, never a call that holds the app (it held
+  # it, and the agent's stream, until Brulion was in front again: RemoteControl::windowPicture).
+  check "… its screenshot refused: not on screen" ra_refused 1
+  # 5. The screen off while the agent works.
+  start_app '--demo --locale pl --route chat'
+  check "Brulion is in front again" wait_for 20 running
+  check "the prompt is sent to the agent" ra_prompt "aplikacja pauza {\"ms\": 10000} && brulion_app_state {} && brulion_app_screenshot {\"path\": \"$OUT/ra-dark.png\"}"
+  adb shell input keyevent KEYCODE_SLEEP
+  check "the agent answered with the screen off" wait_for 90 ra_answered 4
+  ra_chat >"$OUT/ra-conversation.md"
+  check "… the app's state with the screen off" ra_states 3
+  check "… its screenshot refused: not on screen" ra_refused 2
+  adb shell input keyevent KEYCODE_WAKEUP
+  adb shell wm dismiss-keyguard >/dev/null 2>&1 || true
+  sleep 3
+  app_shot ra-4-after
+  ra_chat >"$OUT/ra-conversation.md"
+  check "no call waited in vain" bash -c "! grep -q 'no_answer' '$OUT/ra-conversation.md'"
+  check "the app is still running" running
+  adb logcat -d -v time >"$OUT/ra-logcat.txt"
+  check "no crash" bash -c "! grep -E 'FATAL EXCEPTION|Fatal signal' '$OUT/ra-logcat.txt'"
+  check "no QML errors" bash -c "! grep -E 'TypeError|ReferenceError|Binding loop detected' '$OUT/ra-logcat.txt'"
+  echo "logs and screenshots: $(cd "$OUT" && pwd)"
+  ((failures == 0)) || die "$failures check(s) failed"
+  echo "all checks passed"
+  exit 0
+fi
+
 # --- the app lock (--lock) ------------------------------------------------------------------------
 
 # The flags of Brulion's window on screen: the "fl=…" line of its WindowState in `dumpsys window
@@ -1341,7 +1687,7 @@ lk_type_pin() { # <digits>
 }
 # The widgets' snapshot (WidgetStore.kt: shared preferences) — the locked one: "locked": true, no
 # tasks, days or notes.
-lk_snapshot() { adb shell run-as "$PKG" cat shared_prefs/$PKG.android.widgets.xml 2>/dev/null | tr -d '\r'; }
+lk_snapshot() { adb shell run-as "$PKG" cat "shared_prefs/$PKG.android.widgets.xml" 2>/dev/null | tr -d '\r'; }
 lk_snapshot_locked() {
   local snapshot
   snapshot=$(lk_snapshot)

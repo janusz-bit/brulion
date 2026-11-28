@@ -68,9 +68,11 @@ done in the repository simply disappears from the list.
   JetBrains IDE.
 * **AI agents on another computer changing the app live: on a real phone** — the tunnel is there
   (`acp serve` hands the session's `brulion_app_*` calls to the device's stream, the app answers
-  them in process: docs/CLI.md "The app's live tools"), tested between two processes of a desktop;
-  untried with Android's app (the phone asleep or in the background while a call waits, a
-  screenshot of its window over a mobile network) and with `services.brulion-acp`.
+  them in process: docs/CLI.md "The app's live tools"), tested between two processes of a desktop
+  and with Android's app on the emulator (`scripts/android-emulator-test.sh --remote-agent`: in
+  front, behind the home screen and with the screen off — a screenshot then refused as not on
+  screen); untried on a real phone (asleep for long, a screenshot over a mobile network) and with
+  `services.brulion-acp`.
 * **The AI chat and the writing assistant: what is still to check** — on a real phone: a photo
   from the phone's camera app for a message (the emulator's camera and the app's process ended
   while it is in front are checked: `scripts/android-emulator-test.sh --camera`) and dictation with
@@ -80,8 +82,11 @@ done in the repository simply disappears from the list.
   for a message in a real browser (CI's headless Chrome cannot open a file picker); the chat's
   notifications (an answer, a failure, a question while the app is behind another, an AI agent's
   own — `brulion_app_chat_notify`: docs/UI.md "AI chat") on a real phone — Android shows them as a
-  timer's end (`AndroidNotifier::showMessage`), untried — and in a real browser; and a side chat's
-  pane (`/btw`) on a real phone (in place of the conversation, Back closing it).
+  timer's end (`AndroidNotifier::showMessage`; an answer behind the home screen is checked on the
+  emulator: `scripts/android-emulator-test.sh --chat`) — and in a real browser (the browser's
+  notification itself is: `scripts/wasm-smoke.mjs --notify --headed`, not the chat's way to it); and
+  a side chat's pane (`/btw`) on a real phone (the emulator's `--chat` has it in place of the
+  conversation, Back closing it).
 * **The model on the device: what is still missing** — LFM3-VL 2B, LFM3 1.7B and Brulion
   Assistant 1.7B (LFM3 1.7B with the adapter trained for the assistant: docs/FINETUNE.md) run in
   the app through llama.cpp on Linux (the Nix package, the AppImage), Windows and Android
@@ -118,7 +123,9 @@ done in the repository simply disappears from the list.
   sections and the views' input controls are there (docs/EXTENSIONS.md). What remains: checks on
   real devices — a view block in a page drawn by `PageItem` (`BRULION_PAGE_ITEM=1`) and the new
   view controls (date dialog, slider, text area) on a phone,
-  the type checker on an Android phone (built in, measured, not run on one yet), the browser's
+  the type checker on an Android phone (built in, measured; run on the emulator —
+  `scripts/android-emulator-test.sh --remote-agent`: `b.checkExtension` through an agent's
+  `brulion_app_eval` —, not on a real phone yet), the browser's
   hostile-extension self-test in Safari itself, on macOS or an iPhone (Chromium's and Firefox's
   windows and WebKit's Playwright build pass it: docs/WEB.md).
 * **The app as code (`b.app`, live code): what is next** — the app's settings, theme tokens and

@@ -34,6 +34,7 @@
 #include <QDir>
 #include <QFileInfo>
 #include <QFont>
+#include <QGuiApplication>
 #include <QImage>
 #include <QJSValue>
 #include <QJsonArray>
@@ -112,6 +113,21 @@ namespace {
 QString code(const char *errorCode)
 {
     return QString::fromLatin1(errorCode);
+}
+
+/// Whether the window can be captured now. Android's window has no surface while Brulion is
+/// behind another app or the screen is off: grabWindow() then waits for a frame that never comes,
+/// holding the whole app — its AI agents' streams too — until it is in front again (an agent's
+/// screenshot after the user went home: scripts/android-emulator-test.sh --remote-agent).
+/// Elsewhere Qt renders a window that is not shown.
+bool capturable(const QQuickWindow *window)
+{
+#ifdef Q_OS_ANDROID
+    return window->isExposed() && QGuiApplication::applicationState() >= Qt::ApplicationInactive;
+#else
+    Q_UNUSED(window)
+    return true;
+#endif
 }
 
 /// A coordinate in an answer: to a tenth of a pixel.
@@ -906,10 +922,9 @@ void RemoteControl::screenshot(const QJsonObject &params, const ipc::ControlRepl
             file = QDir(dir).filePath(
                     u"screenshot-%1.png"_s.arg(QDateTime::currentDateTime().toString(u"yyyyMMdd-HHmmss-zzz"_s)));
         }
-        QQuickWindow *w = window();
-        const QImage image = w ? w->grabWindow() : QImage();
+        const QImage image = windowPicture(in);
         if (image.isNull())
-            return in.fail(code(E::Failed), u"The window could not be captured"_s);
+            return;
         QSaveFile out(file);
         if (!out.open(QIODevice::WriteOnly) || !image.save(&out, "PNG") || !out.commit())
             return in.fail(code(E::Failed), u"Could not write %1"_s.arg(file), {{u"path"_s, file}});
@@ -923,10 +938,9 @@ void RemoteControl::screenshot(const QJsonObject &params, const ipc::ControlRepl
 void RemoteControl::screenshotData(const ipc::ControlReply &reply)
 {
     enqueueInput(reply, [this](const Input &in) {
-        QQuickWindow *w = window();
-        QImage image = w ? w->grabWindow() : QImage();
+        QImage image = windowPicture(in);
         if (image.isNull())
-            return in.fail(code(E::Failed), u"The window could not be captured"_s);
+            return;
         const qreal ratio = image.devicePixelRatio();
         QByteArray png;
         // (A picture too big for the answer: smaller, as the agent sees it anyway.)
@@ -946,6 +960,22 @@ void RemoteControl::screenshotData(const ipc::ControlReply &reply)
                           {u"height"_s, image.height()},
                           {u"devicePixelRatio"_s, ratio}});
     });
+}
+
+QImage RemoteControl::windowPicture(const Input &in) const
+{
+    QQuickWindow *w = window();
+    if (w && !capturable(w)) {
+        in.fail(code(E::NotReady),
+                u"The window is not on screen (Brulion is behind another app, or the screen is off): "
+                u"it can be captured once Brulion is in front"_s,
+                {{u"reason"_s, u"not_visible"_s}});
+        return {};
+    }
+    QImage image = w ? w->grabWindow() : QImage();
+    if (image.isNull())
+        in.fail(code(E::Failed), u"The window could not be captured"_s);
+    return image;
 }
 
 // ---- Items ------------------------------------------------------------------------------------
