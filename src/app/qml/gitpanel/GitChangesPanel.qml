@@ -146,9 +146,17 @@ Item {
     property bool aiAvailable: false
     signal writeWithAi(string system, string prompt)
     function aiWritten(ok: bool, text: string): void {
+        // (The pull request of a commit waiting for its text — CodeGit.writesPullRequests —, else
+        // the dialog that asked.)
+        if (panel.prWriting) {
+            panel.prWriting = false
+            repo.pullRequestWritten(ok, text)
+            return
+        }
         commitDialog.aiWritten(ok, text)
         prDialog.aiWritten(ok, text)
     }
+    property bool prWriting: false
 
     function turnCheckpoints(): list<var> {
         if (panel.checkpoints.length > 0)
@@ -512,6 +520,7 @@ Item {
         pollInterval: panel.pollInterval
         // (What the remote has, every five minutes: ahead / behind and Pull follow it.)
         fetchInterval: panel.fetchInterval
+        writesPullRequests: panel.aiAvailable
         onDiffReady: (path, oldText, newText, binary, tooLarge) => {
             if (path !== panel.selectedPath)
                 return
@@ -529,6 +538,10 @@ Item {
             panel.diffLoading = false
         }
         onActionFinished: (action, ok, message, url) => panel.actionFinished(action, ok, message, url)
+        onPullRequestToWrite: (system, prompt) => {
+            panel.prWriting = true
+            panel.writeWithAi(system, prompt)
+        }
         onRevisionChanged: follow.restart()
         onStateChanged: {
             // (The default branch came: "Branch" can compare now.)

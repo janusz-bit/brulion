@@ -749,6 +749,39 @@ void TestCodeGit::commitPushAndPullRequest()
     QCOMPARE(gitIn(remote, {u"log"_s, u"-1"_s, u"--format=%s"_s, u"funkcja"_s}).trimmed(),
              QByteArray("Tytuł z wiadomości"));
 
+    // With the AI writing pull requests and no description given: after the push its question
+    // goes out (pullRequestToWrite), the answer's title and description open the pull request; no
+    // answer that reads — the message's first line, no description.
+    git.setWritesPullRequests(true);
+    QSignalSpy toWrite(&git, &CodeGit::pullRequestToWrite);
+    repo.write(u"c.txt"_s, "c\n");
+    QTRY_VERIFY_WITH_TIMEOUT(git.changeCount() == 1, Wait);
+    actions.clear();
+    git.commitFiles(u"Trzeci\n\nTreść"_s, {u"c.txt"_s}, QString(), true, true, QString(), QString(), false, u"main"_s);
+    QTRY_COMPARE_WITH_TIMEOUT(toWrite.count(), 1, Wait);
+    QVERIFY2(toWrite.at(0).at(1).toString().contains(u"Trzeci"_s), qPrintable(toWrite.at(0).at(1).toString()));
+    QVERIFY(finished(actions, u"commit"_s).isEmpty()); // (still opening its pull request)
+    git.pullRequestWritten(true, u"Tytuł od AI\n\n## Summary\n- dodano c"_s);
+    QTRY_VERIFY_WITH_TIMEOUT(!finished(actions, u"commit"_s).isEmpty(), Wait);
+    QVERIFY2(finished(actions, u"commit"_s).at(1).toBool(), qPrintable(finished(actions, u"commit"_s).at(2).toString()));
+    QList<QByteArray> written = readFile(argsFile).split('\0');
+    QCOMPARE(QString::fromUtf8(written.value(3)), u"Tytuł od AI"_s);
+    QVERIFY2(QString::fromUtf8(written.value(5)).startsWith(u"## Summary"_s), written.value(5).constData());
+    repo.write(u"d.txt"_s, "d\n");
+    QTRY_VERIFY_WITH_TIMEOUT(git.changeCount() == 1, Wait);
+    actions.clear();
+    git.commitFiles(u"Czwarty"_s, {u"d.txt"_s}, QString(), true, true, QString(), QString(), false, u"main"_s);
+    QTRY_COMPARE_WITH_TIMEOUT(toWrite.count(), 2, Wait);
+    git.pullRequestWritten(false, u"model niedostępny"_s);
+    QTRY_VERIFY_WITH_TIMEOUT(!finished(actions, u"commit"_s).isEmpty(), Wait);
+    QVERIFY(finished(actions, u"commit"_s).at(1).toBool());
+    written = readFile(argsFile).split('\0');
+    QCOMPARE(QString::fromUtf8(written.value(3)), u"Czwarty"_s);
+    QCOMPARE(QString::fromUtf8(written.value(5)), QString());
+    // (An answer nobody waits for: nothing.)
+    git.pullRequestWritten(true, u"Spóźniony"_s);
+    git.setWritesPullRequests(false);
+
     // Create PR… alone: nothing to push now, straight to gh.
     git.createPullRequest(u"Drugi"_s, QString(), false);
     QTRY_VERIFY_WITH_TIMEOUT(!finished(actions, u"pullRequest"_s).isEmpty(), Wait);

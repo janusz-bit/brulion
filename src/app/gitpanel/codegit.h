@@ -38,6 +38,7 @@
 #include <QVariantMap>
 
 #include <functional>
+#include <optional>
 
 namespace brulion::gitpanel {
 
@@ -53,6 +54,10 @@ class CodeGit : public QObject {
     /// runs (0: never) — quietly: no actionFinished(), a failure only in lastFetchError.
     Q_PROPERTY(int fetchInterval READ fetchInterval WRITE setFetchInterval NOTIFY fetchIntervalChanged FINAL)
     Q_PROPERTY(QString lastFetchError READ lastFetchError NOTIFY fetchIntervalChanged FINAL)
+    /// The AI writes the pull request of "Commit, push and create PR" when no description is given
+    /// (T3 Code's): after the push pullRequestToWrite(system, prompt), the answer by
+    /// pullRequestWritten(); without one in MaxPullRequestWait the message's first line titles it.
+    Q_PROPERTY(bool writesPullRequests READ writesPullRequests WRITE setWritesPullRequests NOTIFY writesPullRequestsChanged FINAL)
 
     /// The first refresh of this folder is done (before it, isRepo says nothing).
     Q_PROPERTY(bool loaded READ loaded NOTIFY stateChanged FINAL)
@@ -154,6 +159,9 @@ public:
     void setTurnCheckpoint(const QString &id);
     int pollInterval() const { return m_pollInterval; }
     int fetchInterval() const { return m_fetchInterval; }
+    bool writesPullRequests() const { return m_writesPullRequests; }
+    void setWritesPullRequests(bool on);
+    static constexpr int MaxPullRequestWait = 3 * 60 * 1000;
     void setFetchInterval(int ms);
     QString lastFetchError() const { return m_lastFetchError; }
     /// The quiet fetch of fetchInterval now (tests).
@@ -236,6 +244,9 @@ public:
     Q_INVOKABLE void requestPullRequestQuestion(const QString &base);
     /// The AI's answer to it read (codeai::readPullRequest): {title ("" none), body}.
     Q_INVOKABLE QVariantMap pullRequestText(const QString &answer) const;
+    /// The AI's answer to pullRequestToWrite() (`ok` false: it failed, `answer` why): the waiting
+    /// commit's pull request opened with its title and description, else as without the AI.
+    Q_INVOKABLE void pullRequestWritten(bool ok, const QString &answer);
     /// Everything staged (`git add -A`) and committed with `message`; then pushed (`push` or
     /// `createPr`), then a pull request opened (`createPr`; `prTitle` "" = the message's first
     /// line): actionFinished("commit", ok, message, the pull request's url).
@@ -390,6 +401,10 @@ Q_SIGNALS:
     void turnCheckpointChanged();
     void pollIntervalChanged();
     void fetchIntervalChanged();
+    void writesPullRequestsChanged();
+    /// A commit's pull request waits for the AI's text (writesPullRequests): ask it, then
+    /// pullRequestWritten().
+    void pullRequestToWrite(const QString &system, const QString &prompt);
     void stateChanged();
     void turnChangesChanged();
     void branchListChanged();
@@ -465,6 +480,18 @@ private:
     void resolvePullRequestBase(const QString &named, const QStringList &candidates);
     void readPullRequestRange(const QString &ref);
     void failPullRequestQuestion(const QString &why);
+    /// The pull request question's answer: to whoever asked — the dialog (pullRequestQuestionReady())
+    /// or the commit waiting for its pull request (pullRequestToWrite(), or opened at once without one).
+    void answerPullRequestQuestion(const QString &system, const QString &prompt, const QString &error);
+    /// The waiting commit's pull request opened: `title`/`body` the AI's ("" title: as it was).
+    void openWrittenPullRequest(const QString &title, const QString &body);
+    struct WaitingPullRequest {
+        QString root;
+        gitcli::PullRequest pr;
+    };
+    std::optional<WaitingPullRequest> m_prToWrite;
+    QTimer m_prWait;
+    bool m_writesPullRequests = false;
     /// True while the folder is the one of now (no setFolder() since): for answers that come later.
     std::function<bool()> stillThisFolder() const;
 

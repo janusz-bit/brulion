@@ -221,7 +221,11 @@ looks like an option, nothing the base lacks); `pullRequestText(answer)` (the an
 `requestDiff(path, checkpoint)` ("" = against HEAD; a renamed row's
 old text from its old path); `commit(message, push, createPr, prTitle, prBody, draft)` (T3 Code's
 "Commit" / "Commit and push" / "Commit, push and create PR"; `prTitle` "" = the message's first
-line); `push()`; `pull()`; `branches()`; `createBranch(name)`; `checkout(name)`;
+line; with `writesPullRequests` — GitChangesPanel's `aiAvailable` — and no `prBody` the AI writes the
+pull request after the push, T3 Code's: `pullRequestToWrite(system, prompt)` (the question of
+`requestPullRequestQuestion(prBase)`), the panel's AI answers into `pullRequestWritten(ok, text)` —
+its title and description, or, failing, no answer in `MaxPullRequestWait` (3 minutes) or no question
+to ask, the title as without it; the dialog's `gitPrAiNote` says so); `push()`; `pull()`; `branches()`; `createBranch(name)`; `checkout(name)`;
 `createPullRequest(title, body, draft)` (pushes first when there is no upstream or the branch is
 ahead); `checkpoint()` → id; `changesSince(checkpoint)`; `restore(checkpoint)`;
 `dropCheckpoints(ids)`; `worktrees()`; `addWorktree(path, branch, base)`;
@@ -464,10 +468,8 @@ too), the stashes (`gitStashList`: `gitStash_<i>` with `gitStashApply`, `gitStas
 
 ## Not done (yet)
 
-* The pull request of "Commit, push and create PR" written by AI as well (its title follows the
-  commit message's first line, its description is typed; the pull request dialog's "Write with AI"
-  writes both), and a repository's pull request template or the thread's conversation in the question
-  (T3 Code sends them).
+* A repository's pull request template or the thread's conversation in the AI's question for a pull
+  request (T3 Code sends them).
 * Hunks of untracked, conflicted or binary files; the hunks of the other sources staged (they are
   reverted, `gitHunkRevert`), those of an added or deleted file reverted; single lines of a file that has staged changes (their numbers would be the
   index's: offered while nothing of it is staged).

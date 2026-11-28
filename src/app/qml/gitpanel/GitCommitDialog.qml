@@ -388,6 +388,15 @@ BDialog {
         accessibleName: qsTr("Pull request description")
         placeholderText: qsTr("What and why (optional)…")
     }
+    BText {
+        objectName: "gitPrAiNote"
+        Layout.fillWidth: true
+        visible: dialog.choice === "pr" && dialog.aiAvailable && Js.trim(prBodyField.text) === ""
+        text: qsTr("Left empty, the AI writes the pull request's title and description after the push.")
+        variant: "small"
+        color: Theme.fgMuted
+        wrapMode: Text.Wrap
+    }
     GitBasePicker {
         objectName: "gitPrBase"
         Layout.fillWidth: true

@@ -116,6 +116,9 @@ CodeGit::CodeGit(QObject *parent) : QObject(parent)
             refresh();
     });
     connect(&m_fetchTimer, &QTimer::timeout, this, &CodeGit::fetchQuietly);
+    // (The AI never answered: the waiting pull request opened as without it.)
+    m_prWait.setSingleShot(true);
+    connect(&m_prWait, &QTimer::timeout, this, [this] { openWrittenPullRequest(QString(), QString()); });
     const auto changed = [this] {
         if (!m_debounce.isActive())
             m_debounce.start();
@@ -764,14 +767,59 @@ void CodeGit::readPullRequestRange(const QString &ref)
             failPullRequestQuestion(tr("The branch has no commits that %1 does not have.").arg(ref));
         } else {
             const QVariantMap q = question(codeai::pullRequest({ref, m_branch, commits, outputOf(r.at(1)), outputOf(r.at(2))}));
-            Q_EMIT pullRequestQuestionReady(q.value(u"system"_s).toString(), q.value(u"prompt"_s).toString(), QString());
+            answerPullRequestQuestion(q.value(u"system"_s).toString(), q.value(u"prompt"_s).toString(), QString());
         }
     });
 }
 
 void CodeGit::failPullRequestQuestion(const QString &why)
 {
-    Q_EMIT pullRequestQuestionReady(QString(), QString(), why);
+    answerPullRequestQuestion(QString(), QString(), why);
+}
+
+void CodeGit::answerPullRequestQuestion(const QString &system, const QString &prompt, const QString &error)
+{
+    if (!m_prToWrite) {
+        Q_EMIT pullRequestQuestionReady(system, prompt, error);
+        return;
+    }
+    // (No question to ask — no base, nothing of its own —: opened as without the AI.)
+    if (prompt.isEmpty()) {
+        openWrittenPullRequest(QString(), QString());
+        return;
+    }
+    m_prWait.start(MaxPullRequestWait);
+    Q_EMIT pullRequestToWrite(system, prompt);
+}
+
+void CodeGit::pullRequestWritten(bool ok, const QString &answer)
+{
+    if (!m_prToWrite)
+        return;
+    const codeai::PullRequestText text = ok ? codeai::readPullRequest(answer) : codeai::PullRequestText{};
+    openWrittenPullRequest(text.title, text.body);
+}
+
+void CodeGit::openWrittenPullRequest(const QString &title, const QString &body)
+{
+    m_prWait.stop();
+    const std::optional<WaitingPullRequest> waiting = std::exchange(m_prToWrite, std::nullopt);
+    if (!waiting)
+        return;
+    gitcli::PullRequest pr = waiting->pr;
+    if (!title.trimmed().isEmpty()) {
+        pr.title = title.trimmed();
+        pr.body = body;
+    }
+    openPullRequest(u"commit"_s, waiting->root, pr, tr("Committed and pushed, but no pull request: %1"));
+}
+
+void CodeGit::setWritesPullRequests(bool on)
+{
+    if (on == m_writesPullRequests)
+        return;
+    m_writesPullRequests = on;
+    Q_EMIT writesPullRequestsChanged();
 }
 
 QVariantMap CodeGit::pullRequestText(const QString &answer) const
@@ -962,6 +1010,12 @@ void CodeGit::afterCommit(const QString &root, const gitcli::Outcome &committed,
         pr.body = prBody;
         pr.draft = draft;
         pr.base = prBase;
+        // (No description given and the AI writes them: its text first — T3 Code's.)
+        if (m_writesPullRequests && prBody.trimmed().isEmpty()) {
+            m_prToWrite = WaitingPullRequest{root, pr};
+            requestPullRequestQuestion(prBase);
+            return;
+        }
         openPullRequest(u"commit"_s, root, pr, tr("Committed and pushed, but no pull request: %1"));
     });
 }
