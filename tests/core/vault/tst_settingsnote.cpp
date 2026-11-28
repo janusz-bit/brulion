@@ -143,6 +143,10 @@ private Q_SLOTS:
         QVERIFY(migrated.endsWith(u"---\r\nMoje notatki o ustawieniach.\r\n"_s));
         QVERIFY(migrated.contains(u"journalsFolder: Dziennik\r\n"_s));
         QCOMPARE(migratedNote(json, migrated, u"pl"), migrated);
+        // A note not yet marked as the settings note: marked, its text kept.
+        const QString plain = migratedNote(json, u"Zwykła notatka.\n"_s, u"pl");
+        QVERIFY(isSettingsNote(plain));
+        QVERIFY(plain.endsWith(u"Zwykła notatka.\n"_s));
     }
 
     void oneSettingWritten()

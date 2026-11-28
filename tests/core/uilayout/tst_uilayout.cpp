@@ -65,6 +65,10 @@ private Q_SLOTS:
         // (A group in the bottom bar is no button.)
         l = parse(u"#bottom(journals, |, tasks)"_s);
         QCOMPARE(shown(l, u"bottom", {}), (QStringList{u"journals"_s, u"tasks"_s}));
+        // (Nor is a hidden one: five buttons beside them all fit.)
+        l = parse(u"#bottom(journals, |, tasks, -tags, search, calendar, graph)"_s);
+        QVERIFY2(l.warnings.isEmpty(), qPrintable(l.warnings.join(u" | "_s)));
+        QCOMPARE(shown(l, u"bottom", {}).size(), MaxBottom);
     }
 
     void printedAndReadAgain()
