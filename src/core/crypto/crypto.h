@@ -7,16 +7,17 @@
 // The algorithms are BearSSL's (3rdparty/bearssl, MIT; vendored unmodified, only the parts below
 // compiled): AES in its constant-time bitsliced implementation (aes_ct64 — no table is indexed by
 // key or data, so the cache tells nothing), GHASH by constant-time carryless multiplication
-// (ghash_ctmul64), GCM over them, SHA-256 / SHA-512, HMAC. PBKDF2 and the rest are Brulion's,
-// tested against the RFC and NIST vectors (tests/core/crypto).
+// (ghash_ctmul64), GCM over them, SHA-256 / SHA-512, HMAC. PBKDF2, HKDF, CMAC, SIV and the rest
+// are Brulion's, after their RFCs, tested against the RFC and NIST vectors (tests/core/crypto).
 //
 //   secure.h      SecureBytes (a byte buffer wiped when it goes), wipe() for buffers and strings
 //                 Brulion owns, constantTimeEquals()
 //   random.h      RandomSource, systemRandom(), randomBytes()
 //   base64.h      encodeBase64(), decodeBase64() — strict (canonical, padded) or as a browser's
 //                 atob() reads it
-//   hash.h        Hash (SHA-256, SHA-512): digest(), Hasher, hmac(), pbkdf2()
+//   hash.h        Hash (SHA-256, SHA-512): digest(), Hasher, hmac(), pbkdf2(), hkdf()
 //   aead.h        aesgcm::seal() / open(): AES-128/192/256-GCM, any IV length, 16-byte tags
+//   siv.h         aescmac::mac(), aessiv::seal() / open(): deterministic encryption (RFC 5297)
 //   secrethash.h  hashSecret() / verifySecret(): a salted slow hash of a short secret (a PIN) as one
 //                 printable string, "pbkdf2-sha512$<iterations>$<salt>$<hash>"
 //
@@ -37,3 +38,4 @@
 #include "crypto/random.h"
 #include "crypto/secrethash.h"
 #include "crypto/secure.h"
+#include "crypto/siv.h"

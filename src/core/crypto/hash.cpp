@@ -21,6 +21,22 @@ struct WipedOnExit {
     ~WipedOnExit() { wipe(&value, sizeof value); }
 };
 
+/// HMAC-`hash` of `parts` (in order) under `key`, written to `out` (digestSize bytes).
+void hmacInto(Hash hash, QByteArrayView key, std::initializer_list<QByteArrayView> parts, char *out)
+{
+    br_hmac_key_context keyContext;
+    WipedOnExit<br_hmac_key_context> keyWiped{keyContext};
+    br_hmac_key_init(&keyContext, vtableOf(hash), key.data(), std::size_t(key.size()));
+    br_hmac_context context;
+    WipedOnExit<br_hmac_context> contextWiped{context};
+    br_hmac_init(&context, &keyContext, 0);
+    for (const QByteArrayView &part : parts)
+        if (!part.isEmpty())
+            br_hmac_update(&context, part.data(), std::size_t(part.size()));
+    br_hmac_out(&context, out);
+}
+
+
 } // namespace
 
 qsizetype digestSize(Hash hash)
@@ -67,16 +83,8 @@ QByteArray Hasher::result() const
 
 QByteArray hmac(Hash hash, QByteArrayView key, QByteArrayView data)
 {
-    br_hmac_key_context keyContext;
-    WipedOnExit<br_hmac_key_context> keyWiped{keyContext};
-    br_hmac_key_init(&keyContext, vtableOf(hash), key.data(), std::size_t(key.size()));
-    br_hmac_context context;
-    WipedOnExit<br_hmac_context> contextWiped{context};
-    br_hmac_init(&context, &keyContext, 0);
-    if (!data.isEmpty())
-        br_hmac_update(&context, data.data(), std::size_t(data.size()));
     QByteArray out(digestSize(hash), Qt::Uninitialized);
-    br_hmac_out(&context, out.data());
+    hmacInto(hash, key, {data}, out.data());
     return out;
 }
 
@@ -124,6 +132,27 @@ SecureBytes pbkdf2(Hash hash, QByteArrayView password, QByteArrayView salt, quin
     }
     wipe(u, sizeof u);
     wipe(t, sizeof t);
+    return out;
+}
+
+
+SecureBytes hkdf(Hash hash, QByteArrayView ikm, QByteArrayView salt, QByteArrayView info, qsizetype length)
+{
+    const qsizetype hashLength = digestSize(hash);
+    if (length <= 0 || length > 255 * hashLength)
+        return {};
+    // Extract: PRK = HMAC(salt, IKM), a salt of zeros when none is given.
+    const SecureBytes zeros(hashLength);
+    SecureBytes prk(hashLength);
+    hmacInto(hash, salt.isEmpty() ? zeros.view() : salt, {ikm}, prk.data());
+    // Expand: T(i) = HMAC(PRK, T(i-1) | info | i).
+    SecureBytes out(length);
+    SecureBytes t(hashLength);
+    for (qsizetype at = 0, i = 1; at < length; at += hashLength, ++i) {
+        const char counter = char(i);
+        hmacInto(hash, prk.view(), {i == 1 ? QByteArrayView() : t.view(), info, QByteArrayView(&counter, 1)}, t.data());
+        std::memcpy(out.data() + at, t.constData(), std::size_t(qMin(hashLength, length - at)));
+    }
     return out;
 }
 

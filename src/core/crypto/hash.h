@@ -47,4 +47,10 @@ QByteArray hmac(Hash hash, QByteArrayView key, QByteArrayView data);
 /// and in the browser — run it off the GUI thread where a thread is at hand.
 SecureBytes pbkdf2(Hash hash, QByteArrayView password, QByteArrayView salt, quint32 iterations, qsizetype length);
 
+/// HKDF (RFC 5869) with HMAC-`hash`: `length` bytes of key from the input key material `ikm`,
+/// `salt` (none: a block of zeros) and `info`, which tells the keys of one secret apart. Empty
+/// for length ≤ 0 or more than 255 digests. For keys from a key that is random already (a
+/// file's key from the notebook's: docs/SYNC-ENCRYPTION.md) — not from a password (pbkdf2()).
+SecureBytes hkdf(Hash hash, QByteArrayView ikm, QByteArrayView salt, QByteArrayView info, qsizetype length);
+
 } // namespace brulion::crypto

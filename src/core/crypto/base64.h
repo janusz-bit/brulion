@@ -1,4 +1,4 @@
-// brulion::crypto — Base64 as formats with secrets write it (see crypto/crypto.h).
+// brulion::crypto — Base64 and base32 as formats with secrets write them (see crypto/crypto.h).
 #pragma once
 
 #include <QByteArray>
@@ -26,5 +26,12 @@ enum class Base64Mode {
 QString encodeBase64(QByteArrayView bytes);
 /// The bytes `text` encodes, nullopt when it is not Base64 by `mode`'s rules.
 std::optional<QByteArray> decodeBase64(QStringView text, Base64Mode mode = Base64Mode::Strict);
+
+/// `bytes` in RFC 4648's base32 alphabet in lower case, without padding: names that survive file
+/// systems which ignore case (docs/SYNC-ENCRYPTION.md "Names"), keys people type.
+QString encodeBase32(QByteArrayView bytes);
+/// The bytes of canonical lowercase unpadded base32 (as encodeBase32() writes it: no stray bits in
+/// the last letter); nullopt for anything else.
+std::optional<QByteArray> decodeBase32(QStringView text);
 
 } // namespace brulion::crypto

@@ -1,5 +1,5 @@
 # crypto — the cryptographic primitives (crypto/crypto.h; docs/ARCHITECTURE.md "Security"): SHA-2,
-# HMAC, PBKDF2, AES-GCM, Base64 for formats with secrets, wiped memory, constant-time comparison,
+# HMAC, PBKDF2, HKDF, AES-GCM, AES-CMAC and AES-SIV, Base64 for formats with secrets, wiped memory, constant-time comparison,
 # salted slow hashes of a PIN. BearSSL's constant-time code underneath (3rdparty/bearssl, MIT).
 # QtCore only; any module may use it (encrypted notes, the app lock, signing later).
 if(NOT TARGET brulion_bearssl)
@@ -13,5 +13,6 @@ brulion_add_core_module(crypto
         hash.h hash.cpp
         random.h random.cpp
         secrethash.h secrethash.cpp
-        secure.h secure.cpp)
+        secure.h secure.cpp
+        siv.h siv.cpp)
 target_link_libraries(brulion_core_crypto PRIVATE brulion_bearssl)

@@ -1,9 +1,11 @@
 // The core module crypto (src/core/crypto): SHA-256 / SHA-512 (FIPS 180-4 examples), HMAC (RFC 4231),
-// PBKDF2 (RFC 7914 §11 for SHA-256, the published SHA-512 vectors), AES-GCM (the test cases of the
+// PBKDF2 (RFC 7914 §11 for SHA-256, the published SHA-512 vectors), HKDF (RFC 5869 appendix A),
+// AES-CMAC (RFC 4493 §4), AES-SIV (RFC 5297 appendix A, and AES-256-SIV), AES-GCM (the test cases of the
 // GCM specification — McGrew and Viega, also NIST's CAVS — for 128, 192 and 256-bit keys and IVs of
 // 8, 12 and 60 bytes), refused tags and inputs, Base64 strict and forgiving, wiped memory, the
 // constant-time comparison and the stored hashes of a PIN. Every expected value was checked against
-// another implementation (OpenSSL through Node's crypto) before it was written here.
+// another implementation (OpenSSL through Node's crypto; HKDF, CMAC and SIV through Python's
+// `cryptography`) before it was written here.
 #include "crypto/crypto.h"
 
 #include <QTest>
@@ -46,6 +48,16 @@ private Q_SLOTS:
     void pbkdf2Vectors_data();
     void pbkdf2Vectors();
     void pbkdf2Edges();
+    void hkdfVectors_data();
+    void hkdfVectors();
+    void hkdfEdges();
+    void cmacVectors_data();
+    void cmacVectors();
+    void sivVectors_data();
+    void sivVectors();
+    void sivRefusesChanges();
+    void sivRefusesBadInput();
+    void sivIsDeterministic();
     void gcmVectors_data();
     void gcmVectors();
     void gcmRefusesChanges();
@@ -54,6 +66,10 @@ private Q_SLOTS:
     void base64_data();
     void base64();
     void base64Encode();
+    void base32_data();
+    void base32();
+    void base32Refused_data();
+    void base32Refused();
     void constantTime();
     void secureBytes();
     void wipeStrings();
@@ -235,6 +251,163 @@ void TestCrypto::pbkdf2Edges()
     QCOMPARE(shorter.toByteArray(), longer.toByteArray().left(20));
 }
 
+void TestCrypto::hkdfVectors_data()
+{
+    QTest::addColumn<int>("hash");
+    QTest::addColumn<QByteArray>("ikm");
+    QTest::addColumn<QByteArray>("salt");
+    QTest::addColumn<QByteArray>("info");
+    QTest::addColumn<QByteArray>("okm");
+    auto range = [](int from, int to) {
+        QByteArray out;
+        for (int i = from; i < to; ++i)
+            out.append(char(i));
+        return out;
+    };
+    QTest::newRow("A.1: basic") << int(Hash::Sha256) << repeatedByte(0x0b, 22) << hex("000102030405060708090a0b0c")
+                                << hex("f0f1f2f3f4f5f6f7f8f9")
+                                << hex("3cb25f25faacd57a90434f64d0362f2a2d2d0a90cf1a5a4c5db02d56ecc4c5bf34007208d5b887185865");
+    QTest::newRow("A.2: longer") << int(Hash::Sha256) << range(0, 0x50) << range(0x60, 0xb0) << range(0xb0, 0x100)
+                                 << hex("b11e398dc80327a1c8e7f78c596a49344f012eda2d4efad8a050cc4c19afa97c59045a99cac7827271cb"
+                                        "41c65e590e09da3275600c2f09b8367793a9aca3db71cc30c58179ec3e87c14c01d5c1f3434f1d87");
+    QTest::newRow("A.3: no salt, no info") << int(Hash::Sha256) << repeatedByte(0x0b, 22) << QByteArray() << QByteArray()
+                                           << hex("8da4e775a563c18f715f802a063c5a31b8a11f5c5ee1879ec3454e5f3c738d2d9d201395f"
+                                                  "aa4b61a96c8");
+    QTest::newRow("sha-512") << int(Hash::Sha512) << repeatedByte(0x0b, 22) << hex("000102030405060708090a0b0c")
+                             << hex("f0f1f2f3f4f5f6f7f8f9")
+                             << hex("832390086cda71fb47625bb5ceb168e4c8e26a1a16ed34d9fc7fe92c1481579338da362cb8d9f925d7cb");
+}
+
+void TestCrypto::hkdfVectors()
+{
+    QFETCH(int, hash);
+    QFETCH(QByteArray, ikm);
+    QFETCH(QByteArray, salt);
+    QFETCH(QByteArray, info);
+    QFETCH(QByteArray, okm);
+    QCOMPARE(hkdf(Hash(hash), ikm, salt, info, okm.size()).toByteArray(), okm);
+}
+
+void TestCrypto::hkdfEdges()
+{
+    QVERIFY(hkdf(Hash::Sha256, "k", {}, {}, 0).isEmpty());
+    QCOMPARE(hkdf(Hash::Sha256, "k", {}, {}, 255 * 32).size(), 255 * 32);
+    QVERIFY(hkdf(Hash::Sha256, "k", {}, {}, 255 * 32 + 1).isEmpty()); // (RFC 5869: at most 255 blocks)
+    QCOMPARE(hkdf(Hash::Sha512, "k", {}, {}, 255 * 64).size(), 255 * 64);
+    // Another info, another key; a shorter key is the longer one's start.
+    QVERIFY(hkdf(Hash::Sha256, "k", "s", "plik 1", 32).toByteArray() != hkdf(Hash::Sha256, "k", "s", "plik 2", 32).toByteArray());
+    QCOMPARE(hkdf(Hash::Sha256, "k", "s", "i", 20).toByteArray(), hkdf(Hash::Sha256, "k", "s", "i", 70).toByteArray().left(20));
+}
+
+void TestCrypto::cmacVectors_data()
+{
+    QTest::addColumn<QByteArray>("key");
+    QTest::addColumn<QByteArray>("message");
+    QTest::addColumn<QByteArray>("mac");
+    const QByteArray k = hex("2b7e151628aed2a6abf7158809cf4f3c");
+    const QByteArray m = hex("6bc1bee22e409f96e93d7e117393172aae2d8a571e03ac9c9eb76fac45af8e5130c81c46a35ce411e5fbc1191a0a52ef"
+                             "f69f2445df4f9b17ad2b417be66c3710");
+    QTest::newRow("example 1: empty") << k << QByteArray() << hex("bb1d6929e95937287fa37d129b756746");
+    QTest::newRow("example 2: one block") << k << m.left(16) << hex("070a16b46b4d4144f79bdd9dd04a287c");
+    QTest::newRow("example 3: 40 bytes") << k << m.left(40) << hex("dfa66747de9ae63030ca32611497c827");
+    QTest::newRow("example 4: 64 bytes") << k << m << hex("51f0bebf7e3b9d92fc49741779363cfe");
+    QTest::newRow("aes-256") << hex("603deb1015ca71be2b73aef0857d77811f352c073b6108d72d9810a30914dff4") << m
+                             << hex("e1992190549f6ed5696a2c056c315410");
+}
+
+void TestCrypto::cmacVectors()
+{
+    QFETCH(QByteArray, key);
+    QFETCH(QByteArray, message);
+    QFETCH(QByteArray, mac);
+    QCOMPARE(aescmac::mac(key, message), mac);
+}
+
+void TestCrypto::sivVectors_data()
+{
+    QTest::addColumn<QByteArray>("key");
+    QTest::addColumn<QList<QByteArray>>("ad");
+    QTest::addColumn<QByteArray>("plaintext");
+    QTest::addColumn<QByteArray>("sealed");
+    QTest::newRow("A.1: deterministic") << hex("fffefdfcfbfaf9f8f7f6f5f4f3f2f1f0f0f1f2f3f4f5f6f7f8f9fafbfcfdfeff")
+                                        << QList<QByteArray>{hex("101112131415161718191a1b1c1d1e1f2021222324252627")}
+                                        << hex("112233445566778899aabbccddee")
+                                        << hex("85632d07c6e8f37f950acd320a2ecc9340c02b9690c4dc04daef7f6afe5c");
+    QTest::newRow("A.2: several ad, a nonce")
+            << hex("7f7e7d7c7b7a79787776757473727170404142434445464748494a4b4c4d4e4f")
+            << QList<QByteArray>{hex("00112233445566778899aabbccddeeffdeaddadadeaddadaffeeddccbbaa99887766554433221100"),
+                                 hex("102030405060708090a0"), hex("09f911029d74e35bd84156c5635688c0")}
+            << hex("7468697320697320736f6d6520706c61696e7465787420746f20656e6372797074207573696e67205349562d414553")
+            << hex("7bdb6e3b432667eb06f4d14bff2fbd0fcb900f2fddbe404326601965c889bf17dba77ceb094fa663b7a3f748ba8af829ea64ad54"
+                   "4a272e9c485b62a3fd5c0d");
+    QByteArray k64;
+    for (int i = 0; i < 64; ++i)
+        k64.append(char(i));
+    QTest::newRow("aes-256-siv: a Polish name") << k64 << QList<QByteArray>{} << "Zażółć gęślą jaźń.md"_ba
+                                                << hex("062cb74d90ba1d388c5c52d4aa4a2891158767ea18459e8cb47c3d13a3ba90633"
+                                                       "57c87e4d528411964855b314d");
+    QTest::newRow("aes-256-siv: one byte") << k64 << QList<QByteArray>{} << "x"_ba
+                                           << hex("315fc8b42454cb95e5a7eb7a7da0cb02de");
+}
+
+void TestCrypto::sivVectors()
+{
+    QFETCH(QByteArray, key);
+    QFETCH(QList<QByteArray>, ad);
+    QFETCH(QByteArray, plaintext);
+    QFETCH(QByteArray, sealed);
+    const QList<QByteArrayView> views(ad.cbegin(), ad.cend());
+    QCOMPARE(aessiv::seal(key, views, plaintext), sealed);
+    const auto opened = aessiv::open(key, views, sealed);
+    QVERIFY(opened);
+    QCOMPARE(opened->toByteArray(), plaintext);
+}
+
+void TestCrypto::sivRefusesChanges()
+{
+    const QByteArray key(64, '\x42');
+    const QByteArray sealed = aessiv::seal(key, {"folder"}, "Łąka.md");
+    QVERIFY(aessiv::open(key, {"folder"}, sealed));
+    for (qsizetype i = 0; i < sealed.size(); ++i) {
+        QByteArray changed = sealed;
+        changed[i] = char(changed[i] ^ 0x01);
+        QVERIFY2(!aessiv::open(key, {"folder"}, changed), qPrintable(QString::number(i)));
+    }
+    QVERIFY(!aessiv::open(key, {"Folder"}, sealed));           // other associated data
+    QVERIFY(!aessiv::open(key, {}, sealed));                   // none
+    QVERIFY(!aessiv::open(QByteArray(64, '\x43'), {"folder"}, sealed)); // another key
+    QVERIFY(!aessiv::open(key, {"folder"}, sealed.left(sealed.size() - 1)));
+}
+
+void TestCrypto::sivRefusesBadInput()
+{
+    QVERIFY(aessiv::seal(QByteArray(16, 'k'), {}, "x").isEmpty()); // (SIV takes two keys: 32, 48 or 64 bytes)
+    QVERIFY(aessiv::seal(QByteArray(63, 'k'), {}, "x").isEmpty());
+    QVERIFY(!aessiv::open(QByteArray(64, 'k'), {}, QByteArray(15, 'x'))); // shorter than its IV
+    QVERIFY(aescmac::mac(QByteArray(15, 'k'), "x").isEmpty());
+    // An empty plaintext is the IV alone, and opens again.
+    const QByteArray empty = aessiv::seal(QByteArray(32, 'k'), {}, {});
+    QCOMPARE(empty.size(), aessiv::IvSize);
+    const auto opened = aessiv::open(QByteArray(32, 'k'), {}, empty);
+    QVERIFY(opened);
+    QVERIFY(opened->isEmpty());
+    // RFC 5297 takes at most 126 associated data.
+    const QList<QByteArrayView> many(127, QByteArrayView("a"));
+    QVERIFY(aessiv::seal(QByteArray(32, 'k'), many, "x").isEmpty());
+}
+
+void TestCrypto::sivIsDeterministic()
+{
+    const QByteArray key(64, '\x11');
+    QCOMPARE(aessiv::seal(key, {}, "Dziennik"), aessiv::seal(key, {}, "Dziennik"));
+    QVERIFY(aessiv::seal(key, {}, "Dziennik") != aessiv::seal(key, {}, "dziennik"));
+    // A long name, block after block.
+    const QByteArray name = QString(300, u'ż').toUtf8();
+    const auto opened = aessiv::open(key, {}, aessiv::seal(key, {}, name));
+    QVERIFY(opened);
+    QCOMPARE(opened->toByteArray(), name);
+}
+
 void TestCrypto::gcmVectors_data()
 {
     QTest::addColumn<QByteArray>("key");
@@ -405,6 +578,48 @@ void TestCrypto::base64Encode()
         QCOMPARE(text, QString::fromLatin1(bytes.toBase64()));
         QCOMPARE(decodeBase64(text).value_or("x"_ba), bytes);
     }
+}
+
+void TestCrypto::base32_data()
+{
+    // RFC 4648 §10, in lower case and without padding.
+    QTest::addColumn<QByteArray>("bytes");
+    QTest::addColumn<QString>("text");
+    QTest::newRow("empty") << QByteArray() << QString();
+    QTest::newRow("f") << "f"_ba << u"my"_s;
+    QTest::newRow("fo") << "fo"_ba << u"mzxq"_s;
+    QTest::newRow("foo") << "foo"_ba << u"mzxw6"_s;
+    QTest::newRow("foob") << "foob"_ba << u"mzxw6yq"_s;
+    QTest::newRow("fooba") << "fooba"_ba << u"mzxw6ytb"_s;
+    QTest::newRow("foobar") << "foobar"_ba << u"mzxw6ytboi"_s;
+    QTest::newRow("bytes") << hex("00ff10e3") << u"ad7rbyy"_s;
+}
+
+void TestCrypto::base32()
+{
+    QFETCH(QByteArray, bytes);
+    QFETCH(QString, text);
+    QCOMPARE(encodeBase32(bytes), text);
+    QCOMPARE(decodeBase32(text), std::optional<QByteArray>(bytes));
+}
+
+void TestCrypto::base32Refused_data()
+{
+    QTest::addColumn<QString>("text");
+    QTest::newRow("upper case") << u"MZXW6"_s;
+    QTest::newRow("padding") << u"my======"_s;
+    QTest::newRow("not the alphabet: 1") << u"m1"_s;
+    QTest::newRow("not the alphabet: space") << u"mz xq"_s;
+    QTest::newRow("a length no bytes have") << u"mzx"_s;
+    QTest::newRow("one letter") << u"m"_s;
+    QTest::newRow("stray bits") << u"mz"_s; // "f" is "my": the z's low bits are not zero
+    QTest::newRow("Polish letter") << u"mżxq"_s;
+}
+
+void TestCrypto::base32Refused()
+{
+    QFETCH(QString, text);
+    QVERIFY(!decodeBase32(text));
 }
 
 void TestCrypto::constantTime()

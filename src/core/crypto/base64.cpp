@@ -108,4 +108,62 @@ std::optional<QByteArray> decodeBase64(QStringView text, Base64Mode mode)
     return out;
 }
 
+namespace {
+
+constexpr char Base32Alphabet[] = "abcdefghijklmnopqrstuvwxyz234567";
+
+/// The value of a letter of lowercase base32, -1 for any other character.
+int base32Value(QChar c)
+{
+    const char16_t u = c.unicode();
+    if (u >= u'a' && u <= u'z')
+        return u - u'a';
+    if (u >= u'2' && u <= u'7')
+        return u - u'2' + 26;
+    return -1;
+}
+
+} // namespace
+
+QString encodeBase32(QByteArrayView bytes)
+{
+    QString out;
+    out.reserve((bytes.size() * 8 + 4) / 5);
+    quint32 bits = 0;
+    int count = 0;
+    for (const char c : bytes) {
+        bits = bits << 8 | quint8(c);
+        for (count += 8; count >= 5;) {
+            count -= 5;
+            out.append(QLatin1Char(Base32Alphabet[(bits >> count) & 31]));
+        }
+    }
+    if (count > 0)
+        out.append(QLatin1Char(Base32Alphabet[(bits << (5 - count)) & 31]));
+    return out;
+}
+
+std::optional<QByteArray> decodeBase32(QStringView text)
+{
+    QByteArray out;
+    out.reserve(text.size() * 5 / 8);
+    quint32 bits = 0;
+    int count = 0;
+    for (const QChar c : text) {
+        const int value = base32Value(c);
+        if (value < 0)
+            return std::nullopt;
+        bits = bits << 5 | quint32(value);
+        count += 5;
+        if (count >= 8) {
+            count -= 8;
+            out.append(char((bits >> count) & 0xff));
+        }
+    }
+    // A length no bytes give (5 bits or more left), or left bits that are not zero: not canonical.
+    if (count >= 5 || (bits & ((1u << count) - 1)) != 0)
+        return std::nullopt;
+    return out;
+}
+
 } // namespace brulion::crypto
