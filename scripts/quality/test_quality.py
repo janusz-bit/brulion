@@ -71,6 +71,14 @@ class ChangedLinesTest(unittest.TestCase):
         self.assertEqual(q.changed_lines(diff), {'src/a.cpp': {11, 12, 13, 44}, 'src/b.h': {5}})
 
 
+class OnlyPathsTest(unittest.TestCase):
+    def test_keeps_the_named_files(self):
+        lines = {'src/a.cpp': {1}, 'src/b.cpp': {2}}
+        self.assertEqual(q.only_paths(lines, ['src/b.cpp']), {'src/b.cpp': {2}})
+        self.assertEqual(q.only_paths(lines, ['./src/a.cpp']), {'src/a.cpp': {1}})
+        self.assertEqual(q.only_paths(lines, []), lines)
+
+
 class LcovTest(unittest.TestCase):
     def test_reads_line_hits_per_file(self):
         lcov = ('SF:/w/src/a.cpp\nDA:3,1\nDA:4,0\nDA:5,12\nend_of_record\n'

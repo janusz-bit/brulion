@@ -485,7 +485,15 @@ def scope_lines(root, args):
     for path in untracked:
         if os.path.isfile(os.path.join(root, path)):
             lines[path] = set(range(1, _read(os.path.join(root, path)).count('\n') + 2))
-    return {p: ls for p, ls in lines.items() if is_source(p, args.include_tests)}
+    return only_paths({p: ls for p, ls in lines.items() if is_source(p, args.include_tests)}, args.only)
+
+
+def only_paths(lines, only):
+    """`lines` limited to the paths `only` names (all of them when it names none)."""
+    if not only:
+        return lines
+    wanted = {os.path.normpath(p) for p in only}
+    return {p: ls for p, ls in lines.items() if os.path.normpath(p) in wanted}
 
 
 def scoped_functions(root, args):
@@ -698,6 +706,7 @@ def _scope_options(p):
     p.add_argument('--base', default='main', help='diff against the merge base with this ref (default main)')
     p.add_argument('--files', nargs='*', default=[], help='whole files instead of the diff')
     p.add_argument('--include-tests', action='store_true', help='tests/ count too')
+    p.add_argument('--only', nargs='*', default=[], help='of the diff, only these files')
 
 
 def main(argv=None):

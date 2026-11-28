@@ -9,8 +9,8 @@ coverage from Clang's source-based coverage (`llvm-profdata`, `llvm-cov` of the 
 
 By default every command looks at the functions the branch changed: lines of `git diff <merge base
 with main>` (committed or not) and untracked files, under `src/` (not `3rdparty/`, `tests/` or build
-dirs). `--files F…` takes whole files instead, `--base REF` another base, `--include-tests` the tests
-too. Run from the root of the worktree being checked (the script may live in another worktree).
+dirs). `--files F…` takes whole files instead, `--base REF` another base, `--only F…` only those files
+of the diff (mutating each against its own tests), `--include-tests` the tests too. Run from the root of the worktree being checked (the script may live in another worktree).
 
 ## Coverage
 
