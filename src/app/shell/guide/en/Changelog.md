@@ -7,6 +7,27 @@ brulion: document
 
 Here you'll find what changed in every version of Brulion, newest first. Full release notes with downloads are on GitHub: https://github.com/janusz-bit/brulion/releases
 
+## 0.33.0 — November 28, 2026
+
+**New**
+- **Your computer's agents, live on your phone** — what the desktop app runs itself (a Code mode thread, any conversation with an agent) shows on the phone under **On your computers** as it works: the answer as it is written, tool calls and plan; answer its question, **Stop** it or write the next message — with pictures too — in line there or steered in now. The agent's options are the computer's and change there, a message held there after Stop shows with **Resume**, and conversations that ended there lately are listed even when sharing started after they ended. A thread of the computer's project runs its turns in the app there; `brulion-cli app chat live`, `answer`, `option`, `resume`, `send --steer --pictures` ([[Code mode#On the phone]]).
+- **End-to-end encrypted sync** — the Nextcloud account's **End-to-end encryption** card encrypts names and files before they leave the device; a password and a recovery key open the notebook elsewhere, **Change the password…** seals the key anew. Every device needs 0.33 or later ([[Sync#End-to-end encryption]]).
+- **Code mode writes for you** — an empty commit message is written by the AI, then committed; a pull request's title and description, a new worktree's branch name and **Regenerate title** come from the AI too.
+- **Settle and snooze threads** — **Settle** a finished thread, **Snooze** one until a time while its agent works; a new message brings it back. Files dropped on a thread start its message ([[Code mode]]).
+- **Find in the file viewer** — **Ctrl+F** in Code mode's Files tab.
+- **Atrament edits pages** — **Settings → Editor → Draw the editor with Atrament** now edits pages and the journal there: every kind of block, chips and menus, spelling, Vim keys, block selection and drag to move.
+- **Reminders of subscribed calendars** — an ICS subscription's **Ring the reminders of events**.
+- **Calendars from the command line** — `brulion-cli calendar add`, `edit`, `delete` (and the MCP tools).
+
+**Changes**
+- **Photos the right way up** — a photo stored sideways (EXIF orientation) is shown upright everywhere, and search's boxes in it sit where you see the words.
+- **Subtasks moved in another app** — a CalDAV task moved under another task (Tasks.org, Thunderbird) moves in your notes too; a series changed "from this one on" shows its new repetition from then on.
+- **Large files without large memory** — a device's sync folder copies large files in pieces; a Joplin JEX is read file by file.
+- **A photo for the AI chat survives** — it stays with the message's draft when Android closed the app while the camera was in front.
+
+**Fixes**
+- The model on the device writes reminders' `⏰` again (it wrote `⭐`).
+
 ## 0.32.0 — November 26, 2026
 
 **New**

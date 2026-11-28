@@ -7,6 +7,27 @@ brulion: document
 
 Tu znajdziesz zmiany w każdej wersji Brulionu, od najnowszej. Pełne opisy wydań z plikami do pobrania są na GitHubie: https://github.com/janusz-bit/brulion/releases
 
+## 0.33.0 — 28 listopada 2026
+
+**Nowe**
+- **Agenci Twojego komputera na żywo na telefonie** — to, co aplikacja na komputerze uruchomiła sama (wątek trybu Kod, każda rozmowa z agentem), telefon pokazuje w **Na twoich komputerach** w trakcie pracy: odpowiedź, gdy jest pisana, wywołania narzędzi i plan; odpowiedz na pytanie, **zatrzymaj** turę albo napisz następną wiadomość — także ze zdjęciami — w kolejce tam albo od razu. Opcje agenta są te z komputera i zmieniają się tam, wiadomość wstrzymana tam po zatrzymaniu pokazuje się z **Wznów**, a rozmowy zakończone tam niedawno są na liście, nawet gdy udostępnianie zaczęło się po ich końcu. Wątek projektu z komputera prowadzi tury w tamtej aplikacji; `brulion-cli app chat live`, `answer`, `option`, `resume`, `send --steer --pictures` ([[Tryb kodu#Na telefonie]]).
+- **Synchronizacja szyfrowana od końca do końca** — karta **Szyfrowanie end-to-end** konta Nextcloud szyfruje nazwy i pliki, zanim opuszczą urządzenie; hasło i klucz odzyskiwania otwierają notatnik gdzie indziej, **Zmień hasło…** zamyka klucz na nowo. Każde urządzenie potrzebuje wersji 0.33 lub nowszej ([[Synchronizacja]]).
+- **Tryb Kod pisze za Ciebie** — pusty opis commita pisze AI, a potem zmiany są zatwierdzane; tytuł i opis pull requesta, nazwa gałęzi nowego worktree i **Wygeneruj tytuł na nowo** też pochodzą od AI.
+- **Odkładanie i usypianie wątków** — **Odłóż** skończony wątek, **Uśpij** wątek do danej pory, a agent pracuje dalej; nowa wiadomość go przywraca. Pliki upuszczone na wątek zaczynają jego wiadomość ([[Tryb kodu]]).
+- **Szukanie w przeglądarce plików** — **Ctrl+F** w zakładce Pliki trybu Kod.
+- **Atrament edytuje strony** — **Ustawienia → Edytor → Rysuj edytor Atramentem** pozwala teraz tam edytować strony i dziennik: każdy rodzaj bloku, chipy i menu, pisownia, klawisze Vima, zaznaczanie bloków i przeciąganie.
+- **Przypomnienia subskrybowanych kalendarzy** — **Dzwoń przypomnieniami wydarzeń** w subskrypcji ICS.
+- **Kalendarze z wiersza poleceń** — `brulion-cli calendar add`, `edit`, `delete` (i narzędzia MCP).
+
+**Zmiany**
+- **Zdjęcia we właściwą stronę** — zdjęcie zapisane bokiem (orientacja EXIF) stoi prosto wszędzie, a ramki wyszukiwania są tam, gdzie widać słowa.
+- **Podzadania przeniesione w innej aplikacji** — zadanie CalDAV przeniesione pod inne (Tasks.org, Thunderbird) przenosi się też w notatkach; seria zmieniona „od tego wystąpienia” od tej pory pokazuje nowe powtarzanie.
+- **Duże pliki bez dużej pamięci** — folder synchronizacji urządzenia kopiuje duże pliki w kawałkach; JEX z Joplina jest czytany plik po pliku.
+- **Zdjęcie do czatu z AI przetrwa** — zostaje w szkicu wiadomości, gdy Android zamknął aplikację, kiedy aparat był na wierzchu.
+
+**Poprawki**
+- Model na urządzeniu znowu pisze `⏰` w przypomnieniach (pisał `⭐`).
+
 ## 0.32.0 — 26 listopada 2026
 
 **Nowe**
